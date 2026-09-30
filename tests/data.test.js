@@ -14,7 +14,11 @@ test('내장 샘플은 모두 검증을 통과한다(불러오기 성공)', () =
   for (const doc of SAMPLES) {
     const r = validateDocument(doc);
     assert.deepEqual(r.errors, [], doc.universe.id);
-    assert.deepEqual(r.warnings, [], doc.universe.id);
+    // 사번 없는 사람은 외부 기관 역할(변환 사례의 A사 결제 담당)만 허용한다
+    for (const w of r.warnings) {
+      assert.equal(w.code, 'W-NO-EMPNO', doc.universe.id);
+      assert.equal(doc.nodes.find((n) => n.id === w.target_id).subtype, '역할');
+    }
   }
 });
 
