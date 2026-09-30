@@ -1,0 +1,245 @@
+// 합성 뷰(12.7 view): 유니버스 + 꼭지 참조(재귀) + 동일성 연결 → 화면·규칙이 쓰는 읽기 전용 그래프.
+// 원본 문서는 바꾸지 않는다(R-11 ⑤). 노드마다 출처를 전역 참조("<유니버스 ID>/<노드 ID>")로 유지한다.
+// 브라우저 기능(DOM, 저장소)을 쓰지 않는다.
+
+import { EVENT_PAYLOAD, edgeTypeLabel, nodeTypeLabel, NODE_TYPES, normalizeLabel } from '../model/schema.js';
+
+export function toGid(universeId, localId) {
+  return `${universeId}/${localId}`;
+}
+
+export function parseGid(gid) {
+  const i = typeof gid === 'string' ? gid.indexOf('/') : -1;
+  return i < 0 ? null : { universe_id: gid.slice(0, i), local_id: gid.slice(i + 1) };
+}
+
+function pushTo(map, key, value) {
+  const list = map.get(key);
+  if (list) list.push(value);
+  else map.set(key, [value]);
+}
+
+/**
+ * @param {object} rootDoc 기준 유니버스 문서(12.2)
+ * @param {(universeId:string)=>object|null} [resolveUniverse] 참조된 유니버스 문서를 찾는 함수
+ * @returns 노드·연결·이벤트(전역 ID)와 조회 표(1.7)를 가진 읽기 전용 뷰
+ */
+export function buildView(rootDoc, resolveUniverse = () => null) {
+  // 1) 참조를 재귀로 펼친다. 순환은 건너뛰고 기록한다(순환 자체는 저장 때 E-CYCLE로 거부)
+  const docs = [];
+  const included = new Set();
+  const missing = [];
+  const cyclic = [];
+  const refLinks = [];
+
+  function visit(doc, chain) {
+    included.add(doc.universe.id);
+    docs.push(doc);
+    for (const ref of doc.refs || []) {
+      const childId = ref.child_universe_id;
+      if (chain.has(childId)) {
+        cyclic.push({ parent: doc.universe.id, child: childId });
+        continue;
+      }
+      const child = resolveUniverse(childId);
+      if (!child) {
+        if (!missing.includes(childId)) missing.push(childId);
+        continue;
+      }
+      refLinks.push({ parent: doc, child });
+      if (!included.has(childId)) visit(child, new Set([...chain, childId]));
+    }
+  }
+  visit(rootDoc, new Set([rootDoc.universe.id]));
+
+  // 2) 노드
+  const rootId = rootDoc.universe.id;
+  const nodes = [];
+  const nodeByGid = new Map();
+  for (const doc of docs) {
+    for (const n of doc.nodes) {
+      const node = {
+        gid: toGid(doc.universe.id, n.id),
+        universe_id: doc.universe.id,
+        id: n.id,
+        core_type: n.core_type,
+        type_label: nodeTypeLabel(n.core_type),
+        known_type: !!NODE_TYPES[n.core_type],
+        subtype: n.subtype,
+        label: n.label,
+        description: n.description,
+        attrs: n.attrs,
+        tags: n.tags,
+        period: n.period,
+        emp_no: n.emp_no,
+        hidden: !!n.hidden,
+        origin: doc.universe.id === rootId ? 'own' : 'ref',
+        merged_from: [],
+      };
+      nodes.push(node);
+      nodeByGid.set(node.gid, node);
+    }
+  }
+
+  // 3) 동일성 연결: 확정된 것만 합친다. 먼저 나온 노드(기준 유니버스 우선)가 대표가 된다
+  const order = new Map(nodes.map((n, i) => [n.gid, i]));
+  const parent = new Map();
+  const find = (g) => {
+    let r = g;
+    while (parent.has(r)) r = parent.get(r);
+    return r;
+  };
+  const unresolvedLinks = [];
+  for (const doc of docs) {
+    for (const link of doc.identity_links || []) {
+      if (link.status !== 'confirmed') continue;
+      if (!nodeByGid.has(link.a) || !nodeByGid.has(link.b)) {
+        unresolvedLinks.push(link.id);
+        continue;
+      }
+      const ra = find(link.a);
+      const rb = find(link.b);
+      if (ra === rb) continue;
+      if (order.get(ra) <= order.get(rb)) parent.set(rb, ra);
+      else parent.set(ra, rb);
+    }
+  }
+  const canonical = (gid) => (nodeByGid.has(gid) ? find(gid) : gid);
+  for (const n of nodes) {
+    const c = canonical(n.gid);
+    if (c !== n.gid) nodeByGid.get(c).merged_from.push(n.gid);
+  }
+  // 대표 노드는 합쳐진 노드가 모두 숨겨졌을 때만 숨김으로 본다
+  for (const n of nodes) {
+    if (n.merged_from.length) n.hidden = n.hidden && n.merged_from.every((g) => nodeByGid.get(g).hidden);
+  }
+  const viewNodes = nodes.filter((n) => canonical(n.gid) === n.gid);
+
+  // 4) 연결: 끝점을 대표 노드로 바꾸고, 참조 관계는 부모 꼭지 → 자식 꼭지의 합성 연결로 나타낸다
+  const edges = [];
+  for (const doc of docs) {
+    for (const e of doc.edges) {
+      const source = canonical(toGid(doc.universe.id, e.source));
+      const target = canonical(toGid(doc.universe.id, e.target));
+      if (source === target) continue; // 합쳐진 두 노드 사이의 연결은 자기 연결이 되므로 그리지 않는다
+      edges.push({
+        gid: toGid(doc.universe.id, e.id),
+        universe_id: doc.universe.id,
+        id: e.id,
+        source,
+        target,
+        core_type: e.core_type,
+        type_label: edgeTypeLabel(e.core_type),
+        subtype: e.subtype,
+        period: e.period,
+        note: e.note,
+        hidden: !!e.hidden,
+        synthetic: false,
+      });
+    }
+  }
+  for (const { parent: p, child: c } of refLinks) {
+    const source = canonical(toGid(p.universe.id, p.universe.root_node_id));
+    const target = canonical(toGid(c.universe.id, c.universe.root_node_id));
+    if (source === target) continue;
+    edges.push({
+      gid: toGid(p.universe.id, `ref:${c.universe.id}`),
+      universe_id: p.universe.id,
+      id: `ref:${c.universe.id}`,
+      source,
+      target,
+      core_type: 'contains',
+      type_label: edgeTypeLabel('contains'),
+      hidden: false,
+      synthetic: true,
+    });
+  }
+
+  // 5) 이벤트: 노드 참조를 전역 ID(대표 노드 기준)로 모아 두고 시간순으로 정렬한다
+  const events = [];
+  for (const doc of docs) {
+    for (const ev of doc.events) {
+      const rule = EVENT_PAYLOAD[ev.type] || {};
+      const payload = ev.payload || {};
+      const toNodeGid = (id) => canonical(id.includes('/') ? id : toGid(doc.universe.id, id));
+      const nodeGids = [];
+      for (const k of rule.nodeRefs || []) if (payload[k]) nodeGids.push(toNodeGid(payload[k]));
+      for (const k of rule.nodeListRefs || []) for (const id of payload[k] || []) nodeGids.push(toNodeGid(id));
+      if (payload.target_kind === 'node' && payload.target_id) nodeGids.push(toNodeGid(payload.target_id));
+      events.push({
+        gid: toGid(doc.universe.id, ev.id),
+        universe_id: doc.universe.id,
+        id: ev.id,
+        type: ev.type,
+        occurred_at: ev.occurred_at,
+        recorded_at: ev.recorded_at,
+        source: ev.source,
+        payload,
+        note: ev.note,
+        node_gids: [...new Set(nodeGids)],
+      });
+    }
+  }
+  events.sort(
+    (a, b) =>
+      a.occurred_at.localeCompare(b.occurred_at) ||
+      String(a.recorded_at || '').localeCompare(String(b.recorded_at || '')) ||
+      a.gid.localeCompare(b.gid),
+  );
+
+  // 6) 조회 표(1.7). 숨긴 노드는 사번·유형+라벨·주제 조회에서 빠지고, 이력(eventsByNode)은 남긴다
+  const byEmpNo = new Map();
+  const byTypeLabel = new Map();
+  const eventsByNode = new Map();
+  const nodesByTopic = new Map();
+  for (const n of viewNodes) {
+    if (n.hidden) continue;
+    if (n.core_type === 'person' && n.emp_no) pushTo(byEmpNo, n.emp_no, n);
+    pushTo(byTypeLabel, `${n.core_type}|${normalizeLabel(n.label)}`, n);
+  }
+  for (const ev of events) for (const g of ev.node_gids) pushTo(eventsByNode, g, ev);
+  for (const e of edges) {
+    if (e.hidden || e.core_type !== 'relates_to') continue;
+    const src = nodeByGid.get(e.source);
+    const tgt = nodeByGid.get(e.target);
+    if (src && tgt && !src.hidden && !tgt.hidden && tgt.core_type === 'topic') pushTo(nodesByTopic, tgt.gid, src);
+  }
+
+  const view = {
+    universe_id: rootId,
+    universe: rootDoc.universe,
+    nodes: viewNodes,
+    edges,
+    events,
+    missing, // 찾지 못한 하위 유니버스 ID
+    cyclic, // 순환이라 건너뛴 참조
+    unresolved_links: unresolvedLinks,
+    index: { byEmpNo, byTypeLabel, eventsByNode, nodesByTopic },
+
+    canonical,
+    getNode: (gid) => nodeByGid.get(canonical(gid)),
+
+    // 근거 ID 확인용. 숨긴 노드도 내용을 유지해 돌려주고 hidden으로 알린다(4절 "숨김 후 참조")
+    lookup(gid) {
+      const node = nodeByGid.get(canonical(gid));
+      return node ? { found: true, hidden: node.hidden, node } : { found: false, hidden: false, node: null };
+    },
+
+    // 화면에 보일 노드·연결(숨김 제외). 끝점이 숨겨진 연결도 뺀다
+    visible() {
+      const vn = viewNodes.filter((n) => !n.hidden);
+      const ids = new Set(vn.map((n) => n.gid));
+      return { nodes: vn, edges: edges.filter((e) => !e.hidden && ids.has(e.source) && ids.has(e.target)) };
+    },
+
+    // 노드에 연결된 보이는 연결과 반대편 노드. 없으면 빈 배열("연결 없음")
+    neighbors(gid) {
+      const g = canonical(gid);
+      const { edges: ve } = view.visible();
+      return ve
+        .filter((e) => e.source === g || e.target === g)
+        .map((e) => ({ edge: e, direction: e.source === g ? 'out' : 'in', other: nodeByGid.get(e.source === g ? e.target : e.source) }));
+    },
+  };
+  return view;
+}

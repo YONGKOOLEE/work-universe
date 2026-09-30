@@ -59,7 +59,7 @@ first_implementation_task: T-01 (최소 종단 흐름 + P-1·P-3 실측 + 그래
 next_session_first_action: 사용자가 CLAUDE.md를 구현 단계 지침으로 교체한 뒤, docs/03-plan.md 9.4의 시작 프롬프트로 새 구현 세션 시작(T-01)
 
 implementation:
-  current_task: T-03 (대기)
+  current_task: T-03
   tasks:
     - id: T-01
       status: 완료 (사용자 확인 "확인했다", 2026-09-30)
@@ -70,6 +70,13 @@ implementation:
       manual_check: 사용자가 탐색기에서 dist/index.html 더블클릭으로 확인 (2026-09-30)
       ui_feedback: UI 수정 사항은 이후 화면 작업(T-05~T-14)에서 받기로 함
       record: docs/tech-record.md
+    - id: T-03
+      status: 구현·검증 완료, 사용자 확인 대기
+      date: 2026-09-30
+      normal_checks: 통과 (단위 테스트 55개: 추가·수정하면 이벤트가 쌓이고 변경 전 값이 남음, 12.6 예시 JSON 검증 통과, view 합성·조회 표)
+      error_checks: 통과 (E-REQUIRED, E-DUP, E-PAIR, E-SUBTYPE, E-CYCLE, E-SCHEMA, 모르는 유형 → 기타, 숨김 후 참조, 순환 참조 무한 반복 없음)
+      unverified: [화면(UI)에서 새 명령 사용 — T-05·T-06 범위, model·view는 아직 화면에 연결하지 않음]
+      interpretations: docs/tech-record.md 6절 (12절이 정하지 않은 부분을 어떻게 해석했는지)
   premises:
     P-1: 통과 2026-09-30 (Chrome 154.0.8037.58, Edge 154.0.4258.37, headless 자동 점검). 대안 K-3 불필요
     P-2: 미수행 (T-02 선택 작업)
@@ -83,4 +90,4 @@ implementation:
       change: T-01 실측 결과와 라이브러리·빌드 확정 반영 (결정 변경 없음, 결과 기록)
       user_expression: "반영"
       date: 2026-09-30
-  next_task: T-03 (데이터 모델 + view, 02-design 12.1~12.5)
+  next_task: T-04 (가상 데이터 v1) — 사용자 확인 후. T-04 전에 사용자에게 업무 정보 요청(Q2)

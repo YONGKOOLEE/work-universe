@@ -63,3 +63,63 @@ export function edgeTypeLabel(coreType) {
 export function normalizeLabel(label) {
   return String(label).trim().toLowerCase();
 }
+
+// 12.2 events[].type → 화면 표시 이름(1.4)
+export const EVENT_TYPES = {
+  created: '생성',
+  updated: '수정',
+  hidden: '숨김',
+  assign_start: '담당 시작',
+  assign_end: '담당 종료',
+  handover: '인수인계',
+  affiliation_change: '소속 변경',
+  memo: '메모',
+};
+
+// 사용자가 직접 입력하는 이벤트 유형. created·updated·hidden은 명령이 자동으로 기록한다(1.4)
+export const USER_EVENT_TYPES = ['assign_start', 'assign_end', 'handover', 'affiliation_change', 'memo'];
+
+export const EVENT_SOURCES = ['user', 'sample', 'system'];
+
+// 12.2 이벤트 payload 규칙. required: 필수 키, nodeRefs: 노드 ID를 담는 키,
+// nodeListRefs: 노드 ID 배열을 담는 키, eventRefs: 이벤트 ID를 담는 키
+export const EVENT_PAYLOAD = {
+  created: { required: ['target_kind', 'target_id'] },
+  hidden: { required: ['target_kind', 'target_id'] },
+  updated: { required: ['target_kind', 'target_id', 'before', 'after'] },
+  assign_start: { required: ['person_id', 'work_id'], nodeRefs: ['person_id', 'work_id'] },
+  assign_end: { required: ['person_id', 'work_id'], nodeRefs: ['person_id', 'work_id'] },
+  handover: {
+    required: ['work_id', 'from_person_id', 'to_person_id'],
+    nodeRefs: ['work_id', 'from_person_id', 'to_person_id', 'artifact_id'],
+    eventRefs: ['previous_handover_id'],
+  },
+  affiliation_change: { required: ['person_id'], nodeRefs: ['person_id', 'from_org_id', 'to_org_id'] },
+  memo: { nodeRefs: ['target_id'], nodeListRefs: ['topic_ids'] },
+};
+
+export const IDENTITY_KINDS = ['person', 'work'];
+export const IDENTITY_METHODS = ['emp_no_auto', 'human'];
+export const IDENTITY_STATUSES = ['pending', 'confirmed', 'rejected'];
+
+// 12.2 관계 유형별 허용 조합(출발 유형, 도착 유형)
+const PAIR_RULES = {
+  contains: (s, t) => (s === 'root' && t !== 'root') || (s === 'work' && t === 'work'),
+  performs: (s, t) => s === 'person' && t === 'work',
+  produces: (s, t) => s === 'work' && t === 'artifact',
+  precedes: (s, t) => s === 'work' && t === 'work',
+  belongs_to: (s, t) => (s === 'person' || s === 'org') && t === 'org',
+  relates_to: (s, t) => s !== 'root' && t === 'topic',
+  references: (s, t) => s !== 'root' && t !== 'root',
+};
+
+// 모르는 관계·노드 유형은 불러올 때 멈추지 않도록(1.3) 허용으로 본다.
+export function pairAllowed(edgeType, sourceType, targetType) {
+  const rule = PAIR_RULES[edgeType];
+  if (!rule || !NODE_TYPES[sourceType] || !NODE_TYPES[targetType]) return true;
+  return rule(sourceType, targetType);
+}
+
+export function eventTypeLabel(type) {
+  return EVENT_TYPES[type] || UNKNOWN_TYPE_LABEL;
+}

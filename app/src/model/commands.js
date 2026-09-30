@@ -1,7 +1,19 @@
 // 명령 적용(순수 함수). 입력 문서를 바꾸지 않고 새 문서와 이벤트를 돌려준다(12.7 model).
-// T-01 범위: 노드 추가만. 수정·숨김·연결·나머지 검증은 T-03에서 확장한다.
+// 성공: {ok:true, doc, event, ...}  실패: {ok:false, error:{code, field?, existing_id?}}
+// 모든 변경은 이벤트로 쌓고(D-04), 삭제는 숨김으로만 한다.
 
-import { CODES, ID_PREFIX, LABEL_MAX, NODE_TYPES, normalizeLabel } from './schema.js';
+import { findDuplicateEdge, findDuplicateNode, isDate, periodError, subtypeRegistered } from './checks.js';
+import {
+  CODES,
+  EDGE_TYPES,
+  ID_PREFIX,
+  LABEL_MAX,
+  NODE_TYPES,
+  SCHEMA_VERSION,
+  USER_EVENT_TYPES,
+  pairAllowed,
+} from './schema.js';
+import { eventPayloadErrors } from './validate.js';
 
 const ID_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 
@@ -18,65 +30,77 @@ function uniqueId(prefix, taken, random) {
   return id;
 }
 
+const fail = (code, extra = {}) => ({ ok: false, error: { code, ...extra } });
+const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+const isEmpty = (v) => v === undefined || v === null || v === '';
+
+function makeEvent(doc, type, payload, ctx, extra = {}) {
+  return {
+    id: uniqueId(ID_PREFIX.event, new Set(doc.events.map((e) => e.id)), ctx.random || Math.random),
+    type,
+    occurred_at: ctx.occurred_at || ctx.now.slice(0, 10),
+    recorded_at: ctx.now,
+    source: ctx.source || 'user',
+    payload,
+    ...extra,
+  };
+}
+
+// ── 노드 ────────────────────────────────────────────────────────────────
+
+// 입력 필드를 저장 형식으로 정리한다. 빈 값은 필드를 두지 않는다.
+function normalizeNodeFields(f) {
+  const out = { core_type: f.core_type, label: typeof f.label === 'string' ? f.label.trim() : '' };
+  if (!isEmpty(f.subtype)) out.subtype = f.subtype;
+  if (!isEmpty(f.description) && String(f.description).trim()) out.description = String(f.description).trim();
+  if (!isEmpty(f.attrs)) out.attrs = f.attrs;
+  if (Array.isArray(f.tags) && f.tags.length) out.tags = f.tags;
+  if (!isEmpty(f.period)) out.period = f.period;
+  if (!isEmpty(f.emp_no) && String(f.emp_no).trim()) out.emp_no = String(f.emp_no).trim();
+  return out;
+}
+
+// 저장 전 검사. 문제가 없으면 null. isUpdate이면 유형은 바꾸지 않으므로 모르는 유형("기타")도 허용한다.
+function nodeFieldError(doc, f, { excludeId, isUpdate = false } = {}) {
+  if (!f.core_type) return { code: CODES.REQUIRED, field: 'core_type' };
+  if (!f.label || f.label.length > LABEL_MAX) return { code: CODES.REQUIRED, field: 'label' };
+  if (!isUpdate && (!NODE_TYPES[f.core_type] || f.core_type === 'root')) return { code: CODES.SCHEMA, field: 'core_type' };
+  if (f.subtype && !subtypeRegistered(doc, f.core_type, f.subtype)) return { code: CODES.SUBTYPE, field: 'subtype' };
+  if (f.emp_no && f.core_type !== 'person') return { code: CODES.SCHEMA, field: 'emp_no' };
+  if (f.attrs !== undefined) {
+    const ok =
+      f.attrs !== null &&
+      typeof f.attrs === 'object' &&
+      !Array.isArray(f.attrs) &&
+      Object.values(f.attrs).every((v) => typeof v === 'string' || typeof v === 'number');
+    if (!ok) return { code: CODES.SCHEMA, field: 'attrs' };
+  }
+  if (periodError(f.period)) return { code: CODES.SCHEMA, field: 'period' };
+  const dup = findDuplicateNode(doc.nodes, f, excludeId);
+  if (dup) return { code: CODES.DUP, existing_id: dup.id };
+  return null;
+}
+
 /**
- * 노드 1개를 추가한다.
+ * 노드 1개를 추가한다. 꼭지는 유니버스를 만들 때만 생긴다(1.2 Root).
  * @param {object} doc 12.2 유니버스 문서
- * @param {{core_type:string, label:string, subtype?:string, description?:string, emp_no?:string}} input
- * @param {{now:string, random?:()=>number}} ctx now는 ISO 8601 날짜·시각(시간대 포함)
- * @returns {{ok:true, doc:object, node:object, event:object, warnings:object[]}
- *          | {ok:false, error:{code:string, field?:string, existing_id?:string}}}
+ * @param {{core_type:string, label:string, subtype?:string, description?:string, attrs?:object, tags?:string[], period?:object, emp_no?:string}} input
+ * @param {{now:string, random?:()=>number, source?:string, occurred_at?:string}} ctx now는 ISO 8601 날짜·시각(시간대 포함)
  */
 export function addNode(doc, input, ctx) {
-  const coreType = input.core_type;
-  const label = typeof input.label === 'string' ? input.label.trim() : '';
+  const fields = normalizeNodeFields(input);
+  const error = nodeFieldError(doc, fields);
+  if (error) return { ok: false, error };
 
-  if (!coreType) return { ok: false, error: { code: CODES.REQUIRED, field: 'core_type' } };
-  if (!label) return { ok: false, error: { code: CODES.REQUIRED, field: 'label' } };
-  if (label.length > LABEL_MAX) return { ok: false, error: { code: CODES.REQUIRED, field: 'label' } };
-  // 꼭지는 유니버스 생성 때 자동으로만 생긴다(1.2 Root)
-  if (!NODE_TYPES[coreType] || coreType === 'root') {
-    return { ok: false, error: { code: CODES.SCHEMA, field: 'core_type' } };
-  }
-
-  const subtype = input.subtype || undefined;
-  if (subtype) {
-    const known = (doc.universe.subtypes || []).some((s) => s.core_type === coreType && s.name === subtype);
-    if (!known) return { ok: false, error: { code: CODES.SUBTYPE, field: 'subtype' } };
-  }
-
-  const empNo = coreType === 'person' && input.emp_no ? String(input.emp_no).trim() : undefined;
-
-  // 1.5 중복 판정: 사람은 같은 사번, 그 외는 같은 유형 + 같은 정규화 라벨
-  const existing = doc.nodes.find((n) => {
-    if (coreType === 'person' && empNo) return n.core_type === 'person' && n.emp_no === empNo;
-    if (coreType === 'person') return false;
-    return n.core_type === coreType && normalizeLabel(n.label) === normalizeLabel(label);
-  });
-  if (existing) return { ok: false, error: { code: CODES.DUP, existing_id: existing.id } };
-
-  const random = ctx.random || Math.random;
   const node = {
-    id: uniqueId(ID_PREFIX.node, new Set(doc.nodes.map((n) => n.id)), random),
-    core_type: coreType,
-    label,
+    id: uniqueId(ID_PREFIX.node, new Set(doc.nodes.map((n) => n.id)), ctx.random || Math.random),
+    ...fields,
     hidden: false,
     created_at: ctx.now,
     updated_at: ctx.now,
   };
-  if (subtype) node.subtype = subtype;
-  if (input.description) node.description = input.description;
-  if (empNo) node.emp_no = empNo;
-
-  const event = {
-    id: uniqueId(ID_PREFIX.event, new Set(doc.events.map((e) => e.id)), random),
-    type: 'created',
-    occurred_at: ctx.now.slice(0, 10),
-    recorded_at: ctx.now,
-    source: 'user',
-    payload: { target_kind: 'node', target_id: node.id },
-  };
-
-  const warnings = coreType === 'person' && !empNo ? [{ code: CODES.NO_EMPNO, target_id: node.id }] : [];
+  const event = makeEvent(doc, 'created', { target_kind: 'node', target_id: node.id }, ctx);
+  const warnings = node.core_type === 'person' && !node.emp_no ? [{ code: CODES.NO_EMPNO, target_id: node.id }] : [];
 
   return {
     ok: true,
@@ -85,4 +109,241 @@ export function addNode(doc, input, ctx) {
     event,
     warnings,
   };
+}
+
+const NODE_EDITABLE = ['label', 'description', 'attrs', 'tags', 'period', 'subtype', 'emp_no'];
+
+/**
+ * 노드를 수정한다. 바뀐 필드만 골라 `updated` 이벤트의 before/after에 남긴다(R-02 ②).
+ * changes에서 값이 빈 문자열·null이면 그 필드를 지운다. 유형(core_type)은 바꿀 수 없다.
+ * 바뀐 것이 없으면 문서를 그대로 돌려주고 event는 null이다.
+ */
+export function updateNode(doc, nodeId, changes, ctx) {
+  const node = doc.nodes.find((n) => n.id === nodeId);
+  if (!node) return fail(CODES.SCHEMA, { field: 'id' });
+  if (changes.core_type !== undefined && changes.core_type !== node.core_type) return fail(CODES.SCHEMA, { field: 'core_type' });
+  // 꼭지의 이름은 유니버스 이름과 같아야 한다(1.2)
+  if (node.core_type === 'root' && changes.label !== undefined && changes.label !== node.label) {
+    return fail(CODES.SCHEMA, { field: 'label' });
+  }
+
+  const merged = { ...node };
+  for (const key of NODE_EDITABLE) {
+    if (!(key in changes)) continue;
+    const v = typeof changes[key] === 'string' ? changes[key].trim() : changes[key];
+    if (isEmpty(v) || (Array.isArray(v) && v.length === 0)) delete merged[key];
+    else merged[key] = v;
+  }
+  const error = nodeFieldError(doc, merged, { excludeId: nodeId, isUpdate: true });
+  if (error) return { ok: false, error };
+
+  const before = {};
+  const after = {};
+  for (const key of NODE_EDITABLE) {
+    if (!same(node[key], merged[key])) {
+      before[key] = node[key] ?? null;
+      after[key] = merged[key] ?? null;
+    }
+  }
+  if (Object.keys(after).length === 0) return { ok: true, doc, node, event: null, warnings: [] };
+
+  const updated = { ...merged, updated_at: ctx.now };
+  const event = makeEvent(doc, 'updated', { target_kind: 'node', target_id: nodeId, before, after }, ctx);
+  const warnings = updated.core_type === 'person' && !updated.emp_no ? [{ code: CODES.NO_EMPNO, target_id: nodeId }] : [];
+  return {
+    ok: true,
+    doc: { ...doc, nodes: doc.nodes.map((n) => (n.id === nodeId ? updated : n)), events: [...doc.events, event] },
+    node: updated,
+    event,
+    warnings,
+  };
+}
+
+/** 노드를 숨긴다(삭제 대신, D-04). 꼭지는 숨길 수 없다. 이미 숨겼으면 event는 null이다. */
+export function hideNode(doc, nodeId, ctx) {
+  const node = doc.nodes.find((n) => n.id === nodeId);
+  if (!node) return fail(CODES.SCHEMA, { field: 'id' });
+  if (node.core_type === 'root') return fail(CODES.SCHEMA, { field: 'core_type' });
+  if (node.hidden) return { ok: true, doc, node, event: null };
+
+  const hiddenNode = { ...node, hidden: true, updated_at: ctx.now };
+  const event = makeEvent(doc, 'hidden', { target_kind: 'node', target_id: nodeId }, ctx);
+  return {
+    ok: true,
+    doc: { ...doc, nodes: doc.nodes.map((n) => (n.id === nodeId ? hiddenNode : n)), events: [...doc.events, event] },
+    node: hiddenNode,
+    event,
+  };
+}
+
+// ── 연결 ────────────────────────────────────────────────────────────────
+
+/**
+ * 연결 1개를 추가한다. 양 끝 노드는 같은 유니버스에 있어야 하고 관계 조합은 12.2 표를 따른다.
+ * @param {{source:string, target:string, core_type:string, subtype?:string, period?:object, note?:string}} input
+ */
+export function addEdge(doc, input, ctx) {
+  for (const k of ['source', 'target', 'core_type']) {
+    if (isEmpty(input[k])) return fail(CODES.REQUIRED, { field: k });
+  }
+  const src = doc.nodes.find((n) => n.id === input.source);
+  const tgt = doc.nodes.find((n) => n.id === input.target);
+  if (!src) return fail(CODES.SCHEMA, { field: 'source' });
+  if (!tgt) return fail(CODES.SCHEMA, { field: 'target' });
+  if (!EDGE_TYPES[input.core_type]) return fail(CODES.SCHEMA, { field: 'core_type' });
+  if (!pairAllowed(input.core_type, src.core_type, tgt.core_type)) return fail(CODES.PAIR);
+  if (input.subtype && !subtypeRegistered(doc, input.core_type, input.subtype)) return fail(CODES.SUBTYPE, { field: 'subtype' });
+  if (periodError(input.period)) return fail(CODES.SCHEMA, { field: 'period' });
+
+  const fields = { source: input.source, target: input.target, core_type: input.core_type };
+  if (!isEmpty(input.period)) fields.period = input.period;
+  const dup = findDuplicateEdge(doc.edges, fields);
+  if (dup) return fail(CODES.DUP, { existing_id: dup.id });
+
+  const edge = {
+    id: uniqueId(ID_PREFIX.edge, new Set(doc.edges.map((e) => e.id)), ctx.random || Math.random),
+    ...fields,
+    ...(input.subtype ? { subtype: input.subtype } : {}),
+    ...(input.note && String(input.note).trim() ? { note: String(input.note).trim() } : {}),
+    hidden: false,
+    created_at: ctx.now,
+  };
+  const event = makeEvent(doc, 'created', { target_kind: 'edge', target_id: edge.id }, ctx);
+  return { ok: true, doc: { ...doc, edges: [...doc.edges, edge], events: [...doc.events, event] }, edge, event };
+}
+
+const EDGE_EDITABLE = ['subtype', 'period', 'note'];
+
+/** 연결의 하위 유형·기간·메모를 수정한다. 양 끝과 관계 유형은 바꿀 수 없다. */
+export function updateEdge(doc, edgeId, changes, ctx) {
+  const edge = doc.edges.find((e) => e.id === edgeId);
+  if (!edge) return fail(CODES.SCHEMA, { field: 'id' });
+  for (const k of ['source', 'target', 'core_type']) {
+    if (changes[k] !== undefined && changes[k] !== edge[k]) return fail(CODES.SCHEMA, { field: k });
+  }
+
+  const merged = { ...edge };
+  for (const key of EDGE_EDITABLE) {
+    if (!(key in changes)) continue;
+    const v = typeof changes[key] === 'string' ? changes[key].trim() : changes[key];
+    if (isEmpty(v)) delete merged[key];
+    else merged[key] = v;
+  }
+  if (merged.subtype && !subtypeRegistered(doc, merged.core_type, merged.subtype)) return fail(CODES.SUBTYPE, { field: 'subtype' });
+  if (periodError(merged.period)) return fail(CODES.SCHEMA, { field: 'period' });
+  const dup = !merged.hidden && findDuplicateEdge(doc.edges, merged, edgeId);
+  if (dup) return fail(CODES.DUP, { existing_id: dup.id });
+
+  const before = {};
+  const after = {};
+  for (const key of EDGE_EDITABLE) {
+    if (!same(edge[key], merged[key])) {
+      before[key] = edge[key] ?? null;
+      after[key] = merged[key] ?? null;
+    }
+  }
+  if (Object.keys(after).length === 0) return { ok: true, doc, edge, event: null };
+
+  const event = makeEvent(doc, 'updated', { target_kind: 'edge', target_id: edgeId, before, after }, ctx);
+  return {
+    ok: true,
+    doc: { ...doc, edges: doc.edges.map((e) => (e.id === edgeId ? merged : e)), events: [...doc.events, event] },
+    edge: merged,
+    event,
+  };
+}
+
+/** 연결을 숨긴다. 이미 숨겼으면 event는 null이다. */
+export function hideEdge(doc, edgeId, ctx) {
+  const edge = doc.edges.find((e) => e.id === edgeId);
+  if (!edge) return fail(CODES.SCHEMA, { field: 'id' });
+  if (edge.hidden) return { ok: true, doc, edge, event: null };
+
+  const hiddenEdge = { ...edge, hidden: true };
+  const event = makeEvent(doc, 'hidden', { target_kind: 'edge', target_id: edgeId }, ctx);
+  return {
+    ok: true,
+    doc: { ...doc, edges: doc.edges.map((e) => (e.id === edgeId ? hiddenEdge : e)), events: [...doc.events, event] },
+    edge: hiddenEdge,
+    event,
+  };
+}
+
+// ── 이벤트 ──────────────────────────────────────────────────────────────
+
+/**
+ * 사용자 입력 이벤트(담당 시작·종료, 인수인계, 소속 변경, 메모)를 추가한다. 추가만 가능하다(D-04).
+ * 생성·수정·숨김 이벤트는 명령이 자동으로 기록하므로 여기서 받지 않는다.
+ * @param {{type:string, occurred_at:string, payload?:object, note?:string}} input
+ */
+export function addEvent(doc, input, ctx) {
+  if (isEmpty(input.type)) return fail(CODES.REQUIRED, { field: 'type' });
+  if (!USER_EVENT_TYPES.includes(input.type)) return fail(CODES.SCHEMA, { field: 'type' });
+  if (isEmpty(input.occurred_at)) return fail(CODES.REQUIRED, { field: 'occurred_at' });
+  if (!isDate(input.occurred_at)) return fail(CODES.SCHEMA, { field: 'occurred_at' });
+
+  const nodesById = new Map(doc.nodes.map((n) => [n.id, n]));
+  const edgeIds = new Set(doc.edges.map((e) => e.id));
+  const candidate = { type: input.type, payload: input.payload };
+  const [first] = eventPayloadErrors(doc, nodesById, edgeIds, candidate);
+  if (first) return fail(first.code, { field: first.field });
+  const prev = input.payload && input.payload.previous_handover_id;
+  if (prev && !prev.includes('/') && !doc.events.some((e) => e.id === prev)) {
+    return fail(CODES.SCHEMA, { field: 'previous_handover_id' });
+  }
+
+  const event = makeEvent(doc, input.type, input.payload || {}, { ...ctx, occurred_at: input.occurred_at }, {
+    ...(input.note && String(input.note).trim() ? { note: String(input.note).trim() } : {}),
+  });
+  return { ok: true, doc: { ...doc, events: [...doc.events, event] }, event };
+}
+
+// ── 유형 설정과 유니버스 ────────────────────────────────────────────────
+
+/**
+ * 하위 유형을 등록한다(1.3 ②). 반드시 핵심 유형 하나에 속한다. 데이터만 늘고 코드 변경은 없다.
+ * 설정 변경이라 이벤트는 남기지 않는다.
+ */
+export function addSubtype(doc, input) {
+  const name = typeof input.name === 'string' ? input.name.trim() : '';
+  if (!input.core_type) return fail(CODES.REQUIRED, { field: 'core_type' });
+  if (!name || name.length > LABEL_MAX) return fail(CODES.REQUIRED, { field: 'name' });
+  const known = (NODE_TYPES[input.core_type] && input.core_type !== 'root') || EDGE_TYPES[input.core_type];
+  if (!known) return fail(CODES.SCHEMA, { field: 'core_type' });
+  if (subtypeRegistered(doc, input.core_type, name)) return fail(CODES.DUP, { field: 'name' });
+
+  const subtypes = [...(doc.universe.subtypes || []), { core_type: input.core_type, name }];
+  return { ok: true, doc: { ...doc, universe: { ...doc.universe, subtypes } } };
+}
+
+/**
+ * 유니버스를 만든다. 꼭지 노드가 자동으로 생기고 생성 이벤트가 남는다(R-12).
+ * 같은 이름·단위의 유니버스가 이미 있는지는 저장소를 아는 app에서 경고한다.
+ * @param {{name:string, level:string, owner:string, description?:string, tags?:string[], is_sample?:boolean}} input
+ */
+export function createUniverse(input, ctx) {
+  const text = (v) => (typeof v === 'string' ? v.trim() : '');
+  const name = text(input.name);
+  if (!name || name.length > LABEL_MAX) return fail(CODES.REQUIRED, { field: 'name' });
+  if (!text(input.level)) return fail(CODES.REQUIRED, { field: 'level' });
+  if (!text(input.owner)) return fail(CODES.REQUIRED, { field: 'owner' });
+
+  const random = ctx.random || Math.random;
+  const rootId = newId(ID_PREFIX.node, random);
+  const universe = {
+    id: newId(ID_PREFIX.universe, random),
+    name,
+    level: text(input.level),
+    owner: text(input.owner),
+    root_node_id: rootId,
+    subtypes: [],
+    is_sample: !!input.is_sample,
+    created_at: ctx.now,
+    ...(text(input.description) ? { description: text(input.description) } : {}),
+    ...(Array.isArray(input.tags) && input.tags.length ? { tags: input.tags } : {}),
+  };
+  const root = { id: rootId, core_type: 'root', label: name, hidden: false, created_at: ctx.now, updated_at: ctx.now };
+  const base = { schema_version: SCHEMA_VERSION, universe, nodes: [root], edges: [], events: [], refs: [], identity_links: [] };
+  const event = makeEvent(base, 'created', { target_kind: 'node', target_id: rootId }, ctx);
+  return { ok: true, doc: { ...base, events: [event] }, event };
 }
