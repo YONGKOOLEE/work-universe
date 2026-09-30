@@ -1,0 +1,59 @@
+current_stage: planning:complete
+documents:
+  00-context.md: approved
+  01-requirements.md: approved
+  02-design.md: approved
+  03-plan.md: approved
+gates:
+  context:approved: approved
+  requirements:approved: approved
+  design:approved: approved
+  plan:approved: approved
+  planning:complete: recorded 2026-09-30 (최종 점검 통과, CR-2 승인 후 재확정)
+approvals:   # 형식: gate / 대상 문서 / 사용자 승인 표현(원문) / 시각·시간대(확인 가능한 경우만) / 조건
+  - gate: context:approved
+    document: docs/00-context.md
+    user_expression: "context 승인"
+    date: 2026-09-30
+    time: 미기록
+    conditions: 유니버스 개념 절 포함. A-1·A-2 인지("진행해도 된다")
+  - gate: requirements:approved
+    document: docs/01-requirements.md
+    user_expression: "requirements 승인"
+    date: 2026-09-30
+    time: 미기록
+    conditions: RQ-5="2번으로 진행". RA-1 인지("RA-1 확인함"). [1단계 제안] 항목 채택
+  - gate: design:approved
+    document: docs/02-design.md
+    user_expression: "design 승인"
+    date: 2026-09-30
+    time: 미기록
+    conditions: D-05 진행(선택 이유 설명 전제), D-02 승인(두 사용법 모두 구현), DA-1 진행, 노드·관계 ②안(확장 가능 조건), JavaScript. P-1~P-3은 T-01·T-02에서 실측
+  - change: CR-1 (사전 생성 방식)
+    documents: 01 RQ-5·R-15, 02 D-07·5.4, 03 T-02·T-12·T-16·K-2·K-9
+    user_expression: "cr-1 방식을 승인"
+    date: 2026-09-30
+    time: 미기록
+    conditions: 새 입력 데이터는 구현하되 LLM 문장은 규칙 기반 대체, 실제 LLM 확정 시 연결부로 연결
+  - gate: plan:approved
+    document: docs/03-plan.md
+    user_expression: "plan 승인"
+    date: 2026-09-30
+    time: 미기록
+    conditions: 범위 축소 순서 승인, 점검일 없음, 조력자 필수 담당 제외(뼈대 정보 제공은 선택), 가상 데이터 기본안으로 시작
+  - change: CR-2 (02-design 12절 필드 수준 스키마·시스템 구조 보강, 03 T-03·9.4 반영)
+    requested: "보강진행" (2026-09-30)
+    status: 승인
+    user_expression: "cr-2 승인"
+    date: 2026-09-30
+    time: 미기록
+    conditions: 업무 유니버스의 소속 변경은 조직 ID 없이 메모로 기록(12.6 원칙) 유지
+input_basis: inputs/업무정의서_업무유니버스_v0.2.md (사용자 승인본, 참고 근거)
+blocking_questions: []
+final_check:
+  result: 통과 (5/5, 상세는 docs/03-plan.md 9절)
+  date: 2026-09-30
+  notes: R-09는 P2로 1차 제외되어 T-ID 없음(사용자 결정). 차단 조건 없음
+remaining_nonblocking_assumptions: [A-1, A-2, RA-1, DA-1, 기본안 가상 데이터(T-15 전까지 교체 가능), P-1~P-3(T-01·T-02 실측), 주최 측 공지 미확인 항목]
+first_implementation_task: T-01 (최소 종단 흐름 + P-1·P-3 실측 + 그래프 라이브러리·빌드 방식 확정)
+next_session_first_action: 사용자가 CLAUDE.md를 구현 단계 지침으로 교체한 뒤, docs/03-plan.md 9.4의 시작 프롬프트로 새 구현 세션 시작(T-01)
