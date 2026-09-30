@@ -1,0 +1,18 @@
+{
+  "name": "work-universe",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "업무 유니버스 프로토타입 (가상 데이터)",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "test": "node --test \"tests/**/*.test.js\"",
+    "check:browser": "node tools/browser-check.mjs"
+  },
+  "dependencies": {
+    "cytoscape": "3.34.3"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

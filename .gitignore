@@ -1,0 +1,15 @@
+# 빌드 결과(제출용은 T-15에서 별도 압축)
+dist/
+node_modules/
+
+# 비밀값·키 관련 파일 (02-design 5.4, CLAUDE.md)
+.env
+.env.*
+*.key
+*.pem
+secrets/
+**/api-key*
+**/*apikey*
+
+# 브라우저 점검 도구 임시 프로필
+.tmp/

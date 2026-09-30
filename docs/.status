@@ -57,3 +57,30 @@ final_check:
 remaining_nonblocking_assumptions: [A-1, A-2, RA-1, DA-1, 기본안 가상 데이터(T-15 전까지 교체 가능), P-1~P-3(T-01·T-02 실측), 주최 측 공지 미확인 항목]
 first_implementation_task: T-01 (최소 종단 흐름 + P-1·P-3 실측 + 그래프 라이브러리·빌드 방식 확정)
 next_session_first_action: 사용자가 CLAUDE.md를 구현 단계 지침으로 교체한 뒤, docs/03-plan.md 9.4의 시작 프롬프트로 새 구현 세션 시작(T-01)
+
+implementation:
+  current_task: T-03 (대기)
+  tasks:
+    - id: T-01
+      status: 완료 (사용자 확인 "확인했다", 2026-09-30)
+      date: 2026-09-30
+      normal_checks: 통과 (Chrome·Edge file:// 그래프 표시, 클릭 상세, 노드 추가·저장, 새로고침·재시작 후 유지)
+      error_checks: 통과 (인터넷 차단 시 동작·외부 요청 0건, 저장소 차단 시 W-STORAGE 배너·읽기 전용, E-REQUIRED, E-DUP)
+      unverified: [실제 네트워크 단절(프록시 차단으로 대체)]
+      manual_check: 사용자가 탐색기에서 dist/index.html 더블클릭으로 확인 (2026-09-30)
+      ui_feedback: UI 수정 사항은 이후 화면 작업(T-05~T-14)에서 받기로 함
+      record: docs/tech-record.md
+  premises:
+    P-1: 통과 2026-09-30 (Chrome 154.0.8037.58, Edge 154.0.4258.37, headless 자동 점검). 대안 K-3 불필요
+    P-2: 미수행 (T-02 선택 작업)
+    P-3: 통과 2026-09-30 (localStorage, 새로고침·정상 재시작 후 유지. 강제 종료 직후 유실 가능성 관찰). 대안 K-4 불필요
+  decisions:
+    graph_library: Cytoscape.js 3.34.3 (MIT)
+    build: esbuild 0.28.2, ES 모듈 소스 → IIFE 단일 스크립트 dist/app.js + dist/index.html
+    toolchain: Node.js 24.19.0 LTS, npm 11.17.0, Git 2.55.0
+  doc_changes:
+    - document: docs/02-design.md 5.1(P-1)·5.2(P-3)·5.7(D-10)
+      change: T-01 실측 결과와 라이브러리·빌드 확정 반영 (결정 변경 없음, 결과 기록)
+      user_expression: "반영"
+      date: 2026-09-30
+  next_task: T-03 (데이터 모델 + view, 02-design 12.1~12.5)

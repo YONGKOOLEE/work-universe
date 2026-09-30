@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>업무 유니버스</title>
+<style>
+  :root { --bg: #f6f6f8; --panel: #fff; --line: #ddd; --text: #1d1d1f; --muted: #6b6b70; --err: #b3261e; --ok: #1f7a3a; --warn-bg: #fff4d6; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Malgun Gothic", system-ui, sans-serif; color: var(--text); background: var(--bg); display: flex; flex-direction: column; height: 100vh; }
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 17px; margin: 0; }
+  header .sub { color: var(--muted); font-size: 14px; }
+  header .spacer { flex: 1; }
+  #banner { margin: 0; padding: 10px 16px; background: var(--warn-bg); border-bottom: 1px solid #e8d38a; font-size: 14px; }
+  main { flex: 1; display: flex; min-height: 0; }
+  #graph { flex: 1; min-width: 0; background: var(--panel); }
+  aside { width: 340px; border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 16px; }
+  aside h2 { font-size: 16px; margin: 0 0 8px; }
+  aside h3 { font-size: 14px; margin: 16px 0 6px; }
+  dl { display: grid; grid-template-columns: 70px 1fr; gap: 4px 8px; margin: 0; font-size: 14px; }
+  dt { color: var(--muted); }
+  dd { margin: 0; word-break: break-all; }
+  ul { padding-left: 18px; margin: 0; font-size: 14px; }
+  .muted { color: var(--muted); font-size: 14px; }
+  button.link { background: none; border: 0; padding: 0; color: #2f6fb5; text-decoration: underline; cursor: pointer; font: inherit; }
+  form { display: grid; gap: 8px; font-size: 14px; }
+  form label { display: grid; gap: 4px; }
+  input, select, button { font: inherit; padding: 6px 8px; }
+  #add-message.error { color: var(--err); }
+  #add-message.ok { color: var(--ok); }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 20px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>업무 유니버스</h1>
+  <span class="sub" id="universe-title"></span>
+  <span class="spacer"></span>
+  <button type="button" id="reset">가상 데이터 초기화</button>
+</header>
+<p id="banner" role="alert" hidden></p>
+<main>
+  <div id="graph" aria-label="그래프"></div>
+  <aside>
+    <section id="detail" aria-live="polite"></section>
+    <hr>
+    <h2>노드 추가</h2>
+    <form id="add-form" novalidate>
+      <label>유형 <select id="add-type"></select></label>
+      <label>라벨 <input id="add-label" maxlength="100" autocomplete="off"></label>
+      <label id="add-empno-row">사번(선택) <input id="add-empno" placeholder="V-0000" autocomplete="off"></label>
+      <button type="submit">저장</button>
+      <div id="add-message" aria-live="polite"></div>
+    </form>
+  </aside>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
