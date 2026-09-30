@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validateDocument } from '../app/src/model/validate.js';
 import { nodeTypeLabel } from '../app/src/model/schema.js';
-import { SAMPLE_T01 } from '../app/data/sample-t01.js';
+import { SAMPLE_T01 } from './fixtures/sample-t01.js';
 import { EXAMPLE_12_6 } from './fixtures/example-12-6.js';
 
 const clone = (d) => JSON.parse(JSON.stringify(d));

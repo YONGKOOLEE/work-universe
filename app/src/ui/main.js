@@ -2,7 +2,7 @@
 
 import { createApp } from '../app/app.js';
 import { createStore, openStorage } from '../store/local.js';
-import { SAMPLE_T01 } from '../../data/sample-t01.js';
+import { SAMPLE_A1 } from '../../data/sample-a1.js';
 import { NODE_TYPES, edgeTypeLabel, nodeTypeLabel } from '../model/schema.js';
 import { createGraph } from './graph.js';
 import { messageFor } from './messages.js';
@@ -33,7 +33,7 @@ function el(tag, attrs = {}, ...children) {
 
 function start() {
   const storage = openStorage(() => window.localStorage);
-  const app = createApp({ store: storage ? createStore(storage) : null, sample: SAMPLE_T01, now: nowIso });
+  const app = createApp({ store: storage ? createStore(storage) : null, sample: SAMPLE_A1, now: nowIso });
 
   const $ = (id) => document.getElementById(id);
   let selectedId = null;

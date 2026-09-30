@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addNode, newId } from '../app/src/model/commands.js';
-import { SAMPLE_T01 } from '../app/data/sample-t01.js';
+import { SAMPLE_T01 } from './fixtures/sample-t01.js';
 
 const ctx = { now: '2026-10-01T10:00:00+09:00' };
 

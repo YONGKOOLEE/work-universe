@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { SAMPLE_A1 } from '../app/data/sample-a1.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const pageUrl = pathToFileURL(join(root, 'dist/index.html')).href;
@@ -16,6 +17,8 @@ const BROWSERS = [
   { name: 'Edge', paths: ['C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe'] },
 ];
 
+const NODES = SAMPLE_A1.nodes.length;
+const EDGES = SAMPLE_A1.edges.length;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function launch(exe, profileDir, port) {
@@ -166,7 +169,7 @@ async function checkBrowser(browser, port) {
   // 1) 첫 실행: 표시 → 클릭 상세 → 추가 → 새로고침
   let s = await openSession(exe, profile, port);
   const version = s.version;
-  check('P-1 file:// 로드·그래프 표시(노드 3, 연결 2)', s.ready && (await nodeCount(s.cdp)) === 3 && (await edgeCount(s.cdp)) === 2);
+  check(`P-1 file:// 로드·그래프 표시(노드 ${NODES}, 연결 ${EDGES})`, s.ready && (await nodeCount(s.cdp)) === NODES && (await edgeCount(s.cdp)) === EDGES);
   check('저장소 경고 배너 없음(정상 환경)', await evaluate(s.cdp, "document.getElementById('banner').hidden"));
 
   await clickNode(s.cdp, 'N-001');
@@ -179,7 +182,7 @@ async function checkBrowser(browser, port) {
   check('오류: 중복 → E-DUP + 기존 노드 링크', dup.code === 'E-DUP' && dup.text.includes('기존 노드 보기'), dup.text);
 
   const added = await submitAdd(s.cdp, 'artifact', newLabel);
-  check('노드 1개 추가·저장', added.code === 'OK' && (await nodeCount(s.cdp)) === 4 && (await hasLabel(s.cdp, newLabel)), added.text);
+  check('노드 1개 추가·저장', added.code === 'OK' && (await nodeCount(s.cdp)) === NODES + 1 && (await hasLabel(s.cdp, newLabel)), added.text);
 
   await clickNode(s.cdp, await evaluate(s.cdp, `window.__wu.doc.nodes.find(n => n.label === ${JSON.stringify(newLabel)}).id`));
   check('연결 없는 노드 → "연결 없음"', await evaluate(s.cdp, "!!document.querySelector('[data-testid=no-links]')"));
@@ -187,7 +190,7 @@ async function checkBrowser(browser, port) {
   await s.cdp.send('Page.reload');
   await sleep(300);
   const reloaded = await waitFor(s.cdp, 'window.__wu && window.__wu.cy.nodes().length > 0');
-  check('P-3 새로고침 후 추가 노드 유지', reloaded && (await nodeCount(s.cdp)) === 4 && (await hasLabel(s.cdp, newLabel)));
+  check('P-3 새로고침 후 추가 노드 유지', reloaded && (await nodeCount(s.cdp)) === NODES + 1 && (await hasLabel(s.cdp, newLabel)));
   const errors1 = [...s.log.errors];
   const external1 = [...s.log.external];
   s.cdp.close();
@@ -195,7 +198,7 @@ async function checkBrowser(browser, port) {
 
   // 2) 브라우저를 닫았다 다시 열기(같은 프로필)
   s = await openSession(exe, profile, port);
-  check('P-3 브라우저 재시작 후 추가 노드 유지', s.ready && (await nodeCount(s.cdp)) === 4 && (await hasLabel(s.cdp, newLabel)));
+  check('P-3 브라우저 재시작 후 추가 노드 유지', s.ready && (await nodeCount(s.cdp)) === NODES + 1 && (await hasLabel(s.cdp, newLabel)));
   const errors2 = [...s.log.errors];
   const external2 = [...s.log.external];
   s.cdp.close();
@@ -210,7 +213,7 @@ async function checkBrowser(browser, port) {
   s = await openSession(exe, blockedProfile, port, { blockStorage: true });
   const banner = await evaluate(s.cdp, "({ hidden: document.getElementById('banner').hidden, code: document.getElementById('banner').dataset.code || '' })");
   check('오류: 저장소 차단 → W-STORAGE 배너', !banner.hidden && banner.code === 'W-STORAGE');
-  check('저장소 차단 시 샘플 읽기 전용 표시(노드 3, 추가 비활성)', s.ready && (await nodeCount(s.cdp)) === 3 && (await evaluate(s.cdp, "document.getElementById('add-label').disabled")));
+  check(`저장소 차단 시 샘플 읽기 전용 표시(노드 ${NODES}, 추가 비활성)`, s.ready && (await nodeCount(s.cdp)) === NODES && (await evaluate(s.cdp, "document.getElementById('add-label').disabled")));
   s.cdp.close();
   await close(s);
 
