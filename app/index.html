@@ -5,56 +5,114 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>업무 유니버스</title>
 <style>
-  :root { --bg: #f6f6f8; --panel: #fff; --line: #ddd; --text: #1d1d1f; --muted: #6b6b70; --err: #b3261e; --ok: #1f7a3a; --warn-bg: #fff4d6; }
+  /* 어두운 녹색 배경 + 파스텔 노드 색. 그래프 색은 app/src/ui/graph.js의 TYPE_COLORS */
+  :root { --bg: #0f1510; --panel: #141c15; --panel-2: #1b251c; --line: #2a3a2b; --text: #e6ecdf; --muted: #8f9d88; --accent: #a6d86b; --accent-ink: #13200f; --err: #ff8f86; --ok: #9be39f; --warn-bg: #3a3214; --warn-text: #f2dc8e; --chip: #243226; --link: #b9e07a; }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: "Malgun Gothic", system-ui, sans-serif; color: var(--text); background: var(--bg); display: flex; flex-direction: column; height: 100vh; }
   header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
-  header h1 { font-size: 17px; margin: 0; }
-  header .sub { color: var(--muted); font-size: 14px; }
+  header h1 { font-size: 17px; margin: 0; letter-spacing: .5px; }
+  header h1 b { color: var(--accent); }
+  #universe-picker { border-radius: 999px; padding: 6px 12px; max-width: 420px; }
   header .spacer { flex: 1; }
-  #banner { margin: 0; padding: 10px 16px; background: var(--warn-bg); border-bottom: 1px solid #e8d38a; font-size: 14px; }
+  button { font: inherit; padding: 6px 14px; border-radius: 999px; border: 1px solid #3c5a33; background: var(--panel-2); color: var(--text); cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary, form button[type=submit] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: bold; }
+  #banner { margin: 0; padding: 10px 16px; background: var(--warn-bg); color: var(--warn-text); border-bottom: 1px solid #5a4c1c; font-size: 14px; }
   main { flex: 1; display: flex; min-height: 0; }
-  #graph { flex: 1; min-width: 0; background: var(--panel); }
-  aside { width: 340px; border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 16px; }
-  aside h2 { font-size: 16px; margin: 0 0 8px; }
-  aside h3 { font-size: 14px; margin: 16px 0 6px; }
-  dl { display: grid; grid-template-columns: 70px 1fr; gap: 4px 8px; margin: 0; font-size: 14px; }
+  .graph-wrap { flex: 1; min-width: 0; position: relative; background: radial-gradient(ellipse at 50% 45%, #17231a 0%, var(--bg) 70%); display: flex; flex-direction: column; }
+  #graph { flex: 1; min-height: 0; position: relative; }
+  .graph-tools { position: absolute; top: 12px; right: 12px; z-index: 1; display: flex; gap: 6px; }
+  #legend { margin: 0; padding: 8px 14px; list-style: none; border-top: 1px solid var(--line); background: var(--panel); font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+  #legend li { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+  .dot.ref { background: transparent; border: 2px dashed var(--muted); }
+  .legend-note { color: var(--muted); }
+  aside { width: 380px; border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 16px; }
+  aside h2 { font-size: 17px; margin: 0 0 10px; }
+  aside h3 { font-size: 14px; margin: 18px 0 6px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--accent); }
+  dl { display: grid; grid-template-columns: 76px 1fr; gap: 5px 8px; margin: 0; font-size: 14px; }
   dt { color: var(--muted); }
-  dd { margin: 0; word-break: break-all; }
-  ul { padding-left: 18px; margin: 0; font-size: 14px; }
+  dd { margin: 0; word-break: break-word; }
+  ul, ol { padding-left: 0; margin: 0; font-size: 14px; list-style: none; }
+  .links li { padding: 6px 0; border-bottom: 1px dashed var(--line); }
+  .links li:last-child { border-bottom: 0; }
+  .arrow { margin: 0 4px; color: var(--muted); }
+  .history li { display: grid; grid-template-columns: 82px auto 1fr; gap: 2px 8px; padding: 6px 0; border-bottom: 1px dashed var(--line); align-items: start; }
+  .history li:last-child { border-bottom: 0; }
+  .history time { color: var(--muted); font-size: 12px; padding-top: 2px; }
+  .history .chip { justify-self: start; }
+  .history .text { grid-column: 1 / -1; }
+  .chip { display: inline-block; background: var(--chip); border: 1px solid #34482f; border-radius: 10px; padding: 1px 8px; font-size: 12px; }
   .muted { color: var(--muted); font-size: 14px; }
-  button.link { background: none; border: 0; padding: 0; color: #2f6fb5; text-decoration: underline; cursor: pointer; font: inherit; }
-  form { display: grid; gap: 8px; font-size: 14px; }
-  form label { display: grid; gap: 4px; }
-  input, select, button { font: inherit; padding: 6px 8px; }
+  .small { font-size: 12px; }
+  .hint { color: var(--muted); font-size: 13px; margin-top: 16px; padding: 10px; background: var(--panel-2); border-radius: 8px; }
+  .notice { background: var(--warn-bg); color: var(--warn-text); padding: 8px 10px; border-radius: 8px; font-size: 13px; margin: 0 0 10px; }
+  button.link { background: none; border: 0; padding: 0; color: var(--link); text-decoration: underline; cursor: pointer; font: inherit; border-radius: 0; }
+  details.add { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 12px; }
+  details.add summary { cursor: pointer; font-size: 14px; font-weight: bold; }
+  form { display: grid; gap: 8px; font-size: 14px; margin-top: 10px; }
+  form label { display: grid; gap: 4px; color: var(--muted); }
+  input, select { font: inherit; padding: 6px 8px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; }
+  input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   #add-message.error { color: var(--err); }
   #add-message.ok { color: var(--ok); }
-  hr { border: 0; border-top: 1px solid var(--line); margin: 20px 0; }
+  .dot.collapsed { background: transparent; border: 3px double var(--muted); }
+  .layer { margin: 12px 0 0; padding: 10px; background: var(--panel-2); border-radius: 8px; display: grid; gap: 6px; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .check { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--text); }
+  .checks { display: grid; gap: 6px; }
+  dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 12px; width: min(460px, calc(100vw - 32px)); padding: 18px; }
+  dialog::backdrop { background: rgba(0,0,0,.6); }
+  dialog h2 { margin: 0 0 6px; font-size: 17px; }
+  fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  legend { color: var(--muted); font-size: 13px; padding: 0 4px; }
+  .error-text { color: var(--err); font-size: 13px; min-height: 1em; }
+  @media (max-width: 800px) { main { flex-direction: column; } aside { width: auto; border-left: 0; border-top: 1px solid var(--line); max-height: 50vh; } .graph-wrap { min-height: 320px; } }
 </style>
 </head>
 <body>
 <header>
-  <h1>업무 유니버스</h1>
-  <span class="sub" id="universe-title"></span>
+  <h1>업무 <b>UNIVERSE</b></h1>
+  <select id="universe-picker" aria-label="유니버스 선택"></select>
   <span class="spacer"></span>
+  <button type="button" id="group-open" class="primary">유니버스 묶기</button>
   <button type="button" id="reset">가상 데이터 초기화</button>
 </header>
 <p id="banner" role="alert" hidden></p>
 <main>
-  <div id="graph" aria-label="그래프"></div>
+  <div class="graph-wrap">
+    <div id="graph" aria-label="그래프"></div>
+    <div class="graph-tools"><button type="button" id="relayout" title="노드 배치를 처음부터 다시 계산합니다">다시 정렬</button><button type="button" id="fit">전체 보기</button></div>
+    <ul id="legend" aria-label="범례"></ul>
+  </div>
   <aside>
     <section id="detail" aria-live="polite"></section>
-    <hr>
-    <h2>노드 추가</h2>
-    <form id="add-form" novalidate>
-      <label>유형 <select id="add-type"></select></label>
-      <label>라벨 <input id="add-label" maxlength="100" autocomplete="off"></label>
-      <label id="add-empno-row">사번(선택) <input id="add-empno" placeholder="V-0000" autocomplete="off"></label>
-      <button type="submit">저장</button>
-      <div id="add-message" aria-live="polite"></div>
-    </form>
+    <details class="add">
+      <summary>노드 추가</summary>
+      <form id="add-form" novalidate>
+        <label>유형 <select id="add-type"></select></label>
+        <label>라벨 <input id="add-label" maxlength="100" autocomplete="off"></label>
+        <label id="add-empno-row">사번(선택) <input id="add-empno" placeholder="V-0000" autocomplete="off"></label>
+        <button type="submit">저장</button>
+        <div id="add-message" aria-live="polite"></div>
+      </form>
+    </details>
   </aside>
 </main>
+<dialog id="group-dialog" aria-labelledby="group-title">
+  <form id="group-form" novalidate>
+    <h2 id="group-title">유니버스 묶기</h2>
+    <p class="muted small">고른 유니버스를 꼭지 참조로 묶어 상위 유니버스를 만듭니다. 원래 유니버스는 바뀌지 않습니다.</p>
+    <label>이름 <input id="group-name" maxlength="100" autocomplete="off" placeholder="예: 가상 신규팀"></label>
+    <label>단위 <input id="group-level" list="group-levels" value="팀" autocomplete="off"></label>
+    <datalist id="group-levels"><option value="팀"><option value="부서"><option value="본부"><option value="회사"><option value="프로젝트"></datalist>
+    <label>작성 주체 <input id="group-owner" autocomplete="off" placeholder="예: 가상 운영부"></label>
+    <fieldset><legend>묶을 유니버스(2개 이상)</legend><div id="group-children" class="checks"></div></fieldset>
+    <div id="group-message" class="error-text" aria-live="polite"></div>
+    <div class="row"><button type="submit">묶기</button><button type="button" id="group-cancel">취소</button></div>
+  </form>
+</dialog>
 <script src="app.js"></script>
 </body>
 </html>

@@ -3,7 +3,7 @@
 // 사용: npm run build && npm run check:browser
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { SAMPLE_A1 } from '../app/data/sample-a1.js';
@@ -153,6 +153,16 @@ async function submitAdd(cdp, coreType, label) {
   return evaluate(cdp, "({ code: document.getElementById('add-message').dataset.code || '', text: document.getElementById('add-message').textContent })");
 }
 
+const text = (cdp, sel) => evaluate(cdp, `(document.querySelector(${JSON.stringify(sel)}) || {}).textContent || ''`);
+
+// SHOT_DIR을 지정하면 화면을 PNG로 저장한다(사람이 화면을 검토할 때 쓴다)
+async function shot(cdp, name) {
+  if (!process.env.SHOT_DIR) return;
+  await mkdir(process.env.SHOT_DIR, { recursive: true });
+  const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+  await writeFile(join(process.env.SHOT_DIR, `${name}.png`), Buffer.from(data, 'base64'));
+}
+
 const nodeCount = (cdp) => evaluate(cdp, 'window.__wu.cy.nodes().length');
 const edgeCount = (cdp) => evaluate(cdp, 'window.__wu.cy.edges().length');
 const hasLabel = (cdp, label) => evaluate(cdp, `window.__wu.cy.nodes().some(n => n.data('label') === ${JSON.stringify(label)})`);
@@ -172,9 +182,46 @@ async function checkBrowser(browser, port) {
   check(`P-1 file:// 로드·그래프 표시(노드 ${NODES}, 연결 ${EDGES})`, s.ready && (await nodeCount(s.cdp)) === NODES && (await edgeCount(s.cdp)) === EDGES);
   check('저장소 경고 배너 없음(정상 환경)', await evaluate(s.cdp, "document.getElementById('banner').hidden"));
 
-  await clickNode(s.cdp, 'N-001');
-  const detail = await evaluate(s.cdp, "document.getElementById('detail').textContent");
-  check('노드 클릭 → 상세(속성·연결 노드)', detail.includes('대사 확인') && detail.includes('매월') && detail.includes('윤바다') && detail.includes('월말 정산 점검'), detail.slice(0, 80));
+  // 처음 화면: 유니버스 개요와 범례
+  const summary = await text(s.cdp, '#detail');
+  check('처음 화면: 유니버스 개요와 사용법 안내', summary.includes('월말 정산 점검') && summary.includes('노드를 클릭하면'), summary.slice(0, 60));
+  check('범례에 노드 유형이 보임', (await evaluate(s.cdp, "document.querySelectorAll('#legend li').length")) >= 5);
+  await shot(s.cdp, `${browser.name}-1-start`);
+
+  // 마우스를 올리면 이웃만 또렷하게(선택 전), 떼면 원래대로
+  const hoverPos = await evaluate(s.cdp, `(() => { const p = window.__wu.cy.getElementById('U-A1/N-030').renderedPosition(); const r = document.getElementById('graph').getBoundingClientRect(); return { x: r.left + p.x, y: r.top + p.y }; })()`);
+  await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: hoverPos.x, y: hoverPos.y });
+  await sleep(150);
+  const hoverFaded = await evaluate(s.cdp, "window.__wu.cy.elements('.faded').length");
+  const hoodOk = await evaluate(s.cdp, "window.__wu.cy.getElementById('U-A1/N-001').hasClass('faded') === false");
+  await shot(s.cdp, `${browser.name}-1b-hover`);
+  const graphCorner = await evaluate(s.cdp, "(() => { const r = document.getElementById('graph').getBoundingClientRect(); return { x: r.left + 8, y: r.bottom - 8 }; })()");
+  await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: graphCorner.x, y: graphCorner.y });
+  await sleep(150);
+  check('마우스 올림 → 이웃만 또렷하게, 떼면 원래대로', hoverFaded > 0 && hoodOk && (await evaluate(s.cdp, "window.__wu.cy.elements('.faded').length")) === 0);
+
+  // R-01 ①: 노드 클릭 → 속성·연결 노드·이력이 같은 화면에
+  await clickNode(s.cdp, 'U-A1/N-001');
+  const detail = await text(s.cdp, '#detail');
+  check('R-01 ① 노드 클릭 → 속성(설명·주기)', detail.includes('대사 확인') && detail.includes('매월') && detail.includes('원천 자료와 대조'), detail.slice(0, 80));
+  const links = await text(s.cdp, '[data-testid=links]');
+  check('R-01 ① 연결된 노드(관계·담당 기간)', ['월말 정산 점검', '서하늘', '윤바다', '한가람', '대사 불일치', '2026-10-01 ~ 진행 중'].every((t) => links.includes(t)), links.slice(0, 80));
+  const history = await text(s.cdp, '[data-testid=history]');
+  check('R-14 이력이 시간순 문장으로 보임', history.includes('한가람 → 윤바다 인수인계') && history.includes('윤바다 → 서하늘 인수인계') && history.indexOf('2025-03-01') < history.indexOf('2026-09-30'), history.slice(0, 60));
+  check('선택한 노드 밖은 흐리게(이웃 강조)', (await evaluate(s.cdp, "window.__wu.cy.elements('.faded').length")) > 0);
+  await shot(s.cdp, `${browser.name}-2-node`);
+
+  // 상세 패널의 연결된 노드를 눌러 이동
+  await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=links] button')].find(b => b.textContent === '대사 불일치').click()");
+  await sleep(300);
+  check('연결된 노드 링크를 누르면 그 노드로 이동', (await text(s.cdp, '#detail h2')) === '대사 불일치' && (await evaluate(s.cdp, 'window.__wu.selected')) === 'U-A1/N-030');
+
+  // 빈 곳을 클릭하면 선택이 풀리고 개요로 돌아온다
+  await evaluate(s.cdp, `(() => { const r = document.getElementById('graph').getBoundingClientRect(); window.__blank = { x: r.left + 8, y: r.top + 8 }; })()`);
+  const blank = await evaluate(s.cdp, 'window.__blank');
+  for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await s.cdp.send('Input.dispatchMouseEvent', { type, x: blank.x, y: blank.y, button: 'left', clickCount: 1 });
+  await sleep(200);
+  check('빈 곳 클릭 → 선택 해제, 개요로 복귀', (await evaluate(s.cdp, 'window.__wu.selected')) === null && (await text(s.cdp, '#detail')).includes('노드를 클릭하면'));
 
   const empty = await submitAdd(s.cdp, 'work', '   ');
   check('오류: 라벨 누락 → E-REQUIRED', empty.code === 'E-REQUIRED', empty.text);
@@ -184,13 +231,68 @@ async function checkBrowser(browser, port) {
   const added = await submitAdd(s.cdp, 'artifact', newLabel);
   check('노드 1개 추가·저장', added.code === 'OK' && (await nodeCount(s.cdp)) === NODES + 1 && (await hasLabel(s.cdp, newLabel)), added.text);
 
-  await clickNode(s.cdp, await evaluate(s.cdp, `window.__wu.doc.nodes.find(n => n.label === ${JSON.stringify(newLabel)}).id`));
-  check('연결 없는 노드 → "연결 없음"', await evaluate(s.cdp, "!!document.querySelector('[data-testid=no-links]')"));
+  // 추가한 노드는 자동으로 선택된다. 연결이 없으면 "연결 없음"이고, 이어서 다른 노드를 계속 조작할 수 있다(R-01 ②)
+  check('R-01 ② 연결 없는 노드 → "연결 없음"', await evaluate(s.cdp, "!!document.querySelector('[data-testid=no-links]')"));
+  await shot(s.cdp, `${browser.name}-3-no-links`);
+  await clickNode(s.cdp, 'U-A1/N-011');
+  check('R-01 ② "연결 없음" 뒤에도 다른 노드를 계속 선택할 수 있음', (await text(s.cdp, '#detail h2')) === '윤바다' && !!(await evaluate(s.cdp, "!!document.querySelector('[data-testid=links]')")));
 
   await s.cdp.send('Page.reload');
   await sleep(300);
   const reloaded = await waitFor(s.cdp, 'window.__wu && window.__wu.cy.nodes().length > 0');
   check('P-3 새로고침 후 추가 노드 유지', reloaded && (await nodeCount(s.cdp)) === NODES + 1 && (await hasLabel(s.cdp, newLabel)));
+  // CR-4 시제품: 팀 유니버스(접어서 보기, 펼치기, 묶기)
+  await evaluate(s.cdp, "location.hash = 'U-T1'; location.reload()").catch(() => {});
+  await sleep(500);
+  const teamReady = await waitFor(s.cdp, "window.__wu && window.__wu.doc.universe.id === 'U-T1' && window.__wu.cy.nodes().length > 0", 8000);
+  check('팀 유니버스: 접힌 상태로 19개 노드(꼭지·담당자·최상위 업무·공유 주제)', teamReady && (await nodeCount(s.cdp)) === 19);
+  if (teamReady) {
+  await shot(s.cdp, `${browser.name}-4-team`);
+  // 카드승인 꼭지를 더블클릭해 펼친다
+  const k1 = await evaluate(s.cdp, `(() => { const p = window.__wu.cy.getElementById('U-K1/N-000').renderedPosition(); const r = document.getElementById('graph').getBoundingClientRect(); return { x: r.left + p.x, y: r.top + p.y }; })()`);
+  for (const clickCount of [1, 2]) {
+    for (const type of ['mousePressed', 'mouseReleased']) await s.cdp.send('Input.dispatchMouseEvent', { type, x: k1.x, y: k1.y, button: 'left', clickCount });
+    await sleep(60);
+  }
+  await sleep(400);
+  const expandedCount = await nodeCount(s.cdp);
+  check('더블클릭 → 카드승인 유니버스 펼침(세부 노드가 나타남)', expandedCount > 40, String(expandedCount));
+  await shot(s.cdp, `${browser.name}-5-team-expanded`);
+  await evaluate(s.cdp, "window.__wu.toggle('U-K1')");
+  await sleep(300);
+  check('다시 접기 → 19개로 돌아옴', (await nodeCount(s.cdp)) === 19);
+  // 위로 드러내기: 접힌 상태에서 노드의 상세에 체크 상자가 보인다
+  await evaluate(s.cdp, "window.__wu.select('U-K1/N-101')");
+  check('노드 상세에 "위층에 드러내기"와 기본 규칙 이유', (await text(s.cdp, '[data-testid=layer]')).includes('최상위 업무'));
+  // 유니버스 묶기: 먼저 하나만 고르면 거부된다
+  await evaluate(s.cdp, `(() => {
+    document.getElementById('group-open').click();
+    document.getElementById('group-name').value = '가상 점검팀';
+    document.getElementById('group-owner').value = '가상 운영부';
+    document.querySelector('#group-children input[value="U-A1"]').checked = true;
+    document.querySelector('#group-form button[type=submit]').click();
+  })()`);
+  await sleep(200);
+  check('오류: 유니버스를 1개만 고르면 묶지 않고 안내', (await text(s.cdp, '#group-message')).includes('2개 이상'));
+  await evaluate(s.cdp, "document.getElementById('group-dialog').close()");
+  await evaluate(s.cdp, `(() => {
+    document.getElementById('group-open').click();
+    document.getElementById('group-name').value = '가상 점검팀';
+    document.getElementById('group-owner').value = '가상 운영부';
+    document.querySelectorAll('#group-children input').forEach((i) => { if (i.value === 'U-A1' || i.value === 'U-K1') i.checked = true; });
+    document.querySelector('#group-form button[type=submit]').click();
+  })()`);
+  await sleep(400);
+  await waitFor(s.cdp, "window.__wu && window.__wu.doc.universe.name === '가상 점검팀'");
+  // 새로 묶은 팀에는 주제 동일성 연결이 없어 "대사" 주제가 공유되지 않으므로 샘플 팀보다 1개 적다(18)
+  check('유니버스 묶기 → 새 팀 유니버스가 열리고 두 업무가 접혀 보임(18개)', (await evaluate(s.cdp, "window.__wu.doc.universe.name")) === '가상 점검팀' && (await nodeCount(s.cdp)) === 18);
+  // 묶음에서 빼기(확인 창은 자동 수락)
+  await evaluate(s.cdp, "window.confirm = () => true; window.__wu.select('U-K1/N-000')");
+  await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=layer] button')].find((b) => b.textContent === '묶음에서 빼기').click()");
+  await sleep(300);
+  check('묶음에서 빼기 → 카드승인 노드가 사라지고 월말 정산만 남음', !(await evaluate(s.cdp, "window.__wu.cy.nodes().some((n) => n.data('universe_id') === 'U-K1')")) && (await nodeCount(s.cdp)) === 8);
+  }
+
   const errors1 = [...s.log.errors];
   const external1 = [...s.log.external];
   s.cdp.close();

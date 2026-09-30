@@ -98,7 +98,8 @@ export const EVENT_PAYLOAD = {
   memo: { nodeRefs: ['target_id'], nodeListRefs: ['topic_ids'] },
 };
 
-export const IDENTITY_KINDS = ['person', 'work'];
+// topic은 CR-4(제안): 유니버스 사이 공유 주제를 잇는다. 사람 확인만 허용
+export const IDENTITY_KINDS = ['person', 'work', 'topic'];
 export const IDENTITY_METHODS = ['emp_no_auto', 'human'];
 export const IDENTITY_STATUSES = ['pending', 'confirmed', 'rejected'];
 

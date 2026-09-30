@@ -2,9 +2,14 @@
 
 import { createApp } from '../app/app.js';
 import { createStore, openStorage } from '../store/local.js';
-import { SAMPLE_A1 } from '../../data/sample-a1.js';
-import { NODE_TYPES, edgeTypeLabel, nodeTypeLabel } from '../model/schema.js';
-import { createGraph } from './graph.js';
+import { SAMPLES } from '../../data/index.js';
+import { NODE_TYPES } from '../model/schema.js';
+import { describeNode, describeUniverse } from '../view/describe.js';
+import { exposureOf, projectView } from '../view/collapse.js';
+import { parseGid, toGid } from '../view/view.js';
+import { el } from './dom.js';
+import { createGraph, legendItems } from './graph.js';
+import { renderNodeDetail, renderUniverseSummary } from './detail.js';
 import { messageFor } from './messages.js';
 
 // ISO 8601 날짜·시각 + 현지 시간대(12.1)
@@ -20,23 +25,26 @@ function nowIso() {
   )}:${pad(d.getSeconds())}${sign}${oh}:${om}`;
 }
 
-function el(tag, attrs = {}, ...children) {
-  const node = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (k === 'class') node.className = v;
-    else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
-    else node.setAttribute(k, v);
-  }
-  for (const c of children) node.append(c);
-  return node;
+// 다른 유니버스로 이동: 주소 끝의 #유니버스ID를 바꾸고 다시 연다(file://에서도 동작)
+function openUniverse(id) {
+  location.hash = id;
+  location.reload();
 }
 
 function start() {
   const storage = openStorage(() => window.localStorage);
-  const app = createApp({ store: storage ? createStore(storage) : null, sample: SAMPLE_A1, now: nowIso });
+  const app = createApp({
+    store: storage ? createStore(storage) : null,
+    samples: SAMPLES,
+    currentId: decodeURIComponent(location.hash.slice(1)),
+    now: nowIso,
+  });
 
   const $ = (id) => document.getElementById(id);
-  let selectedId = null;
+  let selected = null; // 선택한 노드의 전역 ID
+  const expanded = new Set(); // 펼친 하위 유니버스
+  let view = app.view;
+  let display = projectView(view, { expanded });
 
   // 경고 배너(W-STORAGE 등)
   const banner = $('banner');
@@ -46,58 +54,136 @@ function start() {
     banner.hidden = false;
   }
 
-  $('universe-title').textContent = `${app.doc.universe.name} (${app.doc.universe.level})`;
+  const picker = $('universe-picker');
+  for (const u of app.universes()) {
+    picker.append(el('option', { value: u.id, selected: u.id === app.doc.universe.id }, `${u.name} (${u.level})`));
+  }
+  picker.addEventListener('change', () => openUniverse(picker.value));
 
-  const graph = createGraph($('graph'), { onSelect: select });
+  const graph = createGraph($('graph'), { onSelect: select, onToggle: toggle });
 
-  function select(id) {
-    selectedId = id;
-    renderDetail();
+  function renderLegend() {
+    $('legend').replaceChildren(
+      ...[
+      ...legendItems(display).map((i) => el('li', {}, el('span', { class: 'dot', style: `background:${i.color}` }), i.label)),
+      display.collapsed.size
+        ? el('li', { class: 'legend-note' }, el('span', { class: 'dot collapsed' }), '이중 테두리 + 숫자: 접힌 하위 유니버스(더블클릭하면 펼침) · 점선: 요약 연결')
+        : null,
+      ].flat().filter(Boolean),
+    );
   }
 
-  function renderDetail() {
+  // 층별 보기 조작(CR-4 시제품): 하위 유니버스 꼭지면 펼치기·이동·빼기, 그 밖의 노드면 위로 드러내기
+  function layerControls(gid) {
+    const node = view.getNode(gid);
+    if (!node) return null;
+    const box = el('div', { class: 'layer', 'data-testid': 'layer' });
+    const isChildRoot = node.core_type === 'root' && node.universe_id !== app.doc.universe.id;
+    if (isChildRoot) {
+      const info = display.collapsed.get(node.universe_id);
+      box.append(
+        el('p', { class: 'muted small' }, info ? `접혀 있음: 세부 노드 ${info.hidden_count}개가 가려져 있습니다.` : '펼쳐져 있음'),
+        el('div', { class: 'row' },
+          el('button', { type: 'button', 'data-testid': 'toggle', onclick: () => toggle(node.universe_id) }, info ? '펼치기' : '접기'),
+          el('button', { type: 'button', onclick: () => openUniverse(node.universe_id) }, '이 유니버스 열기'),
+          app.doc.refs.some((r) => r.child_universe_id === node.universe_id && !r.hidden)
+            ? el('button', { type: 'button', disabled: app.readOnly, onclick: () => removeChild(node.universe_id, node.label) }, '묶음에서 빼기')
+            : null,
+        ),
+      );
+      return box;
+    }
+    if (node.core_type === 'root') return null;
+    const exp = exposureOf(view, gid);
+    const { universe_id: uid, local_id: lid } = parseGid(gid);
+    const cb = el('input', { type: 'checkbox', checked: exp.exposed, disabled: app.readOnly, 'data-testid': 'exposed' });
+    cb.addEventListener('change', () => {
+      const r = app.updateNode(uid, lid, { exposed: cb.checked });
+      if (!r.ok) return window.alert(messageFor(r.error));
+      refresh();
+    });
+    box.append(
+      el('label', { class: 'check' }, cb, ' 위층(상위 유니버스)에 드러내기'),
+      el('div', { class: 'muted small' }, `${exp.explicit ? '직접 지정' : '기본 규칙'}: ${exp.reason}`),
+    );
+    return box;
+  }
+
+  function renderPanel() {
     const panel = $('detail');
-    panel.replaceChildren();
-    const doc = app.doc;
-    const node = selectedId && doc.nodes.find((n) => n.id === selectedId);
-    if (!node) {
-      panel.append(el('p', { class: 'muted' }, '노드를 클릭하면 상세가 보입니다.'));
-      return;
-    }
-    panel.append(el('h2', {}, node.label));
-    const dl = el('dl');
-    const row = (k, v) => dl.append(el('dt', {}, k), el('dd', {}, v));
-    row('유형', nodeTypeLabel(node.core_type) + (node.subtype ? ` > ${node.subtype}` : ''));
-    row('ID', `${doc.universe.id}/${node.id}`);
-    if (node.emp_no) row('사번', node.emp_no);
-    if (node.description) row('설명', node.description);
-    for (const [k, v] of Object.entries(node.attrs || {})) row(k, String(v));
-    panel.append(dl);
-
-    panel.append(el('h3', {}, '연결된 노드'));
-    const links = doc.edges.filter((e) => !e.hidden && (e.source === node.id || e.target === node.id));
-    if (!links.length) {
-      panel.append(el('p', { class: 'muted', 'data-testid': 'no-links' }, '연결 없음'));
-      return;
-    }
-    const ul = el('ul', { 'data-testid': 'links' });
-    for (const e of links) {
-      const otherId = e.source === node.id ? e.target : e.source;
-      const other = doc.nodes.find((n) => n.id === otherId);
-      const dir = e.source === node.id ? '→' : '←';
-      const btn = el('button', { type: 'button', class: 'link', onclick: () => focusNode(otherId) }, other ? other.label : otherId);
-      ul.append(el('li', {}, `${edgeTypeLabel(e.core_type)} ${dir} `, btn));
-    }
-    panel.append(ul);
+    if (!selected) return renderUniverseSummary(panel, describeUniverse(view));
+    return renderNodeDetail(panel, describeNode(view, selected), { onFocus: focus, extra: layerControls(selected) });
   }
 
-  function focusNode(id) {
-    graph.cy.$(':selected').unselect();
-    graph.cy.getElementById(id).select();
-    select(id);
+  function select(gid) {
+    selected = gid;
+    graph.highlight(gid);
+    renderPanel();
   }
 
-  // 노드 추가 양식
+  // 상세 패널의 연결된 노드를 눌렀을 때: 그래프에서도 그 노드로 이동한다(접혀 있어 안 보이면 이동만 생략)
+  function focus(gid) {
+    select(view.canonical(gid));
+    const node = graph.cy.getElementById(view.canonical(gid));
+    if (!node.empty()) graph.cy.animate({ center: { eles: node } }, { duration: 200 });
+  }
+
+  function refresh() {
+    view = app.view;
+    display = projectView(view, { expanded });
+    graph.render(display, selected);
+    renderLegend();
+    renderPanel();
+  }
+
+  function toggle(universeId) {
+    if (universeId === app.doc.universe.id) return;
+    if (expanded.has(universeId)) expanded.delete(universeId);
+    else expanded.add(universeId);
+    refresh();
+    graph.relayout();
+  }
+
+  function removeChild(childId, label) {
+    if (!window.confirm(`「${label}」을(를) 이 묶음에서 뺍니다. 원래 유니버스는 그대로 남습니다.`)) return;
+    const r = app.removeChild(childId);
+    if (!r.ok) return window.alert(messageFor(r.error));
+    expanded.delete(childId);
+    selected = null;
+    refresh();
+    graph.relayout();
+  }
+
+  $('fit').addEventListener('click', () => graph.fit());
+  $('relayout').addEventListener('click', () => graph.relayout());
+
+  // 유니버스 묶기(R-11 ①, CR-4 시제품): 사용자가 하위 유니버스와 이름·단위를 고른다
+  const dialog = $('group-dialog');
+  $('group-open').addEventListener('click', () => {
+    const list = $('group-children');
+    list.replaceChildren(
+      ...app.universes().map((u) =>
+        el('label', { class: 'check' }, el('input', { type: 'checkbox', value: u.id }), ` ${u.name} (${u.level})`),
+      ),
+    );
+    $('group-message').textContent = '';
+    dialog.showModal();
+  });
+  $('group-cancel').addEventListener('click', () => dialog.close());
+  $('group-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const childIds = [...$('group-children').querySelectorAll('input:checked')].map((i) => i.value);
+    const r = app.groupUniverses({ name: $('group-name').value, level: $('group-level').value, owner: $('group-owner').value, childIds });
+    if (!r.ok) {
+      $('group-message').textContent =
+        r.error.field === 'child_universe_ids' ? '유니버스를 2개 이상 고르세요.' : messageFor(r.error);
+      return;
+    }
+    openUniverse(r.doc.universe.id);
+  });
+  if (app.readOnly) $('group-open').disabled = true;
+
+  // 노드 추가 양식(T-06에서 자료 편집 화면으로 대체된다)
   const form = $('add-form');
   const typeSel = $('add-type');
   for (const [key, name] of Object.entries(NODE_TYPES)) {
@@ -130,8 +216,8 @@ function start() {
       msg.dataset.code = result.error.code;
       msg.append(messageFor(result.error));
       if (result.error.existing_id) {
-        const id = result.error.existing_id;
-        msg.append(' ', el('button', { type: 'button', class: 'link', onclick: () => focusNode(id) }, '기존 노드 보기'));
+        const gid = toGid(app.doc.universe.id, result.error.existing_id);
+        msg.append(' ', el('button', { type: 'button', class: 'link', onclick: () => focus(gid) }, '기존 노드 보기'));
       }
       return;
     }
@@ -140,24 +226,37 @@ function start() {
     msg.append(`저장했습니다: ${result.node.label}`, ...result.warnings.map((w) => ` ${messageFor(w)}`));
     form.reset();
     syncEmp();
-    selectedId = result.node.id;
-    graph.render(app.doc, selectedId);
-    renderDetail();
+    selected = toGid(app.doc.universe.id, result.node.id);
+    refresh();
   });
 
   $('reset').addEventListener('click', () => {
-    if (!window.confirm('가상 데이터를 초기 샘플로 되돌립니다. 추가한 노드는 사라집니다.')) return;
-    app.resetToSample();
-    selectedId = null;
-    graph.render(app.doc, null);
-    renderDetail();
+    if (!window.confirm('모든 가상 데이터를 초기 샘플로 되돌립니다. 추가한 노드와 직접 묶은 유니버스는 사라집니다.')) return;
+    app.resetAll();
+    openUniverse(app.doc.universe.id);
   });
 
-  graph.render(app.doc, null);
-  renderDetail();
+  refresh();
 
-  // 개발 점검 도구(tools/browser-check.mjs)가 그래프 좌표를 읽기 위한 읽기 전용 연결점
-  window.__wu = { cy: graph.cy, get doc() { return app.doc; }, readOnly: app.readOnly };
+  // 개발 점검 도구(tools/browser-check.mjs)가 그래프 좌표와 상태를 읽기 위한 연결점
+  window.__wu = {
+    cy: graph.cy,
+    select,
+    toggle,
+    get doc() {
+      return app.doc;
+    },
+    get view() {
+      return view;
+    },
+    get display() {
+      return display;
+    },
+    get selected() {
+      return selected;
+    },
+    readOnly: app.readOnly,
+  };
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);

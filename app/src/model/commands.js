@@ -67,6 +67,7 @@ function nodeFieldError(doc, f, { excludeId, isUpdate = false } = {}) {
   if (!isUpdate && (!NODE_TYPES[f.core_type] || f.core_type === 'root')) return { code: CODES.SCHEMA, field: 'core_type' };
   if (f.subtype && !subtypeRegistered(doc, f.core_type, f.subtype)) return { code: CODES.SUBTYPE, field: 'subtype' };
   if (f.emp_no && f.core_type !== 'person') return { code: CODES.SCHEMA, field: 'emp_no' };
+  if (f.exposed !== undefined && typeof f.exposed !== 'boolean') return { code: CODES.SCHEMA, field: 'exposed' };
   if (f.attrs !== undefined) {
     const ok =
       f.attrs !== null &&
@@ -111,7 +112,8 @@ export function addNode(doc, input, ctx) {
   };
 }
 
-const NODE_EDITABLE = ['label', 'description', 'attrs', 'tags', 'period', 'subtype', 'emp_no'];
+// exposed: 위층(상위 유니버스)에서 보일지. 없으면 기본 규칙(view/collapse.js)을 따른다(CR-4 제안)
+const NODE_EDITABLE = ['label', 'description', 'attrs', 'tags', 'period', 'subtype', 'emp_no', 'exposed'];
 
 /**
  * 노드를 수정한다. 바뀐 필드만 골라 `updated` 이벤트의 before/after에 남긴다(R-02 ②).
@@ -346,4 +348,42 @@ export function createUniverse(input, ctx) {
   const base = { schema_version: SCHEMA_VERSION, universe, nodes: [root], edges: [], events: [], refs: [], identity_links: [] };
   const event = makeEvent(base, 'created', { target_kind: 'node', target_id: rootId }, ctx);
   return { ok: true, doc: { ...base, events: [event] }, event };
+}
+
+// ── 꼭지 참조(유니버스 묶기) ─────────────────────────────────────────────
+
+const activeRefs = (doc) => (doc.refs || []).filter((r) => !r.hidden);
+
+// childId에서 참조를 따라 내려가다 targetId를 만나면 true(순환)
+function reaches(childId, targetId, resolveUniverse, seen = new Set()) {
+  if (childId === targetId) return true;
+  if (seen.has(childId)) return false;
+  seen.add(childId);
+  const child = resolveUniverse(childId);
+  return !!child && activeRefs(child).some((r) => reaches(r.child_universe_id, targetId, resolveUniverse, seen));
+}
+
+/**
+ * 하위 유니버스를 참조로 포함한다(D-02·D-03). 원본은 바꾸지 않는다.
+ * resolveUniverse(id)는 다른 유니버스 문서를 찾는 함수다(순환 검사에 필요).
+ */
+export function addRef(doc, childId, ctx, resolveUniverse) {
+  if (isEmpty(childId)) return fail(CODES.REQUIRED, { field: 'child_universe_id' });
+  if (childId === doc.universe.id) return fail(CODES.CYCLE);
+  if (!resolveUniverse(childId)) return fail(CODES.SCHEMA, { field: 'child_universe_id' });
+  if (activeRefs(doc).some((r) => r.child_universe_id === childId)) return fail(CODES.DUP, { field: 'child_universe_id' });
+  if (reaches(childId, doc.universe.id, resolveUniverse)) return fail(CODES.CYCLE);
+
+  const ref = { child_universe_id: childId, added_at: ctx.now };
+  const event = makeEvent(doc, 'created', { target_kind: 'ref', target_id: childId }, ctx);
+  return { ok: true, doc: { ...doc, refs: [...(doc.refs || []), ref], events: [...doc.events, event] }, event };
+}
+
+/** 참조를 해제한다(CR-4 제안). 숨김과 같이 기록은 남기고 화면·계산에서만 빠진다. */
+export function hideRef(doc, childId, ctx) {
+  const i = (doc.refs || []).findIndex((r) => r.child_universe_id === childId && !r.hidden);
+  if (i < 0) return fail(CODES.SCHEMA, { field: 'child_universe_id' });
+  const refs = doc.refs.map((r, k) => (k === i ? { ...r, hidden: true, removed_at: ctx.now } : r));
+  const event = makeEvent(doc, 'hidden', { target_kind: 'ref', target_id: childId }, ctx);
+  return { ok: true, doc: { ...doc, refs, events: [...doc.events, event] }, event };
 }

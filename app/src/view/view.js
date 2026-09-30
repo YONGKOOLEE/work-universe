@@ -35,7 +35,7 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
   function visit(doc, chain) {
     included.add(doc.universe.id);
     docs.push(doc);
-    for (const ref of doc.refs || []) {
+    for (const ref of (doc.refs || []).filter((r) => !r.hidden)) {
       const childId = ref.child_universe_id;
       if (chain.has(childId)) {
         cyclic.push({ parent: doc.universe.id, child: childId });
@@ -61,6 +61,7 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
       const node = {
         gid: toGid(doc.universe.id, n.id),
         universe_id: doc.universe.id,
+        universe_name: doc.universe.name,
         id: n.id,
         core_type: n.core_type,
         type_label: nodeTypeLabel(n.core_type),
@@ -72,6 +73,7 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
         tags: n.tags,
         period: n.period,
         emp_no: n.emp_no,
+        exposed: n.exposed,
         hidden: !!n.hidden,
         origin: doc.universe.id === rootId ? 'own' : 'ref',
         merged_from: [],
@@ -213,11 +215,15 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
     events,
     missing, // 찾지 못한 하위 유니버스 ID
     cyclic, // 순환이라 건너뛴 참조
+    ref_links: refLinks.map(({ parent: p, child: ch }) => ({ parent: p.universe.id, child: ch.universe.id })),
+    universes: new Map(docs.map((d) => [d.universe.id, d.universe])),
     unresolved_links: unresolvedLinks,
     index: { byEmpNo, byTypeLabel, eventsByNode, nodesByTopic },
 
     canonical,
     getNode: (gid) => nodeByGid.get(canonical(gid)),
+    // 합쳐지기 전의 원래 노드(동일성 연결된 다른 유니버스의 노드 확인용)
+    rawNode: (gid) => nodeByGid.get(gid),
 
     // 근거 ID 확인용. 숨긴 노드도 내용을 유지해 돌려주고 hidden으로 알린다(4절 "숨김 후 참조")
     lookup(gid) {

@@ -74,6 +74,7 @@ export function validateDocument(doc) {
     if (n.subtype && !subtypeRegistered(doc, n.core_type, n.subtype)) err(CODES.SUBTYPE, `${path}.subtype`);
     if (n.emp_no !== undefined && n.core_type !== 'person') err(CODES.SCHEMA, `${path}.emp_no`);
     if (n.hidden !== undefined && typeof n.hidden !== 'boolean') err(CODES.SCHEMA, `${path}.hidden`);
+    if (n.exposed !== undefined && typeof n.exposed !== 'boolean') err(CODES.SCHEMA, `${path}.exposed`);
     if (periodError(n.period)) err(CODES.SCHEMA, `${path}.period`);
     if (n.attrs !== undefined) {
       const okAttrs = isObject(n.attrs) && Object.values(n.attrs).every((v) => typeof v === 'string' || typeof v === 'number');
@@ -151,6 +152,8 @@ export function validateDocument(doc) {
     const path = `refs[${i}]`;
     if (!isObject(r) || isBlank(r.child_universe_id)) return err(CODES.REQUIRED, `${path}.child_universe_id`);
     if (r.child_universe_id === u.id) return err(CODES.CYCLE, path);
+    if (r.hidden !== undefined && typeof r.hidden !== 'boolean') err(CODES.SCHEMA, `${path}.hidden`);
+    if (r.hidden) return; // 해제한 참조는 기록으로만 남는다(CR-4)
     if (seenRefs.has(r.child_universe_id)) err(CODES.DUP, path);
     seenRefs.add(r.child_universe_id);
   });
@@ -192,8 +195,12 @@ export function eventPayloadErrors(doc, nodesById, edgeIds, ev) {
     if (payload[k] === undefined || payload[k] === null || payload[k] === '') out.push({ code: CODES.REQUIRED, field: k });
   }
   if (ev.type === 'created' || ev.type === 'hidden' || ev.type === 'updated') {
-    if (payload.target_kind !== 'node' && payload.target_kind !== 'edge') out.push({ code: CODES.SCHEMA, field: 'target_kind' });
-    else if (payload.target_id && !isGlobalRef(payload.target_id)) {
+    // ref: 꼭지 참조의 추가·해제(CR-4). target_id는 하위 유니버스 ID
+    const kinds = ev.type === 'updated' ? ['node', 'edge'] : ['node', 'edge', 'ref'];
+    if (!kinds.includes(payload.target_kind)) out.push({ code: CODES.SCHEMA, field: 'target_kind' });
+    else if (payload.target_kind === 'ref') {
+      if (!(doc.refs || []).some((r) => r && r.child_universe_id === payload.target_id)) out.push({ code: CODES.SCHEMA, field: 'target_id' });
+    } else if (payload.target_id && !isGlobalRef(payload.target_id)) {
       const exists = payload.target_kind === 'node' ? nodesById.has(payload.target_id) : edgeIds.has(payload.target_id);
       if (!exists) out.push({ code: CODES.SCHEMA, field: 'target_id' });
     }

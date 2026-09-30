@@ -1,0 +1,71 @@
+// 상세 패널 그리기. 내용은 view/describe.js가 만들고, 여기서는 DOM으로 옮기기만 한다.
+import { el } from './dom.js';
+
+function historyList(items) {
+  if (!items.length) return el('p', { class: 'muted', 'data-testid': 'no-history' }, '기록된 이력 없음');
+  return el(
+    'ol',
+    { class: 'history', 'data-testid': 'history' },
+    ...items.map((h) => el('li', {}, el('time', {}, h.date), el('span', { class: 'chip' }, h.type_label), el('span', { class: 'text' }, h.text))),
+  );
+}
+
+/**
+ * 노드 상세: 속성, 연결된 노드(클릭하면 이동), 이력. onFocus(gid)는 다른 노드로 이동한다.
+ * extra가 있으면 속성 아래에 붙인다(층별 보기 조작 등).
+ */
+export function renderNodeDetail(panel, d, { onFocus, extra = null }) {
+  panel.replaceChildren();
+  if (!d.found) {
+    panel.append(el('p', { class: 'muted' }, '노드를 찾을 수 없습니다.'));
+    return;
+  }
+  panel.append(el('h2', {}, d.title));
+  if (d.hidden) panel.append(el('p', { class: 'notice', 'data-testid': 'hidden-note' }, '숨김 처리된 노드입니다. 내용과 이력은 유지됩니다.'));
+
+  const dl = el('dl', { 'data-testid': 'attrs' });
+  for (const r of d.rows) dl.append(el('dt', {}, r.label), el('dd', {}, r.value));
+  panel.append(dl);
+  if (extra) panel.append(extra);
+
+  panel.append(el('h3', {}, '연결된 노드'));
+  if (d.no_links) {
+    panel.append(el('p', { class: 'muted', 'data-testid': 'no-links' }, '연결 없음'));
+  } else {
+    const ul = el('ul', { class: 'links', 'data-testid': 'links' });
+    for (const l of d.links) {
+      ul.append(
+        el(
+          'li',
+          {},
+          el('span', { class: 'chip' }, l.relation),
+          el('span', { class: 'arrow', title: l.direction === 'out' ? '이 노드에서 나가는 연결' : '이 노드로 들어오는 연결' }, l.direction === 'out' ? '→' : '←'),
+          el('button', { type: 'button', class: 'link', onclick: () => onFocus(l.other.gid) }, l.other.label),
+          el('span', { class: 'muted small' }, ` ${l.other.type_label}`),
+          l.period ? el('div', { class: 'muted small' }, l.period) : null,
+          l.note ? el('div', { class: 'muted small' }, l.note) : null,
+        ),
+      );
+    }
+    panel.append(ul);
+  }
+
+  panel.append(el('h3', {}, '이력'), historyList(d.history));
+}
+
+/** 노드를 고르지 않았을 때: 유니버스 개요와 사용법 한 줄. */
+export function renderUniverseSummary(panel, s) {
+  panel.replaceChildren();
+  panel.append(el('h2', {}, s.name));
+  const dl = el('dl', { 'data-testid': 'summary' });
+  dl.append(el('dt', {}, '단위'), el('dd', {}, s.level), el('dt', {}, '작성 주체'), el('dd', {}, s.owner));
+  if (s.description) dl.append(el('dt', {}, '설명'), el('dd', {}, s.description));
+  dl.append(
+    el('dt', {}, '구성'),
+    el('dd', {}, `노드 ${s.node_total}개(${s.counts.map((c) => `${c.type_label} ${c.count}`).join(', ')}), 연결 ${s.edge_total}개`),
+  );
+  if (s.period) dl.append(el('dt', {}, '이력 기간'), el('dd', {}, `${s.period.first} ~ ${s.period.last}`));
+  panel.append(dl);
+  if (s.missing.length) panel.append(el('p', { class: 'notice' }, `찾을 수 없는 하위 유니버스: ${s.missing.join(', ')}`));
+  panel.append(el('p', { class: 'hint', 'data-testid': 'hint' }, '그래프에서 노드를 클릭하면 속성, 연결된 노드, 이력이 여기에 보입니다.'));
+}

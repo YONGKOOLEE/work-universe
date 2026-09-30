@@ -48,6 +48,17 @@ approvals:   # 형식: gate / 대상 문서 / 사용자 승인 표현(원문) / 
     date: 2026-09-30
     time: 미기록
     conditions: 업무 유니버스의 소속 변경은 조직 ID 없이 메모로 기록(12.6 원칙) 유지
+  - change: CR-3 (업무정의서 → 유니버스 변환, A 지금·B는 P2)
+    documents: 01 R-15(역할 d), 02 5.4·12.3·12.9, 03 T-17·축소 순서
+    user_expression: "승인 다만 변환 규칙이 그림이 그려지지 않으므로 한번 데이터로 구현해서 시각화후 보여줘보도록"
+    date: 2026-10-01
+    conditions: 변환 규칙은 실제 데이터로 시각화해 사용자 확인 후 확정. T-17은 빼지 않는 항목("웬만하면 빼지 않는 항목"). 원문의 실제 기관·표준명(여신금융협회, PCI DSS 등)은 치환하지 않음(사용자 결정 "치환 안 해도 되고 그대로 가도 됨") → R-06 점검에서 알려진 예외로 처리. 원문은 사용자가 inputs/에 넣음
+    rule_status: 보류 — 변환 규칙 v0을 사례(U-K1)로 시각화해 보여 줌. 사용자 "너무 세분화되거나 구조가 복잡해지지 않나" 의문, 조력자 의견 대기 (2026-10-01). 의견 전까지 T-17 착수 안 함, 다른 작업은 진행
+  - change: CR-4 (층별 보기: 위로 드러낼 노드, 접어서 보기와 요약 연결, 주제 동일성 연결, 참조 해제, 유니버스 묶기 화면)
+    requested: 사용자 "두가지를 넣어 시제품 준비" (2026-10-01)
+    status: 제안 — 시제품 구현·검증 완료, 사용자 승인 대기. 승인 전에는 02-design·03-plan을 고치지 않음
+    affects: 02 2·3절, 12.2(nodes.exposed, refs.hidden·removed_at, identity_links.kind에 topic, 이벤트 target_kind에 ref), 03 T-10(일부 선반영)
+    record: docs/tech-record.md 10절
 input_basis: inputs/업무정의서_업무유니버스_v0.2.md (사용자 승인본, 참고 근거)
 blocking_questions: []
 final_check:
@@ -59,7 +70,7 @@ first_implementation_task: T-01 (최소 종단 흐름 + P-1·P-3 실측 + 그래
 next_session_first_action: 사용자가 CLAUDE.md를 구현 단계 지침으로 교체한 뒤, docs/03-plan.md 9.4의 시작 프롬프트로 새 구현 세션 시작(T-01)
 
 implementation:
-  current_task: T-04
+  current_task: T-05
   tasks:
     - id: T-01
       status: 완료 (사용자 확인 "확인했다", 2026-09-30)
@@ -78,7 +89,7 @@ implementation:
       unverified: [화면(UI)에서 새 명령 사용 — T-05·T-06 범위, model·view는 아직 화면에 연결하지 않음]
       interpretations: docs/tech-record.md 6절 (12절이 정하지 않은 부분을 어떻게 해석했는지)
     - id: T-04
-      status: 구현·검증 완료, 사용자 확인 대기
+      status: 완료 (사용자 확인: 시나리오 확인·R-06 확인, 커밋 16a3cbd)
       date: 2026-10-01
       input: 03-plan 7.2 기본안(설계 사례 1). 사용자 업무 정보(Q2) 없이 시작 — 기본안으로 시작하기로 승인됨
       normal_checks: 통과 (사례 1 불러오기 성공·검증 오류 0·경고 0, 설계 4절 이벤트 4건 포함, 정답 표 근거 ID 유효율 100%, 단위 테스트 71개, Chrome·Edge file:// 점검)
@@ -86,6 +97,13 @@ implementation:
       r06_manual_check: 사용자 확인 "안 겹쳐" (2026-10-01)
       unverified: [정답 표 pending 항목(관계자 T-07, 유사 경험자·같은 업무 쌍 T-13)]
       data_decision: 사례 1에 윤바다 → 서하늘 인수인계(E-007)를 완료 이벤트로 넣음. docs/tech-record.md 7절
+    - id: T-05
+      status: 구현·검증 완료, 사용자 확인 대기
+      date: 2026-10-01
+      normal_checks: 통과 (R-01 ① 노드 클릭 시 속성·연결 노드·이력이 같은 화면에, 연결된 노드 링크 이동, 이웃 강조, 빈 곳 클릭 시 개요 복귀. 단위 테스트 81개, Chrome·Edge file:// 점검)
+      error_checks: 통과 (R-01 ② 연결 없는 노드 → "연결 없음" 표시 뒤에도 다른 노드를 계속 선택 가능, 숨긴 노드 상세·이력 표시, 저장소 차단 시 읽기 전용)
+      unverified: [수백 노드 규모의 성능(DA-1 범위 밖), 통합·참조 유니버스가 섞인 화면(T-10 이후), 시간 슬라이더(T-11)]
+      ui_feedback: 반영 완료 — 처음 배치 겹침 해소, 어두운 색감, 마우스 올림 시 이웃 강조, 유니버스 전환 목록 (2026-10-01)
   premises:
     P-1: 통과 2026-09-30 (Chrome 154.0.8037.58, Edge 154.0.4258.37, headless 자동 점검). 대안 K-3 불필요
     P-2: 미수행 (T-02 선택 작업)
@@ -99,4 +117,4 @@ implementation:
       change: T-01 실측 결과와 라이브러리·빌드 확정 반영 (결정 변경 없음, 결과 기록)
       user_expression: "반영"
       date: 2026-09-30
-  next_task: T-05 (탐색 화면). T-04는 사용자 확인·R-06 사람 확인 후
+  next_task: T-06 (자료 편집) — T-05 사용자 확인 후
