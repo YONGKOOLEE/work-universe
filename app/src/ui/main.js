@@ -4,12 +4,13 @@ import { createApp } from '../app/app.js';
 import { createStore, openStorage } from '../store/local.js';
 import { SAMPLES } from '../../data/index.js';
 import { NODE_TYPES } from '../model/schema.js';
-import { describeNode, describeUniverse } from '../view/describe.js';
+import { describeNode, describeUniverse, eventText } from '../view/describe.js';
 import { exposureOf, projectView } from '../view/collapse.js';
 import { parseGid, toGid } from '../view/view.js';
 import { el } from './dom.js';
 import { createGraph, legendItems } from './graph.js';
 import { renderNodeDetail, renderUniverseSummary } from './detail.js';
+import { edgeEditForm, edgeForm, eventForm, nodeForm } from './editor.js';
 import { messageFor } from './messages.js';
 
 // ISO 8601 날짜·시각 + 현지 시간대(12.1)
@@ -42,6 +43,7 @@ function start() {
 
   const $ = (id) => document.getElementById(id);
   let selected = null; // 선택한 노드의 전역 ID
+  let editing = null; // 편집 중인 양식: {kind:'node'|'edge'|'event'|'edge-edit', edgeId?}
   const expanded = new Set(); // 펼친 하위 유니버스
   let view = app.view;
   let display = projectView(view, { expanded });
@@ -109,13 +111,103 @@ function start() {
     return box;
   }
 
+  // ── 자료 편집(R-02, T-06) ───────────────────────────────────────────
+  const currentId = () => app.doc.universe.id;
+  const isOwn = (gid) => !!gid && parseGid(gid).universe_id === currentId();
+  const localNode = (gid) => app.doc.nodes.find((n) => n.id === parseGid(gid).local_id);
+  // 양식에서 고를 수 있는 이 유니버스의 노드(숨김 제외)
+  const ownNodes = () => view.nodes.filter((n) => n.universe_id === currentId() && !n.hidden);
+
+  function afterSave(result, nextSelected = selected) {
+    if (!result.ok) return result;
+    editing = null;
+    selected = nextSelected;
+    refresh();
+    return result;
+  }
+
+  function toolbar(gid) {
+    const node = view.getNode(gid);
+    if (!node || node.hidden) return null;
+    if (!isOwn(gid)) {
+      return el('p', { class: 'muted small' }, '다른 유니버스의 노드입니다. 고치려면 ',
+        el('button', { type: 'button', class: 'link', onclick: () => openUniverse(node.universe_id) }, `「${node.universe_name}」 열기`), '.');
+    }
+    if (app.readOnly) return null;
+    const btn = (label, kind, testid) => el('button', { type: 'button', 'data-testid': testid, onclick: () => { editing = { kind }; renderPanel(); } }, label);
+    return el('div', { class: 'row toolbar' },
+      btn('수정', 'node', 'btn-edit'),
+      btn('연결 추가', 'edge', 'btn-edge'),
+      btn('이력 추가', 'event', 'btn-event'),
+      node.core_type === 'root' ? null : el('button', { type: 'button', class: 'danger', 'data-testid': 'btn-hide', onclick: () => hideSelected(node) }, '숨기기'),
+    );
+  }
+
+  function hideSelected(node) {
+    if (!window.confirm(`「${node.label}」을(를) 숨깁니다. 그래프에서 사라지지만 이력과 근거로서의 내용은 남습니다.`)) return;
+    const r = app.hideNode(node.id);
+    if (!r.ok) return window.alert(messageFor(r.error));
+    afterSave(r, null);
+  }
+
+  function linkTools(link) {
+    if (app.readOnly || link.synthetic || !isOwn(link.edge_gid)) return null;
+    const edgeId = parseGid(link.edge_gid).local_id;
+    const title = `${link.relation} ${link.other.label}`;
+    return el('div', { class: 'row link-tools' },
+      el('button', { type: 'button', class: 'small-btn', onclick: () => { editing = { kind: 'edge-edit', edgeId, title }; renderPanel(); } }, '수정'),
+      el('button', { type: 'button', class: 'small-btn danger', onclick: () => {
+        if (!window.confirm(`연결 「${title}」을(를) 숨깁니다. 기록은 남습니다.`)) return;
+        const r = app.hideEdge(edgeId);
+        if (!r.ok) return window.alert(messageFor(r.error, { kind: 'edge' }));
+        afterSave(r);
+      } }, '숨기기'),
+    );
+  }
+
+  function editorFor(gid) {
+    const node = localNode(gid);
+    const cancel = () => { editing = null; renderPanel(); };
+    const focusLocal = (id) => { editing = null; focus(toGid(currentId(), id)); };
+    switch (editing.kind) {
+      case 'node':
+        return nodeForm({ mode: 'edit', node, subtypes: app.doc.universe.subtypes || [], onCancel: cancel, onFocusLocal: focusLocal,
+          onSubmit: (values) => afterSave(app.updateNode(currentId(), node.id, values)) });
+      case 'edge':
+        return edgeForm({ node, candidates: ownNodes().filter((n) => n.id !== node.id), onCancel: cancel,
+          onSubmit: (values) => afterSave(app.addEdge(values)) });
+      case 'edge-edit': {
+        const edge = app.doc.edges.find((e) => e.id === editing.edgeId);
+        return edgeEditForm({ edge, title: editing.title, onCancel: cancel, onSubmit: (values) => afterSave(app.updateEdge(edge.id, values)) });
+      }
+      case 'event': {
+        const handovers = view.events
+          .filter((e) => e.universe_id === currentId() && e.type === 'handover')
+          .map((e) => ({ id: e.id, occurred_at: e.occurred_at, text: eventText(view, e) }));
+        return eventForm({ node, nodes: ownNodes(), handovers, onCancel: cancel, onSubmit: (values) => afterSave(app.addEvent(values)) });
+      }
+      default:
+        return null;
+    }
+  }
+
   function renderPanel() {
     const panel = $('detail');
     if (!selected) return renderUniverseSummary(panel, describeUniverse(view));
-    return renderNodeDetail(panel, describeNode(view, selected), { onFocus: focus, extra: layerControls(selected) });
+    if (editing && isOwn(selected) && localNode(selected)) {
+      panel.replaceChildren(el('h2', {}, localNode(selected).label), editorFor(selected));
+      return;
+    }
+    return renderNodeDetail(panel, describeNode(view, selected), {
+      onFocus: focus,
+      extra: layerControls(selected),
+      toolbar: toolbar(selected),
+      linkTools,
+    });
   }
 
   function select(gid) {
+    if (gid !== selected) editing = null;
     selected = gid;
     graph.highlight(gid);
     renderPanel();
@@ -183,52 +275,31 @@ function start() {
   });
   if (app.readOnly) $('group-open').disabled = true;
 
-  // 노드 추가 양식(T-06에서 자료 편집 화면으로 대체된다)
-  const form = $('add-form');
-  const typeSel = $('add-type');
-  for (const [key, name] of Object.entries(NODE_TYPES)) {
-    if (key !== 'root') typeSel.append(el('option', { value: key }, name));
-  }
-  const empRow = $('add-empno-row');
-  const syncEmp = () => {
-    empRow.hidden = typeSel.value !== 'person';
-  };
-  typeSel.addEventListener('change', syncEmp);
-  syncEmp();
-
-  if (app.readOnly) {
-    for (const input of form.elements) input.disabled = true;
-    $('reset').disabled = true;
-  }
-
-  form.addEventListener('submit', (evt) => {
-    evt.preventDefault();
-    const msg = $('add-message');
-    msg.replaceChildren();
-    msg.className = '';
-    const result = app.addNode({
-      core_type: typeSel.value,
-      label: $('add-label').value,
-      emp_no: $('add-empno').value,
-    });
-    if (!result.ok) {
-      msg.className = 'error';
-      msg.dataset.code = result.error.code;
-      msg.append(messageFor(result.error));
-      if (result.error.existing_id) {
-        const gid = toGid(app.doc.universe.id, result.error.existing_id);
-        msg.append(' ', el('button', { type: 'button', class: 'link', onclick: () => focus(gid) }, '기존 노드 보기'));
-      }
+  // 노드 추가(R-02 ①): 저장하면 바로 그래프에 나타나고 선택된다
+  function renderAddForm(doneText) {
+    const slot = $('add-slot');
+    if (app.readOnly) {
+      slot.replaceChildren(el('p', { class: 'muted small' }, '읽기 전용이라 추가할 수 없습니다.'));
+      $('reset').disabled = true;
       return;
     }
-    msg.className = 'ok';
-    msg.dataset.code = result.warnings.map((w) => w.code).join(' ') || 'OK';
-    msg.append(`저장했습니다: ${result.node.label}`, ...result.warnings.map((w) => ` ${messageFor(w)}`));
-    form.reset();
-    syncEmp();
-    selected = toGid(app.doc.universe.id, result.node.id);
-    refresh();
-  });
+    slot.replaceChildren(
+      doneText ? el('p', { class: 'ok-text', 'data-testid': 'add-done' }, doneText) : null,
+      nodeForm({
+        mode: 'add',
+        subtypes: app.doc.universe.subtypes || [],
+        onFocusLocal: (id) => focus(toGid(currentId(), id)),
+        onSubmit: (values) => {
+          const r = app.addNode(values);
+          if (!r.ok) return r;
+          afterSave(r, toGid(currentId(), r.node.id));
+          renderAddForm(`추가했습니다: ${r.node.label}${r.warnings.map((w) => ` ${messageFor(w)}`).join('')}`);
+          return r;
+        },
+      }),
+    );
+  }
+  renderAddForm();
 
   $('reset').addEventListener('click', () => {
     if (!window.confirm('모든 가상 데이터를 초기 샘플로 되돌립니다. 추가한 노드와 직접 묶은 유니버스는 사라집니다.')) return;

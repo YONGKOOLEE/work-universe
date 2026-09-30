@@ -1,6 +1,8 @@
 // 명령 흐름 조립과 현재 상태(12.7 app). 화면은 이 객체만 호출한다.
 
-import { addNode, addRef, createUniverse, hideRef, updateNode } from '../model/commands.js';
+import {
+  addEdge, addEvent, addNode, addRef, createUniverse, hideEdge, hideNode, hideRef, updateEdge, updateNode,
+} from '../model/commands.js';
 import { CODES } from '../model/schema.js';
 import { buildView } from '../view/view.js';
 
@@ -73,8 +75,24 @@ export function createApp({ store, samples, currentId, now }) {
         .map((d) => ({ id: d.universe.id, name: d.universe.name, level: d.universe.level, is_sample: !!d.universe.is_sample }));
     },
 
+    // 자료 편집(R-02, T-06): 현재 유니버스 문서만 고친다. 다른 유니버스 노드는 그 유니버스를 열어서 고친다
     addNode(input) {
       return guard() || commit(addNode(doc, input, { now: now() }));
+    },
+    hideNode(nodeId) {
+      return guard() || commit(hideNode(doc, nodeId, { now: now() }));
+    },
+    addEdge(input) {
+      return guard() || commit(addEdge(doc, input, { now: now() }));
+    },
+    updateEdge(edgeId, changes) {
+      return guard() || commit(updateEdge(doc, edgeId, changes, { now: now() }));
+    },
+    hideEdge(edgeId) {
+      return guard() || commit(hideEdge(doc, edgeId, { now: now() }));
+    },
+    addEvent(input) {
+      return guard() || commit(addEvent(doc, input, { now: now() }));
     },
 
     // 노드 수정. 다른 유니버스의 노드면 그 유니버스 문서를 고친다(예: 위로 드러내기)

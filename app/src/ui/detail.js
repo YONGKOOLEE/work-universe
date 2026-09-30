@@ -12,15 +12,17 @@ function historyList(items) {
 
 /**
  * 노드 상세: 속성, 연결된 노드(클릭하면 이동), 이력. onFocus(gid)는 다른 노드로 이동한다.
- * extra가 있으면 속성 아래에 붙인다(층별 보기 조작 등).
+ * extra가 있으면 속성 아래에 붙인다(층별 보기 조작 등). toolbar는 제목 아래 편집 버튼,
+ * linkTools(link)는 연결마다 붙일 버튼(없으면 null)이다(T-06).
  */
-export function renderNodeDetail(panel, d, { onFocus, extra = null }) {
+export function renderNodeDetail(panel, d, { onFocus, extra = null, toolbar = null, linkTools = () => null }) {
   panel.replaceChildren();
   if (!d.found) {
     panel.append(el('p', { class: 'muted' }, '노드를 찾을 수 없습니다.'));
     return;
   }
   panel.append(el('h2', {}, d.title));
+  if (toolbar) panel.append(toolbar);
   if (d.hidden) panel.append(el('p', { class: 'notice', 'data-testid': 'hidden-note' }, '숨김 처리된 노드입니다. 내용과 이력은 유지됩니다.'));
 
   const dl = el('dl', { 'data-testid': 'attrs' });
@@ -44,6 +46,7 @@ export function renderNodeDetail(panel, d, { onFocus, extra = null }) {
           el('span', { class: 'muted small' }, ` ${l.other.type_label}`),
           l.period ? el('div', { class: 'muted small' }, l.period) : null,
           l.note ? el('div', { class: 'muted small' }, l.note) : null,
+          linkTools(l),
         ),
       );
     }

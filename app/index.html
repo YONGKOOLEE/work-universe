@@ -68,6 +68,25 @@
   fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
   legend { color: var(--muted); font-size: 13px; padding: 0 4px; }
   .error-text { color: var(--err); font-size: 13px; min-height: 1em; }
+  .editor { display: grid; gap: 8px; font-size: 14px; min-width: 0; }
+  .editor select, .editor input:not([type=checkbox]), .editor textarea { width: 100%; min-width: 0; max-width: 100%; }
+  aside { overflow-x: hidden; }
+  .editor h3 { margin: 4px 0; border: 0; padding: 0; }
+  .field { display: grid; gap: 4px; }
+  .field > span { color: var(--muted); font-size: 13px; }
+  textarea { font: inherit; padding: 6px 8px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; resize: vertical; }
+  .attr-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; margin-bottom: 6px; }
+  .attr-row input { min-width: 0; }
+  .period input { flex: 1; min-width: 0; }
+  .small-btn { padding: 2px 10px; font-size: 12px; }
+  .danger { border-color: #6b3434; }
+  .danger:hover:not(:disabled) { border-color: var(--err); color: var(--err); }
+  .toolbar { margin: -2px 0 10px; }
+  .links li { position: relative; }
+  .link-tools { position: absolute; top: 4px; right: 0; display: none; background: var(--panel); padding-left: 6px; }
+  .links li:hover .link-tools, .links li:focus-within .link-tools { display: flex; }
+  .form-message.error { color: var(--err); font-size: 13px; }
+  .ok-text { color: var(--ok); font-size: 13px; margin: 0 0 8px; }
   @media (max-width: 800px) { main { flex-direction: column; } aside { width: auto; border-left: 0; border-top: 1px solid var(--line); max-height: 50vh; } .graph-wrap { min-height: 320px; } }
 </style>
 </head>
@@ -90,13 +109,7 @@
     <section id="detail" aria-live="polite"></section>
     <details class="add">
       <summary>노드 추가</summary>
-      <form id="add-form" novalidate>
-        <label>유형 <select id="add-type"></select></label>
-        <label>라벨 <input id="add-label" maxlength="100" autocomplete="off"></label>
-        <label id="add-empno-row">사번(선택) <input id="add-empno" placeholder="V-0000" autocomplete="off"></label>
-        <button type="submit">저장</button>
-        <div id="add-message" aria-live="polite"></div>
-      </form>
+      <div id="add-slot"></div>
     </details>
   </aside>
 </main>

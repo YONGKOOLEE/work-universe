@@ -145,13 +145,36 @@ async function clickNode(cdp, nodeId) {
 
 async function submitAdd(cdp, coreType, label) {
   await evaluate(cdp, `(() => {
-    const t = document.getElementById('add-type'); t.value = ${JSON.stringify(coreType)}; t.dispatchEvent(new Event('change'));
-    document.getElementById('add-label').value = ${JSON.stringify(label)};
-    document.querySelector('#add-form button[type=submit]').click();
+    const slot = document.getElementById('add-slot');
+    const t = slot.querySelector('[data-testid=node-type]'); t.value = ${JSON.stringify(coreType)}; t.dispatchEvent(new Event('change'));
+    slot.querySelector('[data-testid=node-label]').value = ${JSON.stringify(label)};
+    slot.querySelector('button[type=submit]').click();
   })()`);
   await sleep(200);
-  return evaluate(cdp, "({ code: document.getElementById('add-message').dataset.code || '', text: document.getElementById('add-message').textContent })");
+  return evaluate(cdp, `(() => {
+    const slot = document.getElementById('add-slot');
+    const done = slot.querySelector('[data-testid=add-done]');
+    const m = slot.querySelector('[data-testid=form-message]');
+    return done ? { code: 'OK', text: done.textContent } : { code: (m && m.dataset.code) || '', text: m ? m.textContent : '' };
+  })()`);
 }
+
+// 상세 패널의 편집 양식 채우기: fields = { 'data-testid 또는 CSS 선택자': 값 }
+async function fillPanelForm(cdp, fields) {
+  return evaluate(cdp, `(() => {
+    const panel = document.getElementById('detail');
+    for (const [sel, val] of Object.entries(${JSON.stringify(fields)})) {
+      const el = panel.querySelector(sel.startsWith('.') || sel.startsWith('[') ? sel : \`[data-testid=\${sel}]\`);
+      if (!el) return 'missing ' + sel;
+      el.value = val;
+      el.dispatchEvent(new Event('change'));
+    }
+    panel.querySelector('form button[type=submit]').click();
+    return 'ok';
+  })()`);
+}
+const panelMessage = (cdp) => evaluate(cdp, "(() => { const m = document.querySelector('#detail [data-testid=form-message]'); return m ? { code: m.dataset.code || '', text: m.textContent } : null; })()");
+const clickTestId = (cdp, id) => evaluate(cdp, `document.querySelector('[data-testid=${id}]').click()`);
 
 const text = (cdp, sel) => evaluate(cdp, `(document.querySelector(${JSON.stringify(sel)}) || {}).textContent || ''`);
 
@@ -237,10 +260,64 @@ async function checkBrowser(browser, port) {
   await clickNode(s.cdp, 'U-A1/N-011');
   check('R-01 ② "연결 없음" 뒤에도 다른 노드를 계속 선택할 수 있음', (await text(s.cdp, '#detail h2')) === '윤바다' && !!(await evaluate(s.cdp, "!!document.querySelector('[data-testid=links]')")));
 
+  // ── T-06 자료 편집 ──
+  await evaluate(s.cdp, "window.confirm = () => true");
+  // 수정: 설명을 바꾸면 상세에 반영되고 이력에 변경 전 값이 남는다(R-02 ②)
+  await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+  await clickTestId(s.cdp, 'btn-edit');
+  await fillPanelForm(s.cdp, { 'node-description': '대조 결과를 점검표에 기록한다(수정)' });
+  await sleep(250);
+  const afterEdit = await text(s.cdp, '#detail');
+  check('수정 → 상세에 바로 반영, 이력에 변경 전 값(R-02 ②)', afterEdit.includes('대조 결과를 점검표에 기록한다(수정)') && afterEdit.includes('수정 — 설명: 정산 결과를 원천 자료와 대조해 불일치를 찾는다 →'), afterEdit.slice(0, 80));
+  // 수정 오류: 라벨을 비우면 저장되지 않는다(R-02 ③)
+  await clickTestId(s.cdp, 'btn-edit');
+  await fillPanelForm(s.cdp, { 'node-label': '  ' });
+  await sleep(150);
+  const editErr = await panelMessage(s.cdp);
+  check('오류: 수정에서 라벨을 비우면 E-REQUIRED, 저장 안 됨', editErr && editErr.code === 'E-REQUIRED' && (await evaluate(s.cdp, "window.__wu.doc.nodes.find((n) => n.id === 'N-001').label")) === '대사 확인', editErr && editErr.text);
+  await evaluate(s.cdp, "[...document.querySelectorAll('#detail button')].find((b) => b.textContent === '취소').click()");
+  // 연결 추가: 서하늘 → 보고(수행)
+  await evaluate(s.cdp, "window.__wu.select('U-A1/N-012')");
+  await clickTestId(s.cdp, 'btn-edge');
+  await fillPanelForm(s.cdp, { 'edge-type': 'performs', 'edge-direction': 'out', 'edge-other': 'N-003' });
+  await sleep(250);
+  check('연결 추가 → 그래프와 상세에 바로 반영', (await text(s.cdp, '[data-testid=links]')).includes('보고') && (await evaluate(s.cdp, "window.__wu.cy.edges().some((e) => e.data('source') === 'U-A1/N-012' && e.data('target') === 'U-A1/N-003')")));
+  // 연결 오류: 주제가 업무를 수행할 수는 없다(E-PAIR)
+  await evaluate(s.cdp, "window.__wu.select('U-A1/N-030')");
+  await clickTestId(s.cdp, 'btn-edge');
+  await fillPanelForm(s.cdp, { 'edge-type': 'performs', 'edge-direction': 'out', 'edge-other': 'N-001' });
+  await sleep(150);
+  const pairErr = await panelMessage(s.cdp);
+  check('오류: 허용되지 않는 연결 → E-PAIR와 가능한 조합 안내', pairErr && pairErr.code === 'E-PAIR' && pairErr.text.includes('사람 → 업무'), pairErr && pairErr.text);
+  // 연결 오류: 같은 연결(기간 겹침) → E-DUP
+  await fillPanelForm(s.cdp, { 'edge-type': 'relates_to', 'edge-direction': 'in', 'edge-other': 'N-001' });
+  await sleep(150);
+  const edgeDup = await panelMessage(s.cdp);
+  check('오류: 같은 연결 중복 → E-DUP', edgeDup && edgeDup.code === 'E-DUP', edgeDup && edgeDup.text);
+  // 이력 추가: 메모
+  await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+  await clickTestId(s.cdp, 'btn-event');
+  await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': '2026-10-02', 'event-note': '점검 기준 변경 논의' });
+  await sleep(250);
+  check('이력 추가(메모) → 이력 목록에 날짜와 함께 보임', (await text(s.cdp, '[data-testid=history]')).includes('2026-10-02메모점검 기준 변경 논의'));
+  // 이력 오류: 인수인계에서 받는 사람을 비우면 거부
+  await clickTestId(s.cdp, 'btn-event');
+  await fillPanelForm(s.cdp, { 'event-type': 'handover', 'event-date': '2026-10-02' });
+  await sleep(150);
+  const evErr = await panelMessage(s.cdp);
+  check('오류: 인수인계 필수값 누락 → E-REQUIRED', evErr && evErr.code === 'E-REQUIRED', evErr && evErr.text);
+  await evaluate(s.cdp, "[...document.querySelectorAll('#detail button')].find((b) => b.textContent === '취소').click()");
+  // 숨기기: 점검표 양식을 숨기면 그래프에서 빠지고, 이력은 남는다
+  await evaluate(s.cdp, "window.__wu.select('U-A1/N-021')");
+  await clickTestId(s.cdp, 'btn-hide');
+  await sleep(250);
+  check('숨기기 → 그래프에서 빠지고 문서에는 hidden으로 남음', !(await hasLabel(s.cdp, '점검표 양식')) && (await evaluate(s.cdp, "window.__wu.doc.nodes.find((n) => n.id === 'N-021').hidden === true && window.__wu.doc.events.some((e) => e.type === 'hidden' && e.payload.target_id === 'N-021')")));
+  await shot(s.cdp, `${browser.name}-3b-edited`);
+
   await s.cdp.send('Page.reload');
   await sleep(300);
   const reloaded = await waitFor(s.cdp, 'window.__wu && window.__wu.cy.nodes().length > 0');
-  check('P-3 새로고침 후 추가 노드 유지', reloaded && (await nodeCount(s.cdp)) === NODES + 1 && (await hasLabel(s.cdp, newLabel)));
+  check('P-3 새로고침 후 추가·수정·숨김 유지', reloaded && (await nodeCount(s.cdp)) === NODES && (await hasLabel(s.cdp, newLabel)) && !(await hasLabel(s.cdp, '점검표 양식')));
   // CR-4 시제품: 팀 유니버스(접어서 보기, 펼치기, 묶기)
   await evaluate(s.cdp, "location.hash = 'U-T1'; location.reload()").catch(() => {});
   await sleep(500);
@@ -293,6 +370,20 @@ async function checkBrowser(browser, port) {
   check('묶음에서 빼기 → 카드승인 노드가 사라지고 월말 정산만 남음', !(await evaluate(s.cdp, "window.__wu.cy.nodes().some((n) => n.data('universe_id') === 'U-K1')")) && (await nodeCount(s.cdp)) === 8);
   }
 
+  // 검토 결함 F1: 설명만 고쳤을 때 숫자 속성(순서: 1)이 글자로 바뀌어 "수정"으로 기록되지 않아야 한다
+  await evaluate(s.cdp, "location.hash = 'U-K1'; location.reload()").catch(() => {});
+  await sleep(500);
+  if (await waitFor(s.cdp, "window.__wu && window.__wu.doc.universe.id === 'U-K1'", 8000)) {
+    await evaluate(s.cdp, "window.confirm = () => true; window.__wu.select('U-K1/N-601')");
+    await clickTestId(s.cdp, 'btn-edit');
+    await fillPanelForm(s.cdp, { 'node-description': '필드 정의와 인코딩(수정)' });
+    await sleep(250);
+    const after = await evaluate(s.cdp, "(() => { const ev = window.__wu.doc.events.filter((e) => e.type === 'updated').at(-1); return ev ? Object.keys(ev.payload.after) : null; })()");
+    check('수정 이력에 실제로 바꾼 필드만 남음(숫자 속성 유지)', JSON.stringify(after) === '["description"]', JSON.stringify(after));
+  } else {
+    check('수정 이력에 실제로 바꾼 필드만 남음(숫자 속성 유지)', false, '카드승인 유니버스를 열지 못함');
+  }
+
   const errors1 = [...s.log.errors];
   const external1 = [...s.log.external];
   s.cdp.close();
@@ -300,7 +391,7 @@ async function checkBrowser(browser, port) {
 
   // 2) 브라우저를 닫았다 다시 열기(같은 프로필)
   s = await openSession(exe, profile, port);
-  check('P-3 브라우저 재시작 후 추가 노드 유지', s.ready && (await nodeCount(s.cdp)) === NODES + 1 && (await hasLabel(s.cdp, newLabel)));
+  check('P-3 브라우저 재시작 후 추가·수정·숨김 유지', s.ready && (await nodeCount(s.cdp)) === NODES && (await hasLabel(s.cdp, newLabel)) && (await evaluate(s.cdp, "window.__wu.doc.nodes.find((n) => n.id === 'N-001').description.includes('(수정)')")));
   const errors2 = [...s.log.errors];
   const external2 = [...s.log.external];
   s.cdp.close();
@@ -315,7 +406,7 @@ async function checkBrowser(browser, port) {
   s = await openSession(exe, blockedProfile, port, { blockStorage: true });
   const banner = await evaluate(s.cdp, "({ hidden: document.getElementById('banner').hidden, code: document.getElementById('banner').dataset.code || '' })");
   check('오류: 저장소 차단 → W-STORAGE 배너', !banner.hidden && banner.code === 'W-STORAGE');
-  check(`저장소 차단 시 샘플 읽기 전용 표시(노드 ${NODES}, 추가 비활성)`, s.ready && (await nodeCount(s.cdp)) === NODES && (await evaluate(s.cdp, "document.getElementById('add-label').disabled")));
+  check(`저장소 차단 시 샘플 읽기 전용 표시(노드 ${NODES}, 추가 비활성)`, s.ready && (await nodeCount(s.cdp)) === NODES && (await text(s.cdp, '#add-slot')).includes('읽기 전용'));
   s.cdp.close();
   await close(s);
 

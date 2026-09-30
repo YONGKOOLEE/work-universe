@@ -67,10 +67,10 @@ final_check:
   notes: R-09는 P2로 1차 제외되어 T-ID 없음(사용자 결정). 차단 조건 없음
 remaining_nonblocking_assumptions: [A-1, A-2, RA-1, DA-1, 기본안 가상 데이터(T-15 전까지 교체 가능), P-1~P-3(T-01·T-02 실측), 주최 측 공지 미확인 항목]
 first_implementation_task: T-01 (최소 종단 흐름 + P-1·P-3 실측 + 그래프 라이브러리·빌드 방식 확정)
-next_session_first_action: 사용자가 CLAUDE.md를 구현 단계 지침으로 교체한 뒤, docs/03-plan.md 9.4의 시작 프롬프트로 새 구현 세션 시작(T-01)
+next_session_first_action: (2026-10-01 갱신) docs/.status의 implementation 절과 docs/tech-record.md(특히 10·12·13절)를 읽는다. 사용자가 dist/index.html로 T-06을 직접 확인하면(확인 순서는 tech-record 12절 화면 설명 참고) T-06을 완료로 기록하고 T-07(규칙 기반 인수인계 초안)을 시작한다. 조력자 의견(유니버스 구성 기준·CR-4·변환 규칙 v0)은 대기 중이며, 받기 전에는 T-10·T-13·T-17을 시작하지 않는다
 
 implementation:
-  current_task: T-05
+  current_task: T-06
   tasks:
     - id: T-01
       status: 완료 (사용자 확인 "확인했다", 2026-09-30)
@@ -98,12 +98,19 @@ implementation:
       unverified: [정답 표 pending 항목(관계자 T-07, 유사 경험자·같은 업무 쌍 T-13)]
       data_decision: 사례 1에 윤바다 → 서하늘 인수인계(E-007)를 완료 이벤트로 넣음. docs/tech-record.md 7절
     - id: T-05
-      status: 구현·검증 완료, 사용자 확인 대기
+      status: 완료 (화면 수정 반영, 커밋 dcb7428)
       date: 2026-10-01
       normal_checks: 통과 (R-01 ① 노드 클릭 시 속성·연결 노드·이력이 같은 화면에, 연결된 노드 링크 이동, 이웃 강조, 빈 곳 클릭 시 개요 복귀. 단위 테스트 81개, Chrome·Edge file:// 점검)
       error_checks: 통과 (R-01 ② 연결 없는 노드 → "연결 없음" 표시 뒤에도 다른 노드를 계속 선택 가능, 숨긴 노드 상세·이력 표시, 저장소 차단 시 읽기 전용)
       unverified: [수백 노드 규모의 성능(DA-1 범위 밖), 통합·참조 유니버스가 섞인 화면(T-10 이후), 시간 슬라이더(T-11)]
       ui_feedback: 반영 완료 — 처음 배치 겹침 해소, 어두운 색감, 마우스 올림 시 이웃 강조, 유니버스 전환 목록 (2026-10-01)
+    - id: T-06
+      status: 구현·검증 완료, 사용자 직접 확인 대기(확인 전 커밋함, 계정 전환 대비)
+      date: 2026-10-01
+      normal_checks: 통과 (노드 추가·수정·숨김, 연결 추가·수정·숨김, 이력 추가(메모·인수인계·담당 시작/종료·소속 변경). 저장 직후 그래프·상세 반영(R-02 ①), 수정 전 값이 이력에(R-02 ②), 새로고침·재시작 후 유지. Chrome·Edge 점검 37항목, 단위 테스트 105개)
+      error_checks: 통과 (라벨 비움 E-REQUIRED(R-02 ③), 노드 중복 E-DUP + 기존 노드 링크(R-02 ④), 연결 중복 E-DUP, 허용 안 된 연결 E-PAIR와 가능한 조합 안내, 인수인계 필수값 누락 E-REQUIRED)
+      unverified: [숨긴 노드 되살리기(설계에 없음, 필요하면 CR), 하위 유형 새로 등록하는 화면(T-09 범위)]
+      review: 2026-10-01 전체 검토 — 결함 4건(F1~F4)·문서 불일치 2건 수정, docs/tech-record.md 13절
   premises:
     P-1: 통과 2026-09-30 (Chrome 154.0.8037.58, Edge 154.0.4258.37, headless 자동 점검). 대안 K-3 불필요
     P-2: 미수행 (T-02 선택 작업)
@@ -117,4 +124,4 @@ implementation:
       change: T-01 실측 결과와 라이브러리·빌드 확정 반영 (결정 변경 없음, 결과 기록)
       user_expression: "반영"
       date: 2026-09-30
-  next_task: T-06 (자료 편집) — T-05 사용자 확인 후
+  next_task: T-07 (규칙 기반 인수인계 초안) — T-06 사용자 확인 후. 유니버스 구성 기준(세분화·드러내기)은 조력자 의견 대기

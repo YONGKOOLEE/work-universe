@@ -85,6 +85,7 @@ export function describeNode(view, gid) {
     .neighbors(gid)
     .map(({ edge, direction, other }) => ({
       edge_gid: edge.gid,
+      synthetic: !!edge.synthetic,
       direction,
       relation: edge.synthetic ? '포함(참조)' : edge.type_label + (edge.subtype ? ` > ${edge.subtype}` : ''),
       relation_type: edge.core_type,

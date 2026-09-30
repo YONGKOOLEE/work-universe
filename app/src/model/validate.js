@@ -6,6 +6,7 @@ import {
   CODES,
   EDGE_TYPES,
   EVENT_PAYLOAD,
+  EVENT_REF_TYPES,
   EVENT_SOURCES,
   EVENT_TYPES,
   IDENTITY_KINDS,
@@ -210,7 +211,12 @@ export function eventPayloadErrors(doc, nodesById, edgeIds, ev) {
     return out;
   }
   const checkNode = (field, id) => {
-    if (id && !isGlobalRef(id) && !nodesById.has(id)) out.push({ code: CODES.SCHEMA, field });
+    if (!id || isGlobalRef(id)) return;
+    const node = nodesById.get(id);
+    if (!node) return out.push({ code: CODES.SCHEMA, field });
+    const expected = EVENT_REF_TYPES[field];
+    // 모르는 유형(1.3 "기타")은 멈추지 않도록 통과시킨다
+    if (expected && NODE_TYPES[node.core_type] && node.core_type !== expected) out.push({ code: CODES.SCHEMA, field, expected });
   };
   for (const k of rule.nodeRefs || []) checkNode(k, payload[k]);
   for (const k of rule.nodeListRefs || []) {

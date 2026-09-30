@@ -192,6 +192,9 @@ export function addEdge(doc, input, ctx) {
   const tgt = doc.nodes.find((n) => n.id === input.target);
   if (!src) return fail(CODES.SCHEMA, { field: 'source' });
   if (!tgt) return fail(CODES.SCHEMA, { field: 'target' });
+  // 숨긴 노드는 화면에 없으므로 새 연결의 끝이 될 수 없다(기존 연결은 이력으로 남는다)
+  if (src.hidden) return fail(CODES.SCHEMA, { field: 'source', hidden: true });
+  if (tgt.hidden) return fail(CODES.SCHEMA, { field: 'target', hidden: true });
   if (!EDGE_TYPES[input.core_type]) return fail(CODES.SCHEMA, { field: 'core_type' });
   if (!pairAllowed(input.core_type, src.core_type, tgt.core_type)) return fail(CODES.PAIR);
   if (input.subtype && !subtypeRegistered(doc, input.core_type, input.subtype)) return fail(CODES.SUBTYPE, { field: 'subtype' });
@@ -288,7 +291,7 @@ export function addEvent(doc, input, ctx) {
   const edgeIds = new Set(doc.edges.map((e) => e.id));
   const candidate = { type: input.type, payload: input.payload };
   const [first] = eventPayloadErrors(doc, nodesById, edgeIds, candidate);
-  if (first) return fail(first.code, { field: first.field });
+  if (first) return fail(first.code, { field: first.field, ...(first.expected ? { expected: first.expected } : {}) });
   const prev = input.payload && input.payload.previous_handover_id;
   if (prev && !prev.includes('/') && !doc.events.some((e) => e.id === prev)) {
     return fail(CODES.SCHEMA, { field: 'previous_handover_id' });

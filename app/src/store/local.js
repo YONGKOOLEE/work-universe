@@ -19,15 +19,24 @@ export function openStorage(getStorage) {
 }
 
 export function createStore(storage) {
+  // 저장된 값이 깨져 있으면(직접 고침, 저장 중 중단 등) 없는 것으로 본다. 샘플이면 앱이 다시 넣는다
+  function parse(raw, fallback) {
+    if (!raw) return fallback;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return fallback;
+    }
+  }
   function readIndex() {
-    const raw = storage.getItem(INDEX_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const list = parse(storage.getItem(INDEX_KEY), []);
+    return Array.isArray(list) ? list : [];
   }
 
   return {
     loadUniverse(id) {
-      const raw = storage.getItem(universeKey(id));
-      return raw ? JSON.parse(raw) : null;
+      const doc = parse(storage.getItem(universeKey(id)), null);
+      return doc && doc.universe && Array.isArray(doc.nodes) ? doc : null;
     },
 
     saveUniverse(doc) {

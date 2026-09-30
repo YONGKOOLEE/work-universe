@@ -82,7 +82,8 @@ export const USER_EVENT_TYPES = ['assign_start', 'assign_end', 'handover', 'affi
 export const EVENT_SOURCES = ['user', 'sample', 'system'];
 
 // 12.2 이벤트 payload 규칙. required: 필수 키, nodeRefs: 노드 ID를 담는 키,
-// nodeListRefs: 노드 ID 배열을 담는 키, eventRefs: 이벤트 ID를 담는 키
+// nodeListRefs: 노드 ID 배열을 담는 키, eventRefs: 이벤트 ID를 담는 키.
+// 키가 가리켜야 하는 노드 유형은 EVENT_REF_TYPES에 있다(예: person_id는 사람 노드)
 export const EVENT_PAYLOAD = {
   created: { required: ['target_kind', 'target_id'] },
   hidden: { required: ['target_kind', 'target_id'] },
@@ -99,6 +100,18 @@ export const EVENT_PAYLOAD = {
 };
 
 // topic은 CR-4(제안): 유니버스 사이 공유 주제를 잇는다. 사람 확인만 허용
+// 이벤트 payload 키 → 가리켜야 하는 노드 핵심 유형. 인수인계 초안·인사이트 규칙이 이 유형을 믿고 계산한다
+export const EVENT_REF_TYPES = {
+  person_id: 'person',
+  from_person_id: 'person',
+  to_person_id: 'person',
+  work_id: 'work',
+  artifact_id: 'artifact',
+  from_org_id: 'org',
+  to_org_id: 'org',
+  topic_ids: 'topic',
+};
+
 export const IDENTITY_KINDS = ['person', 'work', 'topic'];
 export const IDENTITY_METHODS = ['emp_no_auto', 'human'];
 export const IDENTITY_STATUSES = ['pending', 'confirmed', 'rejected'];
