@@ -70,7 +70,7 @@ first_implementation_task: T-01 (최소 종단 흐름 + P-1·P-3 실측 + 그래
 next_session_first_action: (2026-10-01 갱신) docs/.status의 implementation 절과 docs/tech-record.md(특히 10·12·13절)를 읽는다. 사용자가 dist/index.html로 T-06을 직접 확인하면(확인 순서는 tech-record 12절 화면 설명 참고) T-06을 완료로 기록하고 T-07(규칙 기반 인수인계 초안)을 시작한다. 조력자 의견(유니버스 구성 기준·CR-4·변환 규칙 v0)은 대기 중이며, 받기 전에는 T-10·T-13·T-17을 시작하지 않는다
 
 implementation:
-  current_task: T-06
+  current_task: T-07 (대기)
   tasks:
     - id: T-01
       status: 완료 (사용자 확인 "확인했다", 2026-09-30)
@@ -105,11 +105,12 @@ implementation:
       unverified: [수백 노드 규모의 성능(DA-1 범위 밖), 통합·참조 유니버스가 섞인 화면(T-10 이후), 시간 슬라이더(T-11)]
       ui_feedback: 반영 완료 — 처음 배치 겹침 해소, 어두운 색감, 마우스 올림 시 이웃 강조, 유니버스 전환 목록 (2026-10-01)
     - id: T-06
-      status: 구현·검증 완료, 사용자 직접 확인 대기(확인 전 커밋함, 계정 전환 대비)
+      status: 완료 (사용자 확인 "전부 확인했고 이상이 없어", 2026-10-01)
       date: 2026-10-01
       normal_checks: 통과 (노드 추가·수정·숨김, 연결 추가·수정·숨김, 이력 추가(메모·인수인계·담당 시작/종료·소속 변경). 저장 직후 그래프·상세 반영(R-02 ①), 수정 전 값이 이력에(R-02 ②), 새로고침·재시작 후 유지. Chrome·Edge 점검 37항목, 단위 테스트 105개)
       error_checks: 통과 (라벨 비움 E-REQUIRED(R-02 ③), 노드 중복 E-DUP + 기존 노드 링크(R-02 ④), 연결 중복 E-DUP, 허용 안 된 연결 E-PAIR와 가능한 조합 안내, 인수인계 필수값 누락 E-REQUIRED)
       unverified: [숨긴 노드 되살리기(설계에 없음, 필요하면 CR), 하위 유형 새로 등록하는 화면(T-09 범위)]
+      user_check: 2026-10-01 사용자 직접 확인 — 이력 정렬 문제 1건 발견·수정(tech-record 14절), 나머지 이상 없음. 추가 확인 항목 안내함
       review: 2026-10-01 전체 검토 — 결함 4건(F1~F4)·문서 불일치 2건 수정, docs/tech-record.md 13절
   premises:
     P-1: 통과 2026-09-30 (Chrome 154.0.8037.58, Edge 154.0.4258.37, headless 자동 점검). 대안 K-3 불필요

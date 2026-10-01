@@ -182,12 +182,12 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
       });
     }
   }
-  events.sort(
-    (a, b) =>
-      a.occurred_at.localeCompare(b.occurred_at) ||
-      String(a.recorded_at || '').localeCompare(String(b.recorded_at || '')) ||
-      a.gid.localeCompare(b.gid),
-  );
+  // 업무 시점 → 기록 시각(시간대를 반영한 시각으로 비교) → ID 순. 같은 날짜의 이력은 기록한 순서대로 쌓인다
+  const instant = (s) => {
+    const t = Date.parse(s);
+    return Number.isNaN(t) ? 0 : t;
+  };
+  events.sort((a, b) => a.occurred_at.localeCompare(b.occurred_at) || instant(a.recorded_at) - instant(b.recorded_at) || a.gid.localeCompare(b.gid));
 
   // 6) 조회 표(1.7). 숨긴 노드는 사번·유형+라벨·주제 조회에서 빠지고, 이력(eventsByNode)은 남긴다
   const byEmpNo = new Map();

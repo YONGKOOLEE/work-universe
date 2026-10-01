@@ -50,3 +50,26 @@ test('저장소 값이 깨져 있어도 멈추지 않고, 샘플은 다시 넣�
   assert.equal(app.doc.nodes.length, SAMPLE_A1.nodes.length);
   assert.deepEqual(app.universes().map((u) => u.id).sort(), ['U-A1', 'U-K1', 'U-T1']);
 });
+
+test('같은 날짜의 이력은 기록한 순서대로 쌓이고, 시간대가 달라도 시각 기준으로 정렬한다', async () => {
+  const { buildView } = await import('../app/src/view/view.js');
+  const { addEvent } = await import('../app/src/model/commands.js');
+  // 샘플 이력(09:00 KST 기록) 뒤에 같은 날 입력한 메모가 와야 한다
+  const doc = addEvent(SAMPLE_A1, { type: 'memo', occurred_at: '2026-10-01', payload: { target_id: 'N-001' }, note: '오늘 메모' }, { now: '2026-10-01T10:30:00+09:00' }).doc;
+  const v = buildView(doc);
+  const last = v.index.eventsByNode.get('U-A1/N-001').at(-1);
+  assert.equal(last.note, '오늘 메모');
+  // 같은 순간을 다른 시간대로 적어도(01:30Z = 10:30+09:00) 순서가 뒤바뀌지 않는다
+  const d2 = JSON.parse(JSON.stringify(SAMPLE_A1));
+  d2.events.push({ id: 'E-X1', type: 'memo', occurred_at: '2026-10-01', recorded_at: '2026-10-01T02:00:00Z', source: 'user', payload: { target_id: 'N-001' }, note: '02:00Z = 11:00 KST' });
+  d2.events.push({ id: 'E-X2', type: 'memo', occurred_at: '2026-10-01', recorded_at: '2026-10-01T10:00:00+09:00', source: 'user', payload: { target_id: 'N-001' }, note: '10:00 KST' });
+  const order = buildView(d2).index.eventsByNode.get('U-A1/N-001').filter((e) => e.id.startsWith('E-X')).map((e) => e.id);
+  assert.deepEqual(order, ['E-X2', 'E-X1']); // 문자열 비교였다면 10:00+09:00이 02:00Z보다 뒤로 갔다
+});
+
+test('내장 샘플의 기록 시각은 미래가 아니다(미래이면 오늘 입력한 이력이 샘플 이력보다 앞에 정렬된다)', () => {
+  for (const s of SAMPLES) {
+    const stamps = [s.universe.created_at, ...s.nodes.map((n) => n.created_at), ...s.events.map((e) => e.recorded_at)].filter(Boolean);
+    for (const t of stamps) assert.ok(Date.parse(t) <= Date.now(), `${s.universe.id}: 미래 시각 ${t}`);
+  }
+});

@@ -10,7 +10,7 @@ export const SAMPLE_T01 = {
     root_node_id: 'N-000',
     subtypes: [],
     is_sample: true,
-    created_at: '2026-10-01T09:00:00+09:00',
+    created_at: '2026-09-30T09:00:00+09:00', // 앱 샘플의 판과 달라야 "이전 판"으로 인식된다
   },
   nodes: [
     { id: 'N-000', core_type: 'root', label: '월말 정산 점검', hidden: false,

@@ -2,10 +2,11 @@
 // 모든 이름·사번·조직명은 가상이다(R-06). 사번은 V- + 숫자 4자리. 12.2 형식이고, 12.1에 따라 JS로 감싸 넣는다(P-1).
 // 12.6 예시의 ID(N-000, N-001, N-010, N-011, N-020, N-030, L-001~003, E-001·E-002)를 그대로 쓴다.
 //
+// STAMP(기록 시각)는 반드시 "지금보다 과거"여야 한다. 미래이면 같은 날짜에 사용자가 입력한 이력이 샘플 이력보다 앞에 정렬된다(tests/data.test.js).
 // 이 파일을 고쳐 내장 샘플이 바뀌면 universe.created_at을 새 값으로 바꾼다.
 // 앱은 그 값이 저장된 것과 다르면 샘플을 새로 넣는다(app/src/app/app.js).
 
-const STAMP = '2026-10-01T18:00:00+09:00';
+const STAMP = '2026-10-01T09:00:00+09:00';
 
 const node = (id, core_type, label, rest = {}) => ({
   id, core_type, label, ...rest, hidden: false, created_at: STAMP, updated_at: STAMP,

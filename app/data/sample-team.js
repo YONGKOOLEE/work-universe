@@ -3,7 +3,7 @@
 // 두 업무의 "대사" 주제를 사람 확인으로 같은 주제로 이었다(주제 동일성 연결은 CR-4 제안).
 // 고치면 STAMP를 바꾼다.
 
-const STAMP = '2026-10-01T21:00:00+09:00';
+const STAMP = '2026-10-01T09:00:00+09:00';
 
 export const SAMPLE_TEAM = {
   schema_version: '1.0',
