@@ -87,6 +87,24 @@
   .links li:hover .link-tools, .links li:focus-within .link-tools { display: flex; }
   .form-message.error { color: var(--err); font-size: 13px; }
   .ok-text { color: var(--ok); font-size: 13px; margin: 0 0 8px; }
+  .draft-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 12px 0 4px; }
+  .badge { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px; padding: 1px 10px; font-size: 12px; font-weight: bold; }
+  .method { color: var(--muted); font-size: 13px; flex: 1; }
+  .draft-title { margin: 6px 0 10px; border: 0; padding: 0; color: var(--text); }
+  .draft-item { border-top: 1px dashed var(--line); padding: 8px 0; }
+  .draft-item h4 { margin: 0 0 4px; font-size: 14px; color: var(--accent); }
+  .draft-item ul { display: grid; gap: 6px; }
+  .draft-item li { display: grid; gap: 3px; }
+  .draft-item.insufficient h4 { color: var(--muted); }
+  .evidence-list { display: flex; flex-wrap: wrap; gap: 4px; }
+  .evidence { padding: 0 8px; font-size: 11px; border-radius: 8px; color: var(--muted); }
+  .copy-box { width: 100%; margin-top: 8px; }
+  .insight .field select, .draft .field select { width: 100%; max-width: 100%; min-width: 0; }
+  .experts { display: grid; gap: 12px; margin-top: 8px; padding: 0; }
+  .experts > li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; gap: 4px; }
+  .who { display: flex; align-items: center; gap: 6px; }
+  .who .chip { margin-left: auto; }
+  .why { display: grid; gap: 2px; }
   @media (max-width: 800px) { main { flex-direction: column; } aside { width: auto; border-left: 0; border-top: 1px solid var(--line); max-height: 50vh; } .graph-wrap { min-height: 320px; } }
 </style>
 </head>

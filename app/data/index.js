@@ -2,5 +2,7 @@
 import { SAMPLE_A1 } from './sample-a1.js';
 import { SAMPLE_CARD } from './sample-card.js';
 import { SAMPLE_TEAM } from './sample-team.js';
+import { SAMPLE_EVENT } from './sample-event.js';
+import { SAMPLE_DEPT } from './sample-dept.js';
 
-export const SAMPLES = [SAMPLE_A1, SAMPLE_CARD, SAMPLE_TEAM];
+export const SAMPLES = [SAMPLE_A1, SAMPLE_CARD, SAMPLE_TEAM, SAMPLE_EVENT, SAMPLE_DEPT];

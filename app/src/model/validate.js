@@ -9,6 +9,7 @@ import {
   EVENT_REF_TYPES,
   EVENT_SOURCES,
   EVENT_TYPES,
+  MEMO_CATEGORIES,
   IDENTITY_KINDS,
   IDENTITY_METHODS,
   IDENTITY_STATUSES,
@@ -194,6 +195,9 @@ export function eventPayloadErrors(doc, nodesById, edgeIds, ev) {
   }
   for (const k of rule.required || []) {
     if (payload[k] === undefined || payload[k] === null || payload[k] === '') out.push({ code: CODES.REQUIRED, field: k });
+  }
+  if (ev.type === 'memo' && payload.category !== undefined && !MEMO_CATEGORIES[payload.category]) {
+    out.push({ code: CODES.SCHEMA, field: 'category' });
   }
   if (ev.type === 'created' || ev.type === 'hidden' || ev.type === 'updated') {
     // ref: 꼭지 참조의 추가·해제(CR-4). target_id는 하위 유니버스 ID

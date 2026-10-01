@@ -128,3 +128,17 @@ test('주제 동일성 연결은 사람 확인만 허용한다', () => {
   d.identity_links[0].method = 'emp_no_auto';
   assert.deepEqual(validateDocument(d).errors.map((e) => e.code), ['E-SCHEMA']);
 });
+
+test('여러 단계로 묶은 부서: 접힌 팀의 개수에 그 아래 업무 유니버스의 노드까지 센다', async () => {
+  const { SAMPLE_DEPT } = await import('../app/data/sample-dept.js');
+  const { SAMPLE_EVENT } = await import('../app/data/sample-event.js');
+  const docs = { ...all, 'U-B': SAMPLE_EVENT, 'U-D1': SAMPLE_DEPT };
+  const v = buildView(SAMPLE_DEPT, (id) => docs[id] || null);
+  const p = projectView(v);
+  const shown = new Set(p.nodes.map((n) => n.gid));
+  const below = new Set(['U-T1', 'U-A1', 'U-K1']);
+  const expected = v.nodes.filter((n) => below.has(n.universe_id) && !n.hidden && !shown.has(n.gid)).length;
+  assert.equal(p.collapsed.get('U-T1').hidden_count, expected);
+  assert.ok(expected > 40); // 월말 정산·카드승인의 노드가 모두 접혀 있다(예전에는 0으로 보였다)
+  assert.ok(p.collapsed.get('U-B').hidden_count > 0);
+});

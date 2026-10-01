@@ -14,6 +14,8 @@ export const TYPE_COLORS = {
   topic: '#ec8fa3',
 };
 const UNKNOWN_COLOR = '#8a948a';
+// 연결이 이 수 이하일 때만 모든 연결 이름을 보인다. 그보다 많으면 고른 노드의 연결만
+const LABEL_EDGE_LIMIT = 14;
 const BG = '#0f1510';
 const TEXT = '#e6ecdf';
 const MUTED = '#8f9d88';
@@ -58,6 +60,9 @@ function toElements(display) {
   const { nodes, edges, rootGid, collapsed } = display;
   const { depth, order } = ringOrder(nodes, edges, rootGid);
   const collapsedRoot = new Map([...collapsed.values()].map((c) => [c.root_gid, c.hidden_count]));
+  // 점선 테두리(참조한 유니버스의 노드)는 내 노드와 참조 노드가 섞여 있을 때만 구분이 의미 있다.
+  // 부서처럼 전부 참조한 노드면 모든 노드에 점선이 둘려 오히려 어수선하다
+  const mixed = nodes.some((n) => n.origin === 'ref') && nodes.some((n) => n.origin === 'own' && n.core_type !== 'root');
   const degree = new Map();
   for (const e of edges) {
     degree.set(e.source, (degree.get(e.source) || 0) + 1);
@@ -72,6 +77,7 @@ function toElements(display) {
       return {
         group: 'nodes',
         data: {
+          mixed,
           id: n.gid,
           universe_id: n.universe_id,
           // 접힌 하위 유니버스의 꼭지: 가려진 노드 수를 함께 보인다
@@ -145,14 +151,14 @@ export function createGraph(container, { onSelect, onToggle = () => {} }) {
         style: { 'background-opacity': 0.9, 'border-width': 4, 'font-weight': 'bold', 'font-size': 16 },
       },
       // 다른 유니버스에서 참조한 노드는 점선 테두리, 합쳐진 노드는 이중 테두리(02-design 2절)
-      { selector: 'node[origin = "ref"]', style: { 'border-style': 'dashed' } },
+      { selector: 'node[?mixed][origin = "ref"]', style: { 'border-style': 'dashed' } },
       { selector: 'node[?merged]', style: { 'border-width': 5, 'border-style': 'double' } },
       { selector: 'node:selected', style: { 'border-width': 4, 'border-color': '#ffffff', 'background-opacity': 0.75 } },
       { selector: 'node.hover', style: { 'border-color': '#ffffff', 'background-opacity': 0.6 } },
       {
         selector: 'edge',
         style: {
-          label: 'data(label)',
+          label: '',
           'font-size': 10,
           'text-rotation': 'autorotate',
           color: MUTED,
@@ -167,6 +173,9 @@ export function createGraph(container, { onSelect, onToggle = () => {} }) {
           opacity: 0.9,
         },
       },
+      // 연결이 많은 화면은 글자가 빽빽해지므로 이름을 숨기고, 노드를 고르거나 올리면(hood) 그 연결의 이름만 보인다
+      { selector: 'edge.labeled', style: { label: 'data(label)' } },
+      { selector: 'edge.hood', style: { label: 'data(label)' } },
       { selector: 'edge[?synthetic]', style: { 'line-style': 'dashed' } },
       // 요약 연결: 접힌 세부를 거쳐 올라온 연결
       { selector: 'edge[?summarized]', style: { 'line-style': 'dotted', width: 1.8 } },
@@ -268,6 +277,7 @@ export function createGraph(container, { onSelect, onToggle = () => {} }) {
       const before = new Map(cy.nodes().map((n) => [n.id(), { ...n.position() }]));
       cy.elements().remove();
       cy.add(toElements(display));
+      cy.edges().toggleClass('labeled', cy.edges().length <= LABEL_EDGE_LIMIT);
       cy.resize();
       if (before.size === 0) {
         layout();

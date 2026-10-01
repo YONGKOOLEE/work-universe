@@ -57,7 +57,7 @@ export function renderNodeDetail(panel, d, { onFocus, extra = null, toolbar = nu
 }
 
 /** 노드를 고르지 않았을 때: 유니버스 개요와 사용법 한 줄. */
-export function renderUniverseSummary(panel, s) {
+export function renderUniverseSummary(panel, s, shown = null) {
   panel.replaceChildren();
   panel.append(el('h2', {}, s.name));
   const dl = el('dl', { 'data-testid': 'summary' });
@@ -65,7 +65,9 @@ export function renderUniverseSummary(panel, s) {
   if (s.description) dl.append(el('dt', {}, '설명'), el('dd', {}, s.description));
   dl.append(
     el('dt', {}, '구성'),
-    el('dd', {}, `노드 ${s.node_total}개(${s.counts.map((c) => `${c.type_label} ${c.count}`).join(', ')}), 연결 ${s.edge_total}개`),
+    el('dd', {}, shown !== null && shown < s.node_total
+      ? `지금 화면 ${shown}개 · 접힌 것까지 전체 ${s.node_total}개(${s.counts.map((c) => `${c.type_label} ${c.count}`).join(', ')}), 연결 ${s.edge_total}개`
+      : `노드 ${s.node_total}개(${s.counts.map((c) => `${c.type_label} ${c.count}`).join(', ')}), 연결 ${s.edge_total}개`),
   );
   if (s.period) dl.append(el('dt', {}, '이력 기간'), el('dd', {}, `${s.period.first} ~ ${s.period.last}`));
   panel.append(dl);

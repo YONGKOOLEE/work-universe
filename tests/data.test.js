@@ -85,9 +85,9 @@ test('정답 표의 근거 ID는 모두 데이터에 있다(근거 ID 유효율 
   }
 });
 
-test('정답 표: 초안 8개 항목이 모두 있고, 확정 대기 항목에는 결정 작업이 적혀 있다', () => {
+test('정답 표: 초안 10개 항목(CR-6)이 모두 있고, 확정 대기 항목에는 결정 작업이 적혀 있다', () => {
   const items = ANSWERS_V1.handover_drafts[0].items;
-  assert.deepEqual(Object.keys(items), ['업무_개요', '세부_업무_주기', '선후행', '산출물', '관계자', '최근_이슈', '이전_인수인계', '유사_경험자']);
+  assert.deepEqual(Object.keys(items), ['업무_개요', '세부_업무_절차', '일정_마감', '주의사항', '진행_중', '산출물_문서', '관계자_연락처', '최근_이슈', '이전_인수인계', '유사_경험자']);
   for (const item of Object.values(items)) if (item.status === 'pending') assert.ok(item.decide_in);
 });
 

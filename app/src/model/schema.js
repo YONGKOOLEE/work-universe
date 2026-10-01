@@ -81,6 +81,10 @@ export const USER_EVENT_TYPES = ['assign_start', 'assign_end', 'handover', 'affi
 
 export const EVENT_SOURCES = ['user', 'sample', 'system'];
 
+// 메모 범주(02-design 5.6, 12.2 memo.payload.category). 없으면 이슈로 본다
+export const MEMO_CATEGORIES = { issue: '이슈', caution: '주의사항', in_progress: '진행 중', resolved: '해결됨' };
+export const memoCategoryOf = (payload) => (payload && payload.category) || 'issue';
+
 // 12.2 이벤트 payload 규칙. required: 필수 키, nodeRefs: 노드 ID를 담는 키,
 // nodeListRefs: 노드 ID 배열을 담는 키, eventRefs: 이벤트 ID를 담는 키.
 // 키가 가리켜야 하는 노드 유형은 EVENT_REF_TYPES에 있다(예: person_id는 사람 노드)

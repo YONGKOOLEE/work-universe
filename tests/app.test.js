@@ -17,7 +17,7 @@ test('처음 열면 모든 내장 샘플이 저장되고 첫 샘플이 열린다
   const storage = memoryStorage();
   const app = open(storage);
   assert.equal(app.doc.universe.id, 'U-A1');
-  assert.deepEqual(app.universes().map((u) => u.id).sort(), ['U-A1', 'U-K1', 'U-T1']);
+  assert.deepEqual(app.universes().map((u) => u.id).sort(), ['U-A1', 'U-B', 'U-D1', 'U-K1', 'U-T1']);
 });
 
 test('추가한 노드는 다시 열어도 남는다', () => {
@@ -90,6 +90,6 @@ test('가상 데이터 초기화: 샘플은 처음 상태로, 사용자가 만�
   app.addNode({ core_type: 'artifact', label: '새 문서' });
   app.groupUniverses({ name: '가상 신규팀', level: '팀', owner: '가상', childIds: ['U-A1', 'U-K1'] });
   app.resetAll();
-  assert.deepEqual(app.universes().map((u) => u.id).sort(), ['U-A1', 'U-K1', 'U-T1']);
+  assert.deepEqual(app.universes().map((u) => u.id).sort(), ['U-A1', 'U-B', 'U-D1', 'U-K1', 'U-T1']);
   assert.equal(app.doc.nodes.length, SAMPLE_A1.nodes.length);
 });

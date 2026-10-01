@@ -2,7 +2,7 @@
 // 양식은 값을 모아 onSubmit(values)을 부르고, 돌려받은 결과({ok, error})로 오류 사유를 보여 준다.
 // 저장·검증은 app → model이 한다. 여기서는 입력과 표시만 한다.
 
-import { EDGE_TYPES, NODE_TYPES } from '../model/schema.js';
+import { EDGE_TYPES, MEMO_CATEGORIES, NODE_TYPES } from '../model/schema.js';
 import { el } from './dom.js';
 import { messageFor } from './messages.js';
 
@@ -245,12 +245,13 @@ export function eventForm(o) {
   const previous = select([['', '(없음) 참조하지 않음'], ...o.handovers.map((h) => [h.id, `${h.occurred_at} ${h.text}`])], '');
   const fromOrg = select(nodeOptions(byType('org'), { empty: '(미기재)' }), '');
   const toOrg = select(nodeOptions(byType('org'), { empty: '(미기재)' }), '');
+  const category = select(Object.entries(MEMO_CATEGORIES), 'issue', { 'data-testid': 'event-category' });
   const topics = el('div', { class: 'checks' }, ...byType('topic').map((t) => el('label', { class: 'check' }, el('input', { type: 'checkbox', value: t.id, checked: t.id === o.node.id }), ` ${t.label}`)));
 
   // 같은 입력 칸(업무·사람)을 여러 종류가 함께 쓰므로, 종류를 바꿀 때마다 칸을 새로 감싼다
   // (DOM 요소는 한 곳에만 붙을 수 있다)
   const groups = {
-    memo: () => [field('관련 주제(선택)', topics)],
+    memo: () => [field('분류', category), field('관련 주제(선택)', topics)],
     handover: () => [field('업무', work), field('보내는 사람', from), field('받는 사람', to), field('인수인계서(선택)', artifact), field('이전 인수인계 참조(선택)', previous)],
     assign_start: () => [field('사람', person), field('업무', work)],
     assign_end: () => [field('사람', person), field('업무', work)],
@@ -277,7 +278,7 @@ export function eventForm(o) {
     evt.preventDefault();
     const v = (s) => s.value || undefined;
     const payloads = {
-      memo: () => ({ target_id: o.node.id, topic_ids: [...topics.querySelectorAll('input:checked')].map((i) => i.value) }),
+      memo: () => ({ target_id: o.node.id, category: category.value, topic_ids: [...topics.querySelectorAll('input:checked')].map((i) => i.value) }),
       handover: () => ({ work_id: v(work), from_person_id: v(from), to_person_id: v(to), artifact_id: v(artifact), previous_handover_id: v(previous) }),
       assign_start: () => ({ person_id: v(person), work_id: v(work) }),
       assign_end: () => ({ person_id: v(person), work_id: v(work) }),

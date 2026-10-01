@@ -21,6 +21,7 @@ const FIELD_NAMES = {
   level: '단위',
   owner: '작성 주체',
   child_universe_id: '하위 유니버스',
+  category: '분류',
 };
 
 const TYPE_NAMES = { person: '사람', work: '업무', artifact: '산출물', org: '조직', topic: '주제' };

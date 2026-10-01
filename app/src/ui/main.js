@@ -11,6 +11,8 @@ import { el } from './dom.js';
 import { createGraph, legendItems } from './graph.js';
 import { renderNodeDetail, renderUniverseSummary } from './detail.js';
 import { edgeEditForm, edgeForm, eventForm, nodeForm } from './editor.js';
+import { draftPanel } from './draft.js';
+import { insightPanel } from './insight.js';
 import { messageFor } from './messages.js';
 
 // ISO 8601 날짜·시각 + 현지 시간대(12.1)
@@ -44,6 +46,8 @@ function start() {
   const $ = (id) => document.getElementById(id);
   let selected = null; // 선택한 노드의 전역 ID
   let editing = null; // 편집 중인 양식: {kind:'node'|'edge'|'event'|'edge-edit', edgeId?}
+  let drafting = null; // 인수인계 초안 화면: {target}
+  let insight = null; // 유사 경험자 화면: {work}
   const expanded = new Set(); // 펼친 하위 유니버스
   let view = app.view;
   let display = projectView(view, { expanded });
@@ -126,20 +130,56 @@ function start() {
     return result;
   }
 
+  function draftButton(gid) {
+    const node = view.getNode(gid);
+    if (!node || !['root', 'work'].includes(node.core_type)) return null;
+    return el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft', onclick: () => openDraft(node.gid) }, '인수인계 초안');
+  }
+
+  function openDraft(targetGid) {
+    editing = null;
+    insight = null;
+    drafting = { target: targetGid };
+    renderPanel();
+  }
+
+  function openInsight(workGid) {
+    editing = null;
+    drafting = null;
+    insight = { work: workGid };
+    renderPanel();
+  }
+
+  // 업무 노드에만 보이는 "유사 경험자" 버튼
+  function insightButton(gid) {
+    const node = view.getNode(gid);
+    if (!node || node.core_type !== 'work') return null;
+    return el('button', { type: 'button', 'data-testid': 'btn-similar', onclick: () => openInsight(node.gid) }, '유사 경험자');
+  }
+
   function toolbar(gid) {
     const node = view.getNode(gid);
     if (!node || node.hidden) return null;
     if (!isOwn(gid)) {
-      return el('p', { class: 'muted small' }, '다른 유니버스의 노드입니다. 고치려면 ',
-        el('button', { type: 'button', class: 'link', onclick: () => openUniverse(node.universe_id) }, `「${node.universe_name}」 열기`), '.');
+      const draft = draftButton(gid);
+      const sim = insightButton(gid);
+      return el('div', {}, draft || sim ? el('div', { class: 'row toolbar' }, draft, sim) : null,
+        el('p', { class: 'muted small' }, '다른 유니버스의 노드입니다. 고치려면 ',
+          el('button', { type: 'button', class: 'link', onclick: () => openUniverse(node.universe_id) }, `「${node.universe_name}」 열기`), '.'));
     }
-    if (app.readOnly) return null;
+    if (app.readOnly) {
+      const draft = draftButton(gid);
+      const sim = insightButton(gid);
+      return draft || sim ? el('div', { class: 'row toolbar' }, draft, sim) : null;
+    }
     const btn = (label, kind, testid) => el('button', { type: 'button', 'data-testid': testid, onclick: () => { editing = { kind }; renderPanel(); } }, label);
     return el('div', { class: 'row toolbar' },
       btn('수정', 'node', 'btn-edit'),
       btn('연결 추가', 'edge', 'btn-edge'),
       btn('이력 추가', 'event', 'btn-event'),
       node.core_type === 'root' ? null : el('button', { type: 'button', class: 'danger', 'data-testid': 'btn-hide', onclick: () => hideSelected(node) }, '숨기기'),
+      draftButton(gid),
+      insightButton(gid),
     );
   }
 
@@ -191,9 +231,32 @@ function start() {
     }
   }
 
+  // 초안의 근거를 누르면 패널은 그대로 두고 그래프에서 그 노드를 보여 준다
+  function showInGraph(gid) {
+    const g = view.canonical(gid);
+    graph.highlight(g);
+    const node = graph.cy.getElementById(g);
+    if (!node.empty()) graph.cy.animate({ center: { eles: node } }, { duration: 200 });
+  }
+
   function renderPanel() {
     const panel = $('detail');
-    if (!selected) return renderUniverseSummary(panel, describeUniverse(view));
+    if (insight) {
+      panel.replaceChildren(insightPanel({ view, work: insight.work, onFocus: showInGraph, onClose: () => { insight = null; renderPanel(); graph.highlight(selected); } }));
+      return;
+    }
+    if (drafting) {
+      panel.replaceChildren(draftPanel({ view, target: drafting.target, onFocus: showInGraph, onClose: () => { drafting = null; renderPanel(); graph.highlight(selected); } }));
+      return;
+    }
+    if (!selected) {
+      renderUniverseSummary(panel, describeUniverse(view), display.nodes.length);
+      const rootGid = toGid(currentId(), app.doc.universe.root_node_id);
+      panel.append(el('div', { class: 'row' },
+        el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft-universe', onclick: () => openDraft(rootGid) }, '인수인계 초안 만들기'),
+        el('button', { type: 'button', 'data-testid': 'btn-similar-universe', onclick: () => openInsight('') }, '유사 경험자 찾기')));
+      return;
+    }
     if (editing && isOwn(selected) && localNode(selected)) {
       panel.replaceChildren(el('h2', {}, localNode(selected).label), editorFor(selected));
       return;
@@ -208,6 +271,8 @@ function start() {
 
   function select(gid) {
     if (gid !== selected) editing = null;
+    drafting = null;
+    insight = null;
     selected = gid;
     graph.highlight(gid);
     renderPanel();
@@ -284,7 +349,7 @@ function start() {
       return;
     }
     slot.replaceChildren(
-      doneText ? el('p', { class: 'ok-text', 'data-testid': 'add-done' }, doneText) : null,
+      ...(doneText ? [el('p', { class: 'ok-text', 'data-testid': 'add-done' }, doneText)] : []),
       nodeForm({
         mode: 'add',
         subtypes: app.doc.universe.subtypes || [],

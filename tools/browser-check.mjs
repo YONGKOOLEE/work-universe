@@ -314,6 +314,47 @@ async function checkBrowser(browser, port) {
   check('숨기기 → 그래프에서 빠지고 문서에는 hidden으로 남음', !(await hasLabel(s.cdp, '점검표 양식')) && (await evaluate(s.cdp, "window.__wu.doc.nodes.find((n) => n.id === 'N-021').hidden === true && window.__wu.doc.events.some((e) => e.type === 'hidden' && e.payload.target_id === 'N-021')")));
   await shot(s.cdp, `${browser.name}-3b-edited`);
 
+  // ── T-07 인수인계 초안 ──
+  await evaluate(s.cdp, "window.__wu.select(null)");
+  await clickTestId(s.cdp, 'btn-draft-universe');
+  await sleep(150);
+  // 오류: 받는 사람을 고르지 않으면 만들지 않는다
+  await evaluate(s.cdp, `(() => {
+    const set = (id, v) => { const e = document.querySelector('[data-testid=' + id + ']'); e.value = v; e.dispatchEvent(new Event('change')); };
+    set('draft-target', 'U-A1/N-000'); set('draft-from', 'U-A1/N-011'); set('draft-to', '');
+    document.querySelector('[data-testid=draft-form] button[type=submit]').click();
+  })()`);
+  await sleep(150);
+  check('오류: 초안의 받는 사람 누락 → 만들지 않고 안내', (await text(s.cdp, '[data-testid=draft-message]')).includes('받는 사람') && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=draft-status]')")));
+  await evaluate(s.cdp, `(() => {
+    const e = document.querySelector('[data-testid=draft-to]'); e.value = 'U-A1/N-012'; e.dispatchEvent(new Event('change'));
+    document.querySelector('[data-testid=draft-form] button[type=submit]').click();
+  })()`);
+  await sleep(250);
+  const itemsCount = await evaluate(s.cdp, "document.querySelectorAll('[data-testid^=draft-item-]').length");
+  check('R-03 초안 10개 항목, "초안" 상태와 생성 방식(규칙 기반) 표시(R-03 ③, R-04 ②)', itemsCount === 10 && (await text(s.cdp, '[data-testid=draft-status]')) === '초안' && (await text(s.cdp, '[data-testid=draft-method]')).includes('규칙 기반'));
+  check('R-03 ① 항목에 근거 링크가 붙는다(관계자: 한가람, 이전 인수인계: 인수인계서)', (await text(s.cdp, '[data-testid=draft-item-관계자_연락처]')).includes('한가람') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=draft-item-이전_인수인계] .evidence').length")) === 2);
+  check('R-03 ② 근거가 없는 항목은 "이력 부족"(유사 경험자)', (await text(s.cdp, '[data-testid=draft-item-유사_경험자]')).includes('이력 부족'));
+  check('숨긴 노드가 근거면 "숨김 처리된 노드"로 표시(점검표 양식을 숨긴 상태)', (await text(s.cdp, '[data-testid=draft-item-산출물_문서]')).includes('점검표 양식(숨김 처리된 노드)'));
+  // 근거를 누르면 패널은 그대로 두고 그래프에서 그 노드를 보여 준다
+  // CR-6 새 항목: 절차·마감·주의사항·진행 중·문의 연락처가 실제로 보인다
+  const rich = {
+    절차: await text(s.cdp, '[data-testid=draft-item-세부_업무_절차]'),
+    마감: await text(s.cdp, '[data-testid=draft-item-일정_마감]'),
+    주의: await text(s.cdp, '[data-testid=draft-item-주의사항]'),
+    진행: await text(s.cdp, '[data-testid=draft-item-진행_중]'),
+    연락: await text(s.cdp, '[data-testid=draft-item-관계자_연락처]'),
+  };
+  check('CR-6 초안에 절차·마감·주의사항·진행 중인 일·문의 연락처가 들어감', rich.절차.includes('진행 순서: 자료 수집 → 대사 확인 → 보고') && rich.절차.includes('절차: ① 점검표의 정산 합계') && rich.마감.includes('월 마감 후 3영업일 이내') && rich.주의.includes('월 경계 건은 따로 표시한다') && rich.진행.includes('회신 대기') && !rich.진행.includes('6월 불일치') && rich.연락.includes('문의: 보내는 사람 윤바다(V-1002)'), JSON.stringify(rich).slice(0, 160));
+  await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=draft-item-관계자_연락처] li')].find((li) => li.textContent.startsWith('한가람')).querySelector('.evidence').click()");
+  await sleep(250);
+  check('근거 링크 → 그래프에서 해당 노드 선택, 초안은 그대로', (await evaluate(s.cdp, "window.__wu.cy.$(':selected').map((n) => n.id()).join()")) === 'U-A1/N-010' && (await evaluate(s.cdp, "!!document.querySelector('[data-testid=draft-status]')")));
+  await shot(s.cdp, `${browser.name}-3c-draft`);
+  // 화면 어디에도 'null' 글자가 들어가지 않는다(replaceChildren에 빈 값을 넘긴 실수 검출)
+  const nullTexts = await evaluate(s.cdp, "(() => { document.querySelectorAll('details').forEach((d) => (d.open = true)); const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); const out = []; while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') out.push(w.currentNode.parentElement.id || w.currentNode.parentElement.className); return out; })()");
+  check('화면에 "null" 글자 없음', nullTexts.length === 0, nullTexts.join(','));
+  await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=draft-form] button')].find((b) => b.textContent === '닫기').click()");
+
   await s.cdp.send('Page.reload');
   await sleep(300);
   const reloaded = await waitFor(s.cdp, 'window.__wu && window.__wu.cy.nodes().length > 0');
@@ -382,6 +423,50 @@ async function checkBrowser(browser, port) {
     check('수정 이력에 실제로 바꾼 필드만 남음(숫자 속성 유지)', JSON.stringify(after) === '["description"]', JSON.stringify(after));
   } else {
     check('수정 이력에 실제로 바꾼 필드만 남음(숫자 속성 유지)', false, '카드승인 유니버스를 열지 못함');
+  }
+
+  // ── T-08 유사 경험자(R-05) ──
+  await evaluate(s.cdp, "location.hash = 'U-D1'; location.reload()").catch(() => {});
+  await sleep(500);
+  const deptReady = await waitFor(s.cdp, "window.__wu && window.__wu.doc.universe.id === 'U-D1' && window.__wu.cy.nodes().length > 0", 8000);
+  check('부서 유니버스(부서 → 팀 → 업무 여러 단계)가 열림', deptReady);
+  if (deptReady) {
+    // 접힌 팀 꼭지를 펼쳐 대사 확인을 고를 수 있게 한다
+    await evaluate(s.cdp, "window.__wu.toggle('U-T1')");
+    await sleep(300);
+    await evaluate(s.cdp, "window.__wu.toggle('U-A1')");
+    await sleep(300);
+    await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+    await clickTestId(s.cdp, 'btn-similar');
+    await sleep(200);
+    const pickOk = await evaluate(s.cdp, "(() => { const p = document.querySelector('[data-testid=insight-work]'); return p.value; })()");
+    check('업무 노드의 "유사 경험자" 버튼 → 그 업무가 미리 골라짐', pickOk === 'U-A1/N-001');
+    const people = await text(s.cdp, '[data-testid=insight-people]');
+    check('R-05 ① ④ 윤바다가 근거 업무·주제와 함께 나옴', people.includes('윤바다') && people.includes('2025 행사') && people.includes('같은 주제 「대사 불일치」(이름이 같은 주제, 연결 확인 전)'), people.slice(0, 120));
+    check('R-05 ① 근거 버튼(공유 주제·업무)이 붙음', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=insight-people] .evidence').length")) >= 4);
+    check('현재 담당자(서하늘)는 뺀다고 밝힘', (await text(s.cdp, '[data-testid=insight-excluded]')).includes('서하늘') && !people.includes('서하늘') && !people.includes('한가람'));
+    check('R-05 ③ 결정은 사람이 한다는 안내', (await text(s.cdp, '#detail')).includes('사람이 정합니다'));
+    await shot(s.cdp, `${browser.name}-6-similar`);
+    // 근거를 누르면 그래프에서 그 노드를 강조한다
+    await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=insight-people] .evidence')].find((b) => b.textContent === '2025 행사').click()");
+    await sleep(250);
+    check('근거 버튼 → 그래프에서 해당 노드 선택(패널은 그대로)', (await evaluate(s.cdp, "window.__wu.cy.$(':selected').map((n) => n.id()).join()")) === 'U-B/N-101' && !!(await evaluate(s.cdp, "!!document.querySelector('[data-testid=insight-people]')")));
+    // 오류: 주제·산출물 연결이 없는 업무 → 데이터 부족
+    await evaluate(s.cdp, `(() => { const p = document.querySelector('[data-testid=insight-work]'); p.value = 'U-A1/N-003'; p.dispatchEvent(new Event('change')); })()`);
+    await sleep(150);
+    check('오류(R-05 ②): 연결이 없는 업무 → "데이터 부족"만 표시', (await text(s.cdp, '[data-testid=insight-insufficient]')).includes('데이터 부족') && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=insight-people]')")));
+    // 인수인계 초안의 유사 경험자 항목에도 같은 결과가 들어간다
+    await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+    await clickTestId(s.cdp, 'btn-draft');
+    await evaluate(s.cdp, `(() => {
+      const set = (id, v) => { const e = document.querySelector('[data-testid=' + id + ']'); e.value = v; e.dispatchEvent(new Event('change')); };
+      set('draft-from', 'U-A1/N-011'); set('draft-to', 'U-A1/N-012');
+      document.querySelector('[data-testid=draft-form] button[type=submit]').click();
+    })()`);
+    await sleep(250);
+    const sim = await text(s.cdp, '[data-testid=draft-item-유사_경험자]');
+    check('인수인계 초안의 "유사 경험자" 항목에 윤바다와 근거 링크가 들어감', sim.includes('윤바다(V-1002)') && !sim.includes('이력 부족') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=draft-item-유사_경험자] .evidence').length")) >= 3);
+    check('부서 화면에서도 화면에 "null" 글자 없음', (await evaluate(s.cdp, "(() => { const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') return false; return true; })()")));
   }
 
   const errors1 = [...s.log.errors];

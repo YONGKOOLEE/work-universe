@@ -1,7 +1,7 @@
 // 상세 패널에 보여 줄 내용을 view에서 만든다(R-01, R-14). 화면(DOM)에 의존하지 않는 순수 함수.
 // ui는 이 결과를 그리기만 한다. 그래야 Node에서 테스트할 수 있다(12.7).
 
-import { EDGE_TYPES, eventTypeLabel } from '../model/schema.js';
+import { EDGE_TYPES, MEMO_CATEGORIES, eventTypeLabel, memoCategoryOf } from '../model/schema.js';
 import { toGid } from './view.js';
 
 const FIELD_NAMES = {
@@ -44,8 +44,10 @@ export function eventText(view, ev) {
       const orgs = p.from_org_id || p.to_org_id ? ` (${name(p.from_org_id) || '미기재'} → ${name(p.to_org_id) || '미기재'})` : '';
       return `${name(p.person_id)} 소속 변경${orgs}${ev.note ? `: ${ev.note}` : ''}`;
     }
-    case 'memo':
-      return ev.note || '메모';
+    case 'memo': {
+      const cat = memoCategoryOf(p);
+      return `${cat === 'issue' ? '' : `[${MEMO_CATEGORIES[cat]}] `}${ev.note || '메모'}`;
+    }
     case 'updated': {
       const keys = Object.keys(p.after || {});
       const changes = keys.map((k) => `${FIELD_NAMES[k] || k}: ${fieldValue(p.before && p.before[k])} → ${fieldValue(p.after[k])}`);

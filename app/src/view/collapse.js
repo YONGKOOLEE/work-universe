@@ -119,10 +119,17 @@ export function projectView(view, { expanded = new Set() } = {}) {
     }
   }
 
-  // 5) 접힌 유니버스마다 가려진 노드 수(꼭지에 표시)
+  // 5) 접힌 유니버스마다 가려진 노드 수(꼭지에 표시). 그 아래 하위 유니버스의 노드도 센다
+  const below = (u) => {
+    const out = new Set([u]);
+    const stack = [u];
+    while (stack.length) for (const ch of children.get(stack.pop()) || []) if (!out.has(ch)) { out.add(ch); stack.push(ch); }
+    return out;
+  };
   const collapsed = new Map();
   for (const u of collapsedU) {
-    const hidden = view.nodes.filter((n) => n.universe_id === u && !n.hidden && !visible.has(n.gid)).length;
+    const scope = below(u);
+    const hidden = view.nodes.filter((n) => scope.has(n.universe_id) && !n.hidden && !visible.has(n.gid)).length;
     collapsed.set(u, { hidden_count: hidden, root_gid: toGid(u, view.universes.get(u).root_node_id) });
   }
 
