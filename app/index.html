@@ -105,8 +105,8 @@
   .who { display: flex; align-items: center; gap: 6px; }
   .who .chip { margin-left: auto; }
   .why { display: grid; gap: 2px; }
-  .tabs { display: flex; gap: 6px; margin: 4px 0 10px; }
-  .tab { padding: 4px 14px; font-size: 13px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+  .tab { padding: 4px 12px; font-size: 13px; white-space: nowrap; }
   .tab.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: bold; }
   .patterns { display: grid; gap: 12px; margin-top: 8px; padding: 0; }
   .patterns > li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; gap: 6px; }
@@ -118,6 +118,15 @@
   .dg-table th:not(:first-child), .dg-table td:not(:first-child) { white-space: nowrap; width: 1%; }
   .chip.status-current { background: var(--accent); color: var(--accent-ink); }
   .chip.status-other { opacity: 0.75; }
+  .timebar { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+  .timebar input[type=range] { flex: 1; min-width: 160px; accent-color: var(--accent); }
+  .timebar .when { color: var(--text); font-weight: bold; min-width: 6.5em; }
+  .timebar.past { background: var(--warn-bg); color: var(--warn-text); }
+  .history li.after { opacity: 0.45; }
+  .flow-table td:first-child { white-space: nowrap; }
+  .flow-table details summary { cursor: pointer; }
+  .flow-table td.nodata { color: var(--muted); font-style: italic; }
+  .flow-table tr.current-row td { background: rgba(160, 210, 110, 0.12); }
   .dg-n { display: flex; align-items: center; gap: 6px; font-size: 13px; }
   .dg-n input { width: 4em; }
   .insight h3 { font-size: 14px; margin: 12px 0 4px; }
@@ -166,6 +175,7 @@
   <div class="graph-wrap">
     <div id="graph" aria-label="그래프"></div>
     <div class="graph-tools"><button type="button" id="relayout" title="노드 배치를 처음부터 다시 계산합니다">다시 정렬</button><button type="button" id="fit">전체 보기</button></div>
+    <div id="timebar" class="timebar" data-testid="timebar"></div>
     <ul id="legend" aria-label="범례"></ul>
   </div>
   <aside>

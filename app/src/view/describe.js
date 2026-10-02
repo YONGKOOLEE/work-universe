@@ -79,6 +79,22 @@ export function eventText(view, ev) {
 }
 
 /**
+ * 기준일의 소속(R-14). 소속 연결(기간이 기준일에 걸친 것)이 있으면 그 조직, 없으면 기준일 이전 마지막 소속 변경 이력.
+ * 조직 노드가 다른 유니버스에 있어 ID가 없으면 "미기재"이고, 이력 메모를 함께 돌려준다.
+ * @returns {{label:string, from:'edge'|'event'|null, event_gid:string|null, note:string}}
+ */
+export function affiliationAt(view, personGid, asOf) {
+  const g = view.canonical(personGid);
+  const edge = view.edges.find((e) => !e.hidden && e.core_type === 'belongs_to' && e.source === g && periodStatus(e.period, asOf) === 'current');
+  if (edge) return { label: view.getNode(edge.target)?.label || '미기재', from: 'edge', event_gid: null, note: '' };
+  const evs = (view.index.eventsByNode.get(g) || []).filter((ev) => ev.type === 'affiliation_change' && ev.occurred_at <= asOf);
+  if (!evs.length) return { label: '미기재', from: null, event_gid: null, note: '' };
+  const ev = evs[evs.length - 1];
+  const to = ev.payload.to_org_id ? view.getNode(ev.payload.to_org_id.includes('/') ? ev.payload.to_org_id : toGid(ev.universe_id, ev.payload.to_org_id)) : null;
+  return { label: to ? to.label : '미기재', from: 'event', event_gid: ev.gid, note: `${ev.occurred_at} 소속 변경${ev.note ? `: ${ev.note}` : ''}` };
+}
+
+/**
  * 노드 상세. 없는 노드는 {found:false}. 숨긴 노드도 내용을 돌려주고 hidden으로 알린다(4절 "숨김 후 참조").
  * links가 비어 있으면 "연결 없음"이다(R-01 ②).
  */
@@ -88,6 +104,10 @@ export function describeNode(view, gid, { asOf = null } = {}) {
 
   const rows = [{ label: '유형', value: node.type_label + (node.subtype ? ` > ${node.subtype}` : '') }];
   if (node.emp_no) rows.push({ label: '사번', value: node.emp_no });
+  if (asOf && node.core_type === 'person') {
+    const aff = affiliationAt(view, node.gid, asOf);
+    if (aff.from) rows.push({ label: '소속(기준일)', value: aff.note && aff.label === '미기재' ? `미기재 — ${aff.note}` : aff.label });
+  }
   if (node.description) rows.push({ label: '설명', value: node.description });
   for (const [k, v] of Object.entries(node.attrs || {})) rows.push({ label: k, value: String(v) });
   if (node.period) rows.push({ label: '기간', value: periodText(node.period, asOf) });
@@ -120,6 +140,8 @@ export function describeNode(view, gid, { asOf = null } = {}) {
     date: ev.occurred_at,
     type_label: eventTypeLabel(ev.type),
     text: eventText(view, ev),
+    // 시간 슬라이더로 과거를 볼 때 기준일 이후 이력은 흐리게 보인다
+    after: !!asOf && ev.occurred_at > asOf,
   }));
 
   return { found: true, gid: node.gid, title: node.label, core_type: node.core_type, hidden, rows, links, no_links: links.length === 0, history };

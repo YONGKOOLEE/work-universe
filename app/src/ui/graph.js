@@ -181,6 +181,8 @@ export function createGraph(container, { onSelect, onToggle = () => {} }) {
       { selector: 'edge[?summarized]', style: { 'line-style': 'dotted', width: 1.8 } },
       { selector: 'node[?collapsed]', style: { 'border-width': 5, 'border-style': 'double', 'text-wrap': 'wrap' } },
       { selector: '.faded', style: { opacity: 0.15 } },
+      { selector: 'node.time-off', style: { opacity: 0.25, 'border-style': 'dotted' } },
+      { selector: 'edge.time-off', style: { opacity: 0.2, 'line-style': 'dotted' } },
       { selector: 'edge.hood', style: { 'line-color': ACCENT, 'target-arrow-color': ACCENT, width: 2.4, color: TEXT, opacity: 1 } },
     ],
   });
@@ -194,6 +196,11 @@ export function createGraph(container, { onSelect, onToggle = () => {} }) {
   }
 
   let selectedGid = null;
+  let timeOff = new Set(); // 시간 슬라이더의 기준일에 유효하지 않은 노드·연결
+  const applyTimeOff = () => {
+    cy.elements().removeClass('time-off');
+    for (const id of timeOff) cy.getElementById(id).addClass('time-off');
+  };
 
   // 노드를 고르면 그 노드와 이웃만 또렷하게 보인다(클릭 펼침)
   function highlight(gid) {
@@ -297,7 +304,14 @@ export function createGraph(container, { onSelect, onToggle = () => {} }) {
         });
         if (slot > 0) cy.fit(undefined, 40);
       }
+      applyTimeOff();
       highlight(selectedGid);
+    },
+
+    /** 시간 슬라이더: 기준일에 유효하지 않은 요소 ID들을 흐리게 표시한다(빈 목록이면 해제) */
+    setTimeOff(ids) {
+      timeOff = new Set(ids);
+      applyTimeOff();
     },
 
     // 배치를 처음부터 다시 계산한다("정렬" 버튼)

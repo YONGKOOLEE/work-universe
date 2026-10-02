@@ -6,7 +6,7 @@ function historyList(items) {
   return el(
     'ol',
     { class: 'history', 'data-testid': 'history' },
-    ...items.map((h) => el('li', {}, el('time', {}, h.date), el('span', { class: 'chip' }, h.type_label), el('span', { class: 'text' }, h.text))),
+    ...items.map((h) => el('li', h.after ? { class: 'after', title: '기준일 이후의 이력' } : {}, el('time', {}, h.date), el('span', { class: 'chip' }, h.type_label), el('span', { class: 'text' }, h.text))),
   );
 }
 

@@ -15,6 +15,8 @@ import { edgeEditForm, edgeForm, eventForm, nodeForm } from './editor.js';
 import { draftPanel } from './draft.js';
 import { currentDenseN, insightPanel, todayLocal } from './insight.js';
 import { personLoad, repeatPatternsFor, workLoad } from '../rules/insight.js';
+import { monthAsOf, timeMonths } from '../rules/flow.js';
+import { periodStatus } from '../view/describe.js';
 import { messageFor } from './messages.js';
 
 // ISO 8601 날짜·시각 + 현지 시간대(12.1)
@@ -108,6 +110,8 @@ function start() {
   let editing = null; // 편집 중인 양식: {kind:'node'|'edge'|'event'|'edge-edit', edgeId?}
   let drafting = null; // 인수인계 초안 화면: {target}
   let insight = null; // 인사이트 화면: {work, kind}
+  let viewDate = null; // 시간 슬라이더로 고른 기준일(YYYY-MM-DD). null이면 오늘
+  const asOf = () => viewDate || todayLocal();
   const expanded = new Set(); // 펼친 하위 유니버스
   let view = app.view;
   let display = projectView(view, { expanded });
@@ -220,7 +224,7 @@ function start() {
 
   // 사람 노드: 지금 맡은 업무 수와 밀집 기준 해당 여부. 누르면 인사이트의 밀집·공백 탭이 열린다
   function loadNote(gid) {
-    const load = personLoad(view, gid, { asOf: todayLocal(), n: currentDenseN() });
+    const load = personLoad(view, gid, { asOf: asOf(), n: currentDenseN() });
     if (!load) return null;
     const text = load.count === 0 ? '지금 맡은 업무 없음' : `지금 맡은 업무 ${load.count}개 — ${load.dense ? `밀집 기준(${load.n}개 이상)에 해당` : `밀집 기준(${load.n}개 이상) 아래`}`;
     return el('p', { class: load.dense ? 'notice' : 'muted small', 'data-testid': 'person-load' }, text, ' ',
@@ -229,7 +233,7 @@ function start() {
 
   // 업무 노드: 현재 담당 또는 공백 종류. 누르면 밀집·공백 탭
   function workNote(gid) {
-    const w = workLoad(view, gid, { asOf: todayLocal() });
+    const w = workLoad(view, gid, { asOf: asOf() });
     if (!w) return null;
     const text = w.work_ended ? '기간이 끝난 업무'
       : w.kind === 'covered' ? `현재 담당: ${w.current.map((p) => p.label).join(', ')}`
@@ -344,6 +348,7 @@ function start() {
     display = projectView(view, { expanded });
     graph.render(display, selected);
     renderLegend();
+    applyTime();
     graph.relayout();
     return true;
   }
@@ -360,11 +365,11 @@ function start() {
   function renderPanel() {
     const panel = $('detail');
     if (insight) {
-      panel.replaceChildren(insightPanel({ view, work: insight.work, kind: insight.kind, onFocus: showInGraph, onClose: () => { insight = null; renderPanel(); graph.highlight(selected); } }));
+      panel.replaceChildren(insightPanel({ view, work: insight.work, kind: insight.kind, asOf: asOf(), today: todayLocal(), onTime: setViewDate, onKind: (k) => { insight.kind = k; }, onFocus: showInGraph, onClose: () => { insight = null; renderPanel(); graph.highlight(selected); } }));
       return;
     }
     if (drafting) {
-      panel.replaceChildren(draftPanel({ view, target: drafting.target, onFocus: showInGraph, onClose: () => { drafting = null; renderPanel(); graph.highlight(selected); } }));
+      panel.replaceChildren(draftPanel({ view, target: drafting.target, asOf: asOf(), onFocus: showInGraph, onClose: () => { drafting = null; renderPanel(); graph.highlight(selected); } }));
       return;
     }
     if (!selected) {
@@ -382,7 +387,7 @@ function start() {
     }
     const notes = [loadNote(selected), workNote(selected), repeatNote(selected)].filter(Boolean);
     const tools = toolbar(selected);
-    return renderNodeDetail(panel, describeNode(view, selected, { asOf: todayLocal() }), {
+    return renderNodeDetail(panel, describeNode(view, selected, { asOf: asOf() }), {
       onFocus: focus,
       extra: layerControls(selected),
       toolbar: notes.length || tools ? el('div', {}, ...notes, tools) : null,
@@ -407,11 +412,68 @@ function start() {
     if (!node.empty()) graph.cy.animate({ center: { eles: node } }, { duration: 200 });
   }
 
+  // ── 시간 슬라이더(02-design 탐색 화면, R-14) ──
+  // 고른 달의 마지막 날(이번 달이면 오늘)을 기준일로, 그때 유효하지 않은 담당·소속 연결과
+  // 기간 밖의 노드, 그때 맡은 일이 없는 사람을 흐리게 한다. 상세·인사이트·초안도 같은 기준일을 쓴다.
+  function timeOffIds() {
+    if (!viewDate) return [];
+    const D = viewDate;
+    const off = [];
+    const shown = new Set(display.nodes.map((n) => n.gid));
+    for (const e of display.edges) {
+      // 여러 연결을 하나로 모은 것(count > 1)은 기간이 하나가 아니라 흐리지 않는다
+      if (e.synthetic || e.count > 1 || !['performs', 'belongs_to'].includes(e.core_type)) continue;
+      if (periodStatus(e.period, D) !== 'current') off.push(e.gid);
+    }
+    for (const n of display.nodes) {
+      if (n.period && periodStatus(n.period, D) !== 'current') { off.push(n.gid); continue; }
+      if (n.core_type !== 'person') continue;
+      const mine = view.edges.filter((e) => !e.hidden && e.core_type === 'performs' && e.source === n.gid);
+      if (mine.length && !mine.some((e) => periodStatus(e.period, D) === 'current')) off.push(n.gid);
+    }
+    return off.filter((id) => shown.has(id) || display.edges.some((e) => e.gid === id));
+  }
+
+  function applyTime() {
+    graph.setTimeOff(timeOffIds());
+    renderTimebar();
+  }
+
+  function setViewDate(date) {
+    const today = todayLocal();
+    viewDate = date && date < today ? date : null;
+    applyTime();
+    renderPanel();
+  }
+
+  function renderTimebar() {
+    const bar = $('timebar');
+    const today = todayLocal();
+    const months = timeMonths(view, today);
+    const current = viewDate ? months.indexOf(viewDate.slice(0, 7)) : months.length - 1;
+    const range = el('input', { type: 'range', min: '0', max: String(months.length - 1), step: '1', value: String(current < 0 ? months.length - 1 : current), 'data-testid': 'time-range', 'aria-label': '기준 달' });
+    range.addEventListener('input', () => {
+      const i = Number(range.value);
+      setViewDate(i === months.length - 1 ? null : monthAsOf(months[i], today));
+    });
+    bar.classList.toggle('past', !!viewDate);
+    bar.replaceChildren(...[
+      el('span', {}, '시간 보기'),
+      el('span', { class: 'muted small' }, months[0]),
+      range,
+      el('span', { class: 'muted small' }, months[months.length - 1]),
+      el('span', { class: 'when', 'data-testid': 'time-when' }, viewDate ? `${viewDate} 기준` : `오늘(${today})`),
+      viewDate ? el('button', { type: 'button', class: 'small-btn', 'data-testid': 'time-today', onclick: () => setViewDate(null) }, '오늘로') : null,
+      viewDate ? el('span', { class: 'small' }, '흐린 연결·사람은 그때 담당이 아님. 상세·인사이트도 이 날짜 기준') : null,
+    ].filter(Boolean));
+  }
+
   function refresh() {
     view = app.view;
     display = projectView(view, { expanded });
     graph.render(display, selected);
     renderLegend();
+    applyTime();
     renderPanel();
   }
 

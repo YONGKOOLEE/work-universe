@@ -1,7 +1,8 @@
-// 인사이트 화면(R-05, T-08·T-11). 탭 셋: 유사 경험자 / 반복 비효율 / 밀집·공백. 모두 규칙으로 계산하고 근거를 함께 보여 준다.
+// 인사이트 화면(R-05, T-08·T-11). 탭 넷: 유사 경험자 / 반복 비효율 / 밀집·공백 / 흐름 변화. 모두 규칙으로 계산하고 근거를 함께 보여 준다.
 // 해석과 인력 배치는 사람이 한다(R-05 ③): 화면은 참고 정보임을 밝히고 자동 결정을 하지 않는다.
 
 import { DENSE_DEFAULT_N, denseLimit, densityGaps, repeatInefficiency, similarExperts } from '../rules/insight.js';
+import { flowChange } from '../rules/flow.js';
 import { el } from './dom.js';
 
 // 밀집 기준 N. 화면에서 바꾸면 이 세션 동안 유지되고 사람 상세의 "밀집 기준에 해당" 판정도 같은 값을 쓴다(저장하지 않음)
@@ -29,7 +30,7 @@ function chip(view, gid, onFocus) {
 const chips = (view, ids, onFocus) => el('div', { class: 'evidence-list' }, ...[...new Set(ids)].map((g) => chip(view, g, onFocus)).filter(Boolean));
 
 /**
- * @param {{view:object, kind?:'similar'|'repeat'|'density', work?:string, asOf?:string, onFocus:(gid)=>void, onClose:()=>void}} o
+ * @param {{view:object, kind?:'similar'|'repeat'|'density'|'flow', today?:string, onTime?:(date)=>void, work?:string, asOf?:string, onFocus:(gid)=>void, onClose:()=>void}} o
  */
 export function insightPanel(o) {
   const { view } = o;
@@ -38,16 +39,18 @@ export function insightPanel(o) {
   const tabs = el('div', { class: 'tabs', role: 'tablist' });
 
   const tabButton = (key, label, testid) =>
-    el('button', { type: 'button', role: 'tab', class: kind === key ? 'tab active' : 'tab', 'data-testid': testid, onclick: () => { kind = key; draw(); } }, label);
+    el('button', { type: 'button', role: 'tab', class: kind === key ? 'tab active' : 'tab', 'data-testid': testid, onclick: () => { kind = key; if (o.onKind) o.onKind(key); draw(); } }, label);
 
   function draw() {
-    tabs.replaceChildren(tabButton('similar', '유사 경험자', 'tab-similar'), tabButton('repeat', '반복 비효율', 'tab-repeat'), tabButton('density', '밀집·공백', 'tab-density'));
-    body.replaceChildren(kind === 'similar' ? similarView(o, view) : kind === 'repeat' ? repeatView(view, o.onFocus) : densityView(o, view));
+    tabs.replaceChildren(tabButton('similar', '유사 경험자', 'tab-similar'), tabButton('repeat', '반복 비효율', 'tab-repeat'), tabButton('density', '밀집·공백', 'tab-density'), tabButton('flow', '흐름 변화', 'tab-flow'));
+    body.replaceChildren(kind === 'similar' ? similarView(o, view) : kind === 'repeat' ? repeatView(view, o.onFocus) : kind === 'density' ? densityView(o, view) : flowView(o, view));
   }
   draw();
 
+  const past = o.asOf && o.today && o.asOf < o.today;
   return el('div', { class: 'insight' },
     el('h2', {}, '인사이트'),
+    past ? el('p', { class: 'notice', 'data-testid': 'insight-asof' }, `${o.asOf} 기준으로 계산합니다(시간 보기). 오늘 기준은 그래프 아래 「오늘로」.`) : null,
     tabs,
     body,
     el('p', { class: 'muted small', 'data-testid': 'insight-note' }, '참고 정보입니다. 해석과 인력 배치는 사람이 정합니다.'),
@@ -185,4 +188,53 @@ function renderDensity(box, view, r, onFocus) {
           chips(view, p.evidence_ids, onFocus)))));
   }
   box.replaceChildren(...parts.filter(Boolean));
+}
+
+// ── 흐름 변화 ──
+let flowUnit = 'month';
+function flowView(o, view) {
+  const today = o.today || todayLocal();
+  const unit = el('select', { 'data-testid': 'flow-unit' }, el('option', { value: 'month', selected: flowUnit === 'month' }, '월'), el('option', { value: 'quarter', selected: flowUnit === 'quarter' }, '분기'));
+  const out = el('div', { 'data-testid': 'flow-result' });
+  const run = () => {
+    flowUnit = unit.value;
+    renderFlow(out, view, flowChange(view, { unit: flowUnit, asOf: today }), o);
+  };
+  unit.addEventListener('change', run);
+  run();
+  return el('div', { 'data-testid': 'flow-body' },
+    el('p', { class: 'muted small' }, '기간마다 기록된 이력 수와, 그 기간 말에 담당 중인 업무·사람 수입니다. 「보기」를 누르면 그래프가 그 시점으로 바뀝니다.'),
+    el('label', { class: 'dg-n' }, el('span', {}, '기간 단위'), unit),
+    out);
+}
+
+function renderFlow(box, view, r, o) {
+  if (r.status === 'insufficient') {
+    box.replaceChildren(el('p', { class: 'notice', 'data-testid': 'flow-insufficient' }, `데이터 부족 — ${r.reason}${r.last_input ? ` (마지막 입력 ${r.last_input})` : ''}.`));
+    return;
+  }
+  const cur = o.asOf ? r.periods.find((p) => p.start <= o.asOf && o.asOf <= p.end) : null;
+  const row = (p) => {
+    const c = p.counts;
+    const cells = p.no_data
+      ? [el('td', { colspan: '6', class: 'nodata' }, `입력 없음 — 데이터 부족(마지막 입력 ${r.last_input})`)]
+      : [String(c.total), String(c.assign_start + c.assign_end), String(c.handover), String(c.affiliation_change), String(p.active_works), String(p.active_people)].map((v) => el('td', {}, v));
+    const evidence = p.evidence_ids.length
+      ? el('details', {}, el('summary', { class: 'muted small' }, `근거 ${p.evidence_ids.length}`), chips(view, p.evidence_ids, o.onFocus))
+      : null;
+    return el('tr', { class: cur === p ? 'current-row' : '', 'data-key': p.key },
+      el('td', {}, p.key, evidence),
+      ...cells,
+      el('td', {}, o.onTime ? el('button', { type: 'button', class: 'small-btn', 'data-testid': `flow-goto-${p.key}`, onclick: () => o.onTime(p.at) }, '보기') : null));
+  };
+  const parts = [];
+  if (r.no_data_periods) {
+    parts.push(el('p', { class: 'notice', 'data-testid': 'flow-nodata' }, `마지막 입력(${r.last_input}) 이후 ${r.no_data_periods}개 기간은 입력이 없어 변화를 판단하지 않습니다(데이터 부족).`));
+  }
+  parts.push(el('table', { class: 'dg-table flow-table', 'data-testid': 'flow-table' },
+    el('thead', {}, el('tr', {},
+      el('th', {}, '기간'), el('th', { title: '이 기간에 기록된 이력 전체' }, '이력'), el('th', { title: '담당 시작·종료' }, '담당'),
+      el('th', {}, '인계'), el('th', { title: '소속 변경(조직개편 등)' }, '소속'), el('th', { title: '기간 말에 담당자가 있는 업무 수' }, '업무'), el('th', { title: '기간 말에 업무를 맡은 사람 수' }, '인원'), el('th', {}, ''))),
+    el('tbody', {}, ...r.periods.map(row))));
+  box.replaceChildren(...parts);
 }
