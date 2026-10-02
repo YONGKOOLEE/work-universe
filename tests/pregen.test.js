@@ -9,7 +9,7 @@ import { buildView } from '../app/src/view/view.js';
 import { buildHandoverDraft } from '../app/src/rules/handover.js';
 import { createProvider, itemEvidence, peopleKey, pregenKey, PROVIDERS, DEFAULT_PROVIDER } from '../app/src/llm/providers.js';
 import { explainInsight, refineDraft } from '../app/src/llm/connector.js';
-import { EXPLAIN_SCENARIOS, HANDOVER_SCENARIOS, explainRequestOf, handoverDraftOf, viewOf } from '../tools/pregen-scenarios.mjs';
+import { CANDIDATE_VIEWS, EXPLAIN_SCENARIOS, HANDOVER_SCENARIOS, candidateRequestsOf, explainRequestOf, handoverDraftOf, viewOf } from '../tools/pregen-scenarios.mjs';
 
 const pregen = createProvider('pregen', { pregen: PREGEN });
 const existsIn = (v) => (gid) => v.lookup(gid).found || v.events.some((e) => e.gid === gid);
@@ -53,6 +53,7 @@ test('사전 생성 파일: 모든 문장에 근거가 있고, 근거는 그 항
     const { req } = explainRequestOf(s);
     used.add(pregenKey('insight_explain', req.target, '', req.evidence_ids));
   }
+  for (const id of CANDIDATE_VIEWS) for (const req of candidateRequestsOf(id).reqs) used.add(pregenKey(req.task, req.target, '', req.evidence_ids));
   const views = ['U-D1', 'U-O'].map(viewOf);
   for (const it of PREGEN.items) {
     assert.ok(used.has(pregenKey(it.task, it.target, it.item, it.evidence_ids, peopleKey(it.from, it.to))), `쓰이지 않는(낡은) 사전 생성 줄: ${it.task} ${it.target} ${it.item || ''}`);
@@ -159,3 +160,16 @@ test('검토3 LLM-3: 저장된 공급자 이름이 목록에 없으면 기본값
   assert.deepEqual(loadSettings(storage, { provider: DEFAULT_PROVIDER }, names), { provider: 'pregen' });
 });
 
+
+test('T-10 역할 (c): 통합 화면의 업무 후보 이유가 모두 사전 생성으로 조회되고, 근거 밖 문장은 없다(R-15 ①②)', () => {
+  for (const id of CANDIDATE_VIEWS) {
+    const { view, reqs } = candidateRequestsOf(id);
+    assert.ok(reqs.length > 0, id);
+    for (const req of reqs) {
+      const r = explainInsight(req, { provider: pregen, exists: existsIn(view) });
+      assert.equal(r.method, 'pregen', `${id} ${req.target}`);
+      const none = explainInsight(req, { provider: null, exists: existsIn(view) });
+      assert.equal(none.method, 'rule'); // 키 없음 → 규칙 기반 이유
+    }
+  }
+});

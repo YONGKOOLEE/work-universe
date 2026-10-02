@@ -46,9 +46,9 @@ function pregenProvider(file) {
       }
       return { items };
     },
-    // 인사이트 설명: 대상과 근거가 맞으면 문장, 아니면 null
-    explain(target, evidenceIds) {
-      const hit = index.get(pregenKey('insight_explain', target, '', evidenceIds));
+    // 설명(인사이트 설명 insight_explain, 업무 후보 이유 work_candidate_reason): 대상과 근거가 맞으면 문장, 아니면 null
+    explain(target, evidenceIds, task = 'insight_explain') {
+      const hit = index.get(pregenKey(task, target, '', evidenceIds));
       return hit ? { sentences: hit.sentences } : null;
     },
   };

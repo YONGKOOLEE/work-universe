@@ -6,12 +6,12 @@
 ## 1. 지금 상태 (한 줄씩)
 
 - 계획 승인 완료. 구현 중. 제출 기한 2026-10-30.
-- 완료: T-01, T-03~T-08(M1), T-09, T-11(반복 비효율·밀집/공백·흐름 변화·시간 슬라이더), T-13(기본안 데이터: 교육팀 U-C·조직관리 U-O, 예외 9건, 한계 목록), T-12(연결부 + 사전 생성 (a) 초안·(b) 인사이트 설명. (c) 업무 후보 이유는 T-10 뒤라 R-15 AC ① 일부 미충족. Claude API는 P2라 자리만). T-14(시작 화면)는 구현 완료·관찰 대기. 키 검색 도구(`check:secrets`)도 있음.
+- 완료: T-01, T-03~T-08(M1), T-09, T-11(반복 비효율·밀집/공백·흐름 변화·시간 슬라이더), T-13(기본안 데이터: 교육팀 U-C·조직관리 U-O, 예외 9건, 한계 목록), T-12(연결부 + 사전 생성 (a) 초안·(b) 인사이트 설명·(c) 업무 후보 이유. Claude API는 P2라 자리만), T-10(통합: 사번 자동 연결, 확인 목록, 업무 후보와 사람 판정 — 기본안 데이터). T-14(시작 화면)는 구현 완료·관찰 대기. 키 검색 도구(`check:secrets`)도 있음.
   - 모두 로컬 커밋됨(push 없음). 사용자 확인·결정 대기 항목은 `docs/decisions-pending.md` 1~3절.
   - 세 번째 전체 검토(2026-10-03) 결과와 수정: `docs/review-2026-10-02.md` 7절, tech-record 29절.
   - T-14는 구현만 끝났다. 완료 기준(대리 검증자 관찰, R-08)은 미확인.
   - 조력자 의견이 오면 데이터 내용만 교체: T-13 → T-12 → 시나리오(K-9).
-- 대기(조력자 의견): T-10 통합, T-17 문서 변환. CR-4(층별 보기)는 코드에만 있고 미승인.
+- 대기: T-17 문서 변환(T-10 뒤, 착수 전 CR-5 ② 확인 필요). CR-4(층별 보기)는 코드에만 있고 미승인. T-16 대본·소개자료는 기한(10-30) 즈음 검토 뒤에(사용자 결정 2026-10-03).
 - T-15 자동 부분 완료(실행 안내·압축·제출 점검 8/8). 남은 것은 사용자: 다른 PC 실행·메일 발송·태그. T-16 영상(사용자).
 - **연속 진행 모드(2026-10-02~):** 확인 없이 다음 작업으로, 작업마다 로컬 자동 커밋. 결정·확인은 `docs/decisions-pending.md`에 쌓는다(CLAUDE.md 작업 방식).
 - 진행 기록: `docs/.status`의 `implementation:` 절. 결정·해석: `docs/tech-record.md`(절 번호로 찾기).
@@ -28,7 +28,7 @@
 ## 3. 명령
 
 ```
-npm test                  # 단위 테스트(257개)
+npm test                  # 단위 테스트(266개)
 node tools/pregen-dump.mjs        # 사전 생성 작성용 근거 덤프(데이터를 바꾸면 다시 보고 app/data/pregen.js 고침)
 npm run build             # dist/index.html (바이트 크기 표시)
 npm run check:browser     # Chrome·Edge file:// 점검. SHOT_DIR=.tmp/shots 를 주면 화면 PNG 저장
@@ -53,7 +53,7 @@ node tools/perf-check.mjs 300 --browser   # 규모 점검
 | 작업 | 읽을 곳 |
 |---|---|
 | 공통(짧게) | 이 파일, `docs/.status`의 `implementation:` 절, 해당 T-ID 행(`docs/03-plan.md` 2절) |
-| T-10 통합 | 01 R-11, 02 2·3절·12.2 `identity_links`·12.7 흐름 3, tech-record 10절(CR-4 시제품), review 2-5·2-6·2-17 |
+| T-10 통합(다시 볼 때) | 01 R-11, 02 2·3절·12.2 `identity_links`·12.7 흐름 3, tech-record 10·31절, `app/src/merge/merge.js` |
 | T-11 인사이트·시간 보기를 다시 볼 때 | 01 R-05·R-14, 02 5.5, tech-record 16·19·23·24·25·29절 |
 | T-12 사전 생성(다시 쓸 때) | 01 R-15(CR-1), 02 5.4·12.3, tech-record 15·27절, `tools/pregen-dump.mjs`, `app/data/pregen.js` |
 | T-13 데이터(교체 시) | 02 4절(사례·예외 9건)·1.7, 03 7.2, tech-record 7·18·26절, `app/data/answers-v1.js`, `docs/limits.md` |
@@ -65,6 +65,7 @@ node tools/perf-check.mjs 300 --browser   # 규모 점검
 
 - `app/src/model`: 스키마 상수·검증·명령(순수 함수)
 - `app/src/view`: 합성 뷰, 상세 문장, 층별 보기
+- `app/src/merge`: 통합 확인 목록(사번 자동 연결, 사번 충돌·없음, 업무 후보)
 - `app/src/rules`: 인수인계 초안(`handover.js`), 인사이트(`insight.js`)
 - `app/src/llm`: 연결부(`connector.js`)와 공급자(`providers.js`: 사전 생성 기본, Claude API·사내 LLM은 P2 자리)
 - `app/src/app`: 명령 흐름과 저장

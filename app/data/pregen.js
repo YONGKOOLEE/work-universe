@@ -215,10 +215,68 @@ const explain = [
   },
 ].map((x) => ({ task: 'insight_explain', ...x }));
 
+// 역할 (c) 업무 후보 이유(T-10): 통합 확인 목록의 업무 후보마다. 왜 후보인지와 두 업무의 차이까지만 쓰고, 같은지는 사람이 정한다
+const candidate = [
+  {
+    pair: ['U-B/N-101', 'U-K1/N-104'],
+    evidence_ids: ['U-K1/N-104', 'U-B/N-101', 'U-A1/N-030', 'U-B/N-302'],
+    sentences: [
+      { text: '카드승인의 「거래 조회」와 행사팀의 「2025 행사」(참가비 정산 포함)는 둘 다 「대사 불일치」라는 이름의 주제와 이어져 있습니다(두 주제가 같은지는 확인 전).', evidence_ids: ['U-K1/N-104', 'U-B/N-101', 'U-A1/N-030', 'U-B/N-302'] },
+      { text: '업무 설명으로 보면 하는 일의 범위가 달라 보이므로, 같은 업무인지 담당자 확인이 필요합니다.', evidence_ids: ['U-K1/N-104', 'U-B/N-101'] },
+    ],
+  },
+  {
+    pair: ['U-A1/N-001', 'U-B/N-101'],
+    evidence_ids: ['U-A1/N-001', 'U-B/N-101', 'U-A1/N-030', 'U-B/N-302'],
+    sentences: [
+      { text: '「대사 확인」은 정산 결과를 원천 자료와 대조하는 매월 업무이고, 「2025 행사」는 참가비 정산이 포함된 연 1회 행사 운영입니다.', evidence_ids: ['U-A1/N-001', 'U-B/N-101'] },
+      { text: '둘 다 「대사 불일치」라는 이름의 주제와 이어져 후보에 올랐습니다(두 주제가 같은지는 확인 전).', evidence_ids: ['U-A1/N-030', 'U-B/N-302'] },
+    ],
+  },
+  {
+    pair: ['U-A1/N-001', 'U-K1/N-104'],
+    evidence_ids: ['U-A1/N-001', 'U-K1/N-104', 'U-A1/N-030'],
+    sentences: [
+      { text: '「대사 확인」과 카드승인의 「거래 조회」는 결제운영팀에서 사람이 이어 둔 같은 주제 「대사 불일치」를 다룹니다.', evidence_ids: ['U-A1/N-001', 'U-K1/N-104', 'U-A1/N-030'] },
+      { text: '「거래 조회」는 업무 설명이 없어, 같은 업무인지는 담당자에게 확인해야 합니다.', evidence_ids: ['U-K1/N-104'] },
+    ],
+  },
+  {
+    pair: ['U-A1/N-001', 'U-K1/N-105'],
+    evidence_ids: ['U-A1/N-001', 'U-K1/N-105', 'U-A1/N-030'],
+    sentences: [
+      { text: '둘 다 「대사 불일치」 주제를 다루지만, 「장애 시 재처리」는 장애로 저장해 둔 건을 별도 처리로 다시 보내는 일이고 「대사 확인」은 월말 정산 결과를 대조하는 일입니다.', evidence_ids: ['U-A1/N-001', 'U-K1/N-105', 'U-A1/N-030'] },
+    ],
+  },
+  {
+    pair: ['U-B/N-101', 'U-K1/N-105'],
+    evidence_ids: ['U-K1/N-105', 'U-B/N-101', 'U-A1/N-030', 'U-B/N-302'],
+    sentences: [
+      { text: '공통점은 「대사 불일치」라는 이름의 주제뿐입니다(두 주제가 같은지는 확인 전). 하는 일은 카드승인 재처리와 행사 운영으로 다릅니다.', evidence_ids: ['U-K1/N-105', 'U-B/N-101', 'U-A1/N-030', 'U-B/N-302'] },
+    ],
+  },
+  {
+    pair: ['U-A1/N-003', 'U-C/N-104'],
+    evidence_ids: ['U-A1/N-003', 'U-C/N-104'],
+    sentences: [
+      { text: '두 업무 모두 결과를 정리해 팀장 검토 후 공유하는 보고 업무입니다.', evidence_ids: ['U-A1/N-003', 'U-C/N-104'] },
+      { text: '다만 월말 정산의 「보고」는 매월, 「교육 결과 보고」는 과정이 끝날 때마다 하며 다루는 내용(점검 결과 / 출석·만족도)이 다릅니다.', evidence_ids: ['U-A1/N-003', 'U-C/N-104'] },
+    ],
+  },
+  {
+    pair: ['U-B/N-103', 'U-C/N-102'],
+    evidence_ids: ['U-B/N-103', 'U-C/N-102'],
+    sentences: [
+      { text: '둘 다 일정에 맞춰 장소를 알아보고 잡는 일입니다(행사 장소 계약 / 교육 강의실 예약).', evidence_ids: ['U-B/N-103', 'U-C/N-102'] },
+      { text: '「강의실·강사 섭외」는 사내 강사에게 강의를 요청하는 일까지 포함합니다.', evidence_ids: ['U-C/N-102'] },
+    ],
+  },
+].map(({ pair, ...x }) => ({ task: 'work_candidate_reason', target: `work_candidate|${[...pair].sort().join('|')}`, ...x }));
+
 export const PREGEN = {
   schema_version: '1.0',
   generator: 'Claude Code (개발 시 작성)',
   generated_at: '2026-10-02T15:00:00+09:00',
   data_version: 'v2',
-  items: [...handoverA1, ...handoverC, ...explain],
+  items: [...handoverA1, ...handoverC, ...explain, ...candidate],
 };

@@ -64,15 +64,23 @@ export function eventText(view, ev) {
       const cat = memoCategoryOf(p);
       return `${cat === 'issue' ? '' : `[${MEMO_CATEGORIES[cat]}] `}${ev.note || '메모'}`;
     }
-    case 'updated': {
-      const keys = Object.keys(p.after || {});
-      const changes = keys.map((k) => `${FIELD_NAMES[k] || k}: ${fieldValue(p.before && p.before[k])} → ${fieldValue(p.after[k])}`);
-      return `수정 — ${changes.join(', ') || '변경 내용 없음'}`;
-    }
+    case 'created':
+    case 'updated':
+      if (p.target_kind === 'identity_link' && ev.link) {
+        const raw = (g) => { const n = view.rawNode(g); return n ? `${n.label}(${n.universe_name})` : g; };
+        const what = { person: '사람으로', work: '업무로', topic: '주제로' }[ev.link.kind] || '노드로';
+        const verdict = ev.type === 'updated' ? (p.after && p.after.status) : ev.link.status;
+        const word = verdict === 'confirmed' ? `같은 ${what} 확인` : verdict === 'rejected' ? `다른 ${what} 판정` : '확인 대기로 둠';
+        return `통합 확인 — ${raw(ev.link.a)} · ${raw(ev.link.b)}: ${word}${ev.link.method === 'emp_no_auto' ? '(사번 자동)' : ''}`;
+      }
+      if (ev.type === 'created') return '생성';
+      {
+        const keys = Object.keys(p.after || {});
+        const changes = keys.map((k) => `${FIELD_NAMES[k] || k}: ${fieldValue(p.before && p.before[k])} → ${fieldValue(p.after[k])}`);
+        return `수정 — ${changes.join(', ') || '변경 내용 없음'}`;
+      }
     case 'hidden':
       return '숨김 처리';
-    case 'created':
-      return '생성';
     default:
       return ev.note || eventTypeLabel(ev.type);
   }

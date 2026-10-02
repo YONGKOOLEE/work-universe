@@ -761,6 +761,32 @@ async function checkBrowser(browser, port) {
     await sleep(150);
     const conflict = await text(s.cdp, '[data-testid=empno-conflict]');
     check('T-13 예외: 부서 개요에 사번 충돌 V-1002(윤바다·윤바다라) 알림', conflict.includes('V-1002') && conflict.includes('윤바다라'), conflict);
+
+    // ── T-10 통합 확인(R-11 ②③④⑤) ──
+    const hint = await text(s.cdp, '[data-testid=merge-hint]');
+    check('T-10: 부서 개요에 통합 확인 대기 건수와 「통합 확인 목록」', hint.includes('통합 확인 대기') && hint.includes('통합 확인 목록'), hint);
+    await clickTestId(s.cdp, 'btn-merge');
+    await sleep(200);
+    const persons = await text(s.cdp, '[data-testid=merge-persons]');
+    const worksTxt = await text(s.cdp, '[data-testid=merge-works]');
+    check('R-11 ③: 사번 충돌(윤바다/윤바다라)과 사번 없음(임가온)이 확인 목록에', persons.includes('사번 충돌') && persons.includes('윤바다라') && persons.includes('임가온'), persons.slice(0, 80));
+    check('R-11 ②: 업무 후보(장소 섭외 ↔ 강의실·강사 섭외)와 이유(사전 생성), 자동으로 합치지 않음', worksTxt.includes('장소 섭외') && worksTxt.includes('강의실·강사 섭외') && worksTxt.includes('사전 생성') && worksTxt.includes('일정에 맞춰 장소를 알아보고'), worksTxt.slice(0, 80));
+    await shot(s.cdp, `${browser.name}-9e-merge`);
+    const before = await evaluate(s.cdp, "window.__wu.view.canonical('U-C/N-102') === window.__wu.view.canonical('U-B/N-103')");
+    // 장소 섭외 후보의 「같은 업무」
+    await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=merge-works] li')].find((li) => li.textContent.includes('강의실·강사 섭외') && li.textContent.includes('장소 섭외')).querySelector('[data-testid=merge-same]').click()");
+    await sleep(400);
+    const after = await evaluate(s.cdp, "window.__wu.view.canonical('U-C/N-102') === window.__wu.view.canonical('U-B/N-103')");
+    const worksAfter = await text(s.cdp, '[data-testid=merge-works]');
+    check('R-11 ②④: 「같은 업무」를 누르면 통합 화면에서 한 노드가 되고 후보에서 빠지며 판정 기록에 남음', !before && after && !(await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=merge-works] li strong')].some((x) => x.textContent.includes('장소 섭외') && x.textContent.includes('강의실·강사 섭외'))")) && (await text(s.cdp, '[data-testid=merge-decided]')).includes('같음'));
+    // 사번 충돌 「다른 사람」 → 개요 알림이 사라짐
+    await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=merge-persons] li')].find((li) => li.dataset.type === 'conflict').querySelector('[data-testid=merge-diff]').click()");
+    await sleep(400);
+    await evaluate(s.cdp, "window.__wu.select(null)");
+    await sleep(150);
+    check('R-11 ③: 사번 충돌을 「다른 사람」으로 판정하면 개요의 충돌 알림이 사라짐(다시 묻지 않음)', !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=empno-conflict]')")));
+    const original = await evaluate(s.cdp, "(() => { const d = JSON.parse(localStorage.getItem('wu:v1:u:U-C')); return d.identity_links.length + ':' + d.nodes.find((n) => n.id === 'N-102').label; })()");
+    check('R-11 ⑤: 판정은 부서 유니버스에만 저장되고 교육팀 원본은 그대로', original === '0:강의실·강사 섭외', original);
   }
 
   // ── T-13 조직관리(U-O): 입력 중단, 조직개편 소속, 데이터 부족 ──

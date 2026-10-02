@@ -115,6 +115,8 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
     }
   }
   const canonical = (gid) => (nodeByGid.has(gid) ? find(gid) : gid);
+  // 판정한 쌍(대표 노드 기준). 같은 사람이 여러 유니버스에 있어도 한 번 판정하면 된다
+  const decidedPairs = new Set(docs.flatMap((d) => (d.identity_links || []).filter((l) => l.status !== 'pending').map((l) => [canonical(l.a), canonical(l.b)].sort().join('|'))));
   for (const n of nodes) {
     const c = canonical(n.gid);
     if (c !== n.gid) nodeByGid.get(c).merged_from.push(n.gid);
@@ -176,6 +178,9 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
       for (const k of rule.nodeRefs || []) if (payload[k]) nodeGids.push(toNodeGid(payload[k]));
       for (const k of rule.nodeListRefs || []) for (const id of payload[k] || []) nodeGids.push(toNodeGid(id));
       if (payload.target_kind === 'node' && payload.target_id) nodeGids.push(toNodeGid(payload.target_id));
+      // 동일성 판정(T-10): 두 노드의 이력에 모두 남긴다
+      const link = payload.target_kind === 'identity_link' ? (doc.identity_links || []).find((l) => l.id === payload.target_id) : null;
+      if (link) for (const g of [link.a, link.b]) if (nodeByGid.has(g)) nodeGids.push(canonical(g));
       events.push({
         gid: toGid(doc.universe.id, ev.id),
         universe_id: doc.universe.id,
@@ -187,6 +192,7 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
         payload,
         note: ev.note,
         node_gids: [...new Set(nodeGids)],
+        ...(link ? { link: { a: link.a, b: link.b, kind: link.kind, status: link.status, method: link.method } } : {}),
       });
     }
   }
@@ -219,6 +225,8 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
     universe_id: rootId,
     universe: rootDoc.universe,
     nodes: viewNodes,
+    // 합치기 전의 모든 노드(통합 확인 목록 계산용, T-10)
+    raw_nodes: nodes,
     edges,
     events,
     missing, // 찾지 못한 하위 유니버스 ID
@@ -228,8 +236,9 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
     unresolved_links: unresolvedLinks,
     stale_links: staleLinks,
     // 같은 사번인데 이름이 다른 사람(W-EMPNO-CONFLICT, 4절 사번 충돌). 자동으로 합치지 않고 알리기만 한다(R-11 ③)
+    // 사람이 이미 판정한 쌍(같은 사람으로 확인 또는 다른 사람으로 판정)만 남은 충돌은 알리지 않는다(T-10)
     empno_conflicts: [...byEmpNo.entries()]
-      .filter(([, list]) => new Set(list.map((n) => normalizeLabel(n.label))).size > 1)
+      .filter(([, list]) => list.some((x, i) => list.slice(i + 1).some((y) => normalizeLabel(x.label) !== normalizeLabel(y.label) && !decidedPairs.has([x.gid, y.gid].sort().join('|')))))
       .map(([emp_no, list]) => ({ code: 'W-EMPNO-CONFLICT', emp_no, nodes: list.map((n) => ({ gid: n.gid, label: n.label, universe_name: n.universe_name })) })),
     index: { byEmpNo, byTypeLabel, eventsByNode, nodesByTopic },
 

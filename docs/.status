@@ -163,11 +163,11 @@ implementation:
       unverified: [R-06 사람 확인(실명·실제 조직명과 겹치는지 — 사용자), 조력자 뼈대 정보로 교체(대기), A팀(U-T1)·부서(U-D1)는 미승인 CR-4 확장(주제 동일성 연결, ref 이벤트)에 의존 — CR-4가 거절되면 R-13 ①·R-07 ① 판정과 사전 생성 X1·X3·X4를 다시 봐야 함(검토3 DOCS-3)]
       decisions: docs/tech-record.md 26절
     - id: T-12
-      status: 구현·검증 완료 — (a) 초안·(b) 인사이트 설명. (c) 업무 후보 이유는 T-10 뒤라 R-15 AC ① 일부 미충족. Claude API·사내 LLM은 P2라 연결하지 않고 자리만 둠(고르면 이유 표시 후 규칙 기반)
+      status: 구현·검증 완료 — (a) 초안·(b) 인사이트 설명·(c) 업무 후보 이유(T-10과 함께 2026-10-03). Claude API·사내 LLM은 P2라 연결하지 않고 자리만 둠(고르면 이유 표시 후 규칙 기반)
       date: 2026-10-02
       normal_checks: 통과 (공급자 4종+실패 흉내, 기본 사전 생성, 시연 초안 3건(월말 정산·부서 화면·교육팀)의 모든 항목과 인사이트 설명 7건이 사전 생성으로 표시, 문장마다 근거 ID가 항목 근거 안에 있고 실제로 있음, 생성 방식 표시(머리글·초안·항목·설명), 설정 저장(wu:v1:settings, 키 저장 안 함))
       error_checks: 통과 (새로 입력한 데이터 → 근거가 바뀐 항목만 규칙 기반과 개수 안내(K-9), 사전 생성 결과가 없는 유니버스 → 전부 규칙 기반, 실패 흉내 → 규칙 기반 + 원인(R-04 ③ 화면 시연), Claude API·사내 LLM 선택 → 규칙 기반 + P2 이유, 항목 근거 밖 노드를 단 문장 → 그 항목만 규칙 기반(검토 3-11 일부 대응), 결과 파일 형식 오류 → 전체 규칙 기반)
-      unverified: [사전 생성 문장이 근거 내용과 맞는지 사람 검토(근거 ID 존재·범위는 자동 검증, 내용 일치는 사람 몫 — review 3-11), Claude API 실제 호출(P2·K-2), 업무 후보 이유(역할 c)는 T-10 뒤]
+      unverified: [사전 생성 문장이 근거 내용과 맞는지 사람 검토(근거 ID 존재·범위는 자동 검증, 내용 일치는 사람 몫 — review 3-11), Claude API 실제 호출(P2·K-2)]
       evidence_validity: 정답 표·사전 생성 근거 ID 유효율 100%(자동 테스트)
       decisions: docs/tech-record.md 27절
     - id: T-15(일부)
@@ -177,6 +177,14 @@ implementation:
       unverified: [다른 PC에서 실행(1.4 대체: 조력자 PC 또는 다른 계정), 메일 첨부 차단 여부(K-6), 실행 안내 문구 사용자 확인, 제출 태그]
       outputs: docs/submission/실행안내.html, tools/package.mjs(npm run package), tools/submit-check.mjs(npm run check:submit), release/(Git 제외)
       decisions: docs/tech-record.md 28절
+    - id: T-10
+      status: 구현·검증 완료(기본안 데이터, 사용자 "3진행" 2026-10-03). 조력자 의견으로 구성 기준이 바뀌면 후보 기준·정답 표를 다시 봄
+      date: 2026-10-03
+      normal_checks: 통과 (R-11 ① A·B·C 묶으면 부서 유니버스 생성 + 사번·이름 같은 사람 자동 연결(노드 하나), ② 업무는 후보로만(주제 3·산출물 유형 2·낱말 1, 이유 문장), 사람이 「같은 업무」 확정 → 한 노드, 정답 표 SW-1~3이 후보에 포함, ④ 통합 결과 탐색·상세·초안, ⑤ 원본 유니버스 그대로(저장 내용 비교). 역할 (c) 업무 후보 이유 사전 생성 7건)
+      error_checks: 통과 (R-11 ③ 사번 충돌·사번 없음 → 자동 판단 없이 확인 목록, 「다른 사람」 판정 뒤 다시 묻지 않음·개요 알림 사라짐, 같은 노드·판정자 없음·같은 판정 반복 거부, 합쳐진 업무를 같은 유니버스 업무와 다시 짝짓지 않음. 순환 참조 거부는 T-13 예외 8)
+      unverified: [조력자 데이터에서 후보 점수 기준이 적절한지(구성 기준과 함께), 확인 목록을 사람이 쓰기 쉬운지(대리 관찰)]
+      outputs: app/src/merge/merge.js, model decideIdentity, app.mergePlan·decideIdentity·applyAutoLinks, ui/merge.js(통합 확인 목록), tests/merge.test.js
+      decisions: docs/tech-record.md 31절
     - id: VERIFY-EXTRA-2026-10-03
       status: 완료(사용자 "2는 진행"). 규모 500노드 새 기능 포함, 실행 안내 따라가기 자동 점검(check:guide), 제출 점검 9/9
       date: 2026-10-03

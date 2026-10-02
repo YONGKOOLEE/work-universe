@@ -5,6 +5,7 @@ import { createStore, loadSettings, openStorage, saveSettings } from '../store/l
 import { PREGEN } from '../../data/pregen.js';
 import { DEFAULT_PROVIDER, PROVIDERS, createProvider } from '../llm/providers.js';
 import { settingsPanel } from './settings.js';
+import { mergePanel } from './merge.js';
 import { SAMPLES, SAMPLE_GUIDE } from '../../data/index.js';
 import { startScreen } from './start.js';
 import { NODE_TYPES } from '../model/schema.js';
@@ -118,6 +119,7 @@ function start() {
   const settings = loadSettings(storage, { provider: DEFAULT_PROVIDER }, PROVIDERS.map((p) => p.name));
   let provider = createProvider(settings.provider, { pregen: PREGEN });
   let settingsOpen = false;
+  let merging = false; // 통합 확인 목록(T-10)
   const providerLabel = () => (PROVIDERS.find((p) => p.name === settings.provider) || PROVIDERS[0]).label;
   const asOf = () => viewDate || todayLocal();
   const expanded = new Set(); // 펼친 하위 유니버스
@@ -211,6 +213,7 @@ function start() {
 
   function openDraft(targetGid) {
     settingsOpen = false;
+    merging = false;
     editing = null;
     insight = null;
     drafting = { target: targetGid };
@@ -219,6 +222,7 @@ function start() {
 
   function openInsight(workGid, kind = 'similar') {
     settingsOpen = false;
+    merging = false;
     editing = null;
     drafting = null;
     insight = { work: workGid, kind };
@@ -267,6 +271,15 @@ function start() {
     const kinds = [...new Set(hits.map((p) => (p.kind === 'handover_chain' ? '인수인계 반복' : '주제 반복')))].join('·');
     return el('p', { class: 'notice', 'data-testid': 'repeat-note' }, `반복 비효율 패턴 ${hits.length}건에 포함(${kinds}) `,
       el('button', { type: 'button', class: 'link', 'data-testid': 'btn-repeat-note', onclick: () => openInsight('', 'repeat') }, '반복 비효율 보기'));
+  }
+
+  // 하위 유니버스를 묶은 유니버스의 개요: 통합 확인 목록으로 가는 버튼(대기 건수)
+  function mergeButton() {
+    const plan = app.mergePlan();
+    if (!plan) return null;
+    return el('p', { class: plan.counts.pending ? 'notice' : 'muted small', 'data-testid': 'merge-hint' },
+      plan.counts.pending ? `통합 확인 대기 ${plan.counts.pending}건(사람 ${plan.counts.persons}, 업무 후보 ${plan.counts.works}) ` : '통합 확인할 항목이 없습니다. ',
+      el('button', { type: 'button', class: 'link', 'data-testid': 'btn-merge', onclick: () => { merging = true; insight = null; drafting = null; editing = null; settingsOpen = false; renderPanel(); } }, '통합 확인 목록'));
   }
 
   function toolbar(gid) {
@@ -391,6 +404,28 @@ function start() {
       }));
       return;
     }
+    if (merging) {
+      const plan = app.mergePlan();
+      if (plan) {
+        panel.replaceChildren(mergePanel({
+          view, plan, links: app.doc.identity_links || [], provider, readOnly: app.readOnly,
+          onDecide: (item, status) => {
+            const r = app.decideIdentity({ a: item.a, b: item.b, kind: item.kind, status, reason: item.reason, score: item.score });
+            if (!r.ok) return window.alert(messageFor(r.error));
+            refresh();
+          },
+          onApplyAuto: () => {
+            const r = app.applyAutoLinks();
+            if (!r.ok) return window.alert(messageFor(r.error));
+            refresh();
+          },
+          onFocus: showInGraph,
+          onClose: () => { merging = false; renderPanel(); graph.highlight(selected); },
+        }));
+        return;
+      }
+      merging = false;
+    }
     if (insight) {
       panel.replaceChildren(insightPanel({ view, provider, work: insight.work, kind: insight.kind, asOf: asOf(), today: todayLocal(), onTime: setViewDate, onKind: (k) => { insight.kind = k; }, onWork: (w) => { insight.work = w; }, onFocus: showInGraph, onClose: () => { insight = null; renderPanel(); graph.highlight(selected); } }));
       return;
@@ -402,10 +437,11 @@ function start() {
     if (!selected) {
       renderUniverseSummary(panel, describeUniverse(view), display.nodes.length);
       const rootGid = toGid(currentId(), app.doc.universe.root_node_id);
-      panel.append(el('div', { class: 'row' },
+      panel.append(...[el('div', { class: 'row' },
         el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft-universe', onclick: () => openDraft(rootGid) }, '인수인계 초안 만들기'),
         el('button', { type: 'button', 'data-testid': 'btn-insight-universe', onclick: () => openInsight('', 'repeat') }, '인사이트 보기')),
-        el('p', { class: 'muted small', 'data-testid': 'insight-hint' }, '인사이트(반복 비효율 탭부터 열림): 유사 경험자 · 반복 비효율 · 밀집·공백(일이 몰린 사람, 담당자 없는 업무) · 흐름 변화'));
+        mergeButton(),
+        el('p', { class: 'muted small', 'data-testid': 'insight-hint' }, '인사이트(반복 비효율 탭부터 열림): 유사 경험자 · 반복 비효율 · 밀집·공백(일이 몰린 사람, 담당자 없는 업무) · 흐름 변화')].filter(Boolean)); // append(null)은 "null" 글자를 넣으므로 거른다
       return;
     }
     if (editing && isOwn(selected) && localNode(selected)) {
@@ -425,6 +461,7 @@ function start() {
   function select(gid) {
     if (gid !== selected) editing = null;
     settingsOpen = false;
+    merging = false;
     drafting = null;
     insight = null;
     selected = gid;
@@ -472,7 +509,7 @@ function start() {
     viewDate = date && date < today ? date : null;
     applyTime();
     // 초안(오늘 기준)과 편집 양식은 기준일과 무관하니 입력을 지우지 않도록 다시 그리지 않는다(검토3 UI-3)
-    if (drafting || editing || settingsOpen) return;
+    if (drafting || editing || settingsOpen || merging) return;
     renderPanel();
   }
 
@@ -553,6 +590,7 @@ function start() {
   renderSettingsButton();
   $('settings-open').addEventListener('click', () => {
     settingsOpen = true;
+    merging = false;
     insight = null;
     drafting = null;
     editing = null;

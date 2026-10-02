@@ -59,8 +59,9 @@ export function refineDraft(draft, { provider = null, exists }) {
 }
 
 /**
- * 인사이트 결과의 설명 문장(역할 b, 12.3 insight_explain). 공급자 결과가 없거나 검증에 실패하면 규칙 기반 문장.
- * @param {{target:string, evidence_ids:string[], rule:{text:string, evidence_ids:string[]}[]}} req
+ * 설명 문장: 인사이트 설명(역할 b, insight_explain) 또는 업무 후보 이유(역할 c, work_candidate_reason, T-10).
+ * 공급자 결과가 없거나 검증에 실패하면 규칙 기반 문장.
+ * @param {{task?:string, target:string, evidence_ids:string[], rule:{text:string, evidence_ids:string[]}[]}} req
  * @returns {{sentences:object[], method:string, fallback:object|null}}
  */
 export function explainInsight(req, { provider = null, exists }) {
@@ -68,7 +69,7 @@ export function explainInsight(req, { provider = null, exists }) {
   if (!provider || provider.name === 'none' || typeof provider.explain !== 'function') return rule;
   let got;
   try {
-    got = provider.explain(req.target, req.evidence_ids);
+    got = provider.explain(req.target, req.evidence_ids, req.task || 'insight_explain');
   } catch (err) {
     return { ...rule, fallback: { code: FALLBACK, reason: `공급자 오류: ${err && err.message ? err.message : err}` } };
   }

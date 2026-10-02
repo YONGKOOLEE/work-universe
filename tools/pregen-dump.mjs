@@ -33,3 +33,12 @@ for (const s of EXPLAIN_SCENARIOS) {
   for (const st of req.rule) console.log(`   rule: ${st.text}  ${JSON.stringify(st.evidence_ids)}`);
   for (const g of req.evidence_ids) console.log(`   · ${describe(view, g)}`);
 }
+import { CANDIDATE_VIEWS, candidateRequestsOf } from './pregen-scenarios.mjs';
+for (const id of CANDIDATE_VIEWS) {
+  const { view, reqs } = candidateRequestsOf(id);
+  for (const req of reqs) {
+    console.log(`\n=== work_candidate_reason view=${id} ${req.title}\n   target=${req.target}\n   evidence=${JSON.stringify(req.evidence_ids)}`);
+    for (const st of req.rule) console.log(`   rule: ${st.text}`);
+    for (const g of req.evidence_ids) console.log(`   · ${describe(view, g)}`);
+  }
+}

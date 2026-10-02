@@ -43,3 +43,12 @@ export function explainRequestOf(s, asOf = PREGEN_ASOF) {
   if (s.kind === 'density') return { view: v, req: densityExplain(densityGaps(v, { asOf, n: DENSE_DEFAULT_N }), s.view) };
   return { view: v, req: flowExplain(flowChange(v, { unit: 'month', asOf }), s.view) };
 }
+
+// 역할 (c) 업무 후보 이유(T-10): 통합 화면의 업무 후보. 조회 키는 work_candidate|정렬한 두 노드
+import { mergePlan } from '../app/src/merge/merge.js';
+export const CANDIDATE_VIEWS = ['U-D1', 'U-T1'];
+export function candidateRequestsOf(viewId) {
+  const v = viewOf(viewId);
+  const doc = SAMPLES.find((d) => d.universe.id === viewId);
+  return { view: v, reqs: mergePlan(v, doc.identity_links).works.map((w) => ({ task: 'work_candidate_reason', target: `work_candidate|${[w.a, w.b].sort().join('|')}`, evidence_ids: w.evidence_ids, rule: [{ text: w.reason, evidence_ids: w.evidence_ids }], title: w.title })) };
+}

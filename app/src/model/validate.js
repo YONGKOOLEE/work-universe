@@ -201,9 +201,12 @@ export function eventPayloadErrors(doc, nodesById, edgeIds, ev) {
   }
   if (ev.type === 'created' || ev.type === 'hidden' || ev.type === 'updated') {
     // ref: 꼭지 참조의 추가·해제(CR-4). target_id는 하위 유니버스 ID
-    const kinds = ev.type === 'updated' ? ['node', 'edge'] : ['node', 'edge', 'ref'];
+    // identity_link: 동일성 연결 판정(T-10, 12.7 흐름 3의 "이벤트를 기록한다". 12.2 표에 없는 값이라 CR 후보)
+    const kinds = ev.type === 'updated' ? ['node', 'edge', 'identity_link'] : ['node', 'edge', 'ref', 'identity_link'];
     if (!kinds.includes(payload.target_kind)) out.push({ code: CODES.SCHEMA, field: 'target_kind' });
-    else if (payload.target_kind === 'ref') {
+    else if (payload.target_kind === 'identity_link') {
+      if (!(doc.identity_links || []).some((l) => l && l.id === payload.target_id)) out.push({ code: CODES.SCHEMA, field: 'target_id' });
+    } else if (payload.target_kind === 'ref') {
       if (!(doc.refs || []).some((r) => r && r.child_universe_id === payload.target_id)) out.push({ code: CODES.SCHEMA, field: 'target_id' });
     } else if (payload.target_id && !isGlobalRef(payload.target_id)) {
       const exists = payload.target_kind === 'node' ? nodesById.has(payload.target_id) : edgeIds.has(payload.target_id);

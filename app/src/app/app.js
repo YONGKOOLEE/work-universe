@@ -1,12 +1,24 @@
 // 명령 흐름 조립과 현재 상태(12.7 app). 화면은 이 객체만 호출한다.
 
 import {
-  addEdge, addEvent, addNode, addRef, addSubtype, createUniverse, hideEdge, hideNode, hideRef, updateEdge, updateNode,
+  addEdge, addEvent, addNode, addRef, addSubtype, createUniverse, decideIdentity, hideEdge, hideNode, hideRef, updateEdge, updateNode,
 } from '../model/commands.js';
 import { normalizeLabel } from '../model/schema.js';
 import { validateDocument } from '../model/validate.js';
 import { CODES } from '../model/schema.js';
 import { buildView } from '../view/view.js';
+import { mergePlan } from '../merge/merge.js';
+
+// 사번 자동 연결(R-11 ①)을 문서에 적용한다. 판정자는 없다(emp_no_auto)
+function applyAuto(doc, resolve, ctx) {
+  const plan = mergePlan(buildView(doc, resolve), doc.identity_links || []);
+  let next = doc;
+  for (const a of plan.auto) {
+    const r = decideIdentity(next, { a: a.a, b: a.b, kind: 'person', method: 'emp_no_auto', status: 'confirmed', reason: a.reason }, ctx);
+    if (r.ok) next = r.doc;
+  }
+  return { doc: next, count: plan.auto.length };
+}
 
 function clone(doc) {
   return JSON.parse(JSON.stringify(doc));
@@ -180,9 +192,12 @@ export function createApp({ store, samples, currentId, now }) {
         if (!r.ok) return { ...r, child_id: id };
         next = r.doc;
       }
+      // 같은 사번·이름의 사람은 묶을 때 바로 하나로 잇는다(R-11 ①). 나머지는 확인 목록(merge.mergePlan)
+      const autoApplied = applyAuto(next, (x) => (x === next.universe.id ? next : db.loadUniverse(x)), { now: now() });
+      next = autoApplied.doc;
       const failedGroup = save(next);
       if (failedGroup) return failedGroup;
-      return { ok: true, doc: next };
+      return { ok: true, doc: next, auto_linked: autoApplied.count };
     },
 
     // 같은 이름·단위의 유니버스가 이미 있는지(1.2: 경고하고 사용자가 정한다)
@@ -203,6 +218,28 @@ export function createApp({ store, samples, currentId, now }) {
     /** 현재 유니버스에 하위 유형을 등록한다(1.3 ②). 데이터만 늘고 코드 변경은 없다 */
     addSubtype(coreType, name) {
       return guard() || commit(addSubtype(doc, { core_type: coreType, name }));
+    },
+
+    /** 통합 확인 목록(R-11 ②③): 하위 유니버스를 참조한 유니버스에서만 의미가 있다 */
+    mergePlan() {
+      if (!(doc.refs || []).some((r) => !r.hidden)) return null;
+      return mergePlan(buildView(doc, resolve), doc.identity_links || []);
+    },
+
+    /** 사번 자동 연결 대상이 남아 있으면 적용한다(예: 묶은 뒤 하위 유니버스에 사람이 늘었을 때) */
+    applyAutoLinks() {
+      if (guard()) return guard();
+      const r = applyAuto(doc, resolve, { now: now() });
+      if (!r.count) return { ok: true, doc, count: 0 };
+      const failed = save(r.doc);
+      if (failed) return failed;
+      doc = r.doc;
+      return { ok: true, doc, count: r.count };
+    },
+
+    /** 사람의 판정(같음 confirmed / 다름 rejected)을 기록한다(R-11 ②③, 12.7 흐름 3 ⑤). 원래 유니버스는 바뀌지 않는다(R-11 ⑤) */
+    decideIdentity({ a, b, kind, status, reason, score }) {
+      return guard() || commit(decideIdentity(doc, { a, b, kind, method: 'human', status, reason, score, decided_by: '사용자(이 브라우저)' }, { now: now() }));
     },
 
     /** 현재 유니버스에서 하위 유니버스를 뺀다(참조 해제, 원본은 그대로) */
