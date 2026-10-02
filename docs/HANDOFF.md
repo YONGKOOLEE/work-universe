@@ -59,7 +59,7 @@ node tools/perf-check.mjs 300 --browser   # 규모 점검
 | T-12 사전 생성(다시 쓸 때) | 01 R-15(CR-1), 02 5.4·12.3, tech-record 15·27절, `tools/pregen-dump.mjs`, `app/data/pregen.js` |
 | T-13 데이터(교체 시) | 02 4절(사례·예외 9건)·1.7, 03 7.2, tech-record 7·18·26절, `app/data/answers-v1.js`, `docs/limits.md` |
 | T-15 제출 | 03 T-15·K-6, review 3-1~3-7·4-10, README |
-| T-17 문서 변환·가져오기(다시 볼 때) | 01 CR-3·CR-5, 02 12.9·12.9.1, tech-record 9·32절, `app/src/rules/doc-convert.js`(`CONVERT_RULES`), `app/src/ui/import.js` |
+| T-17 문서 변환·가져오기(다시 볼 때) | `docs/가져오기-사용가이드.md`(사용법·특이점), 01 CR-3·CR-5, 02 12.9·12.9.1, tech-record 9·32절, `app/src/rules/doc-convert.js`(`CONVERT_RULES`), `app/src/ui/import.js` |
 | 화면 수정 | `app/src/ui/*`, tech-record 8·12·17·21절 |
 
 ## 6. 코드 지도
