@@ -34,7 +34,8 @@ npm run build             # dist/index.html (바이트 크기 표시)
 npm run check:browser     # Chrome·Edge file:// 점검. SHOT_DIR=.tmp/shots 를 주면 화면 PNG 저장
 npm run check:secrets     # 비밀값 형식 검색(dist 포함). 0건이어야 함
 npm run package           # 제출 압축 release/업무유니버스-제출본-날짜.zip
-npm run check:submit      # 제출 점검 8단계(압축을 풀어 새 프로필로 브라우저 점검까지). --quick은 브라우저 생략
+npm run check:submit      # 제출 점검 9단계(압축을 풀어 새 프로필로 브라우저 점검 + 실행 안내 따라가기). --quick은 브라우저 생략
+npm run check:guide       # 실행 안내 "5분 둘러보기"를 실제 마우스·키보드로 따라가기(Chrome·Edge)
 node tools/virtual-data-check.mjs   # R-06 형식 점검
 node tools/perf-check.mjs 300 --browser   # 규모 점검
 ```

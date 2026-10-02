@@ -10,7 +10,8 @@
     "check:browser": "node tools/browser-check.mjs",
     "check:secrets": "node tools/secret-scan.mjs",
     "package": "node tools/package.mjs",
-    "check:submit": "node tools/submit-check.mjs"
+    "check:submit": "node tools/submit-check.mjs",
+    "check:guide": "node tools/guide-check.mjs"
   },
   "dependencies": {
     "cytoscape": "3.34.3"

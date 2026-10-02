@@ -67,6 +67,10 @@ approvals:   # 형식: gate / 대상 문서 / 사용자 승인 표현(원문) / 
     user_expression: "연속 진행 허용 / 작업마다 자동 커밋 / 기본안으로 진행 / 허용" (선택지 응답)
     date: 2026-10-02
     conditions: 확인은 끝에 한 번에. 결정은 기본값으로 구현하고 docs/decisions-pending.md에 쌓음. 승인 문서 변경은 CR 후보로만. 로컬 커밋만(push·태그 없음). T-13은 03-plan 7.2 기본안, 쪼개는 정도는 월말 정산 수준(업무당 노드 10~20개), 조력자 의견이 오면 수정
+  - change: 진행 순서 (2026-10-03)
+    user_expression: "1은 나중에 검토 이후 실제 기한일즈음 하자 / 2는 진행 / 3진행 / 4는 진행 이후 한느게 낫겠지?"
+    date: 2026-10-03
+    conditions: T-16 대본·소개자료는 기한 즈음에(검토 뒤). 추가 검증(규모·실행 안내 따라가기 자동 점검) 진행. T-10 통합을 기본안 데이터로 진행(조력자 의견 오면 수정). T-17은 T-10 뒤, 착수 전에 CR-5 ② 확인
   - change: CR-6 (인수인계 초안 항목 보강 8 → 10개, 메모 범주, 업무 속성 약속, 월말 정산 가상 데이터 보강)
     documents: 02 5.6·D-09·12.2 메모 payload, 03 T-07 표기, 01 머리말
     user_expression: "둘 다 진행해"
@@ -173,6 +177,10 @@ implementation:
       unverified: [다른 PC에서 실행(1.4 대체: 조력자 PC 또는 다른 계정), 메일 첨부 차단 여부(K-6), 실행 안내 문구 사용자 확인, 제출 태그]
       outputs: docs/submission/실행안내.html, tools/package.mjs(npm run package), tools/submit-check.mjs(npm run check:submit), release/(Git 제외)
       decisions: docs/tech-record.md 28절
+    - id: VERIFY-EXTRA-2026-10-03
+      status: 완료(사용자 "2는 진행"). 규모 500노드 새 기능 포함, 실행 안내 따라가기 자동 점검(check:guide), 제출 점검 9/9
+      date: 2026-10-03
+      decisions: docs/tech-record.md 30절
     - id: REVIEW3-2026-10-03
       status: 세 번째 전체 검토(워크플로: 5범주 찾기 + 범주별 반박 검증, 에이전트 10). 36건 중 27건 확인, 9건 반박. 확인된 것 중 결정이 필요 없는 것은 모두 수정·검증
       date: 2026-10-03

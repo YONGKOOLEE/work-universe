@@ -11,7 +11,11 @@ import { validateDocument } from '../app/src/model/validate.js';
 import { buildView } from '../app/src/view/view.js';
 import { projectView } from '../app/src/view/collapse.js';
 import { buildHandoverDraft, scopeWorks } from '../app/src/rules/handover.js';
-import { similarExperts, repeatInefficiency, densityGaps } from '../app/src/rules/insight.js';
+import { similarExperts, repeatInefficiency, densityGaps, personLoad, workLoad } from '../app/src/rules/insight.js';
+import { flowChange, timeMonths } from '../app/src/rules/flow.js';
+import { createProvider } from '../app/src/llm/providers.js';
+import { refineDraft } from '../app/src/llm/connector.js';
+import { PREGEN } from '../app/data/pregen.js';
 
 export function makeUniverse(n) {
   const ctx = { now: '2026-10-01T09:00:00+09:00' };
@@ -71,6 +75,17 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   time('밀집·공백(전체)', () => densityGaps(view, { asOf: '2026-10-02' }));
   time('인수인계 초안(유니버스 전체)', () => buildHandoverDraft(view, { target: `${doc.universe.id}/${doc.universe.root_node_id}`, from: `${doc.universe.id}/${people[0]}`, to: `${doc.universe.id}/${people[1]}`, similar: [] }));
   time('초안 범위(scopeWorks)', () => scopeWorks(view, `${doc.universe.id}/${doc.universe.root_node_id}`));
+  // 연속 진행으로 생긴 기능(T-11 흐름 변화·시간 보기, T-12 사전 생성, 상세 한 줄)
+  time('흐름 변화(월)', () => flowChange(view, { unit: 'month', asOf: '2026-10-02' }));
+  time('흐름 변화(과거 기준일 50회)', () => { for (let i = 0; i < 50; i += 1) flowChange(view, { unit: 'month', asOf: '2026-03-31' }); });
+  time('시간 범위(timeMonths)', () => timeMonths(view, '2026-10-02'));
+  const draft = buildHandoverDraft(view, { target: `${doc.universe.id}/${doc.universe.root_node_id}`, from: `${doc.universe.id}/${people[0]}`, to: `${doc.universe.id}/${people[1]}`, similar: [] }).draft;
+  const exists = (g) => view.lookup(g).found || view.events.some((e) => e.gid === g);
+  time('사전 생성 조회(초안, 결과 없음)', () => refineDraft(draft, { provider: createProvider('pregen', { pregen: PREGEN }), exists }));
+  time('상세 한 줄(사람·업무 전부)', () => {
+    for (const p of people) personLoad(view, `${doc.universe.id}/${p}`, { asOf: '2026-10-02' });
+    for (const w of works) workLoad(view, `${doc.universe.id}/${w}`, { asOf: '2026-10-02' });
+  });
 
   if (process.argv.includes('--browser')) {
     // Chrome에서 이 문서를 저장소에 넣고 열어, 첫 그래프가 그려질 때까지 시간을 잰다
@@ -106,7 +121,10 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     const openMs = Date.now() - t0;
     const relayout = await ev("(() => { const t = performance.now(); document.getElementById('relayout').click(); return performance.now() - t; })()");
     const select = await ev(`(() => { const t = performance.now(); window.__wu.select('${doc.universe.id}/${works[0]}'); return performance.now() - t; })()`);
-    console.log(`\n[Chrome] 열기~그래프 표시 ${openMs} ms (노드 ${shown}개), 다시 정렬 ${Math.round(relayout)} ms, 노드 선택·상세 ${Math.round(select)} ms`);
+    // 시간 보기: 슬라이더를 6칸 옮겨 흐림·상세 다시 계산까지, 흐름 변화 탭 열기
+    const slide = await ev("(() => { const r = document.querySelector('[data-testid=time-range]'); const t = performance.now(); r.value = String(Math.max(0, Number(r.max) - 6)); r.dispatchEvent(new Event('input')); return performance.now() - t; })()");
+    const flowTab = await ev("(() => { window.__wu.select(null); document.querySelector('[data-testid=btn-insight-universe]').click(); const t = performance.now(); document.querySelector('[data-testid=tab-flow]').click(); return performance.now() - t; })()");
+    console.log(`\n[Chrome] 열기~그래프 표시 ${openMs} ms (노드 ${shown}개), 다시 정렬 ${Math.round(relayout)} ms, 노드 선택·상세 ${Math.round(select)} ms, 시간 보기 이동 ${Math.round(slide)} ms, 흐름 변화 탭 ${Math.round(flowTab)} ms`);
     proc.kill();
     await sleep(500);
     await rm(profile, { recursive: true, force: true }).catch(() => {});

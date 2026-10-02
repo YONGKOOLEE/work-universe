@@ -2,7 +2,7 @@
 // 사용: npm run check:submit            (브라우저 점검 포함, 몇 분 걸림)
 //       npm run check:submit -- --quick (브라우저 점검 생략)
 // 순서: 빌드 → 단위 테스트 → 비밀값(소스·dist) → R-06 형식 → 압축 → 압축 풀기(새 폴더) → 풀린 파일 비교·비밀값
-//       → 풀린 index.html을 새 브라우저 프로필로 열어 전체 브라우저 점검(이 PC에서 "깨끗한 환경"을 흉내)
+//       → 풀린 index.html을 새 브라우저 프로필로 열어 전체 브라우저 점검(이 PC에서 "깨끗한 환경"을 흉내) → 실행 안내 따라가기
 import { spawnSync } from 'node:child_process';
 import { mkdir, readFile, readdir, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -72,6 +72,9 @@ if (!quick) {
   const bc = run(['tools/browser-check.mjs'], { PAGE: page });
   const fails = (bc.stdout.match(/^FAIL .*$/gm) || []);
   record('풀린 index.html로 Chrome·Edge 전체 점검(새 프로필)', bc.status === 0 && /모두 통과/.test(bc.stdout), fails.slice(0, 3).join(' | '));
+  // 9) 실행 안내 "5분 둘러보기"를 풀린 파일에서 실제 마우스·키보드로 따라가기
+  const gc = run(['tools/guide-check.mjs'], { PAGE: page });
+  record('풀린 index.html로 실행 안내 따라가기(Chrome·Edge, 실제 입력)', gc.status === 0 && /모두 통과/.test(gc.stdout), (gc.stdout.match(/^FAIL .*$/gm) || []).slice(0, 2).join(' | '));
 } else {
   record('브라우저 점검(--quick이라 생략)', true, '미실행');
 }
