@@ -7,6 +7,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { SAMPLE_A1 } from '../app/data/sample-a1.js';
+import { SAMPLES } from '../app/data/index.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const pageUrl = pathToFileURL(join(root, 'dist/index.html')).href;
@@ -442,7 +443,7 @@ async function checkBrowser(browser, port) {
     check('R-08 시작 화면의 제목·설명·추천 버튼이 실제로 보임', await evaluate(s.cdp, "['.start-hero h1', '.start-hero .lead', '[data-testid=start-primary]', '[data-testid=start-create]'].every((q) => { const r = document.querySelector(q).getBoundingClientRect(); return r.width > 0 && r.height > 0; })"));
     check('R-08 시작 화면에 이게 무엇인지 한 줄 설명과 가상 데이터 안내', startText.includes('누가 무엇을 해 왔는지 한눈에 보고 인수인계를 돕는 도구') && startText.includes('모든 이름과 데이터는 가상'));
     check('R-08 "처음이라면 이 순서로" 4단계 안내', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=start-steps] li').length")) === 4);
-    check('샘플 카드 5개와 추천(월말 정산) 표시, 내 유니버스 안내', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=start-samples] .card').length")) === 5 && (await evaluate(s.cdp, "document.querySelector('[data-testid=card-U-A1]').classList.contains('recommended')")) && !!(await evaluate(s.cdp, "!!document.querySelector('[data-testid=start-mine], [data-testid=start-mine-empty]')")));
+    check(`샘플 카드 ${SAMPLES.length}개(내장 샘플 전부)와 추천(월말 정산) 표시, 내 유니버스 안내`, (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=start-samples] .card').length")) === SAMPLES.length && (await evaluate(s.cdp, "document.querySelector('[data-testid=card-U-A1]').classList.contains('recommended')")) && !!(await evaluate(s.cdp, "!!document.querySelector('[data-testid=start-mine], [data-testid=start-mine-empty]')")));
     check('시작 화면에 "null" 글자 없음', await evaluate(s.cdp, "(() => { const w = document.createTreeWalker(document.getElementById('start-screen'), NodeFilter.SHOW_TEXT); while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') return false; return true; })()"));
     await evaluate(s.cdp, 'window.scrollTo(0, 0)');
     await shot(s.cdp, `${browser.name}-0-start`);
@@ -705,6 +706,60 @@ async function checkBrowser(browser, port) {
     await sleep(500);
     check('근거 버튼 → 접힌 유니버스를 펼쳐 그 노드를 보여 줌', !(await evaluate(s.cdp, `window.__wu.cy.getElementById(${JSON.stringify(hiddenGid)}).empty()`)));
     await shot(s.cdp, `${browser.name}-9d-reveal`);
+    // T-13: 부서 화면 개요에 교육팀의 사번 충돌(V-1002 윤바다/윤바다라)
+    await evaluate(s.cdp, "window.__wu.select(null)");
+    await sleep(150);
+    const conflict = await text(s.cdp, '[data-testid=empno-conflict]');
+    check('T-13 예외: 부서 개요에 사번 충돌 V-1002(윤바다·윤바다라) 알림', conflict.includes('V-1002') && conflict.includes('윤바다라'), conflict);
+  }
+
+  // ── T-13 조직관리(U-O): 입력 중단, 조직개편 소속, 데이터 부족 ──
+  await evaluate(s.cdp, "location.hash = 'U-O'; location.reload()").catch(() => {});
+  await sleep(500);
+  if (await waitFor(s.cdp, "window.__wu && window.__wu.doc.universe.id === 'U-O' && window.__wu.cy.nodes().length > 0", 8000)) {
+    await evaluate(s.cdp, "window.__wu.select(null)");
+    await clickTestId(s.cdp, 'btn-insight-universe');
+    await sleep(200);
+    await clickTestId(s.cdp, 'tab-flow');
+    await sleep(200);
+    const nodata = await text(s.cdp, '[data-testid=flow-nodata]');
+    check('R-05 ②: 조직관리 흐름 변화 — 마지막 입력(2026-03-10) 이후 기간은 "입력 없음"으로 알림', nodata.includes('2026-03-10') && (await text(s.cdp, '[data-testid=flow-table]')).includes('입력 없음 — 데이터 부족'), nodata);
+    check('조직개편 2026-01 행에 소속 변경 12', await evaluate(s.cdp, `(() => { const tr = document.querySelector('[data-testid=flow-table] tr[data-key="2026-01"]'); return !!tr && tr.children[4].textContent === '12'; })()`));
+    await shot(s.cdp, `${browser.name}-10-org-flow`);
+    await clickTestId(s.cdp, 'tab-density');
+    await sleep(150);
+    check('R-05 ②: 조직관리 밀집·공백 — 데이터 부족과 마지막 입력', (await text(s.cdp, '[data-testid=density-insufficient]')).includes('마지막 입력 2026-03-10'));
+    // 시간 보기: 2025-12에는 가상운영팀 소속, 2026-02에는 가상정산팀(소속 연결). 슬라이더는 2025-01부터
+    await evaluate(s.cdp, "window.__wu.select('U-O/N-101')");
+    await sleep(150);
+    const setOrgMonth = (m) => evaluate(s.cdp, `(() => { const r = document.querySelector('[data-testid=time-range]'); const [ty, tm] = ${JSON.stringify(m)}.split('-').map(Number); r.value = String((ty - 2025) * 12 + (tm - 1)); r.dispatchEvent(new Event('input')); return r.value; })()`);
+    await setOrgMonth('2025-12');
+    await sleep(200);
+    const before = await text(s.cdp, '[data-testid=attrs]');
+    await setOrgMonth('2026-02');
+    await sleep(200);
+    const after = await text(s.cdp, '[data-testid=attrs]');
+    check('R-14 시간 보기: 한가람 소속 2025-12 가상운영팀 → 2026-02 가상정산팀', before.includes('가상운영팀') && after.includes('가상정산팀'), `${before.slice(0, 60)} / ${after.slice(0, 60)}`);
+    await shot(s.cdp, `${browser.name}-10b-org-time`);
+    await clickTestId(s.cdp, 'time-today');
+  }
+
+  // ── T-13 교육팀(U-C): 이력 부족 ──
+  await evaluate(s.cdp, "location.hash = 'U-C'; location.reload()").catch(() => {});
+  await sleep(500);
+  if (await waitFor(s.cdp, "window.__wu && window.__wu.doc.universe.id === 'U-C' && window.__wu.cy.nodes().length > 0", 8000)) {
+    await evaluate(s.cdp, "window.__wu.select('U-C/N-105')");
+    await sleep(150);
+    check('교육팀 「신규 교육 과정」 상세: "공백 — 담당 기록 없음", 이력 없음', (await text(s.cdp, '[data-testid=work-load]')).includes('담당 기록 없음') && !!(await evaluate(s.cdp, "!!document.querySelector('[data-testid=no-history]')")));
+    await clickTestId(s.cdp, 'btn-draft');
+    await sleep(150);
+    await evaluate(s.cdp, "(() => { const f = document.querySelector('[data-testid=draft-form]'); const set = (t, v) => { const e = f.querySelector('[data-testid=' + t + ']'); e.value = v; e.dispatchEvent(new Event('change')); }; set('draft-from', 'U-C/N-202'); set('draft-to', 'U-C/N-203'); f.querySelector('button[type=submit]').click(); })()");
+    await sleep(250);
+    const shortCount = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid^=draft-item-]')].filter((x) => x.textContent.includes('이력 부족')).length");
+    check('R-03 ② 예외 5: 「신규 교육 과정」 초안은 8개 항목이 "이력 부족"', shortCount === 8, String(shortCount));
+    await shot(s.cdp, `${browser.name}-11-edu-short`);
+  }
+  {
     check('부서 화면에서도 화면에 "null" 글자 없음', (await evaluate(s.cdp, "(() => { const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') return false; return true; })()")));
   }
 

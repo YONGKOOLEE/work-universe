@@ -1,5 +1,6 @@
 // 2026-10-02 두 번째 검토(화면 UI-1·UI-2): 업무 상세의 담당 상태, 반복 비효율 포함 여부
 import { test } from 'node:test';
+import { SAMPLES } from '../app/data/index.js';
 import assert from 'node:assert/strict';
 import { SAMPLE_A1 } from '../app/data/sample-a1.js';
 import { SAMPLE_CARD } from '../app/data/sample-card.js';
@@ -10,7 +11,7 @@ import { buildView } from '../app/src/view/view.js';
 import { densityGaps, repeatPatternsFor, workLoad } from '../app/src/rules/insight.js';
 import { describeNode } from '../app/src/view/describe.js';
 
-const all = { 'U-A1': SAMPLE_A1, 'U-K1': SAMPLE_CARD, 'U-T1': SAMPLE_TEAM, 'U-B': SAMPLE_EVENT, 'U-D1': SAMPLE_DEPT };
+const all = Object.fromEntries(SAMPLES.map((d) => [d.universe.id, d])); // T-13: 부서(U-D1)는 교육팀(U-C)까지 포함
 const viewOf = (id) => buildView(all[id], (x) => all[x] || null);
 const ASOF = '2026-10-02';
 

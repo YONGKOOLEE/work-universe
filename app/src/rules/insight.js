@@ -8,6 +8,8 @@ import { normalizeLabel } from '../model/schema.js';
 // 점수 가중치(D-08에 수치가 없어 정함): 주제 3, 산출물 유형 2, 라벨 토큰 1
 export const WEIGHTS = { topic: 3, artifactType: 2, token: 1 };
 const STOP_TOKENS = new Set(['업무', '관리', '처리', '확인']);
+// 어떤 업무든 인계할 때 생기는 산출물 유형은 업무가 비슷하다는 근거가 아니다(T-13에서 발견, 결정 대기 D3-3)
+export const GENERIC_ARTIFACT_TYPES = new Set(['인수인계서']);
 
 const live = (e) => !e.hidden;
 
@@ -39,7 +41,7 @@ function profileOf(view, work) {
       hasLink = true;
     } else if (e.core_type === 'produces' && t.core_type === 'artifact') {
       hasLink = true;
-      if (t.subtype) {
+      if (t.subtype && !GENERIC_ARTIFACT_TYPES.has(t.subtype)) {
         if (!artifactTypes.has(t.subtype)) artifactTypes.set(t.subtype, []);
         artifactTypes.get(t.subtype).push(t.gid);
       }

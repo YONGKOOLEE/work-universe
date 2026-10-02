@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { SAMPLES } from '../app/data/index.js';
 import assert from 'node:assert/strict';
 import { SAMPLE_A1 } from '../app/data/sample-a1.js';
 import { SAMPLE_CARD } from '../app/data/sample-card.js';
@@ -12,7 +13,7 @@ import { buildView } from '../app/src/view/view.js';
 import { isCurrent, similarExperts, similarSentences } from '../app/src/rules/insight.js';
 import { buildHandoverDraft } from '../app/src/rules/handover.js';
 
-const all = { 'U-A1': SAMPLE_A1, 'U-K1': SAMPLE_CARD, 'U-T1': SAMPLE_TEAM, 'U-B': SAMPLE_EVENT, 'U-D1': SAMPLE_DEPT };
+const all = Object.fromEntries(SAMPLES.map((d) => [d.universe.id, d])); // T-13: 부서(U-D1)는 교육팀(U-C)까지 포함
 const viewOf = (id, override = {}) => buildView(override[id] || all[id], (x) => override[x] || all[x] || null);
 const ASOF = '2026-10-02';
 
@@ -97,14 +98,25 @@ test('점수: 주제 3, 산출물 유형 2, 낱말 1. 더 많이 겹치는 업�
   const r = similarExperts(viewOf('U-D1'), { works: ['U-A1/N-001'], asOf: ASOF });
   assert.deepEqual(r.people.map((p) => [p.label, p.score]), [['운영 담당', 3], ['윤바다', 3], ['정산 담당', 3]]); // 점수가 같으면 이름순
   assert.deepEqual(r.people.map((p) => p.score), [...r.people.map((p) => p.score)].sort((a, b) => b - a));
-  // 산출물 유형이 겹치면 점수가 오른다: 기준 업무가 "인수인계서" 산출물을 만들고, 다른 업무도 같은 유형을 만들면 +2
+  // 산출물 유형이 겹치면 점수가 오른다: 기준 업무(대사 확인)가 「정산표」 산출물을 만들고, 다른 업무도 같은 유형을 만들면 +2
+  const a1 = JSON.parse(JSON.stringify(SAMPLE_A1));
+  a1.universe.subtypes.push({ core_type: 'artifact', name: '정산표' });
+  a1.nodes.find((n) => n.id === 'N-021').subtype = '정산표';
+  a1.edges.push({ id: 'L-090', source: 'N-001', target: 'N-021', core_type: 'produces', hidden: false });
   const more = JSON.parse(JSON.stringify(SAMPLE_EVENT));
-  more.universe.subtypes = [{ core_type: 'artifact', name: '인수인계서' }];
-  more.nodes.push({ id: 'N-401', core_type: 'artifact', subtype: '인수인계서', label: '2025 행사 인수인계서', hidden: false });
+  more.universe.subtypes = [{ core_type: 'artifact', name: '정산표' }, { core_type: 'artifact', name: '인수인계서' }];
+  more.nodes.push({ id: 'N-401', core_type: 'artifact', subtype: '정산표', label: '행사 정산표', hidden: false });
   more.edges.push({ id: 'L-050', source: 'N-101', target: 'N-401', core_type: 'produces', hidden: false });
-  const boosted = similarExperts(viewOf('U-D1', { 'U-B': more }), { works: ['U-A1/N-001'], asOf: ASOF }).people;
+  const boosted = similarExperts(viewOf('U-D1', { 'U-A1': a1, 'U-B': more }), { works: ['U-A1/N-001'], asOf: ASOF }).people;
   assert.deepEqual(boosted.map((p) => [p.label, p.score]), [['윤바다', 5], ['운영 담당', 3], ['정산 담당', 3]]);
-  assert.match(boosted[0].works[0].reasons.join(' '), /같은 산출물 유형 「인수인계서」/);
+  assert.match(boosted[0].works[0].reasons.join(' '), /같은 산출물 유형 「정산표」/);
+  // T-13: 「인수인계서」는 어떤 업무든 인계 때 생기므로 같아도 점수를 주지 않는다(GENERIC_ARTIFACT_TYPES)
+  const handoverOnly = JSON.parse(JSON.stringify(SAMPLE_EVENT));
+  handoverOnly.universe.subtypes = [{ core_type: 'artifact', name: '인수인계서' }];
+  handoverOnly.nodes.push({ id: 'N-401', core_type: 'artifact', subtype: '인수인계서', label: '2025 행사 인수인계서', hidden: false });
+  handoverOnly.edges.push({ id: 'L-050', source: 'N-101', target: 'N-401', core_type: 'produces', hidden: false });
+  const same = similarExperts(viewOf('U-D1', { 'U-B': handoverOnly }), { works: ['U-A1/N-001'], asOf: ASOF }).people;
+  assert.equal(same.find((p) => p.label === '윤바다').score, 3);
 });
 
 test('날짜 비교: 기간 안에서만 현재 담당이다', () => {
@@ -182,8 +194,9 @@ test('인수인계가 세 번이면 이어받지 않은 횟수를 센다', () =>
 
 test('반복 비효율 ②: 같은 주제가 여러 업무에서 반복되면 근거와 함께 나온다(부서 화면)', () => {
   const r = repeatInefficiency(viewOf('U-D1'));
-  const t = r.patterns.find((x) => x.kind === 'topic_repeat');
-  assert.equal(t.topic.label, '대사 불일치');
+  // T-13: 교육팀의 「강의실 부족」도 주제 반복으로 잡히므로 대사 불일치 패턴을 이름으로 찾는다
+  assert.ok(r.patterns.some((x) => x.kind === 'topic_repeat' && x.topic.label === '강의실 부족'));
+  const t = r.patterns.find((x) => x.kind === 'topic_repeat' && x.topic.label === '대사 불일치');
   assert.deepEqual(t.works.map((w) => w.label).sort(), ['2025 행사', '거래 조회', '대사 확인', '망취소']);
   const v = viewOf('U-D1');
   for (const g of t.evidence_ids) assert.ok(v.lookup(g).found || v.events.some((e) => e.gid === g), g);

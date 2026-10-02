@@ -48,7 +48,7 @@ test('저장소 값이 깨져 있어도 멈추지 않고, 샘플은 다시 넣�
   assert.deepEqual(store.listUniverses(), []);
   const app = createApp({ store, samples: SAMPLES, now: () => ctx.now });
   assert.equal(app.doc.nodes.length, SAMPLE_A1.nodes.length);
-  assert.deepEqual(app.universes().map((u) => u.id).sort(), ['U-A1', 'U-B', 'U-D1', 'U-K1', 'U-T1']);
+  assert.deepEqual(app.universes().map((u) => u.id).sort(), SAMPLES.map((s) => s.universe.id).sort());
 });
 
 test('같은 날짜의 이력은 기록한 순서대로 쌓이고, 시간대가 달라도 시각 기준으로 정렬한다', async () => {

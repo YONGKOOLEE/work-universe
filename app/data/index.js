@@ -4,8 +4,10 @@ import { SAMPLE_CARD } from './sample-card.js';
 import { SAMPLE_TEAM } from './sample-team.js';
 import { SAMPLE_EVENT } from './sample-event.js';
 import { SAMPLE_DEPT } from './sample-dept.js';
+import { SAMPLE_EDU } from './sample-edu.js';
+import { SAMPLE_ORG } from './sample-org.js';
 
-export const SAMPLES = [SAMPLE_A1, SAMPLE_CARD, SAMPLE_TEAM, SAMPLE_EVENT, SAMPLE_DEPT];
+export const SAMPLES = [SAMPLE_A1, SAMPLE_CARD, SAMPLE_TEAM, SAMPLE_EVENT, SAMPLE_DEPT, SAMPLE_EDU, SAMPLE_ORG];
 
 // 시작 화면의 샘플 카드 문구. order가 작을수록 앞. 추천은 처음 보는 사람에게 권하는 첫 샘플이다
 export const SAMPLE_GUIDE = {
@@ -14,4 +16,6 @@ export const SAMPLE_GUIDE = {
   'U-K1': { order: 3, tagline: '업무정의서 문서를 유니버스로 바꾼 사례', try: '「요청 검증」 같은 노드를 눌러 \'원문\' 속성을 확인해 보세요' },
   'U-T1': { order: 4, tagline: '업무 둘을 묶은 팀 사례', try: '「가상 결제운영팀」 꼭지에서 접고 펼쳐 보세요' },
   'U-B': { order: 5, tagline: '해마다 하는 일(행사)을 팀 안에 직접 둔 사례', try: '' },
+  'U-C': { order: 6, tagline: '조직개편으로 새로 생긴 교육팀 — 사번 없음·사번 충돌·이력 부족 사례', try: '「신규 교육 과정」을 누르고 「인수인계 초안 만들기」로 이력 부족이 어떻게 보이는지 확인해 보세요' },
+  'U-O': { order: 7, tagline: '조직·사람·소속 이력(조직개편 2회, 2026-03 이후 입력 중단)', try: '그래프 아래 시간 보기를 2025-12와 2026-02로 옮겨 소속이 바뀌는 것을 보고, 「인사이트 보기」의 흐름 변화를 확인해 보세요' },
 };

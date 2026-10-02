@@ -6,11 +6,11 @@
 ## 1. 지금 상태 (한 줄씩)
 
 - 계획 승인 완료. 구현 중. 제출 기한 2026-10-30.
-- 완료: T-01, T-03~T-08(M1), T-09, T-11(반복 비효율·밀집/공백·흐름 변화·시간 슬라이더). T-14(시작 화면)는 구현 완료·관찰 대기. 키 검색 도구(`check:secrets`)도 있음.
+- 완료: T-01, T-03~T-08(M1), T-09, T-11(반복 비효율·밀집/공백·흐름 변화·시간 슬라이더), T-13(기본안 데이터: 교육팀 U-C·조직관리 U-O, 예외 9건, 한계 목록). T-14(시작 화면)는 구현 완료·관찰 대기. 키 검색 도구(`check:secrets`)도 있음.
   - 커밋 001b558까지 반영. **T-11 밀집/공백(tech-record 23절)과 두 번째 전체 검토 수정(24절)은 사용자 확인·커밋 대기** → `git status`로 확인.
   - T-14는 구현만 끝났다. 완료 기준(대리 검증자 관찰, R-08)은 미확인.
-  - T-11 남은 것: 조직관리 유니버스(U-O)의 입력 중단 화면 시연(T-13 뒤).
-- 대기(조력자 의견): T-10 통합, T-13 데이터 완성, T-17 문서 변환. CR-4(층별 보기)는 코드에만 있고 미승인.
+  - 조력자 의견이 오면 데이터 내용만 교체: T-13 → T-12 → 시나리오(K-9).
+- 대기(조력자 의견): T-10 통합, T-17 문서 변환. CR-4(층별 보기)는 코드에만 있고 미승인.
 - 이후: T-12 사전 생성(선행 T-13), T-15 제출 점검, T-16 영상.
 - **연속 진행 모드(2026-10-02~):** 확인 없이 다음 작업으로, 작업마다 로컬 자동 커밋. 결정·확인은 `docs/decisions-pending.md`에 쌓는다(CLAUDE.md 작업 방식).
 - 진행 기록: `docs/.status`의 `implementation:` 절. 결정·해석: `docs/tech-record.md`(절 번호로 찾기).
@@ -27,7 +27,7 @@
 ## 3. 명령
 
 ```
-npm test                  # 단위 테스트(220개)
+npm test                  # 단위 테스트(237개)
 npm run build             # dist/index.html (바이트 크기 표시)
 npm run check:browser     # Chrome·Edge file:// 점검. SHOT_DIR=.tmp/shots 를 주면 화면 PNG 저장
 npm run check:secrets     # 비밀값 형식 검색(dist 포함). 0건이어야 함
@@ -51,7 +51,7 @@ node tools/perf-check.mjs 300 --browser   # 규모 점검
 | T-10 통합 | 01 R-11, 02 2·3절·12.2 `identity_links`·12.7 흐름 3, tech-record 10절(CR-4 시제품), review 2-5·2-6·2-17 |
 | T-11 나머지 | 01 R-05·R-14, 02 5.5, tech-record 16·19·23·24·25절 |
 | T-12 사전 생성 | 01 R-15(CR-1), 02 5.4·12.3, tech-record 15절, review 3-11 |
-| T-13 데이터 | 02 4절(사례·예외 9건)·1.7, 03 7.2, tech-record 7·18절, `app/data/answers-v1.js` |
+| T-13 데이터(교체 시) | 02 4절(사례·예외 9건)·1.7, 03 7.2, tech-record 7·18·26절, `app/data/answers-v1.js`, `docs/limits.md` |
 | T-15 제출 | 03 T-15·K-6, review 3-1~3-7·4-10, README |
 | T-17 문서 변환 | 01 CR-3, 02 12.9, `.status` CR-3·CR-5, tech-record 9절 |
 | 화면 수정 | `app/src/ui/*`, tech-record 8·12·17·21절 |
@@ -65,7 +65,7 @@ node tools/perf-check.mjs 300 --browser   # 규모 점검
 - `app/src/app`: 명령 흐름과 저장
 - `app/src/store`: 브라우저 저장소
 - `app/src/ui`: 화면(main, graph, detail, editor, draft, insight, start)
-- `app/data`: 샘플 5개, 정답 표, 시작 화면 문구
+- `app/data`: 샘플 7개(월말 정산·카드승인·결제운영팀·행사팀·부서·교육팀·조직관리), 정답 표(v2), 시작 화면 문구
 - `tests/*.test.js`: 단위 테스트
 - `tools/`: 빌드, 브라우저 점검, 비밀값·데이터·규모 점검
 

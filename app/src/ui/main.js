@@ -225,7 +225,8 @@ function start() {
   // 사람 노드: 지금 맡은 업무 수와 밀집 기준 해당 여부. 누르면 인사이트의 밀집·공백 탭이 열린다
   function loadNote(gid) {
     const load = personLoad(view, gid, { asOf: asOf(), n: currentDenseN() });
-    if (!load) return null;
+    // 담당 기록이 한 번도 없는 사람(조직관리의 사람 등)에게는 표시하지 않는다
+    if (!load || !view.edges.some((e) => !e.hidden && e.core_type === 'performs' && e.source === view.canonical(gid))) return null;
     const text = load.count === 0 ? '지금 맡은 업무 없음' : `지금 맡은 업무 ${load.count}개 — ${load.dense ? `밀집 기준(${load.n}개 이상)에 해당` : `밀집 기준(${load.n}개 이상) 아래`}`;
     return el('p', { class: load.dense ? 'notice' : 'muted small', 'data-testid': 'person-load' }, text, ' ',
       el('button', { type: 'button', class: 'link', 'data-testid': 'btn-person-density', onclick: () => openInsight('', 'density') }, '밀집·공백 보기'));
@@ -435,8 +436,8 @@ function start() {
   }
 
   function applyTime() {
-    graph.setTimeOff(timeOffIds());
     renderTimebar();
+    graph.setTimeOff(timeOffIds());
   }
 
   function setViewDate(date) {
@@ -466,14 +467,17 @@ function start() {
       viewDate ? el('button', { type: 'button', class: 'small-btn', 'data-testid': 'time-today', onclick: () => setViewDate(null) }, '오늘로') : null,
       viewDate ? el('span', { class: 'small' }, '흐린 연결·사람은 그때 담당이 아님. 상세·인사이트도 이 날짜 기준') : null,
     ].filter(Boolean));
+    graph.cy.resize(); // 막대 높이가 바뀌면 그래프 영역도 바뀐다
   }
 
   function refresh() {
     view = app.view;
     display = projectView(view, { expanded });
+    // 시간 막대를 먼저 그려 그래프 영역 높이가 정해진 뒤 배치·맞춤을 한다(아래쪽 노드가 잘리지 않게)
+    renderTimebar();
     graph.render(display, selected);
     renderLegend();
-    applyTime();
+    graph.setTimeOff(timeOffIds());
     renderPanel();
   }
 

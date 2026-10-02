@@ -20,8 +20,9 @@ test('E5 같은 사번·다른 이름은 사번 충돌로 알린다(자동으로
   const v = deptView(all);
   const c = v.empno_conflicts.find((x) => x.emp_no === 'V-1001');
   assert.deepEqual(c.nodes.map((n) => n.label).sort(), ['도하람', '한가람']);
-  assert.equal(describeUniverse(v).empno_conflicts.length, 1);
-  assert.equal(deptView(docs()).empno_conflicts.length, 0); // 원래 샘플에는 충돌이 없다
+  // T-13: 원래 샘플에도 교육팀 윤바다라(V-1002) 사번 충돌 1건이 예외 사례로 있다 → 더한 충돌과 합쳐 2건
+  assert.equal(describeUniverse(v).empno_conflicts.length, 2);
+  assert.deepEqual(deptView(docs()).empno_conflicts.map((x) => x.emp_no), ['V-1002']);
 });
 
 test('E6 사번 자동 연결 뒤 사번이 바뀌면 합치지 않고 "다시 확인" 목록에 올린다', () => {

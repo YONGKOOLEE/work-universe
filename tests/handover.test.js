@@ -166,7 +166,7 @@ test('숨긴 산출물이 근거면 "숨김 처리된 노드"로 표시하고 �
 });
 
 test('팀 유니버스 꼭지로 만들면 참조한 업무 유니버스의 업무까지 범위에 든다', () => {
-  const all = { 'U-A1': SAMPLE_A1, 'U-K1': SAMPLE_CARD };
+  const all = Object.fromEntries(SAMPLES.map((d) => [d.universe.id, d])); // T-13: 부서(U-D1)는 교육팀(U-C)까지 포함
   const vt = buildView(SAMPLE_TEAM, (id) => all[id]);
   const d = buildHandoverDraft(vt, { target: 'U-T1/N-000', from: 'U-A1/N-011', to: 'U-A1/N-012' }).draft;
   const works = item(d, '세부_업무_절차').sentences.flatMap((s) => s.evidence_ids);
