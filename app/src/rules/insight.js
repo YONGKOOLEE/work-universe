@@ -4,6 +4,7 @@
 
 import { periodStatus, periodText } from '../view/describe.js';
 import { normalizeLabel } from '../model/schema.js';
+import { lastInput } from './flow.js';
 
 // 점수 가중치(D-08에 수치가 없어 정함): 주제 3, 산출물 유형 2, 라벨 토큰 1
 export const WEIGHTS = { topic: 3, artifactType: 2, token: 1 };
@@ -196,9 +197,10 @@ function continuesPrevious(view, later, earlier) {
  * @param {object} view buildView 결과
  * @returns {{status:'ok'|'none'|'insufficient', reason:string, last_input:string|null, patterns:object[]}}
  */
-export function repeatInefficiency(view) {
-  const relevant = view.events.filter((e) => e.type === 'handover' || e.type === 'memo');
-  const last = view.events.length ? view.events[view.events.length - 1].occurred_at : null;
+export function repeatInefficiency(view, { asOf = null } = {}) {
+  // 기준일(시간 보기)이 있으면 그날까지의 기록만 본다(검토3 RULES-2)
+  const relevant = view.events.filter((e) => (e.type === 'handover' || e.type === 'memo') && (!asOf || e.occurred_at <= asOf));
+  const last = lastInput(view, asOf);
   if (relevant.length < 2) {
     return { status: 'insufficient', reason: '인수인계·메모 기록이 2건 미만이라 반복을 찾을 수 없습니다', last_input: last, patterns: [] };
   }
@@ -325,13 +327,15 @@ export function workLoad(view, workGid, { asOf }) {
     next_person: person(next[0]),
     next_start: next[0]?.period.start || null,
     work_ended: periodStatus(work.period, asOf) === 'ended',
+    work_scheduled: periodStatus(work.period, asOf) === 'scheduled',
+    work_start: work.period?.start || null,
   };
 }
 
 /** 이 노드(업무·주제)가 들어 있는 반복 비효율 패턴(상세의 한 줄용) */
-export function repeatPatternsFor(view, gid) {
+export function repeatPatternsFor(view, gid, asOf = null) {
   const g = view.canonical(gid);
-  return repeatInefficiency(view).patterns.filter((p) => p.work?.gid === g || (p.works || []).some((w) => w.gid === g) || (p.topic?.gids || []).some((t) => view.canonical(t) === g));
+  return repeatInefficiency(view, { asOf }).patterns.filter((p) => p.work?.gid === g || (p.works || []).some((w) => w.gid === g) || (p.topic?.gids || []).some((t) => view.canonical(t) === g));
 }
 
 /**
@@ -345,7 +349,7 @@ export function personLoad(view, personGid, { asOf, n = DENSE_DEFAULT_N }) {
   for (const e of view.edges) {
     if (!live(e) || e.core_type !== 'performs' || e.source !== person.gid || !isCurrent(e.period, asOf)) continue;
     const w = view.getNode(e.target);
-    if (!w || w.core_type !== 'work' || w.hidden || works.some((x) => x.gid === w.gid)) continue;
+    if (!w || w.core_type !== 'work' || w.hidden || periodStatus(w.period, asOf) !== 'current' || works.some((x) => x.gid === w.gid)) continue;
     works.push({ gid: w.gid, label: w.label });
   }
   const limit = denseLimit(n);
@@ -359,16 +363,19 @@ export function personLoad(view, personGid, { asOf, n = DENSE_DEFAULT_N }) {
  */
 export function densityGaps(view, { asOf, n = DENSE_DEFAULT_N }) {
   const limit = denseLimit(n);
-  const last = view.events.length ? view.events[view.events.length - 1].occurred_at : null;
+  const last = lastInput(view, asOf);
   // 활성 업무: 숨기지 않았고, 업무 자체의 기간(12.2 node.period)이 기준일 전에 끝나지 않은 업무
   const allWorks = view.nodes.filter((w) => w.core_type === 'work' && !w.hidden);
-  const works = allWorks.filter((w) => periodStatus(w.period, asOf) !== 'ended');
-  const ended = allWorks.length - works.length;
+  const works = allWorks.filter((w) => periodStatus(w.period, asOf) === 'current');
+  const ended = allWorks.filter((w) => periodStatus(w.period, asOf) === 'ended').length;
+  const scheduledWorks = allWorks.filter((w) => periodStatus(w.period, asOf) === 'scheduled').length;
   const workIds = new Set(works.map((w) => w.gid));
   const performs = view.edges.filter((e) => live(e) && e.core_type === 'performs' && workIds.has(e.target) && view.getNode(e.source)?.core_type === 'person' && !view.getNode(e.source).hidden);
-  const base = { n: limit, last_input: last, ended_works: ended, groups: [], gaps: [], dense: [] };
+  const base = { n: limit, last_input: last, ended_works: ended, scheduled_works: scheduledWorks, groups: [], gaps: [], dense: [] };
   if (performs.length === 0) {
-    return { ...base, status: 'insufficient', reason: '업무에 담당자(수행) 연결이 없어 밀집·공백을 셀 수 없습니다' };
+    // 수행 연결은 있는데 모두 기간 밖 업무로 가면 사유를 구분한다(검토3 RULES-3)
+    const anyPerforms = view.edges.some((e) => live(e) && e.core_type === 'performs');
+    return { ...base, status: 'insufficient', reason: anyPerforms ? '담당(수행) 연결이 기간이 끝났거나 시작 전인 업무에만 있어 밀집·공백을 셀 수 없습니다' : '업무에 담당자(수행) 연결이 없어 밀집·공백을 셀 수 없습니다' };
   }
 
   const byWork = new Map(works.map((w) => [w.gid, []]));

@@ -538,7 +538,7 @@ async function checkBrowser(browser, port) {
     await clickTestId(s.cdp, 'btn-insight-universe');
     await sleep(200);
     const insuf = await text(s.cdp, '[data-testid=repeat-insufficient]');
-    check('오류(R-05 ②): 기록이 없는 새 유니버스 → 반복 비효율 "데이터 부족"과 마지막 입력 시점만', insuf.includes('데이터 부족') && insuf.includes('마지막 입력') && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=repeat-patterns]')")), insuf);
+    check('오류(R-05 ②): 기록이 없는 새 유니버스 → 반복 비효율 "데이터 부족"과 "입력된 업무 이력 없음"(생성 이력은 입력이 아님)', insuf.includes('데이터 부족') && insuf.includes('입력된 업무 이력 없음') && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=repeat-patterns]')")), insuf);
     await clickTestId(s.cdp, 'tab-density');
     await sleep(150);
     const dinsuf = await text(s.cdp, '[data-testid=density-insufficient]');
@@ -613,6 +613,27 @@ async function checkBrowser(browser, port) {
     await sleep(150);
     check('시간 슬라이더가 그래프 아래에 있고 처음엔 오늘 기준', (await text(s.cdp, '[data-testid=time-when]')).startsWith('오늘(') && (await evaluate(s.cdp, "(() => { const r = document.querySelector('[data-testid=time-range]').getBoundingClientRect(); return r.width > 100 && r.height > 5; })()")));
     const setMonth = (m) => evaluate(s.cdp, `(() => { const r = document.querySelector('[data-testid=time-range]'); const months = []; const [y0, m0] = [2025, 3]; for (let i = 0; i <= Number(r.max); i += 1) { const t = (m0 - 1) + i; months.push(String(y0 + Math.floor(t / 12)) + '-' + String((t % 12) + 1).padStart(2, '0')); } r.value = String(months.indexOf(${JSON.stringify(m)})); r.dispatchEvent(new Event('input')); return r.value; })()`);
+    // 검토3 UI-1: 실제 키보드로 움직이기(화살표 3번 → 3달 전, 포커스 유지). 값을 직접 넣는 점검은 이 결함을 못 잡았다
+    await evaluate(s.cdp, "document.querySelector('[data-testid=time-range]').focus()");
+    for (let i = 0; i < 3; i += 1) {
+      await s.cdp.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'ArrowLeft', code: 'ArrowLeft', windowsVirtualKeyCode: 37 });
+      await s.cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'ArrowLeft', code: 'ArrowLeft', windowsVirtualKeyCode: 37 });
+      await sleep(120);
+    }
+    const kb = await evaluate(s.cdp, "({ when: document.querySelector('[data-testid=time-when]').textContent, focused: document.activeElement && document.activeElement.dataset.testid })");
+    const threeBack = await evaluate(s.cdp, "(() => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 3); const y = d.getFullYear(), m = d.getMonth() + 1; const last = new Date(y, m, 0).getDate(); return `${y}-${String(m).padStart(2, '0')}-${String(last).padStart(2, '0')} 기준`; })()");
+    check('검토3 UI-1: 화살표 키 3번 → 3달 전 기준, 슬라이더 포커스 유지', kb.when === threeBack && kb.focused === 'time-range', `${kb.when} / ${kb.focused} / 기대 ${threeBack}`);
+    // 검토3 UI-3·UI-2: 초안을 만든 뒤 슬라이더를 움직여도 초안이 남고, 초안은 오늘 기준이라는 안내
+    await evaluate(s.cdp, "window.__wu.select(null)");
+    await clickTestId(s.cdp, 'btn-draft-universe');
+    await sleep(150);
+    await evaluate(s.cdp, `(() => { const set = (id, v) => { const e = document.querySelector('[data-testid=' + id + ']'); e.value = v; e.dispatchEvent(new Event('change')); }; set('draft-target', 'U-A1/N-000'); set('draft-from', 'U-A1/N-011'); set('draft-to', 'U-A1/N-012'); document.querySelector('[data-testid=draft-form] button[type=submit]').click(); })()`);
+    await sleep(250);
+    check('검토3 UI-2: 지난 날짜를 보는 중 초안 패널에 "초안은 오늘 기준" 안내', (await text(s.cdp, '[data-testid=draft-today]')).includes('오늘'));
+    await setMonth('2025-09');
+    await sleep(200);
+    check('검토3 UI-3: 슬라이더를 움직여도 만든 초안(10개 항목)과 받는 사람 선택이 남는다', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid^=draft-item-]').length")) === 10 && (await evaluate(s.cdp, "document.querySelector('[data-testid=draft-to]').value")) === 'U-A1/N-012');
+    await evaluate(s.cdp, "window.__wu.select(null)");
     await setMonth('2025-06');
     await sleep(200);
     check('슬라이더를 2025-06으로 → "2025-06-30 기준"', (await text(s.cdp, '[data-testid=time-when]')) === '2025-06-30 기준');
@@ -621,7 +642,7 @@ async function checkBrowser(browser, port) {
     check('2025-06: 그때 맡은 일이 없는 윤바다 노드는 흐림, 한가람은 또렷', await evaluate(s.cdp, "window.__wu.cy.getElementById('U-A1/N-011').hasClass('time-off') && !window.__wu.cy.getElementById('U-A1/N-010').hasClass('time-off')"));
     await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
     await sleep(150);
-    check('2025-06 기준 업무 상세: "현재 담당: 한가람"', (await text(s.cdp, '[data-testid=work-load]')).includes('현재 담당: 한가람'));
+    check('2025-06 기준 업무 상세: "2025-06-30 기준 담당: 한가람"(검토3 UI-5: 지난 날짜엔 기준일을 밝힘)', (await text(s.cdp, '[data-testid=work-load]')).includes('2025-06-30 기준 담당: 한가람'));
     check('기준일 이후 이력은 흐리게(after) 표시', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=history] li.after').length")) > 0);
     await shot(s.cdp, `${browser.name}-7d-time-2025-06`);
     await setMonth('2026-02');
@@ -638,6 +659,7 @@ async function checkBrowser(browser, port) {
     await sleep(200);
     const flow = await text(s.cdp, '[data-testid=flow-table]');
     check('R-05 흐름 변화: 월별 표(2025-03 ~ 이번 달)와 2026-01·2026-06 행', flow.includes('2025-03') && flow.includes('2026-01') && flow.includes('2026-06'), flow.slice(0, 80));
+    check('검토3 UI-4: 흐름 변화 표가 패널 안에 들어온다(오른쪽이 잘리지 않음)', await evaluate(s.cdp, "(() => { const t = document.querySelector('[data-testid=flow-table]').getBoundingClientRect(); const a = document.getElementById('detail').getBoundingClientRect(); return t.right <= a.right + 1; })()"));
     check('흐름 변화 표가 실제로 그려짐(크기 있음)', await evaluate(s.cdp, "(() => { const r = document.querySelector('[data-testid=flow-table]').getBoundingClientRect(); return r.width > 100 && r.height > 100; })()"));
     await shot(s.cdp, `${browser.name}-7e-flow`);
     await clickTestId(s.cdp, 'flow-goto-2026-06');
@@ -792,7 +814,7 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, "(() => { const f = document.querySelector('[data-testid=draft-form]'); const set = (t, v) => { const e = f.querySelector('[data-testid=' + t + ']'); e.value = v; e.dispatchEvent(new Event('change')); }; set('draft-target', 'U-C/N-101'); set('draft-from', 'U-C/N-202'); set('draft-to', 'U-C/N-201'); f.querySelector('button[type=submit]').click(); })()");
     await sleep(250);
     const pregenChips = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=item-method]')].filter((x) => x.textContent === '사전 생성').length");
-    check('T-12 사전 생성: 생성 방식 표시와 9개 항목(이력 부족 제외)에 「사전 생성」, 근거 버튼 유지', (await text(s.cdp, '[data-testid=draft-method]')).includes('사전 생성') && pregenChips === 9 && (await text(s.cdp, '[data-testid=draft-item-세부_업무_절차]')).includes('먼저 강의실·강사 섭외를 마친 뒤') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=draft-item-세부_업무_절차] .evidence').length")) >= 4, String(pregenChips));
+    check('T-12 사전 생성: 생성 방식 표시와 9개 항목(이력 부족 제외)에 「사전 생성」, 근거 버튼 유지', (await text(s.cdp, '[data-testid=draft-method]')).includes('사전 생성') && pregenChips === 9 && (await text(s.cdp, '[data-testid=draft-item-세부_업무_절차]')).includes('강의실·강사 섭외를 마쳐야 교육을 열 수 있고') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=draft-item-세부_업무_절차] .evidence').length")) >= 4, String(pregenChips));
     await shot(s.cdp, `${browser.name}-11b-edu-pregen`);
     // 새로 입력한 데이터: 메모를 하나 더하면 최근 이슈만 규칙 기반으로 돌아간다(K-9)
     await evaluate(s.cdp, "window.__wu.select('U-C/N-101')");

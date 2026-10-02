@@ -42,9 +42,10 @@ test('R-13: 두 사용법(A팀 참조, B·C팀 직접 생성)과 조직관리가
   assert.ok(all['U-O'].nodes.some((n) => n.core_type === 'org'));
 });
 
-test('DA-1 규모: 가상 인물 20~30명, 조직개편 2회 이상', () => {
+test('DA-1 규모: 가상 인물 20~30명(역할 노드 제외, 사번이 같아도 이름이 다르면 따로), 조직개편 2회 이상', () => {
+  // 검토3 DATA-4: 카드승인의 역할 노드(subtype 역할)는 사람이 아니고, 사번 충돌(윤바다/윤바다라)은 서로 다른 사람이다
   const people = new Set();
-  for (const s of SAMPLES) for (const n of s.nodes) if (n.core_type === 'person') people.add(n.emp_no || `${s.universe.id}:${n.label}`);
+  for (const s of SAMPLES) for (const n of s.nodes) if (n.core_type === 'person' && n.subtype !== '역할') people.add(n.emp_no ? `${n.emp_no}:${n.label}` : `${s.universe.id}:${n.label}`);
   assert.ok(people.size >= 20 && people.size <= 30, `${people.size}명`);
   const changes = all['U-O'].events.filter((e) => e.type === 'affiliation_change').map((e) => e.occurred_at.slice(0, 7));
   assert.ok(new Set(changes).size >= 2);
@@ -154,4 +155,21 @@ test('정답 표 v2의 노드·이벤트 ID는 모두 데이터에 있다(근거
   const v = viewOf('U-D1');
   const o = viewOf('U-O');
   for (const g of ids) assert.ok(v.lookup(g).found || o.lookup(g).found || viewOf(g.split('/')[0]).lookup(g).found, g);
+});
+
+test('검토3 DATA-1: 기간이 있는 수행 연결마다 같은 날 담당 시작(끝이 있으면 담당 종료) 이벤트가 있다', () => {
+  for (const d of SAMPLES) {
+    for (const e of d.edges.filter((x) => x.core_type === 'performs' && x.period?.start)) {
+      const has = (type, date) => d.events.some((ev) => ev.type === type && ev.occurred_at === date && ev.payload.person_id === e.source && ev.payload.work_id === e.target);
+      assert.ok(has('assign_start', e.period.start), `${d.universe.id} ${e.id} 담당 시작 ${e.period.start}`);
+      if (e.period.end) assert.ok(has('assign_end', e.period.end), `${d.universe.id} ${e.id} 담당 종료 ${e.period.end}`);
+    }
+  }
+});
+
+test('검토3 DATA-2: 교육팀 진행 순서는 강의실·강사 섭외 → 만족도 조사 → 교육 결과 보고(하위가 상위를 앞서지 않음)', () => {
+  const v = viewOf('U-C');
+  const d = buildHandoverDraft(v, { target: 'U-C/N-000', from: 'U-C/N-202', to: 'U-C/N-201' }).draft;
+  const order = d.items.find((i) => i.key === '세부_업무_절차').sentences[0].text;
+  assert.ok(order.indexOf('강의실·강사 섭외') < order.indexOf('만족도 조사') && order.indexOf('만족도 조사') < order.indexOf('교육 결과 보고'), order);
 });

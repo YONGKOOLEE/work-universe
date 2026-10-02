@@ -2,7 +2,7 @@
 // 팀이 업무를 직접 노드로 가진다. 윤바다(V-1002)는 A팀 사람과 같은 사번이며, 2025 행사 때 정산 대사를 맡았다(유사 경험자 시연).
 // 모든 이름·사번·조직명은 가상이다(R-06). 기록 시각은 반드시 과거여야 한다(tests/review.test.js). 고치면 STAMP를 바꾼다.
 
-const STAMP = '2026-10-01T09:30:00+09:00';
+const STAMP = '2026-10-01T10:35:00+09:00';
 
 const node = (id, core_type, label, rest = {}) => ({ id, core_type, label, ...rest, hidden: false, created_at: STAMP, updated_at: STAMP });
 let seq = 0;
@@ -51,6 +51,9 @@ export const SAMPLE_EVENT = {
     { id: 'E-002', type: 'memo', occurred_at: '2025-11-20', recorded_at: STAMP, source: 'sample', payload: { target_id: 'N-101', topic_ids: ['N-302'] }, note: '참가비 정산 대사 불일치 2건 발생, 환불 건 누락 확인' },
     { id: 'E-003', type: 'assign_end', occurred_at: '2025-12-15', recorded_at: STAMP, source: 'sample', payload: { person_id: 'N-202', work_id: 'N-101' } },
     { id: 'E-004', type: 'assign_start', occurred_at: '2026-03-01', recorded_at: STAMP, source: 'sample', payload: { person_id: 'N-201', work_id: 'N-102' } },
+    // 검토3 DATA-1: 수행 연결마다 담당 시작 이벤트(연결 목록과 이력이 같은 말을 하도록)
+    { id: 'E-005', type: 'assign_start', occurred_at: '2026-03-01', recorded_at: STAMP, source: 'sample', payload: { person_id: 'N-201', work_id: 'N-103' } },
+    { id: 'E-006', type: 'assign_start', occurred_at: '2026-04-01', recorded_at: STAMP, source: 'sample', payload: { person_id: 'N-201', work_id: 'N-104' } },
   ],
   refs: [],
   identity_links: [],

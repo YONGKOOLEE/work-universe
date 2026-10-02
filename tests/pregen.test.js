@@ -7,7 +7,7 @@ import { addEvent } from '../app/src/model/commands.js';
 import { createUniverse, addNode } from '../app/src/model/commands.js';
 import { buildView } from '../app/src/view/view.js';
 import { buildHandoverDraft } from '../app/src/rules/handover.js';
-import { createProvider, itemEvidence, pregenKey, PROVIDERS, DEFAULT_PROVIDER } from '../app/src/llm/providers.js';
+import { createProvider, itemEvidence, peopleKey, pregenKey, PROVIDERS, DEFAULT_PROVIDER } from '../app/src/llm/providers.js';
 import { explainInsight, refineDraft } from '../app/src/llm/connector.js';
 import { EXPLAIN_SCENARIOS, HANDOVER_SCENARIOS, explainRequestOf, handoverDraftOf, viewOf } from '../tools/pregen-scenarios.mjs';
 
@@ -47,7 +47,7 @@ test('사전 생성 파일: 모든 문장에 근거가 있고, 근거는 그 항
   const used = new Set();
   for (const s of HANDOVER_SCENARIOS) {
     const { draft } = handoverDraftOf(s);
-    for (const i of draft.items) used.add(pregenKey('handover', draft.target, i.key, itemEvidence(i)));
+    for (const i of draft.items) used.add(pregenKey('handover', draft.target, i.key, itemEvidence(i), peopleKey(draft.from, draft.to)));
   }
   for (const s of EXPLAIN_SCENARIOS) {
     const { req } = explainRequestOf(s);
@@ -55,7 +55,7 @@ test('사전 생성 파일: 모든 문장에 근거가 있고, 근거는 그 항
   }
   const views = ['U-D1', 'U-O'].map(viewOf);
   for (const it of PREGEN.items) {
-    assert.ok(used.has(pregenKey(it.task, it.target, it.item, it.evidence_ids)), `쓰이지 않는(낡은) 사전 생성 줄: ${it.task} ${it.target} ${it.item || ''}`);
+    assert.ok(used.has(pregenKey(it.task, it.target, it.item, it.evidence_ids, peopleKey(it.from, it.to))), `쓰이지 않는(낡은) 사전 생성 줄: ${it.task} ${it.target} ${it.item || ''}`);
     const allowed = new Set(it.evidence_ids);
     assert.ok(it.sentences.length > 0);
     for (const st of it.sentences) {
@@ -129,3 +129,33 @@ test('설정(12.4 wu:v1:settings): 공급자만 저장하고, 없거나 깨졌�
   assert.deepEqual(loadSettings(null, d), { provider: 'pregen' });
   assert.equal(saveSettings(null, d), false);
 });
+
+test('검토3 LLM-1: 보내는 사람을 바꾸면 사전 생성 초안을 쓰지 않는다(다른 사람 이름이 든 문장 방지)', () => {
+  const v = viewOf('U-C');
+  for (const [from, to] of [['U-C/N-203', 'U-C/N-201'], ['U-C/N-202', 'U-C/N-205']]) {
+    const d = buildHandoverDraft(v, { target: 'U-C/N-101', from, to }).draft;
+    const r = refineDraft(d, { provider: pregen, exists: existsIn(v) });
+    assert.equal(r.counts.provider, 0, `${from}>${to}`);
+    const contact = r.items.find((i) => i.key === '관계자_연락처');
+    assert.equal(contact.method, 'rule');
+  }
+});
+
+test('검토3 LLM-4 보강: 사전 생성 파일에 깨진 줄이 있어도 나머지는 쓰고 시작이 멈추지 않는다', () => {
+  const broken = { items: [null, { task: 'handover' }, ...PREGEN.items] };
+  const p = createProvider('pregen', { pregen: broken });
+  const { view, draft } = handoverDraftOf(HANDOVER_SCENARIOS[0]);
+  assert.equal(refineDraft(draft, { provider: p, exists: existsIn(view) }).method, 'pregen');
+  assert.equal(refineDraft(draft, { provider: createProvider('pregen', { pregen: null }), exists: existsIn(view) }).method, 'rule');
+});
+
+test('검토3 LLM-3: 저장된 공급자 이름이 목록에 없으면 기본값', async () => {
+  const { loadSettings } = await import('../app/src/store/local.js');
+  const m = new Map([['wu:v1:settings', '{"provider":"gpt"}']]);
+  const storage = { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: () => {}, removeItem: () => {} };
+  const names = PROVIDERS.map((p) => p.name);
+  assert.deepEqual(loadSettings(storage, { provider: DEFAULT_PROVIDER }, names), { provider: 'pregen' });
+  m.set('wu:v1:settings', '[1,2]');
+  assert.deepEqual(loadSettings(storage, { provider: DEFAULT_PROVIDER }, names), { provider: 'pregen' });
+});
+

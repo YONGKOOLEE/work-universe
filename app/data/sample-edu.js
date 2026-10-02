@@ -6,7 +6,7 @@
 //   - 이력 부족: 「신규 교육 과정」(이벤트 0건, 담당 없음) → 인수인계 초안 대부분이 "이력 부족"(R-03 ②)
 // 모든 이름·사번·조직명은 가상이다(R-06). 기록 시각은 반드시 과거여야 한다. 고치면 STAMP를 바꾼다.
 
-const STAMP = '2026-10-01T10:00:00+09:00';
+const STAMP = '2026-10-01T10:30:00+09:00';
 
 const node = (id, core_type, label, rest = {}) => ({ id, core_type, label, ...rest, hidden: false, created_at: STAMP, updated_at: STAMP });
 let seq = 0;
@@ -77,7 +77,8 @@ export const SAMPLE_EDU = {
     edge('N-000', 'N-105', 'contains'),
     edge('N-101', 'N-102', 'contains'),
     edge('N-101', 'N-103', 'contains'),
-    edge('N-102', 'N-101', 'precedes', { note: '강의실·강사가 정해져야 안내문을 보낸다' }),
+    // 형제 업무끼리의 순서: 강의실·강사가 정해져야 교육을 열고, 교육이 끝나야 설문을 보낸다(검토3 DATA-2: 하위가 상위를 앞서던 연결을 고침)
+    edge('N-102', 'N-103', 'precedes', { note: '강의실·강사가 정해진 뒤 교육을 열고, 교육이 끝나면 설문을 보낸다' }),
     edge('N-103', 'N-104', 'precedes'),
     edge('N-101', 'N-301', 'relates_to'),
     edge('N-101', 'N-302', 'relates_to'),
@@ -107,6 +108,7 @@ export const SAMPLE_EDU = {
     event('E-010', 'assign_end', '2026-03-31', { person_id: 'N-203', work_id: 'N-101' }),
     event('E-011', 'handover', '2026-04-01', { work_id: 'N-101', from_person_id: 'N-203', to_person_id: 'N-202', artifact_id: 'N-404' }, '인수인계서로 인계(강의실 예약 요령 포함)'),
     event('E-012', 'assign_start', '2026-04-01', { person_id: 'N-202', work_id: 'N-101' }),
+    event('E-016', 'assign_start', '2026-04-01', { person_id: 'N-202', work_id: 'N-102' }),
     event('E-013', 'memo', '2026-07-15', { target_id: 'N-104', category: 'resolved' }, '상반기 결과 보고서 공유 완료'),
     event('E-014', 'memo', '2026-09-15', { target_id: 'N-103', topic_ids: ['N-303'], category: 'in_progress' }, '9월 신입 교육 만족도 설문 회수 중(회수율 60%, 9월 말까지)'),
     event('E-015', 'memo', '2026-09-25', { target_id: 'N-103', topic_ids: ['N-303'], category: 'issue' }, '실습 시간이 짧다는 의견이 3월에 이어 다시 나옴'),

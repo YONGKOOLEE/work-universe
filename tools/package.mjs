@@ -2,7 +2,7 @@
 // 사용: npm run build && npm run package  → release/업무유니버스-제출본-YYYYMMDD.zip
 // 압축 안 구성: 업무유니버스/index.html, 업무유니버스/실행안내.html, 업무유니버스/THIRD_PARTY_LICENSES.txt
 import { deflateRawSync, crc32 } from 'node:zlib';
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -72,19 +72,32 @@ export function makeZip(entries, when = new Date()) {
   return Buffer.concat([...locals, centralBuf, end]);
 }
 
-/** 제출 압축을 만든다. 반환: {path, bytes, files} */
+async function newestMtime(dirs) {
+  let max = 0;
+  for (const d of dirs) {
+    for (const e of await readdir(d, { withFileTypes: true })) {
+      const p = join(d, e.name);
+      max = Math.max(max, e.isDirectory() ? await newestMtime([p]) : (await stat(p)).mtimeMs);
+    }
+  }
+  return max;
+}
+
+/** 제출 압축을 만든다. 반환: {path, bytes, files, stale(dist가 app 소스보다 오래됨)} */
 export async function buildPackage(now = new Date()) {
   const entries = [];
   for (const f of FILES) entries.push({ name: f.to, data: await readFile(join(root, f.from)) });
-  // dist가 소스보다 오래되면 경고(빌드를 잊은 경우)
+  // dist가 소스보다 오래되면 경고(빌드를 잊은 경우, 검토3 LLM-2)
   const distTime = (await stat(join(root, 'dist/index.html'))).mtimeMs;
+  const newest = await newestMtime([join(root, 'app')]);
+  const stale = newest > distTime;
   const pad = (n) => String(n).padStart(2, '0');
   const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
   const out = join(root, 'release', `업무유니버스-제출본-${stamp}.zip`);
   await mkdir(dirname(out), { recursive: true });
   const zip = makeZip(entries, now);
   await writeFile(out, zip);
-  return { path: out, bytes: zip.length, files: FILES.map((f) => f.to), distTime };
+  return { path: out, bytes: zip.length, files: FILES.map((f) => f.to), stale };
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
@@ -92,4 +105,5 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   console.log(`제출 압축: ${r.path}`);
   console.log(`크기: ${r.bytes}바이트(${(r.bytes / 1024).toFixed(0)} KB)`);
   for (const f of r.files) console.log(`  - ${f}`);
+  if (r.stale) console.log('경고: dist/index.html이 app/ 소스보다 오래되었습니다. npm run build를 먼저 실행하세요.');
 }

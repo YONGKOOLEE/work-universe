@@ -6,7 +6,7 @@
 // 브라우저 기능을 쓰지 않는다(12.7).
 
 export const PROVIDERS = [
-  { name: 'pregen', label: '사전 생성(기본)', help: '개발 중 Claude로 미리 작성한 문장을 씁니다. 결과가 없거나 데이터가 바뀐 항목은 규칙 기반 문장으로 보입니다.' },
+  { name: 'pregen', label: '사전 생성(개발 시 Claude로 작성)', help: '기본값. 개발 중 Claude로 미리 작성한 문장을 씁니다. 결과가 없거나 데이터가 바뀐 항목은 규칙 기반 문장으로 보입니다.' },
   { name: 'none', label: '규칙 기반만', help: '기록을 규칙으로 옮겨 적은 문장만 씁니다(LLM 없음).' },
   { name: 'claude_api', label: 'Claude API (P2, 1차 제출 범위 밖)', help: '1차 제출물에는 연결하지 않았습니다. 고르면 규칙 기반으로 동작하고 이유를 표시합니다.' },
   { name: 'internal', label: '사내 LLM (P2)', help: '사용 방법이 정해지면 이 자리에 연결합니다. 지금은 규칙 기반으로 동작합니다.' },
@@ -15,17 +15,24 @@ export const PROVIDERS = [
 export const DEFAULT_PROVIDER = 'pregen';
 
 const sortedIds = (ids) => [...new Set(ids)].sort();
-/** 사전 생성 조회 키(12.3): 작업, 대상, (초안이면) 항목, 정렬한 근거 ID */
-export function pregenKey(task, target, item, evidenceIds) {
-  return [task, target, item || '', sortedIds(evidenceIds).join(',')].join('|');
+/**
+ * 사전 생성 조회 키(12.3): 작업, 대상, (초안이면) 항목·보내는 사람>받는 사람, 정렬한 근거 ID.
+ * 초안은 사람에 따라 문장(문의할 사람 등)이 달라지므로 보내는·받는 사람이 같을 때만 쓴다(검토3 LLM-1)
+ */
+export function pregenKey(task, target, item, evidenceIds, people = '') {
+  return [task, target, item || '', people, sortedIds(evidenceIds).join(',')].join('|');
 }
+export const peopleKey = (from, to) => (from && to ? `${from}>${to}` : '');
 
 /** 규칙 기반 초안 항목의 근거 ID 전체 */
 export const itemEvidence = (item) => sortedIds(item.sentences.flatMap((s) => s.evidence_ids));
 
 function pregenProvider(file) {
   const index = new Map();
-  for (const it of (file && Array.isArray(file.items) ? file.items : [])) index.set(pregenKey(it.task, it.target, it.item, it.evidence_ids), it);
+  for (const it of (file && Array.isArray(file.items) ? file.items : [])) {
+    if (!it || !Array.isArray(it.evidence_ids) || !Array.isArray(it.sentences)) continue; // 깨진 줄은 건너뛴다
+    index.set(pregenKey(it.task, it.target, it.item, it.evidence_ids, peopleKey(it.from, it.to)), it);
+  }
   return {
     name: 'pregen',
     method: 'pregen',
@@ -34,7 +41,7 @@ function pregenProvider(file) {
       const items = [];
       for (const item of draft.items) {
         if (item.insufficient) continue;
-        const hit = index.get(pregenKey(task, draft.target, item.key, itemEvidence(item)));
+        const hit = index.get(pregenKey(task, draft.target, item.key, itemEvidence(item), peopleKey(draft.from, draft.to)));
         if (hit) items.push({ key: item.key, sentences: hit.sentences });
       }
       return { items };

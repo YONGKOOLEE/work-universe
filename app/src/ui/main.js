@@ -115,7 +115,7 @@ function start() {
   let insight = null; // 인사이트 화면: {work, kind}
   let viewDate = null; // 시간 슬라이더로 고른 기준일(YYYY-MM-DD). null이면 오늘
   // 생성 방식(R-15): 설정에서 고른 공급자. 기본은 사전 생성(12.4)
-  const settings = loadSettings(storage, { provider: DEFAULT_PROVIDER });
+  const settings = loadSettings(storage, { provider: DEFAULT_PROVIDER }, PROVIDERS.map((p) => p.name));
   let provider = createProvider(settings.provider, { pregen: PREGEN });
   let settingsOpen = false;
   const providerLabel = () => (PROVIDERS.find((p) => p.name === settings.provider) || PROVIDERS[0]).label;
@@ -237,7 +237,8 @@ function start() {
     const load = personLoad(view, gid, { asOf: asOf(), n: currentDenseN() });
     // 담당 기록이 한 번도 없는 사람(조직관리의 사람 등)에게는 표시하지 않는다
     if (!load || !view.edges.some((e) => !e.hidden && e.core_type === 'performs' && e.source === view.canonical(gid))) return null;
-    const text = load.count === 0 ? '지금 맡은 업무 없음' : `지금 맡은 업무 ${load.count}개 — ${load.dense ? `밀집 기준(${load.n}개 이상)에 해당` : `밀집 기준(${load.n}개 이상) 아래`}`;
+    const when = viewDate ? `${viewDate} 기준` : '지금';
+    const text = load.count === 0 ? `${when} 맡은 업무 없음` : `${when} 맡은 업무 ${load.count}개 — ${load.dense ? `밀집 기준(${load.n}개 이상)에 해당` : `밀집 기준(${load.n}개 이상) 아래`}`;
     return el('p', { class: load.dense ? 'notice' : 'muted small', 'data-testid': 'person-load' }, text, ' ',
       el('button', { type: 'button', class: 'link', 'data-testid': 'btn-person-density', onclick: () => openInsight('', 'density') }, '밀집·공백 보기'));
   }
@@ -247,11 +248,12 @@ function start() {
     const w = workLoad(view, gid, { asOf: asOf() });
     if (!w) return null;
     const text = w.work_ended ? '기간이 끝난 업무'
-      : w.kind === 'covered' ? `현재 담당: ${w.current.map((p) => p.label).join(', ')}`
+      : w.work_scheduled ? `시작 전 업무(${w.work_start}부터)`
+      : w.kind === 'covered' ? `${viewDate ? `${viewDate} 기준 담당` : '현재 담당'}: ${w.current.map((p) => p.label).join(', ')}`
       : w.kind === 'scheduled' ? `공백 — 시작 예정 담당자만 있음(${w.next_person.label}, ${w.next_start}부터)`
       : w.kind === 'ended' ? `공백 — 이전 담당자만 있음(${w.last_person.label}, ${w.last_end}까지). 끝난 업무인지 확인`
       : '공백 — 담당 기록 없음';
-    const gap = !w.work_ended && w.kind !== 'covered';
+    const gap = !w.work_ended && !w.work_scheduled && w.kind !== 'covered';
     return el('p', { class: gap ? 'notice' : 'muted small', 'data-testid': 'work-load' }, text, ' ',
       el('button', { type: 'button', class: 'link', 'data-testid': 'btn-work-density', onclick: () => openInsight('', 'density') }, '밀집·공백 보기'));
   }
@@ -260,7 +262,7 @@ function start() {
   function repeatNote(gid) {
     const node = view.getNode(gid);
     if (!node || node.hidden || !['work', 'topic'].includes(node.core_type)) return null;
-    const hits = repeatPatternsFor(view, gid);
+    const hits = repeatPatternsFor(view, gid, viewDate);
     if (!hits.length) return null;
     const kinds = [...new Set(hits.map((p) => (p.kind === 'handover_chain' ? '인수인계 반복' : '주제 반복')))].join('·');
     return el('p', { class: 'notice', 'data-testid': 'repeat-note' }, `반복 비효율 패턴 ${hits.length}건에 포함(${kinds}) `,
@@ -390,11 +392,11 @@ function start() {
       return;
     }
     if (insight) {
-      panel.replaceChildren(insightPanel({ view, provider, work: insight.work, kind: insight.kind, asOf: asOf(), today: todayLocal(), onTime: setViewDate, onKind: (k) => { insight.kind = k; }, onFocus: showInGraph, onClose: () => { insight = null; renderPanel(); graph.highlight(selected); } }));
+      panel.replaceChildren(insightPanel({ view, provider, work: insight.work, kind: insight.kind, asOf: asOf(), today: todayLocal(), onTime: setViewDate, onKind: (k) => { insight.kind = k; }, onWork: (w) => { insight.work = w; }, onFocus: showInGraph, onClose: () => { insight = null; renderPanel(); graph.highlight(selected); } }));
       return;
     }
     if (drafting) {
-      panel.replaceChildren(draftPanel({ view, provider, target: drafting.target, asOf: asOf(), onFocus: showInGraph, onClose: () => { drafting = null; renderPanel(); graph.highlight(selected); } }));
+      panel.replaceChildren(draftPanel({ view, provider, target: drafting.target, asOf: todayLocal(), viewDate, onFocus: showInGraph, onClose: () => { drafting = null; renderPanel(); graph.highlight(selected); } }));
       return;
     }
     if (!selected) {
@@ -412,7 +414,7 @@ function start() {
     }
     const notes = [loadNote(selected), workNote(selected), repeatNote(selected)].filter(Boolean);
     const tools = toolbar(selected);
-    return renderNodeDetail(panel, describeNode(view, selected, { asOf: asOf() }), {
+    return renderNodeDetail(panel, describeNode(view, selected, { asOf: asOf(), past: !!viewDate }), {
       onFocus: focus,
       extra: layerControls(selected),
       toolbar: notes.length || tools ? el('div', {}, ...notes, tools) : null,
@@ -469,29 +471,44 @@ function start() {
     const today = todayLocal();
     viewDate = date && date < today ? date : null;
     applyTime();
+    // 초안(오늘 기준)과 편집 양식은 기준일과 무관하니 입력을 지우지 않도록 다시 그리지 않는다(검토3 UI-3)
+    if (drafting || editing || settingsOpen) return;
     renderPanel();
   }
 
+  // 막대 요소는 한 번만 만들고 값만 바꾼다. 다시 만들면 끌던 슬라이더가 DOM에서 빠져 끌기·화살표 키가 끊긴다(검토3 UI-1)
+  let tb = null;
+  let tbMonths = [];
   function renderTimebar() {
     const bar = $('timebar');
     const today = todayLocal();
-    const months = timeMonths(view, today);
-    const current = viewDate ? months.indexOf(viewDate.slice(0, 7)) : months.length - 1;
-    const range = el('input', { type: 'range', min: '0', max: String(months.length - 1), step: '1', value: String(current < 0 ? months.length - 1 : current), 'data-testid': 'time-range', 'aria-label': '기준 달' });
-    range.addEventListener('input', () => {
-      const i = Number(range.value);
-      setViewDate(i === months.length - 1 ? null : monthAsOf(months[i], today));
-    });
+    tbMonths = timeMonths(view, today);
+    if (!tb) {
+      const range = el('input', { type: 'range', min: '0', step: '1', 'data-testid': 'time-range', 'aria-label': '기준 달' });
+      range.addEventListener('input', () => {
+        const i = Number(range.value);
+        setViewDate(i === tbMonths.length - 1 ? null : monthAsOf(tbMonths[i], todayLocal()));
+      });
+      tb = {
+        range,
+        first: el('span', { class: 'muted small' }),
+        last: el('span', { class: 'muted small' }),
+        when: el('span', { class: 'when', 'data-testid': 'time-when' }),
+        today: el('button', { type: 'button', class: 'small-btn', 'data-testid': 'time-today', onclick: () => setViewDate(null) }, '오늘로'),
+        note: el('span', { class: 'small' }, '흐린 연결·사람·조직은 이 날짜에 유효하지 않음. 상세·인사이트도 이 날짜 기준(초안은 오늘 기준)'),
+      };
+      bar.replaceChildren(el('span', {}, '시간 보기'), tb.first, tb.range, tb.last, tb.when, tb.today, tb.note);
+    }
+    const current = viewDate ? tbMonths.indexOf(viewDate.slice(0, 7)) : tbMonths.length - 1;
+    tb.range.max = String(tbMonths.length - 1);
+    const want = String(current < 0 ? tbMonths.length - 1 : current);
+    if (tb.range.value !== want) tb.range.value = want;
+    tb.first.textContent = tbMonths[0];
+    tb.last.textContent = tbMonths[tbMonths.length - 1];
+    tb.when.textContent = viewDate ? `${viewDate} 기준` : `오늘(${today})`;
+    tb.today.hidden = !viewDate;
+    tb.note.hidden = !viewDate;
     bar.classList.toggle('past', !!viewDate);
-    bar.replaceChildren(...[
-      el('span', {}, '시간 보기'),
-      el('span', { class: 'muted small' }, months[0]),
-      range,
-      el('span', { class: 'muted small' }, months[months.length - 1]),
-      el('span', { class: 'when', 'data-testid': 'time-when' }, viewDate ? `${viewDate} 기준` : `오늘(${today})`),
-      viewDate ? el('button', { type: 'button', class: 'small-btn', 'data-testid': 'time-today', onclick: () => setViewDate(null) }, '오늘로') : null,
-      viewDate ? el('span', { class: 'small' }, '흐린 연결·사람은 그때 담당이 아님. 상세·인사이트도 이 날짜 기준') : null,
-    ].filter(Boolean));
     graph.cy.resize(); // 막대 높이가 바뀌면 그래프 영역도 바뀐다
   }
 

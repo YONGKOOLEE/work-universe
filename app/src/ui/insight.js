@@ -6,6 +6,7 @@ import { flowChange } from '../rules/flow.js';
 import { densityExplain, flowExplain, repeatExplain, similarExplain } from '../rules/explain.js';
 import { METHOD_LABELS, explainInsight } from '../llm/connector.js';
 import { el } from './dom.js';
+import { eventChipLabel } from './chip-label.js';
 
 // 밀집 기준 N. 화면에서 바꾸면 이 세션 동안 유지되고 사람 상세의 "밀집 기준에 해당" 판정도 같은 값을 쓴다(저장하지 않음)
 let denseN = DENSE_DEFAULT_N;
@@ -26,7 +27,7 @@ function chip(view, gid, onFocus) {
   }
   const ev = view.events.find((e) => e.gid === gid);
   if (!ev) return null;
-  return el('button', { type: 'button', class: 'evidence', title: `근거: ${gid}`, onclick: () => ev.node_gids[0] && onFocus(ev.node_gids[0]) }, `${ev.occurred_at} 이력`);
+  return el('button', { type: 'button', class: 'evidence', title: `근거: ${gid}`, onclick: () => ev.node_gids[0] && onFocus(ev.node_gids[0]) }, eventChipLabel(view, ev));
 }
 
 // 인사이트 설명(역할 b): 공급자 결과(사전 생성)가 있으면 그 문장, 없으면 규칙 기반 문장. 문장마다 근거 버튼
@@ -36,7 +37,10 @@ function explainBox(view, req, o) {
   const r = explainInsight(req, { provider: o.provider, exists });
   return el('div', { class: 'explain', 'data-testid': 'insight-explain', 'data-method': r.method },
     el('h4', {}, '설명', el('span', { class: `method-chip ${r.method}` }, METHOD_LABELS[r.method])),
-    el('ul', {}, ...r.sentences.map((s) => el('li', {}, s.text, ' ', chips(view, s.evidence_ids, o.onFocus)))),
+    // 근거가 많으면 접어 둔다(표를 밀어내지 않게)
+    el('ul', {}, ...r.sentences.map((s) => el('li', {}, s.text, ' ', s.evidence_ids.length > 4
+      ? el('details', { class: 'evidence-fold' }, el('summary', { class: 'muted small' }, `근거 ${s.evidence_ids.length}건`), chips(view, s.evidence_ids, o.onFocus))
+      : chips(view, s.evidence_ids, o.onFocus)))),
     r.fallback ? el('p', { class: 'muted small', 'data-testid': 'explain-fallback' }, `규칙 기반으로 대체함: ${r.fallback.reason}`) : null);
 }
 
@@ -48,6 +52,10 @@ const chips = (view, ids, onFocus) => el('div', { class: 'evidence-list' }, ...[
 export function insightPanel(o) {
   const { view } = o;
   let kind = o.kind || 'similar';
+  const past = o.asOf && o.today && o.asOf < o.today;
+  // 사전 생성 설명은 오늘 데이터 기준으로 쓴 문장이라 지난 날짜에는 쓰지 않는다(검토3 RULES-6)
+  if (past) o = { ...o, provider: null };
+  const asofNote = el('p', { class: 'notice', 'data-testid': 'insight-asof' });
   const body = el('div', { 'data-testid': 'insight-body' });
   const tabs = el('div', { class: 'tabs', role: 'tablist' });
 
@@ -56,14 +64,17 @@ export function insightPanel(o) {
 
   function draw() {
     tabs.replaceChildren(tabButton('similar', '유사 경험자', 'tab-similar'), tabButton('repeat', '반복 비효율', 'tab-repeat'), tabButton('density', '밀집·공백', 'tab-density'), tabButton('flow', '흐름 변화', 'tab-flow'));
+    asofNote.hidden = !past;
+    asofNote.textContent = kind === 'flow'
+      ? `표는 전체 기간이고, 강조한 줄이 기준일(${o.asOf})입니다. 오늘 기준은 그래프 아래 「오늘로」.`
+      : `${o.asOf} 기준으로 계산합니다(시간 보기). 오늘 기준은 그래프 아래 「오늘로」.`;
     body.replaceChildren(kind === 'similar' ? similarView(o, view) : kind === 'repeat' ? repeatView(view, o) : kind === 'density' ? densityView(o, view) : flowView(o, view));
   }
   draw();
 
-  const past = o.asOf && o.today && o.asOf < o.today;
   return el('div', { class: 'insight' },
     el('h2', {}, '인사이트'),
-    past ? el('p', { class: 'notice', 'data-testid': 'insight-asof' }, `${o.asOf} 기준으로 계산합니다(시간 보기). 오늘 기준은 그래프 아래 「오늘로」.`) : null,
+    asofNote,
     tabs,
     body,
     el('p', { class: 'muted small', 'data-testid': 'insight-note' }, '참고 정보입니다. 해석과 인력 배치는 사람이 정합니다.'),
@@ -88,7 +99,7 @@ function similarView(o, view) {
     const box = explainBox(view, similarExplain(r, pick.value), o);
     if (box) out.prepend(box);
   };
-  pick.addEventListener('change', run);
+  pick.addEventListener('change', () => { if (o.onWork) o.onWork(pick.value); run(); });
   run();
   return el('div', {},
     el('p', { class: 'muted small' }, '고른 업무와 같은 주제·산출물 유형·낱말을 가진 다른 업무를 수행한 사람입니다. 현재 담당자는 뺍니다.'),
@@ -127,12 +138,12 @@ function renderSimilar(box, view, r, onFocus) {
 // ── 반복 비효율 ──
 function repeatView(view, o) {
   const onFocus = o.onFocus;
-  const r = repeatInefficiency(view);
+  const r = repeatInefficiency(view, { asOf: o.asOf });
   const parts = [el('p', { class: 'muted small' }, '담당자가 바뀔 때마다 같은 설명을 처음부터 반복하거나, 같은 문제가 여러 업무에서 되풀이되는 패턴입니다.')];
   if (r.status === 'insufficient') {
-    parts.push(el('p', { class: 'notice', 'data-testid': 'repeat-insufficient' }, `데이터 부족 — ${r.reason}${r.last_input ? ` (마지막 입력 ${r.last_input})` : ''}.`));
+    parts.push(el('p', { class: 'notice', 'data-testid': 'repeat-insufficient' }, `데이터 부족 — ${r.reason}${r.last_input ? ` (마지막 입력 ${r.last_input})` : ' (입력된 업무 이력 없음)'}.`));
   } else if (r.status === 'none') {
-    parts.push(el('p', { class: 'muted', 'data-testid': 'repeat-none' }, `${r.reason}${r.last_input ? ` (마지막 입력 ${r.last_input})` : ''}.`));
+    parts.push(el('p', { class: 'muted', 'data-testid': 'repeat-none' }, `${r.reason}${r.last_input ? ` (마지막 입력 ${r.last_input})` : ' (입력된 업무 이력 없음)'}.`));
   } else {
     parts.push(
       el('ul', { class: 'patterns', 'data-testid': 'repeat-patterns' },
@@ -178,7 +189,7 @@ const gapText = (g) => {
 
 function renderDensity(box, view, r, onFocus) {
   if (r.status === 'insufficient') {
-    box.replaceChildren(el('p', { class: 'notice', 'data-testid': 'density-insufficient' }, `데이터 부족 — ${r.reason}${r.last_input ? ` (마지막 입력 ${r.last_input})` : ''}.`));
+    box.replaceChildren(el('p', { class: 'notice', 'data-testid': 'density-insufficient' }, `데이터 부족 — ${r.reason}${r.last_input ? ` (마지막 입력 ${r.last_input})` : ' (입력된 업무 이력 없음)'}.`));
     return;
   }
   const parts = [
@@ -227,29 +238,33 @@ function flowView(o, view) {
   unit.addEventListener('change', run);
   run();
   return el('div', { 'data-testid': 'flow-body' },
-    el('p', { class: 'muted small' }, '기간마다 기록된 이력 수와, 그 기간 말에 담당 중인 업무·사람 수입니다. 「보기」를 누르면 그래프가 그 시점으로 바뀝니다.'),
+    el('p', { class: 'muted small' }, '기간마다 기록된 이력 수와, 그 기간 말에 담당 중인 업무·사람 수입니다. 기간(예: 2026-06)을 누르면 그래프가 그 시점으로 바뀝니다.'),
     el('label', { class: 'dg-n' }, el('span', {}, '기간 단위'), unit),
     out);
 }
 
 function renderFlow(box, view, r, o) {
   if (r.status === 'insufficient') {
-    box.replaceChildren(el('p', { class: 'notice', 'data-testid': 'flow-insufficient' }, `데이터 부족 — ${r.reason}${r.last_input ? ` (마지막 입력 ${r.last_input})` : ''}.`));
+    box.replaceChildren(el('p', { class: 'notice', 'data-testid': 'flow-insufficient' }, `데이터 부족 — ${r.reason}${r.last_input ? ` (마지막 입력 ${r.last_input})` : ' (입력된 업무 이력 없음)'}.`));
     return;
   }
   const cur = o.asOf ? r.periods.find((p) => p.start <= o.asOf && o.asOf <= p.end) : null;
+  // 담당(수행) 연결이 없는 유니버스(조직관리 등)는 업무·인원을 세지 않는다 → 0이 아니라 해당 없음
+  const noPerforms = !view.edges.some((e) => !e.hidden && e.core_type === 'performs');
+  const na = (v) => (noPerforms ? '—' : String(v));
   const row = (p) => {
     const c = p.counts;
     const cells = p.no_data
       ? [el('td', { colspan: '6', class: 'nodata' }, `입력 없음 — 데이터 부족(마지막 입력 ${r.last_input})`)]
-      : [String(c.total), String(c.assign_start + c.assign_end), String(c.handover), String(c.affiliation_change), String(p.active_works), String(p.active_people)].map((v) => el('td', {}, v));
+      : [String(c.total), String(c.assign_start + c.assign_end), String(c.handover), String(c.affiliation_change), na(p.active_works), na(p.active_people)].map((v) => el('td', {}, v));
     const evidence = p.evidence_ids.length
       ? el('details', {}, el('summary', { class: 'muted small' }, `근거 ${p.evidence_ids.length}`), chips(view, p.evidence_ids, o.onFocus))
       : null;
+    // 기간 이름이 곧 「그 시점 보기」 버튼이다(표 오른쪽 끝이 잘려도 들어갈 수 있게, 검토3 UI-4)
+    const goto = o.onTime ? el('button', { type: 'button', class: 'link', title: '그래프를 이 기간 말 시점으로', 'data-testid': `flow-goto-${p.key}`, onclick: () => o.onTime(p.at) }, p.key) : p.key;
     return el('tr', { class: cur === p ? 'current-row' : '', 'data-key': p.key },
-      el('td', {}, p.key, evidence),
-      ...cells,
-      el('td', {}, o.onTime ? el('button', { type: 'button', class: 'small-btn', 'data-testid': `flow-goto-${p.key}`, onclick: () => o.onTime(p.at) }, '보기') : null));
+      el('td', {}, goto, evidence),
+      ...cells);
   };
   const parts = [];
   if (r.no_data_periods) {
@@ -258,7 +273,8 @@ function renderFlow(box, view, r, o) {
   parts.push(el('table', { class: 'dg-table flow-table', 'data-testid': 'flow-table' },
     el('thead', {}, el('tr', {},
       el('th', {}, '기간'), el('th', { title: '이 기간에 기록된 이력 전체' }, '이력'), el('th', { title: '담당 시작·종료' }, '담당'),
-      el('th', {}, '인계'), el('th', { title: '소속 변경(조직개편 등)' }, '소속'), el('th', { title: '기간 말에 담당자가 있는 업무 수' }, '업무'), el('th', { title: '기간 말에 업무를 맡은 사람 수' }, '인원'), el('th', {}, ''))),
+      el('th', {}, '인계'), el('th', { title: '소속 변경(조직개편 등)' }, '소속'), el('th', { title: '기간 말에 담당자가 있는 업무 수' }, '업무'), el('th', { title: '기간 말에 업무를 맡은 사람 수' }, '인원'))),
     el('tbody', {}, ...r.periods.map(row))));
+  if (noPerforms) parts.push(el('p', { class: 'muted small', 'data-testid': 'flow-na' }, '이 유니버스에는 업무 담당(수행) 기록이 없어 업무·인원은 세지 않습니다(—).'));
   box.replaceChildren(...parts);
 }

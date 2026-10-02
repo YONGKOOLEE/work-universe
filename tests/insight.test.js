@@ -210,7 +210,8 @@ test('데이터 부족: 인수인계·메모 기록이 2건 미만이면 결론 
   let r = repeatInefficiency(buildView(doc));
   assert.equal(r.status, 'insufficient');
   assert.deepEqual(r.patterns, []);
-  assert.equal(r.last_input, '2026-10-02'); // 생성 이벤트가 마지막 입력
+  // 검토3 RULES-1: 생성·수정 같은 시스템 이력은 '입력'이 아니다 → 업무 이력이 없으면 마지막 입력도 없음
+  assert.equal(r.last_input, null);
   doc = addNode(doc, { core_type: 'work', label: '교육 안내' }, T0).doc;
   doc = addEvent(doc, { type: 'memo', occurred_at: '2026-10-02', payload: { target_id: doc.nodes.at(-1).id }, note: '첫 메모' }, T0).doc;
   r = repeatInefficiency(buildView(doc));

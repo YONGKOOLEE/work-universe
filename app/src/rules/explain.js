@@ -27,7 +27,7 @@ export function densityExplain(result, universeId) {
   if (!result || result.status !== 'ok') return null;
   const rule = [];
   if (result.gaps.length) {
-    rule.push({ text: `지금 담당자가 없는 업무가 ${result.gaps.length}개입니다.`, evidence_ids: uniq(result.gaps.flatMap((g) => g.evidence_ids)) });
+    rule.push({ text: `담당자가 없는 업무가 ${result.gaps.length}개입니다.`, evidence_ids: uniq(result.gaps.flatMap((g) => g.evidence_ids)) });
   }
   if (result.dense.length) {
     rule.push({ text: `업무를 ${result.n}개 이상 맡은 사람이 ${result.dense.length}명입니다: ${result.dense.map((p) => `${p.label}(${p.count}개)`).join(', ')}.`, evidence_ids: uniq(result.dense.flatMap((p) => p.evidence_ids)) });

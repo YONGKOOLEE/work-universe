@@ -6,6 +6,7 @@ import { similarExperts, similarSentences, workLoad } from '../rules/insight.js'
 import { todayLocal } from './insight.js';
 import { METHOD_LABELS, refineDraft } from '../llm/connector.js';
 import { el } from './dom.js';
+import { eventChipLabel } from './chip-label.js';
 import { messageFor } from './messages.js';
 
 const DRAFT_FIELDS = { target: '대상', from: '보내는 사람', to: '받는 사람' };
@@ -96,7 +97,9 @@ export function draftPanel(o) {
     renderDraft(result, refineDraft(r.draft, { provider: o.provider, exists }), view, o.onFocus);
   });
 
-  return el('div', { class: 'draft' }, el('h2', {}, '인수인계 초안'), form, result);
+  return el('div', { class: 'draft' }, el('h2', {}, '인수인계 초안'),
+    o.viewDate ? el('p', { class: 'notice', 'data-testid': 'draft-today' }, `초안은 오늘(${o.asOf}) 기준으로 만듭니다. 시간 보기의 기준일(${o.viewDate})과 상관없습니다.`) : null,
+    form, result);
 }
 
 function evidenceChip(view, gid, onFocus) {
@@ -107,7 +110,7 @@ function evidenceChip(view, gid, onFocus) {
   }
   // 이벤트 근거: 날짜와 종류
   const ev = view.events.find((e) => e.gid === gid);
-  const label = ev ? `${ev.occurred_at} 이력` : gid;
+  const label = ev ? eventChipLabel(view, ev) : gid;
   const first = ev && ev.node_gids[0];
   return el('button', { type: 'button', class: 'evidence', title: `근거: ${gid}`, onclick: () => first && onFocus(first) }, label);
 }

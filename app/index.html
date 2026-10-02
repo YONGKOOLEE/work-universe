@@ -123,7 +123,10 @@
   .timebar .when { color: var(--text); font-weight: bold; min-width: 6.5em; }
   .timebar.past { background: var(--warn-bg); color: var(--warn-text); }
   .history li.after { opacity: 0.45; }
-  .flow-table td:first-child { white-space: nowrap; }
+  .flow-table { table-layout: auto; }
+  .flow-table td:first-child { white-space: normal; min-width: 5.5em; }
+  .flow-table td:first-child > .link { white-space: nowrap; }
+  .flow-table details .evidence-list { max-width: 12em; }
   .flow-table details summary { cursor: pointer; }
   .flow-table td.nodata { color: var(--muted); font-style: italic; }
   .flow-table tr.current-row td { background: rgba(160, 210, 110, 0.12); }

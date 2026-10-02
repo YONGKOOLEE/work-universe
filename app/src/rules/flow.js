@@ -8,6 +8,20 @@ import { periodStatus } from '../view/describe.js';
 const pad = (n) => String(n).padStart(2, '0');
 const COUNTED = ['assign_start', 'assign_end', 'handover', 'affiliation_change', 'memo'];
 
+/**
+ * 사람이 남긴 업무 이력(담당 시작·종료, 인수인계, 소속 변경, 메모) 중 기준일까지의 것.
+ * 생성·수정·숨김 같은 시스템 이력은 "입력"으로 보지 않는다 — 설명 오타 하나를 고쳤다고
+ * 끊긴 기간이 "0건"으로 확정되면 안 된다(02-design 5.5·4절 사례 3, 검토3 RULES-1).
+ */
+export function inputEvents(view, asOf) {
+  return view.events.filter((e) => COUNTED.includes(e.type) && e.occurred_at && (!asOf || e.occurred_at <= asOf));
+}
+/** 기준일까지의 마지막 업무 이력 날짜(없으면 null) */
+export function lastInput(view, asOf) {
+  const list = inputEvents(view, asOf);
+  return list.length ? list[list.length - 1].occurred_at : null;
+}
+
 /** 날짜(YYYY-MM-DD)가 속한 기간 키. month: 2026-06, quarter: 2026-Q2 */
 export function periodKey(date, unit) {
   const y = Number(date.slice(0, 4));
@@ -40,7 +54,7 @@ export function activeAt(view, at) {
     if (e.hidden || e.core_type !== 'performs' || periodStatus(e.period, at) !== 'current') continue;
     const w = view.getNode(e.target);
     const p = view.getNode(e.source);
-    if (!w || w.hidden || w.core_type !== 'work' || periodStatus(w.period, at) === 'ended') continue;
+    if (!w || w.hidden || w.core_type !== 'work' || periodStatus(w.period, at) !== 'current') continue;
     if (!p || p.hidden || p.core_type !== 'person') continue;
     works.add(w.gid);
     people.add(p.gid);
@@ -56,10 +70,11 @@ export function activeAt(view, at) {
  */
 export function flowChange(view, { unit = 'month', asOf }) {
   const events = view.events.filter((e) => e.occurred_at && e.occurred_at <= asOf);
-  const first = events.length ? events[0].occurred_at : null;
-  const last = events.length ? events[events.length - 1].occurred_at : null;
+  const inputs = inputEvents(view, asOf);
+  const first = inputs.length ? inputs[0].occurred_at : null;
+  const last = inputs.length ? inputs[inputs.length - 1].occurred_at : null;
   const base = { unit, first_input: first, last_input: last, no_data_periods: 0, periods: [] };
-  if (!events.length) return { ...base, status: 'insufficient', reason: '이력이 없어 흐름을 볼 수 없습니다' };
+  if (!inputs.length) return { ...base, status: 'insufficient', reason: '업무 이력이 없어 흐름을 볼 수 없습니다' };
   if (periodKey(first, unit) === periodKey(last, unit)) {
     return { ...base, status: 'insufficient', reason: `이력이 한 ${unit === 'quarter' ? '분기' : '달'} 안에만 있어 변화를 볼 수 없습니다` };
   }

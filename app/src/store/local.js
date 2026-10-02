@@ -92,11 +92,14 @@ export function createStore(storage) {
 }
 
 /** 설정(12.4 wu:v1:settings): 공급자 선택. 저장소가 없거나 값이 깨졌으면 기본값. 키는 저장하지 않는다(Claude API는 P2) */
-export function loadSettings(storage, defaults) {
+export function loadSettings(storage, defaults, allowed = null) {
   if (!storage) return { ...defaults };
   try {
     const v = JSON.parse(storage.getItem(SETTINGS_KEY) || 'null');
-    return v && typeof v === 'object' ? { ...defaults, ...v } : { ...defaults };
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return { ...defaults };
+    // 모르는 공급자 이름은 기본값으로 바로잡는다(표시와 저장값이 어긋나지 않게, 검토3 LLM-3)
+    const provider = typeof v.provider === 'string' && (!allowed || allowed.includes(v.provider)) ? v.provider : defaults.provider;
+    return { ...defaults, provider };
   } catch {
     return { ...defaults };
   }

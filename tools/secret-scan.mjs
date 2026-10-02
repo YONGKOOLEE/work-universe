@@ -7,7 +7,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const SECRET_PATTERNS = [
   ['Anthropic API 키', /sk-ant-[A-Za-z0-9_-]{20,}/g],
-  ['일반 API 키(sk-)', /\bsk-[A-Za-z0-9]{32,}\b/g],
+  ['일반 API 키(sk-, sk-proj- 등)', /\bsk-(?!ant-)[A-Za-z0-9_-]{32,}/g],
+  ['Google API 키', /\bAIza[0-9A-Za-z_-]{35}\b/g],
   ['키 헤더에 넣은 값', /x-api-key["'\s:=]+["'][A-Za-z0-9_-]{20,}["']/gi],
   ['Bearer 토큰', /Bearer\s+[A-Za-z0-9._-]{30,}/g],
   ['AWS 액세스 키', /\bAKIA[0-9A-Z]{16}\b/g],
@@ -36,7 +37,7 @@ export function scanText(text) {
   return hits;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const root = join(fileURLToPath(new URL('.', import.meta.url)), '..');
   const targets = ['app', 'dist', 'docs', 'tools', 'tests', 'README.md', 'CLAUDE.md', 'package.json'];
   let files = 0;

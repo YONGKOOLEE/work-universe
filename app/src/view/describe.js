@@ -98,7 +98,7 @@ export function affiliationAt(view, personGid, asOf) {
  * 노드 상세. 없는 노드는 {found:false}. 숨긴 노드도 내용을 돌려주고 hidden으로 알린다(4절 "숨김 후 참조").
  * links가 비어 있으면 "연결 없음"이다(R-01 ②).
  */
-export function describeNode(view, gid, { asOf = null } = {}) {
+export function describeNode(view, gid, { asOf = null, past = false } = {}) {
   const { found, hidden, node } = view.lookup(gid);
   if (!found) return { found: false };
 
@@ -129,7 +129,8 @@ export function describeNode(view, gid, { asOf = null } = {}) {
       relation_type: edge.core_type,
       period: periodText(edge.period, asOf),
       // 수행 연결은 기준일 기준 현재·종료·예정을 붙인다(사람·업무 상세에서 지금 담당을 구분하도록)
-      status: asOf && edge.core_type === 'performs' && !edge.synthetic ? STATUS_LABEL[periodStatus(edge.period, asOf)] : null,
+      status_key: asOf && edge.core_type === 'performs' && !edge.synthetic ? periodStatus(edge.period, asOf) : null,
+      status: asOf && edge.core_type === 'performs' && !edge.synthetic ? (past && periodStatus(edge.period, asOf) === 'current' ? '그때 담당' : STATUS_LABEL[periodStatus(edge.period, asOf)]) : null,
       note: edge.note || '',
       other: { gid: other.gid, label: other.label, type_label: other.type_label },
     }))
