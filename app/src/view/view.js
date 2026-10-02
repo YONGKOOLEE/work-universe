@@ -2,7 +2,7 @@
 // 원본 문서는 바꾸지 않는다(R-11 ⑤). 노드마다 출처를 전역 참조("<유니버스 ID>/<노드 ID>")로 유지한다.
 // 브라우저 기능(DOM, 저장소)을 쓰지 않는다.
 
-import { EVENT_PAYLOAD, edgeTypeLabel, nodeTypeLabel, NODE_TYPES, normalizeLabel } from '../model/schema.js';
+import { EVENT_PAYLOAD, edgeTypeLabel, nodeTypeLabel, NODE_TYPES, normalizeEmpNo, normalizeLabel } from '../model/schema.js';
 
 export function toGid(universeId, localId) {
   return `${universeId}/${localId}`;
@@ -83,8 +83,8 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
     }
   }
 
-  // 3) 동일성 연결: 확정된 것만 합친다. 먼저 나온 노드(기준 유니버스 우선)가 대표가 된다
-  const order = new Map(nodes.map((n, i) => [n.gid, i]));
+  // 3) 동일성 연결: 확정된 것만 합친다. 대표는 숨기지 않은 노드 중 먼저 나온 것(기준 유니버스 우선)
+  const order = new Map(nodes.map((n, i) => [n.gid, (n.hidden ? nodes.length : 0) + i]));
   const parent = new Map();
   const find = (g) => {
     let r = g;
@@ -92,12 +92,20 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
     return r;
   };
   const unresolvedLinks = [];
+  const staleLinks = []; // 사번 자동 연결인데 그 뒤 사번이 바뀌어 더는 맞지 않는 연결(다시 확인 필요)
   for (const doc of docs) {
     for (const link of doc.identity_links || []) {
       if (link.status !== 'confirmed') continue;
       if (!nodeByGid.has(link.a) || !nodeByGid.has(link.b)) {
         unresolvedLinks.push(link.id);
         continue;
+      }
+      if (link.method === 'emp_no_auto') {
+        const [x, y] = [nodeByGid.get(link.a), nodeByGid.get(link.b)];
+        if (!x.emp_no || !y.emp_no || normalizeEmpNo(x.emp_no) !== normalizeEmpNo(y.emp_no)) {
+          staleLinks.push(link.id);
+          continue;
+        }
       }
       const ra = find(link.a);
       const rb = find(link.b);
@@ -196,7 +204,7 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
   const nodesByTopic = new Map();
   for (const n of viewNodes) {
     if (n.hidden) continue;
-    if (n.core_type === 'person' && n.emp_no) pushTo(byEmpNo, n.emp_no, n);
+    if (n.core_type === 'person' && n.emp_no) pushTo(byEmpNo, normalizeEmpNo(n.emp_no), n);
     pushTo(byTypeLabel, `${n.core_type}|${normalizeLabel(n.label)}`, n);
   }
   for (const ev of events) for (const g of ev.node_gids) pushTo(eventsByNode, g, ev);
@@ -218,6 +226,11 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
     ref_links: refLinks.map(({ parent: p, child: ch }) => ({ parent: p.universe.id, child: ch.universe.id })),
     universes: new Map(docs.map((d) => [d.universe.id, d.universe])),
     unresolved_links: unresolvedLinks,
+    stale_links: staleLinks,
+    // 같은 사번인데 이름이 다른 사람(W-EMPNO-CONFLICT, 4절 사번 충돌). 자동으로 합치지 않고 알리기만 한다(R-11 ③)
+    empno_conflicts: [...byEmpNo.entries()]
+      .filter(([, list]) => new Set(list.map((n) => normalizeLabel(n.label))).size > 1)
+      .map(([emp_no, list]) => ({ code: 'W-EMPNO-CONFLICT', emp_no, nodes: list.map((n) => ({ gid: n.gid, label: n.label, universe_name: n.universe_name })) })),
     index: { byEmpNo, byTypeLabel, eventsByNode, nodesByTopic },
 
     canonical,

@@ -6,6 +6,49 @@ import { EDGE_TYPES, MEMO_CATEGORIES, NODE_TYPES } from '../model/schema.js';
 import { el } from './dom.js';
 import { messageFor } from './messages.js';
 
+// 하위 유형 선택 칸: 목록에서 고르거나 "새 하위 유형"을 입력한다(1.3 ②).
+// getType()은 지금 고른 핵심 유형(노드 유형 또는 관계)을 돌려준다. refresh()로 유형이 바뀔 때 목록을 다시 채운다.
+function subtypeEditor(subtypes, getType, selected, testid) {
+  const NEW = '__new__';
+  const pick = el('select', { 'data-testid': testid });
+  const input = el('input', { placeholder: '새 하위 유형 이름(예: 회의록)', maxlength: 100, autocomplete: 'off', 'data-testid': `${testid}-new`, hidden: true });
+  const box = el('div', { class: 'subtype-box' }, pick, input);
+  const refresh = () => {
+    const names = subtypes.filter((s) => s.core_type === getType()).map((s) => s.name);
+    pick.replaceChildren(
+      el('option', { value: '' }, '(없음)'),
+      ...names.map((nm) => el('option', { value: nm, selected: nm === selected }, nm)),
+      el('option', { value: NEW }, '＋ 새 하위 유형 추가…'),
+    );
+    input.hidden = true;
+  };
+  pick.addEventListener('change', () => {
+    input.hidden = pick.value !== NEW;
+    if (!input.hidden) input.focus();
+  });
+  refresh();
+  return {
+    el: box,
+    refresh,
+    // {name, isNew}: 새로 입력한 이름이면 isNew. 비어 있으면 null
+    value() {
+      if (pick.value === NEW) return input.value.trim() ? { name: input.value.trim(), isNew: true } : { name: '', isNew: true };
+      return pick.value ? { name: pick.value, isNew: false } : null;
+    },
+  };
+}
+
+// 하위 유형 값을 확정한다. 새 이름이면 먼저 등록하고(onAddSubtype), 실패하면 {ok:false, error}를 돌려준다
+function resolveSubtype(sub, coreType, onAddSubtype) {
+  const v = sub.value();
+  if (!v) return { ok: true, name: null };
+  if (!v.isNew) return { ok: true, name: v.name };
+  if (!v.name) return { ok: false, error: { code: 'E-REQUIRED', field: 'name' } };
+  if (!onAddSubtype) return { ok: false, error: { code: 'E-SUBTYPE', field: 'subtype' } };
+  const r = onAddSubtype(coreType, v.name);
+  return r.ok ? { ok: true, name: v.name } : { ok: false, error: r.error };
+}
+
 // 오늘 날짜(현지 기준). toISOString은 UTC라 한국 새벽에는 전날이 된다
 const today = () => {
   const d = new Date();
@@ -106,13 +149,8 @@ export function nodeForm(o) {
   const isRoot = n.core_type === 'root';
   const typeOptions = Object.entries(NODE_TYPES).filter(([k]) => k !== 'root');
   const type = select(typeOptions, n.core_type || 'work', { 'data-testid': 'node-type', disabled: o.mode === 'edit' });
-  const subtype = el('select', { 'data-testid': 'node-subtype' });
-  const syncSubtypes = () => {
-    const names = o.subtypes.filter((s) => s.core_type === type.value).map((s) => s.name);
-    subtype.replaceChildren(el('option', { value: '' }, '(없음)'), ...names.map((nm) => el('option', { value: nm, selected: nm === n.subtype }, nm)));
-    subtypeField.hidden = names.length === 0;
-  };
-  const subtypeField = field('하위 유형', subtype);
+  const sub = subtypeEditor(o.subtypes, () => type.value, n.subtype, 'node-subtype');
+  const subtypeField = field('하위 유형(선택)', sub.el);
   const label = el('input', { value: n.label || '', maxlength: 100, autocomplete: 'off', 'data-testid': 'node-label', disabled: isRoot });
   const description = el('textarea', { rows: 3, 'data-testid': 'node-description' }, n.description || '');
   const empNo = el('input', { value: n.emp_no || '', placeholder: 'V-0000', autocomplete: 'off', 'data-testid': 'node-empno' });
@@ -121,10 +159,16 @@ export function nodeForm(o) {
   const period = periodEditor(n.period || {});
   const syncType = () => {
     empField.hidden = type.value !== 'person';
-    syncSubtypes();
+    subtypeField.hidden = isRoot;
+    sub.refresh();
   };
   type.addEventListener('change', syncType);
   syncType();
+
+  // 추가할 때만: 꼭지에 바로 연결(포함). 업무는 기본으로 켠다 — 연결 없이 떠 있는 노드를 줄이기 위해
+  const attach = el('input', { type: 'checkbox', 'data-testid': 'node-attach', checked: type.value === 'work' });
+  const attachField = el('label', { class: 'check' }, attach, ' 꼭지(유니버스)에 바로 연결하기');
+  if (o.mode === 'add') type.addEventListener('change', () => { attach.checked = type.value === 'work'; });
 
   const msg = messageBox();
   const form = el(
@@ -139,14 +183,17 @@ export function nodeForm(o) {
     empField,
     field('속성', attrs.el),
     field('기간(선택)', period.el),
+    o.mode === 'add' ? attachField : null,
     msg.box,
     actions(o.mode === 'add' ? '추가' : '저장', o.onCancel),
   );
   form.addEventListener('submit', (evt) => {
     evt.preventDefault();
+    const resolved = resolveSubtype(sub, type.value, o.onAddSubtype);
+    if (!resolved.ok) return msg.show(resolved, { kind: 'node' });
     const values = {
       core_type: type.value,
-      subtype: subtype.value || null,
+      subtype: resolved.name,
       label: label.value,
       description: description.value,
       emp_no: type.value === 'person' ? empNo.value : null,
@@ -154,6 +201,7 @@ export function nodeForm(o) {
       period: period.value(),
     };
     if (isRoot) delete values.label;
+    if (o.mode === 'add') values.attach_root = attach.checked;
     const result = o.onSubmit(values);
     msg.show(result, { kind: 'node' }, o.onFocusLocal);
   });
@@ -170,12 +218,15 @@ export function edgeForm(o) {
   const other = select(nodeOptions(o.candidates, { empty: '상대 노드를 고르세요' }), '', { 'data-testid': 'edge-other' });
   const period = periodEditor();
   const note = el('input', { autocomplete: 'off', placeholder: '예: 인수 후 담당' });
+  const sub = subtypeEditor(o.subtypes || [], () => relation.value, null, 'edge-subtype');
+  relation.addEventListener('change', () => sub.refresh());
   const msg = messageBox();
   const form = el(
     'form',
     { class: 'editor', novalidate: true, 'data-testid': 'edge-form' },
     el('h3', {}, '연결 추가'),
     field('관계', relation),
+    field('하위 유형(선택, 예: 참조 > 검토함)', sub.el),
     field('방향', direction),
     field('상대 노드', other),
     field('기간(선택, 담당·소속 기간)', period.el),
@@ -186,8 +237,11 @@ export function edgeForm(o) {
   form.addEventListener('submit', (evt) => {
     evt.preventDefault();
     const out = direction.value === 'out';
+    const resolved = resolveSubtype(sub, relation.value, o.onAddSubtype);
+    if (!resolved.ok) return msg.show(resolved, { kind: 'edge', relation: relation.value });
     const values = {
       core_type: relation.value,
+      subtype: resolved.name,
       source: out ? o.node.id : other.value,
       target: out ? other.value : o.node.id,
       period: period.value(),

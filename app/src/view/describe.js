@@ -41,7 +41,7 @@ export function eventText(view, ev) {
     }
     case 'affiliation_change': {
       // 조직 노드가 다른 유니버스에 있으면 ID가 없다. 없는 값은 "미기재"(R-14)
-      const orgs = p.from_org_id || p.to_org_id ? ` (${name(p.from_org_id) || '미기재'} → ${name(p.to_org_id) || '미기재'})` : '';
+      const orgs = ` (${name(p.from_org_id) || '미기재'} → ${name(p.to_org_id) || '미기재'})`;
       return `${name(p.person_id)} 소속 변경${orgs}${ev.note ? `: ${ev.note}` : ''}`;
     }
     case 'memo': {
@@ -123,5 +123,7 @@ export function describeUniverse(view) {
     edge_total: edges.length,
     period: dates.length ? { first: dates[0], last: dates[dates.length - 1] } : null,
     missing: view.missing,
+    empno_conflicts: view.empno_conflicts || [],
+    stale_links: view.stale_links || [],
   };
 }

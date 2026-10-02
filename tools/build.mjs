@@ -49,4 +49,4 @@ const html = template
   .replace('<script src="app.js"></script>', () => `<script>\n${inline}</script>`)
   .replace('<!doctype html>', () => `<!doctype html>\n<!--\n${notice.replace(/--/g, '- -')}\n-->`);
 await writeFile(join(dist, 'index.html'), html);
-console.log(`빌드 완료: dist/index.html 하나 (${(html.length / 1024).toFixed(0)} KB, 스크립트 포함)`);
+console.log(`빌드 완료: dist/index.html 하나 (${(Buffer.byteLength(html, 'utf8') / 1024).toFixed(0)} KB = ${Buffer.byteLength(html, 'utf8')}바이트, 스크립트 포함)`);

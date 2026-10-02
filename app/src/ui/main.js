@@ -2,7 +2,8 @@
 
 import { createApp } from '../app/app.js';
 import { createStore, openStorage } from '../store/local.js';
-import { SAMPLES } from '../../data/index.js';
+import { SAMPLES, SAMPLE_GUIDE } from '../../data/index.js';
+import { startScreen } from './start.js';
 import { NODE_TYPES } from '../model/schema.js';
 import { describeNode, describeUniverse, eventText } from '../view/describe.js';
 import { exposureOf, projectView } from '../view/collapse.js';
@@ -34,6 +35,39 @@ function openUniverse(id) {
   location.reload();
 }
 
+// 새 유니버스(R-12): 이름·단위·작성 주체가 필수. 같은 이름·단위가 있으면 확인한다. 시작 화면과 본 화면이 함께 쓴다
+function wireCreateDialog(app, $) {
+  const dialog = $('create-dialog');
+  const open = () => {
+    $('create-form').reset();
+    $('create-message').textContent = '';
+    dialog.showModal();
+  };
+  $('create-open').addEventListener('click', open);
+  $('create-cancel').addEventListener('click', () => dialog.close());
+  $('create-form').addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    const input = { name: $('create-name').value, level: $('create-level').value, owner: $('create-owner').value, description: $('create-description').value };
+    const same = input.name.trim() && input.level.trim() ? app.findSameUniverse(input.name, input.level) : null;
+    if (same && !window.confirm(`같은 이름·단위의 유니버스「${same.name}」(${same.level})가 이미 있습니다. 그래도 새로 만들까요?`)) return;
+    const r = app.createUniverse(input);
+    if (!r.ok) {
+      $('create-message').textContent = messageFor(r.error);
+      $('create-message').dataset.code = r.error.code;
+      return;
+    }
+    openUniverse(r.doc.universe.id);
+  });
+  if (app.readOnly) $('create-open').disabled = true;
+  return open;
+}
+
+// 시작 화면으로: 주소의 #유니버스ID를 지우고 다시 연다
+function goStart() {
+  history.replaceState(null, '', location.pathname + location.search);
+  location.reload();
+}
+
 function start() {
   const storage = openStorage(() => window.localStorage);
   const app = createApp({
@@ -44,10 +78,26 @@ function start() {
   });
 
   const $ = (id) => document.getElementById(id);
+
+  // 주소에 유니버스가 없으면(더블클릭으로 처음 열었을 때) 시작 화면을 보여 준다(R-08)
+  if (!location.hash.slice(1)) {
+    document.body.classList.add('start-mode');
+    const openCreate = wireCreateDialog(app, $);
+    $('start-screen').replaceChildren(startScreen({
+      universes: app.universes(),
+      guide: SAMPLE_GUIDE,
+      warnings: app.warnings.map((w) => messageFor(w)),
+      readOnly: app.readOnly,
+      onOpen: openUniverse,
+      onCreate: openCreate,
+    }));
+    window.__wu = { start: true, readOnly: app.readOnly };
+    return;
+  }
   let selected = null; // 선택한 노드의 전역 ID
   let editing = null; // 편집 중인 양식: {kind:'node'|'edge'|'event'|'edge-edit', edgeId?}
   let drafting = null; // 인수인계 초안 화면: {target}
-  let insight = null; // 유사 경험자 화면: {work}
+  let insight = null; // 인사이트 화면: {work, kind}
   const expanded = new Set(); // 펼친 하위 유니버스
   let view = app.view;
   let display = projectView(view, { expanded });
@@ -60,6 +110,7 @@ function start() {
     banner.hidden = false;
   }
 
+  $('home').addEventListener('click', goStart);
   const picker = $('universe-picker');
   for (const u of app.universes()) {
     picker.append(el('option', { value: u.id, selected: u.id === app.doc.universe.id }, `${u.name} (${u.level})`));
@@ -143,10 +194,10 @@ function start() {
     renderPanel();
   }
 
-  function openInsight(workGid) {
+  function openInsight(workGid, kind = 'similar') {
     editing = null;
     drafting = null;
-    insight = { work: workGid };
+    insight = { work: workGid, kind };
     renderPanel();
   }
 
@@ -211,10 +262,10 @@ function start() {
     const focusLocal = (id) => { editing = null; focus(toGid(currentId(), id)); };
     switch (editing.kind) {
       case 'node':
-        return nodeForm({ mode: 'edit', node, subtypes: app.doc.universe.subtypes || [], onCancel: cancel, onFocusLocal: focusLocal,
+        return nodeForm({ mode: 'edit', node, subtypes: app.doc.universe.subtypes || [], onAddSubtype: (t, nm) => app.addSubtype(t, nm), onCancel: cancel, onFocusLocal: focusLocal,
           onSubmit: (values) => afterSave(app.updateNode(currentId(), node.id, values)) });
       case 'edge':
-        return edgeForm({ node, candidates: ownNodes().filter((n) => n.id !== node.id), onCancel: cancel,
+        return edgeForm({ node, subtypes: app.doc.universe.subtypes || [], onAddSubtype: (t, nm) => app.addSubtype(t, nm), candidates: ownNodes().filter((n) => n.id !== node.id), onCancel: cancel,
           onSubmit: (values) => afterSave(app.addEdge(values)) });
       case 'edge-edit': {
         const edge = app.doc.edges.find((e) => e.id === editing.edgeId);
@@ -242,7 +293,7 @@ function start() {
   function renderPanel() {
     const panel = $('detail');
     if (insight) {
-      panel.replaceChildren(insightPanel({ view, work: insight.work, onFocus: showInGraph, onClose: () => { insight = null; renderPanel(); graph.highlight(selected); } }));
+      panel.replaceChildren(insightPanel({ view, work: insight.work, kind: insight.kind, onFocus: showInGraph, onClose: () => { insight = null; renderPanel(); graph.highlight(selected); } }));
       return;
     }
     if (drafting) {
@@ -254,7 +305,7 @@ function start() {
       const rootGid = toGid(currentId(), app.doc.universe.root_node_id);
       panel.append(el('div', { class: 'row' },
         el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft-universe', onclick: () => openDraft(rootGid) }, '인수인계 초안 만들기'),
-        el('button', { type: 'button', 'data-testid': 'btn-similar-universe', onclick: () => openInsight('') }, '유사 경험자 찾기')));
+        el('button', { type: 'button', 'data-testid': 'btn-insight-universe', onclick: () => openInsight('', 'repeat') }, '인사이트 보기')));
       return;
     }
     if (editing && isOwn(selected) && localNode(selected)) {
@@ -340,12 +391,15 @@ function start() {
   });
   if (app.readOnly) $('group-open').disabled = true;
 
+  wireCreateDialog(app, $);
+
   // 노드 추가(R-02 ①): 저장하면 바로 그래프에 나타나고 선택된다
   function renderAddForm(doneText) {
     const slot = $('add-slot');
     if (app.readOnly) {
       slot.replaceChildren(el('p', { class: 'muted small' }, '읽기 전용이라 추가할 수 없습니다.'));
-      $('reset').disabled = true;
+      // 문서만 읽기 전용(버전 불일치)이면 초기화로 복구할 수 있게 둔다. 저장소 자체를 못 쓸 때만 막는다
+      $('reset').disabled = !app.canReset;
       return;
     }
     slot.replaceChildren(
@@ -353,10 +407,14 @@ function start() {
       nodeForm({
         mode: 'add',
         subtypes: app.doc.universe.subtypes || [],
+        onAddSubtype: (t, nm) => app.addSubtype(t, nm),
         onFocusLocal: (id) => focus(toGid(currentId(), id)),
         onSubmit: (values) => {
-          const r = app.addNode(values);
+          const { attach_root: attachRoot, ...input } = values;
+          const r = app.addNode(input);
           if (!r.ok) return r;
+          // 꼭지에 바로 연결(포함). 꼭지 → 꼭지 외 모든 노드는 항상 허용되는 조합이다
+          if (attachRoot) app.addEdge({ source: app.doc.universe.root_node_id, target: r.node.id, core_type: 'contains' });
           afterSave(r, toGid(currentId(), r.node.id));
           renderAddForm(`추가했습니다: ${r.node.label}${r.warnings.map((w) => ` ${messageFor(w)}`).join('')}`);
           return r;

@@ -72,5 +72,11 @@ export function renderUniverseSummary(panel, s, shown = null) {
   if (s.period) dl.append(el('dt', {}, '이력 기간'), el('dd', {}, `${s.period.first} ~ ${s.period.last}`));
   panel.append(dl);
   if (s.missing.length) panel.append(el('p', { class: 'notice' }, `찾을 수 없는 하위 유니버스: ${s.missing.join(', ')}`));
-  panel.append(el('p', { class: 'hint', 'data-testid': 'hint' }, '그래프에서 노드를 클릭하면 속성, 연결된 노드, 이력이 여기에 보입니다.'));
+  for (const c of s.empno_conflicts) {
+    panel.append(el('p', { class: 'notice', 'data-testid': 'empno-conflict' }, `사번 충돌: ${c.emp_no}가 서로 다른 이름으로 있습니다(${c.nodes.map((n) => `${n.label}·${n.universe_name}`).join(', ')}). 자동으로 합치지 않습니다. 확인이 필요합니다.`));
+  }
+  if (s.stale_links.length) panel.append(el('p', { class: 'notice', 'data-testid': 'stale-links' }, `사번이 바뀌어 더는 맞지 않는 사번 자동 연결 ${s.stale_links.length}건은 합치지 않았습니다. 다시 확인이 필요합니다.`));
+  panel.append(el('div', { class: 'hint', 'data-testid': 'hint' },
+    el('p', {}, '그래프에서 노드를 클릭하면 속성, 연결된 노드, 이력이 여기에 보입니다.'),
+    el('p', {}, '아래 「인수인계 초안 만들기」와 「인사이트 보기」도 눌러 보세요.')));
 }

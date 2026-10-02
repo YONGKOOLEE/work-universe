@@ -124,7 +124,7 @@ async function openSession(exe, profileDir, port, { blockStorage = false } = {})
       source: "Object.defineProperty(window,'localStorage',{get(){throw new DOMException('blocked','SecurityError')}})",
     });
   }
-  await cdp.send('Page.navigate', { url: pageUrl });
+  await cdp.send('Page.navigate', { url: `${pageUrl}#U-A1` });
   const ready = await waitFor(cdp, 'window.__wu && window.__wu.cy.nodes().length > 0');
   return { ...b, cdp, log, ready };
 }
@@ -184,6 +184,13 @@ async function shot(cdp, name) {
   await mkdir(process.env.SHOT_DIR, { recursive: true });
   const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
   await writeFile(join(process.env.SHOT_DIR, `${name}.png`), Buffer.from(data, 'base64'));
+}
+
+// 주소의 #유니버스ID를 지우고 다시 연다 = 더블클릭으로 처음 연 상태(시작 화면)
+async function goBare(cdp) {
+  await evaluate(cdp, "history.replaceState(null, '', location.pathname); location.reload()").catch(() => {});
+  await sleep(500);
+  return waitFor(cdp, 'window.__wu && window.__wu.start === true', 8000);
 }
 
 const nodeCount = (cdp) => evaluate(cdp, 'window.__wu.cy.nodes().length');
@@ -425,6 +432,114 @@ async function checkBrowser(browser, port) {
     check('수정 이력에 실제로 바꾼 필드만 남음(숫자 속성 유지)', false, '카드승인 유니버스를 열지 못함');
   }
 
+  // ── T-14 시작 화면(R-08) ──
+  await evaluate(s.cdp, 'window.confirm = () => true');
+  const onStart = await goBare(s.cdp);
+  check('R-08 주소에 유니버스가 없으면(처음 더블클릭) 시작 화면이 열림', onStart);
+  if (onStart) {
+    const startText = await text(s.cdp, '#start-screen');
+    // 눌러지는 것과 눈에 보이는 것은 다르다: 핵심 요소가 실제로 화면에 그려지는지(크기가 있는지) 확인한다
+    check('R-08 시작 화면의 제목·설명·추천 버튼이 실제로 보임', await evaluate(s.cdp, "['.start-hero h1', '.start-hero .lead', '[data-testid=start-primary]', '[data-testid=start-create]'].every((q) => { const r = document.querySelector(q).getBoundingClientRect(); return r.width > 0 && r.height > 0; })"));
+    check('R-08 시작 화면에 이게 무엇인지 한 줄 설명과 가상 데이터 안내', startText.includes('누가 무엇을 해 왔는지 한눈에 보고 인수인계를 돕는 도구') && startText.includes('모든 이름과 데이터는 가상'));
+    check('R-08 "처음이라면 이 순서로" 4단계 안내', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=start-steps] li').length")) === 4);
+    check('샘플 카드 5개와 추천(월말 정산) 표시, 내 유니버스 안내', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=start-samples] .card').length")) === 5 && (await evaluate(s.cdp, "document.querySelector('[data-testid=card-U-A1]').classList.contains('recommended')")) && !!(await evaluate(s.cdp, "!!document.querySelector('[data-testid=start-mine], [data-testid=start-mine-empty]')")));
+    check('시작 화면에 "null" 글자 없음', await evaluate(s.cdp, "(() => { const w = document.createTreeWalker(document.getElementById('start-screen'), NodeFilter.SHOW_TEXT); while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') return false; return true; })()"));
+    await evaluate(s.cdp, 'window.scrollTo(0, 0)');
+    await shot(s.cdp, `${browser.name}-0-start`);
+    // 한 번 눌러 탐색 시작(R-08): 추천 샘플이 열리고 그래프가 보인다
+    await evaluate(s.cdp, "document.querySelector('[data-testid=start-primary]').click()");
+    await sleep(500);
+    const opened = await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
+    check('R-08 "샘플 바로 열기" 한 번으로 그래프 탐색이 시작됨', opened);
+    // 제목을 누르면 시작 화면으로 돌아온다
+    await evaluate(s.cdp, "document.getElementById('home').click()").catch(() => {});
+    await sleep(500);
+    check('머리글 제목을 누르면 시작 화면으로 돌아옴', await waitFor(s.cdp, 'window.__wu && window.__wu.start === true', 8000));
+    await evaluate(s.cdp, "document.querySelector('[data-testid=open-U-D1]').click()");
+    await sleep(500);
+    check('카드의 "열기"로 다른 샘플(가상 운영부)을 열 수 있음', await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-D1'", 8000));
+  }
+  await evaluate(s.cdp, "location.hash = 'U-A1'; location.reload()").catch(() => {});
+  await sleep(500);
+  await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1'", 8000);
+
+  // ── T-09 새 유니버스(R-12)와 하위 유형 ──
+  await evaluate(s.cdp, "window.confirm = () => true; window.__wu.select(null)");
+  const submitCreate = (name, level, owner) => evaluate(s.cdp, `(() => {
+    document.getElementById('create-open').click();
+    document.getElementById('create-name').value = ${JSON.stringify(name)};
+    document.getElementById('create-level').value = ${JSON.stringify(level)};
+    document.getElementById('create-owner').value = ${JSON.stringify(owner)};
+    document.querySelector('#create-form button[type=submit]').click();
+  })()`);
+  await submitCreate('', '업무', '가상 교육팀');
+  await sleep(150);
+  check('오류(R-12 ②): 이름이 비면 만들지 않고 사유 표시', (await evaluate(s.cdp, "document.getElementById('create-message').dataset.code")) === 'E-REQUIRED' && (await text(s.cdp, '#create-message')).includes('이름'));
+  await evaluate(s.cdp, "document.getElementById('create-dialog').close()");
+  await submitCreate('연말 교육 운영', '업무', '가상 교육팀');
+  await sleep(500);
+  const created = await waitFor(s.cdp, "window.__wu && window.__wu.doc.universe.name === '연말 교육 운영' && window.__wu.cy.nodes().length === 1", 8000);
+  check('R-12 ① 새 유니버스를 만들면 꼭지만 있는 빈 유니버스가 열림', created);
+  if (created) {
+    const addR = await submitAdd(s.cdp, 'work', '교육 안내');
+    check('R-12 ① 새 유니버스에 노드를 추가할 수 있음(업무는 꼭지에 바로 연결)', addR.code === 'OK' && (await nodeCount(s.cdp)) === 2 && (await edgeCount(s.cdp)) === 1, addR.text);
+    await evaluate(s.cdp, `(() => {
+      const slot = document.getElementById('add-slot');
+      const t = slot.querySelector('[data-testid=node-type]'); t.value = 'artifact'; t.dispatchEvent(new Event('change'));
+      const st = slot.querySelector('[data-testid=node-subtype]'); st.value = '__new__'; st.dispatchEvent(new Event('change'));
+      slot.querySelector('[data-testid=node-subtype-new]').value = '회의록';
+      slot.querySelector('[data-testid=node-label]').value = '10월 회의록';
+      slot.querySelector('button[type=submit]').click();
+    })()`);
+    await sleep(250);
+    check('하위 유형을 새로 추가하면서 노드를 만들 수 있음(데이터만 늘고 코드 변경 없음)', await evaluate(s.cdp, "window.__wu.doc.universe.subtypes.some((x) => x.name === '회의록') && window.__wu.doc.nodes.some((n) => n.label === '10월 회의록' && n.subtype === '회의록')"));
+    check('추가한 하위 유형이 상세에 보임', (await text(s.cdp, '#detail')).includes('산출물 > 회의록'));
+    await evaluate(s.cdp, `(() => {
+      const slot = document.getElementById('add-slot');
+      const t = slot.querySelector('[data-testid=node-type]'); t.value = 'artifact'; t.dispatchEvent(new Event('change'));
+      const st = slot.querySelector('[data-testid=node-subtype]'); st.value = '__new__'; st.dispatchEvent(new Event('change'));
+      slot.querySelector('[data-testid=node-label]').value = '11월 회의록';
+      slot.querySelector('button[type=submit]').click();
+    })()`);
+    await sleep(200);
+    check('오류: 새 하위 유형 이름을 비우면 거부', (await evaluate(s.cdp, "((document.querySelector('#add-slot [data-testid=form-message]') || {}).dataset || {}).code")) === 'E-REQUIRED' && !(await evaluate(s.cdp, "window.__wu.doc.nodes.some((n) => n.label === '11월 회의록')")));
+    await shot(s.cdp, `${browser.name}-8-new-universe`);
+    // 오류(R-05 ②): 인수인계·메모 기록이 없는 새 유니버스의 반복 비효율 → 결론 없이 "데이터 부족"과 마지막 입력 시점
+    await evaluate(s.cdp, "window.__wu.select(null)");
+    await clickTestId(s.cdp, 'btn-insight-universe');
+    await sleep(200);
+    const insuf = await text(s.cdp, '[data-testid=repeat-insufficient]');
+    check('오류(R-05 ②): 기록이 없는 새 유니버스 → 반복 비효율 "데이터 부족"과 마지막 입력 시점만', insuf.includes('데이터 부족') && insuf.includes('마지막 입력') && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=repeat-patterns]')")), insuf);
+  }
+  const countBefore = await evaluate(s.cdp, "document.getElementById('universe-picker').options.length");
+  // 페이지를 다시 열면 confirm이 원래대로 돌아가 자동화가 멈추므로 다시 자동 수락으로 바꾼다
+  await evaluate(s.cdp, 'window.confirm = () => true');
+  await submitCreate('연말 교육 운영', '업무', '가상 교육팀');
+  await sleep(500);
+  await waitFor(s.cdp, "window.__wu && window.__wu.doc.universe.name === '연말 교육 운영' && window.__wu.cy.nodes().length === 1", 8000);
+  check('같은 이름·단위 유니버스는 확인 후 만들어짐(유니버스 수 +1)', (await evaluate(s.cdp, "document.getElementById('universe-picker').options.length")) === countBefore + 1);
+  await evaluate(s.cdp, "location.hash = 'U-A1'; location.reload()").catch(() => {});
+  await sleep(500);
+  await waitFor(s.cdp, "window.__wu && window.__wu.doc.universe.id === 'U-A1'", 8000);
+
+  // ── T-11 반복 비효율(R-05 ⑤) ──
+  await evaluate(s.cdp, "location.hash = 'U-A1'; location.reload()").catch(() => {});
+  await sleep(500);
+  if (await waitFor(s.cdp, "window.__wu && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000)) {
+    await evaluate(s.cdp, "window.__wu.select(null)");
+    await clickTestId(s.cdp, 'btn-insight-universe');
+    await sleep(200);
+    const rep = await text(s.cdp, '[data-testid=repeat-patterns]');
+    check('R-05 ⑤ 반복 비효율: 이전 인수인계서를 이어받지 않은 인수인계가 근거 이벤트와 함께 나옴', rep.includes('인수인계 2회 중 1회가 이전 인수인계서를 이어받지 않아') && rep.includes('2026-09-30 윤바다 → 서하늘 (인수인계서 없음) — 이전 인수인계서를 이어받지 않음') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=repeat-patterns] .evidence').length")) >= 2, rep.slice(0, 120));
+    check('R-05 ③ 결정은 사람이 한다는 안내', (await text(s.cdp, '[data-testid=insight-note]')).includes('사람이 정합니다'));
+    await shot(s.cdp, `${browser.name}-7-repeat`);
+    // 탭을 바꾸면 유사 경험자가 열린다
+    await clickTestId(s.cdp, 'tab-similar');
+    await sleep(150);
+    check('탭 전환: 유사 경험자', !!(await evaluate(s.cdp, "!!document.querySelector('[data-testid=insight-work]')")));
+    await clickTestId(s.cdp, 'tab-repeat');
+  }
+
   // ── T-08 유사 경험자(R-05) ──
   await evaluate(s.cdp, "location.hash = 'U-D1'; location.reload()").catch(() => {});
   await sleep(500);
@@ -477,6 +592,16 @@ async function checkBrowser(browser, port) {
   // 2) 브라우저를 닫았다 다시 열기(같은 프로필)
   s = await openSession(exe, profile, port);
   check('P-3 브라우저 재시작 후 추가·수정·숨김 유지', s.ready && (await nodeCount(s.cdp)) === NODES && (await hasLabel(s.cdp, newLabel)) && (await evaluate(s.cdp, "window.__wu.doc.nodes.find((n) => n.id === 'N-001').description.includes('(수정)')")));
+  // E1(12.1): 저장된 문서의 스키마 버전이 다르면 경고하고 읽기 전용으로 연다
+  await evaluate(s.cdp, `(() => { const k = 'wu:v1:u:U-A1'; const d = JSON.parse(localStorage.getItem(k)); d.schema_version = '2.0'; localStorage.setItem(k, JSON.stringify(d)); location.reload(); })()`).catch(() => {});
+  await sleep(500);
+  await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1'", 8000);
+  check('오류(12.1): 스키마 버전이 다른 문서 → 경고 배너와 읽기 전용(추가 불가)', (await text(s.cdp, '#banner')).includes('읽기 전용으로 엽니다') && (await text(s.cdp, '#add-slot')).includes('읽기 전용'));
+  // NFR 가용성·복구: 「가상 데이터 초기화」로 처음 상태로 돌아간다(위 버전 문제도 함께 풀림)
+  await evaluate(s.cdp, "window.confirm = () => true; document.getElementById('reset').click()").catch(() => {});
+  await sleep(600);
+  await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
+  check('NFR 복구: 가상 데이터 초기화 → 샘플이 처음 상태(추가 노드 없음, 수정 되돌림, 쓰기 가능)', (await nodeCount(s.cdp)) === NODES && !(await hasLabel(s.cdp, newLabel)) && !(await evaluate(s.cdp, "window.__wu.readOnly")) && !(await evaluate(s.cdp, "(window.__wu.doc.nodes.find((n) => n.id === 'N-001').description || '').includes('(수정)')")));
   const errors2 = [...s.log.errors];
   const external2 = [...s.log.external];
   s.cdp.close();
@@ -492,6 +617,11 @@ async function checkBrowser(browser, port) {
   const banner = await evaluate(s.cdp, "({ hidden: document.getElementById('banner').hidden, code: document.getElementById('banner').dataset.code || '' })");
   check('오류: 저장소 차단 → W-STORAGE 배너', !banner.hidden && banner.code === 'W-STORAGE');
   check(`저장소 차단 시 샘플 읽기 전용 표시(노드 ${NODES}, 추가 비활성)`, s.ready && (await nodeCount(s.cdp)) === NODES && (await text(s.cdp, '#add-slot')).includes('읽기 전용'));
+  if (await goBare(s.cdp)) {
+    check('오류: 저장소 차단 시 시작 화면에도 경고가 보이고 새 유니버스는 막힘', (await text(s.cdp, '[data-testid=start-warning]')).includes('저장소를 쓸 수 없습니다') && (await evaluate(s.cdp, "document.querySelector('[data-testid=start-create]').disabled")));
+  } else {
+    check('오류: 저장소 차단 시 시작 화면에도 경고가 보이고 새 유니버스는 막힘', false, '시작 화면이 열리지 않음');
+  }
   s.cdp.close();
   await close(s);
 

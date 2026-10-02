@@ -10,6 +10,7 @@ import {
   LABEL_MAX,
   NODE_TYPES,
   SCHEMA_VERSION,
+  TEXT_MAX,
   USER_EVENT_TYPES,
   pairAllowed,
 } from './schema.js';
@@ -77,6 +78,8 @@ function nodeFieldError(doc, f, { excludeId, isUpdate = false } = {}) {
     if (!ok) return { code: CODES.SCHEMA, field: 'attrs' };
   }
   if (periodError(f.period)) return { code: CODES.SCHEMA, field: 'period' };
+  if (f.description && f.description.length > TEXT_MAX) return { code: CODES.SCHEMA, field: 'description', too_long: TEXT_MAX };
+  if (f.attrs && Object.values(f.attrs).some((v) => String(v).length > TEXT_MAX)) return { code: CODES.SCHEMA, field: 'attrs', too_long: TEXT_MAX };
   const dup = findDuplicateNode(doc.nodes, f, excludeId);
   if (dup) return { code: CODES.DUP, existing_id: dup.id };
   return null;
@@ -123,6 +126,8 @@ const NODE_EDITABLE = ['label', 'description', 'attrs', 'tags', 'period', 'subty
 export function updateNode(doc, nodeId, changes, ctx) {
   const node = doc.nodes.find((n) => n.id === nodeId);
   if (!node) return fail(CODES.SCHEMA, { field: 'id' });
+  // 숨긴 노드는 근거로서 내용을 그대로 지킨다(4절 숨김 후 참조). 고치려면 숨기기 전에 고친다
+  if (node.hidden) return fail(CODES.SCHEMA, { field: 'id', hidden: true });
   if (changes.core_type !== undefined && changes.core_type !== node.core_type) return fail(CODES.SCHEMA, { field: 'core_type' });
   // 꼭지의 이름은 유니버스 이름과 같아야 한다(1.2)
   if (node.core_type === 'root' && changes.label !== undefined && changes.label !== node.label) {
@@ -286,6 +291,20 @@ export function addEvent(doc, input, ctx) {
   if (!USER_EVENT_TYPES.includes(input.type)) return fail(CODES.SCHEMA, { field: 'type' });
   if (isEmpty(input.occurred_at)) return fail(CODES.REQUIRED, { field: 'occurred_at' });
   if (!isDate(input.occurred_at)) return fail(CODES.SCHEMA, { field: 'occurred_at' });
+  if (input.note && String(input.note).length > TEXT_MAX) return fail(CODES.SCHEMA, { field: 'note', too_long: TEXT_MAX });
+  const pl = input.payload || {};
+  // 인수인계는 보내는 사람과 받는 사람이 달라야 한다
+  if (input.type === 'handover' && pl.from_person_id && pl.from_person_id === pl.to_person_id) {
+    return fail(CODES.SCHEMA, { field: 'to_person_id', same_person: true });
+  }
+  // 숨긴 노드를 새 이력의 대상으로 쓰지 않는다(연결과 같은 기준). 전역 참조(다른 유니버스)는 여기서 확인하지 않는다
+  for (const [k, v] of Object.entries(pl)) {
+    for (const id of Array.isArray(v) ? v : [v]) {
+      if (typeof id !== 'string' || id.includes('/') || !/_id$|_ids$/.test(k) || k === 'previous_handover_id') continue;
+      const n = doc.nodes.find((x) => x.id === id);
+      if (n && n.hidden) return fail(CODES.SCHEMA, { field: k, hidden: true });
+    }
+  }
 
   const nodesById = new Map(doc.nodes.map((n) => [n.id, n]));
   const edgeIds = new Set(doc.edges.map((e) => e.id));
@@ -293,7 +312,7 @@ export function addEvent(doc, input, ctx) {
   const [first] = eventPayloadErrors(doc, nodesById, edgeIds, candidate);
   if (first) return fail(first.code, { field: first.field, ...(first.expected ? { expected: first.expected } : {}) });
   const prev = input.payload && input.payload.previous_handover_id;
-  if (prev && !prev.includes('/') && !doc.events.some((e) => e.id === prev)) {
+  if (prev && !prev.includes('/') && !doc.events.some((e) => e.id === prev && e.type === 'handover')) {
     return fail(CODES.SCHEMA, { field: 'previous_handover_id' });
   }
 
@@ -330,8 +349,9 @@ export function createUniverse(input, ctx) {
   const text = (v) => (typeof v === 'string' ? v.trim() : '');
   const name = text(input.name);
   if (!name || name.length > LABEL_MAX) return fail(CODES.REQUIRED, { field: 'name' });
-  if (!text(input.level)) return fail(CODES.REQUIRED, { field: 'level' });
-  if (!text(input.owner)) return fail(CODES.REQUIRED, { field: 'owner' });
+  if (!text(input.level) || text(input.level).length > LABEL_MAX) return fail(CODES.REQUIRED, { field: 'level' });
+  if (!text(input.owner) || text(input.owner).length > LABEL_MAX) return fail(CODES.REQUIRED, { field: 'owner' });
+  if (text(input.description).length > TEXT_MAX) return fail(CODES.SCHEMA, { field: 'description', too_long: TEXT_MAX });
 
   const random = ctx.random || Math.random;
   const rootId = newId(ID_PREFIX.node, random);

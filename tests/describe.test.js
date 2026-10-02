@@ -58,7 +58,7 @@ test('이력: 시간순이고 사람이 읽는 문장으로 나온다(R-14)', ()
   assert.deepEqual(d.history.map((h) => h.date), [...d.history.map((h) => h.date)].sort());
   const texts = d.history.map((h) => `${h.date} ${h.type_label}: ${h.text}`);
   assert.ok(texts.includes('2025-03-01 담당 시작: 한가람 담당 시작 — 대사 확인'));
-  assert.ok(texts.some((t) => t.startsWith('2026-01-01 소속 변경: 한가람 소속 변경: 조직개편')));
+  assert.ok(texts.some((t) => t.startsWith('2026-01-01 소속 변경: 한가람 소속 변경 (미기재 → 미기재): 조직개편')));
   assert.ok(texts.includes('2026-06-01 인수인계: 한가람 → 윤바다 인수인계 — 대사 확인 (근거: 2026-06 인수인계서). 문서로 인수인계'));
 });
 
@@ -97,4 +97,11 @@ test('유니버스 개요: 유형별 개수와 이력 기간', () => {
   assert.equal(s.edge_total, 11);
   assert.deepEqual(s.counts.find((c) => c.type_label === '사람'), { type_label: '사람', count: 3 });
   assert.deepEqual(s.period, { first: '2025-03-01', last: '2026-10-01' });
+});
+
+test('R-14: 조직 정보가 없는 소속 변경도 "미기재"로 표시하고, 업무 이력은 끊기지 않는다(1.5)', () => {
+  const ev = view.events.find((e) => e.id === 'E-001');
+  assert.equal(eventText(view, ev), '한가람 소속 변경 (미기재 → 미기재): 조직개편: 가상운영팀 → 가상정산팀 (조직 노드는 U-O에 있음)');
+  const h = describeNode(view, 'U-A1/N-010').history.map((x) => x.date);
+  assert.ok(h.includes('2026-01-01') && h.some((d) => d > '2026-01-01')); // 조직개편 뒤에도 이력이 이어짐
 });

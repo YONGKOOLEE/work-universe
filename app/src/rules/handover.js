@@ -90,7 +90,7 @@ function flowOrder(view, works, workIds) {
 const sentence = (text, evidence) => ({ text, evidence_ids: [...new Set(evidence)] });
 const name = (view, gid) => {
   const n = view.getNode(gid);
-  if (!n) return gid;
+  if (!n) return '(찾을 수 없는 노드)';
   return n.hidden ? `${n.label}(숨김 처리된 노드)` : n.label;
 };
 
@@ -105,9 +105,11 @@ export function buildHandoverDraft(view, input) {
   }
   const target = view.getNode(input.target);
   if (!target || !['root', 'work'].includes(target.core_type)) return { ok: false, error: { code: 'E-SCHEMA', field: 'target' } };
+  if (target.hidden) return { ok: false, error: { code: 'E-SCHEMA', field: 'target', hidden: true } };
   for (const f of ['from', 'to']) {
     const p = view.getNode(input[f]);
     if (!p || p.core_type !== 'person') return { ok: false, error: { code: 'E-SCHEMA', field: f, expected: 'person' } };
+    if (p.hidden) return { ok: false, error: { code: 'E-SCHEMA', field: f, hidden: true } };
   }
   const from = view.canonical(input.from);
   const to = view.canonical(input.to);

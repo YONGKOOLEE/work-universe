@@ -60,9 +60,18 @@ export function edgeTypeLabel(coreType) {
 }
 
 // 12.1 중복 비교용 정규화: 앞뒤 공백 제거 + 영문 소문자
+// 표기만 다른 같은 이름을 한 이름으로 본다: 한글 자모 분리(NFD) → 합침(NFC), 연속·특수 공백(NBSP 등) → 한 칸
 export function normalizeLabel(label) {
-  return String(label).trim().toLowerCase();
+  return String(label).normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase();
 }
+
+// 사번 비교용: 앞뒤 공백 제거 + 대문자(v-1001 = V-1001)
+export function normalizeEmpNo(empNo) {
+  return String(empNo).normalize('NFC').replace(/\s+/g, '').toUpperCase();
+}
+
+// 긴 글 상한(설명·메모·속성 값·단위·작성 주체). 저장소 용량을 지키기 위한 값이다
+export const TEXT_MAX = 2000;
 
 // 12.2 events[].type → 화면 표시 이름(1.4)
 export const EVENT_TYPES = {

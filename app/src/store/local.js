@@ -28,15 +28,26 @@ export function createStore(storage) {
       return fallback;
     }
   }
+  // 목록이 깨졌거나 비었으면 저장소의 유니버스 키를 훑어 다시 만든다(localStorage의 key·length가 있을 때)
   function readIndex() {
-    const list = parse(storage.getItem(INDEX_KEY), []);
-    return Array.isArray(list) ? list : [];
+    const list = parse(storage.getItem(INDEX_KEY), null);
+    if (Array.isArray(list) && list.length) return list;
+    if (typeof storage.key !== 'function' || typeof storage.length !== 'number') return Array.isArray(list) ? list : [];
+    const rebuilt = [];
+    for (let i = 0; i < storage.length; i += 1) {
+      const k = storage.key(i);
+      if (!k || !k.startsWith('wu:v1:u:')) continue;
+      const doc = parse(storage.getItem(k), null);
+      if (doc && doc.universe) rebuilt.push({ id: doc.universe.id, name: doc.universe.name });
+    }
+    return rebuilt;
   }
 
   return {
     loadUniverse(id) {
       const doc = parse(storage.getItem(universeKey(id)), null);
-      return doc && doc.universe && Array.isArray(doc.nodes) ? doc : null;
+      const ok = doc && doc.universe && ['nodes', 'edges', 'events', 'refs', 'identity_links'].every((k) => Array.isArray(doc[k]));
+      return ok ? doc : null;
     },
 
     saveUniverse(doc) {

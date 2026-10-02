@@ -93,3 +93,52 @@ test('가상 데이터 초기화: 샘플은 처음 상태로, 사용자가 만�
   assert.deepEqual(app.universes().map((u) => u.id).sort(), ['U-A1', 'U-B', 'U-D1', 'U-K1', 'U-T1']);
   assert.equal(app.doc.nodes.length, SAMPLE_A1.nodes.length);
 });
+
+test('새 유니버스(R-12): 만들면 꼭지가 생기고 저장되며, 이어서 노드를 추가할 수 있다', () => {
+  const storage = memoryStorage();
+  const app = open(storage);
+  const r = app.createUniverse({ name: '연말 교육 운영', level: '업무', owner: '가상 교육팀', description: '연말 교육 준비' });
+  assert.equal(r.ok, true);
+  assert.equal(r.doc.nodes.length, 1);
+  assert.equal(r.doc.nodes[0].core_type, 'root');
+  assert.equal(r.doc.universe.is_sample, false);
+  const reopened = open(storage, r.doc.universe.id);
+  assert.equal(reopened.doc.universe.name, '연말 교육 운영');
+  assert.equal(reopened.addNode({ core_type: 'work', label: '교육 안내' }).ok, true);
+  assert.ok(reopened.universes().some((u) => u.name === '연말 교육 운영' && !u.is_sample));
+});
+
+test('새 유니버스: 이름·단위·작성 주체가 비면 만들지 않는다(R-12 ②)', () => {
+  const app = open(memoryStorage());
+  const before = app.universes().length;
+  assert.deepEqual(app.createUniverse({ name: ' ', level: '업무', owner: 'x' }).error, { code: 'E-REQUIRED', field: 'name' });
+  assert.deepEqual(app.createUniverse({ name: 'x', level: '', owner: 'x' }).error, { code: 'E-REQUIRED', field: 'level' });
+  assert.deepEqual(app.createUniverse({ name: 'x', level: '업무', owner: '' }).error, { code: 'E-REQUIRED', field: 'owner' });
+  assert.equal(app.universes().length, before);
+});
+
+test('같은 이름·단위의 유니버스를 찾아 준다(공백·대소문자 무시)', () => {
+  const app = open(memoryStorage());
+  assert.equal(app.findSameUniverse(' 월말 정산 점검 ', '업무').id, 'U-A1');
+  assert.equal(app.findSameUniverse('월말 정산 점검', '팀'), null);
+});
+
+test('하위 유형 추가: 등록하면 쓸 수 있고 중복·비어 있음은 거부하며, 노드·연결 모두에 쓸 수 있다(1.3 ②)', () => {
+  const app = open(memoryStorage());
+  assert.equal(app.addNode({ core_type: 'artifact', label: '회의록 1', subtype: '회의록' }).error.code, 'E-SUBTYPE');
+  assert.equal(app.addSubtype('artifact', '회의록').ok, true);
+  assert.equal(app.addNode({ core_type: 'artifact', label: '회의록 1', subtype: '회의록' }).ok, true);
+  assert.equal(app.addSubtype('artifact', '회의록').error.code, 'E-DUP');
+  assert.equal(app.addSubtype('artifact', ' ').error.code, 'E-REQUIRED');
+  assert.equal(app.addSubtype('references', '검토함').ok, true);
+  const art = app.doc.nodes.find((n) => n.label === '회의록 1').id;
+  assert.equal(app.addEdge({ source: art, target: 'N-001', core_type: 'references', subtype: '검토함' }).ok, true);
+  // 다른 유니버스에는 영향이 없다
+  assert.equal(open(memoryStorage(), 'U-K1').doc.universe.subtypes.some((s) => s.name === '회의록'), false);
+});
+
+test('저장소가 없으면 새 유니버스도 만들 수 없다(읽기 전용)', () => {
+  const app = createApp({ store: null, samples: SAMPLES, now });
+  assert.equal(app.createUniverse({ name: 'x', level: '업무', owner: 'x' }).error.code, 'W-STORAGE');
+  assert.equal(app.addSubtype('artifact', '회의록').error.code, 'W-STORAGE');
+});

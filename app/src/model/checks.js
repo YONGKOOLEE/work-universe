@@ -1,6 +1,6 @@
 // 명령과 문서 검증이 함께 쓰는 검사(1.5). 순수 함수.
 
-import { normalizeLabel } from './schema.js';
+import { normalizeEmpNo, normalizeLabel } from './schema.js';
 
 // YYYY-MM-DD이고 달력에 있는 날짜인지
 export function isDate(v) {
@@ -34,7 +34,7 @@ export function findDuplicateNode(nodes, cand, excludeId) {
   if (cand.core_type === 'root') return undefined;
   return nodes.find((n) => {
     if (n.hidden || n.id === excludeId) return false;
-    if (cand.core_type === 'person') return !!cand.emp_no && n.core_type === 'person' && n.emp_no === cand.emp_no;
+    if (cand.core_type === 'person') return !!cand.emp_no && n.core_type === 'person' && !!n.emp_no && normalizeEmpNo(n.emp_no) === normalizeEmpNo(cand.emp_no);
     return n.core_type === cand.core_type && normalizeLabel(n.label) === normalizeLabel(cand.label);
   });
 }

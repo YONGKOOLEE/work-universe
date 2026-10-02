@@ -132,3 +132,83 @@ test('인수인계 초안의 "유사 경험자" 항목: 근거가 있는 문장�
   const none = buildHandoverDraft(solo, { target: 'U-A1/N-000', from: 'U-A1/N-011', to: 'U-A1/N-012', similar: similarSentences(similarExperts(solo, { works: ['U-A1/N-001'], asOf: ASOF })) }).draft;
   assert.equal(none.items.find((i) => i.key === '유사_경험자').insufficient, true);
 });
+
+// ── 반복 비효율(T-11, R-05 ⑤) ──
+
+import { repeatInefficiency } from '../app/src/rules/insight.js';
+import { addEvent, addEdge, addNode, createUniverse } from '../app/src/model/commands.js';
+
+const T0 = { now: '2026-10-02T10:00:00+09:00' };
+
+test('반복 비효율 ①: 인수인계가 두 번인데 두 번째가 이전 인수인계서를 이어받지 않았다(정답 표 RI-A1-1)', () => {
+  const ri = ANSWERS_V1.repeat_inefficiency[0];
+  const r = repeatInefficiency(viewOf('U-A1'));
+  assert.equal(r.status, 'ok');
+  const p = r.patterns.find((x) => x.kind === 'handover_chain');
+  assert.equal(p.work.gid, ri.work);
+  assert.deepEqual([...p.evidence_ids].sort(), [...ri.evidence].sort());
+  assert.deepEqual([p.total, p.missed], [2, 1]);
+  assert.match(p.steps[0].text, /^2026-06-01 한가람 → 윤바다 \(인수인계서: 2026-06 인수인계서\)$/);
+  assert.match(p.steps[1].text, /^2026-09-30 윤바다 → 서하늘 \(인수인계서 없음\) — 이전 인수인계서를 이어받지 않음$/);
+  assert.match(p.summary, /인수인계 2회 중 1회가 이전 인수인계서를 이어받지 않아/);
+});
+
+test('이전 인수인계를 가리키면(previous_handover_id) 반복으로 보지 않는다', () => {
+  const doc = JSON.parse(JSON.stringify(SAMPLE_A1));
+  doc.events.find((e) => e.id === 'E-007').payload.previous_handover_id = 'E-002';
+  assert.ok(!repeatInefficiency(buildView(doc)).patterns.some((p) => p.kind === 'handover_chain'));
+});
+
+test('같은 인수인계서를 이어서 쓰거나, 새 인수인계서가 이전 것을 참조해도 이어받은 것이다', () => {
+  const same = JSON.parse(JSON.stringify(SAMPLE_A1));
+  same.events.find((e) => e.id === 'E-007').payload.artifact_id = 'N-020';
+  assert.ok(!repeatInefficiency(buildView(same)).patterns.some((p) => p.kind === 'handover_chain'));
+
+  let doc = addNode(SAMPLE_A1, { core_type: 'artifact', subtype: '인수인계서', label: '2026-09 인수인계서' }, T0).doc;
+  const art = doc.nodes.at(-1).id;
+  doc = addEdge(doc, { source: art, target: 'N-020', core_type: 'references' }, T0).doc;
+  doc.events.find((e) => e.id === 'E-007').payload.artifact_id = art;
+  assert.ok(!repeatInefficiency(buildView(doc)).patterns.some((p) => p.kind === 'handover_chain'));
+});
+
+test('인수인계가 세 번이면 이어받지 않은 횟수를 센다', () => {
+  let doc = JSON.parse(JSON.stringify(SAMPLE_A1));
+  doc = addEvent(doc, { type: 'handover', occurred_at: '2026-12-01', payload: { work_id: 'N-001', from_person_id: 'N-012', to_person_id: 'N-010', previous_handover_id: 'E-007' } }, T0).doc;
+  const p = repeatInefficiency(buildView(doc)).patterns.find((x) => x.kind === 'handover_chain');
+  assert.deepEqual([p.total, p.missed], [3, 1]); // 두 번째만 이어받지 않음
+  assert.equal(p.steps[2].referenced, true);
+  assert.equal(p.evidence_ids.length, 3);
+});
+
+test('반복 비효율 ②: 같은 주제가 여러 업무에서 반복되면 근거와 함께 나온다(부서 화면)', () => {
+  const r = repeatInefficiency(viewOf('U-D1'));
+  const t = r.patterns.find((x) => x.kind === 'topic_repeat');
+  assert.equal(t.topic.label, '대사 불일치');
+  assert.deepEqual(t.works.map((w) => w.label).sort(), ['2025 행사', '거래 조회', '대사 확인', '망취소']);
+  const v = viewOf('U-D1');
+  for (const g of t.evidence_ids) assert.ok(v.lookup(g).found || v.events.some((e) => e.gid === g), g);
+  assert.match(t.summary, /4개 업무에서 반복됩니다/);
+  // 월말 정산 하나만 보면 한 업무에서만 나오므로 주제 반복은 없다
+  assert.ok(!repeatInefficiency(viewOf('U-A1')).patterns.some((x) => x.kind === 'topic_repeat'));
+});
+
+test('데이터 부족: 인수인계·메모 기록이 2건 미만이면 결론 없이 마지막 입력 시점만 보인다(R-05 ②)', () => {
+  let doc = createUniverse({ name: '신규 교육 과정', level: '업무', owner: '가상교육팀' }, T0).doc;
+  let r = repeatInefficiency(buildView(doc));
+  assert.equal(r.status, 'insufficient');
+  assert.deepEqual(r.patterns, []);
+  assert.equal(r.last_input, '2026-10-02'); // 생성 이벤트가 마지막 입력
+  doc = addNode(doc, { core_type: 'work', label: '교육 안내' }, T0).doc;
+  doc = addEvent(doc, { type: 'memo', occurred_at: '2026-10-02', payload: { target_id: doc.nodes.at(-1).id }, note: '첫 메모' }, T0).doc;
+  r = repeatInefficiency(buildView(doc));
+  assert.equal(r.status, 'insufficient'); // 메모 1건뿐
+  doc = addEvent(doc, { type: 'memo', occurred_at: '2026-10-03', payload: { target_id: doc.nodes.at(-1).id }, note: '둘째 메모' }, T0).doc;
+  assert.equal(repeatInefficiency(buildView(doc)).status, 'none'); // 기록은 충분하지만 반복이 없음
+});
+
+test('숨긴 업무의 기록은 반복 계산에서 빠진다', async () => {
+  const { hideNode } = await import('../app/src/model/commands.js');
+  const hidden = hideNode(SAMPLE_A1, 'N-001', T0).doc;
+  const r = repeatInefficiency(buildView(hidden));
+  assert.ok(!r.patterns.some((p) => p.kind === 'handover_chain'));
+});

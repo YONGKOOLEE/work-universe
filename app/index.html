@@ -105,17 +105,53 @@
   .who { display: flex; align-items: center; gap: 6px; }
   .who .chip { margin-left: auto; }
   .why { display: grid; gap: 2px; }
+  .tabs { display: flex; gap: 6px; margin: 4px 0 10px; }
+  .tab { padding: 4px 14px; font-size: 13px; }
+  .tab.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: bold; }
+  .patterns { display: grid; gap: 12px; margin-top: 8px; padding: 0; }
+  .patterns > li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; gap: 6px; }
+  .steps { display: grid; gap: 3px; font-size: 13px; color: var(--muted); padding-left: 0; }
+  .steps .missed { color: var(--err); }
+  .subtype-box { display: grid; gap: 6px; }
+  #create-form { display: grid; gap: 8px; font-size: 14px; }
+  #create-form label { display: grid; gap: 4px; color: var(--muted); }
+  button.home { background: none; border: 0; padding: 0; border-radius: 6px; }
+  button.home h1 { margin: 0; }
+  body.start-mode { overflow: auto; height: auto; min-height: 100vh; }
+  body.start-mode > header, body.start-mode > main, body.start-mode > #banner { display: none; }
+  #start-screen:empty { display: none; }
+  .start-inner { max-width: 960px; margin: 0 auto; padding: 32px 20px 64px; display: grid; gap: 28px; }
+  header.start-hero { display: block; padding: 0; background: none; border: 0; }
+  .start-hero .row { margin: 12px 0 8px; }
+  .start-hero h1 { font-size: 30px; margin: 0 0 8px; }
+  .start-hero h1 b { color: var(--accent); }
+  .lead { font-size: 17px; margin: 0 0 16px; line-height: 1.6; }
+  button.big { padding: 10px 22px; font-size: 16px; }
+  .start-inner h2 { font-size: 18px; margin: 0 0 10px; color: var(--accent); }
+  .steps-list { display: grid; gap: 10px; padding: 0; counter-reset: s; }
+  .steps-list li { display: grid; gap: 2px; padding-left: 36px; position: relative; counter-increment: s; }
+  .steps-list li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-size: 13px; font-weight: bold; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; padding: 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: grid; gap: 6px; align-content: start; }
+  .card.recommended { border-color: var(--accent); }
+  .card-head .chip { white-space: nowrap; flex: none; }
+  .card-head { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+  .card p { margin: 0; }
+  .card .try { font-size: 13px; color: var(--text); background: var(--panel-2); border-radius: 6px; padding: 6px 8px; }
+  .card button { justify-self: start; margin-top: 4px; }
   @media (max-width: 800px) { main { flex-direction: column; } aside { width: auto; border-left: 0; border-top: 1px solid var(--line); max-height: 50vh; } .graph-wrap { min-height: 320px; } }
 </style>
 </head>
 <body>
 <header>
-  <h1>업무 <b>UNIVERSE</b></h1>
+  <button type="button" id="home" class="home" title="시작 화면으로"><h1>업무 <b>UNIVERSE</b></h1></button>
   <select id="universe-picker" aria-label="유니버스 선택"></select>
   <span class="spacer"></span>
-  <button type="button" id="group-open" class="primary">유니버스 묶기</button>
+  <button type="button" id="create-open" class="primary">새 유니버스</button>
+  <button type="button" id="group-open">유니버스 묶기</button>
   <button type="button" id="reset">가상 데이터 초기화</button>
 </header>
+<div id="start-screen"></div>
 <p id="banner" role="alert" hidden></p>
 <main>
   <div class="graph-wrap">
@@ -131,6 +167,19 @@
     </details>
   </aside>
 </main>
+<dialog id="create-dialog" aria-labelledby="create-title">
+  <form id="create-form" novalidate>
+    <h2 id="create-title">새 유니버스 만들기</h2>
+    <p class="muted small">빈 유니버스를 만듭니다. 만든 뒤 노드를 하나씩 추가해 구성합니다.</p>
+    <label>이름 <input id="create-name" maxlength="100" autocomplete="off" placeholder="예: 연말 교육 운영"></label>
+    <label>단위 <input id="create-level" list="create-levels" value="업무" autocomplete="off"></label>
+    <datalist id="create-levels"><option value="업무"><option value="팀"><option value="부서"><option value="본부"><option value="회사"></datalist>
+    <label>작성 주체 <input id="create-owner" autocomplete="off" placeholder="예: 가상 교육팀"></label>
+    <label>설명(선택) <textarea id="create-description" rows="3"></textarea></label>
+    <div id="create-message" class="error-text" aria-live="polite"></div>
+    <div class="row"><button type="submit" class="primary">만들기</button><button type="button" id="create-cancel">취소</button></div>
+  </form>
+</dialog>
 <dialog id="group-dialog" aria-labelledby="group-title">
   <form id="group-form" novalidate>
     <h2 id="group-title">유니버스 묶기</h2>

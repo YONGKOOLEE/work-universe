@@ -73,3 +73,76 @@ test('내장 샘플의 기록 시각은 미래가 아니다(미래이면 오늘 
     for (const t of stamps) assert.ok(Date.parse(t) <= Date.now(), `${s.universe.id}: 미래 시각 ${t}`);
   }
 });
+
+test('저장소 쓰기가 실패하면(용량 초과) 화면 상태를 바꾸지 않고 W-STORAGE(quota)로 알린다', () => {
+  const m = new Map();
+  let full = false;
+  const storage = {
+    getItem: (k) => (m.has(k) ? m.get(k) : null),
+    setItem: (k, v) => {
+      if (full) { const e = new Error('full'); e.name = 'QuotaExceededError'; throw e; }
+      m.set(k, String(v));
+    },
+    removeItem: (k) => m.delete(k),
+  };
+  const app = createApp({ store: createStore(storage), samples: SAMPLES, now: () => ctx.now });
+  const before = app.doc.nodes.length;
+  full = true;
+  const r = app.addNode({ core_type: 'work', label: '공간 부족 때 추가' });
+  assert.deepEqual(r, { ok: false, error: { code: 'W-STORAGE', reason: 'quota' } });
+  assert.equal(app.doc.nodes.length, before); // 화면 상태 그대로
+  assert.equal(app.createUniverse({ name: 'x', level: '업무', owner: 'x' }).error.reason, 'quota');
+  full = false;
+  assert.equal(app.addNode({ core_type: 'work', label: '공간 생긴 뒤 추가' }).ok, true);
+});
+
+// ── 2026-10-02 전체 검토(범주 2) 재발 방지 ──
+function mem() {
+  const m = new Map();
+  return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k), get length() { return m.size; }, key: (i) => [...m.keys()][i] ?? null, raw: m };
+}
+
+test('E1 스키마 버전이 다른 문서는 경고하고 읽기 전용으로 연다(12.1)', () => {
+  const st = mem();
+  createApp({ store: createStore(st), samples: SAMPLES, now: () => ctx.now });
+  const d = JSON.parse(st.raw.get('wu:v1:u:U-A1'));
+  d.schema_version = '2.0';
+  st.raw.set('wu:v1:u:U-A1', JSON.stringify(d));
+  const app = createApp({ store: createStore(st), samples: SAMPLES, now: () => ctx.now, currentId: 'U-A1' });
+  assert.equal(app.readOnly, true);
+  assert.deepEqual(app.warnings, [{ code: 'E-SCHEMA', reason: 'version', found: '2.0' }]);
+  assert.equal(app.addNode({ core_type: 'work', label: 'x' }).error.reason, 'version');
+  assert.equal(JSON.parse(st.raw.get('wu:v1:u:U-A1')).schema_version, '2.0'); // 덮어쓰지 않음
+});
+
+test('E2 구조가 깨진 저장 문서(events 없음)는 없는 것으로 보고 샘플을 다시 넣는다', () => {
+  const st = mem();
+  createApp({ store: createStore(st), samples: SAMPLES, now: () => ctx.now });
+  const d = JSON.parse(st.raw.get('wu:v1:u:U-A1'));
+  delete d.events;
+  st.raw.set('wu:v1:u:U-A1', JSON.stringify(d));
+  const app = createApp({ store: createStore(st), samples: SAMPLES, now: () => ctx.now, currentId: 'U-D1' });
+  assert.doesNotThrow(() => app.view);
+  assert.ok(Array.isArray(JSON.parse(st.raw.get('wu:v1:u:U-A1')).events));
+});
+
+test('E3 목록 키가 깨져도 저장소를 훑어 목록을 다시 만들고 사용자 유니버스도 보인다', () => {
+  const st = mem();
+  const first = createApp({ store: createStore(st), samples: SAMPLES, now: () => ctx.now });
+  first.createUniverse({ name: '내 업무', level: '업무', owner: '가상' });
+  st.raw.set('wu:v1:index', '{broken');
+  const app = createApp({ store: createStore(st), samples: SAMPLES, now: () => ctx.now });
+  const ids = app.universes().map((u) => u.name);
+  assert.ok(ids.includes('내 업무') && ids.includes('월말 정산 점검'));
+});
+
+test('E15 판이 바뀐 샘플에 사용자가 고친 내용이 있었으면 알린다', () => {
+  const st = mem();
+  const first = createApp({ store: createStore(st), samples: SAMPLES, now: () => ctx.now });
+  first.addNode({ core_type: 'work', label: '내가 추가' });
+  const d = JSON.parse(st.raw.get('wu:v1:u:U-A1'));
+  d.universe.created_at = '2026-09-01T00:00:00+09:00'; // 이전 판처럼
+  st.raw.set('wu:v1:u:U-A1', JSON.stringify(d));
+  const app = createApp({ store: createStore(st), samples: SAMPLES, now: () => ctx.now });
+  assert.deepEqual(app.warnings, [{ code: 'W-SAMPLE-RESET', name: '월말 정산 점검' }]);
+});
