@@ -3,6 +3,8 @@
 
 import { DENSE_DEFAULT_N, denseLimit, densityGaps, repeatInefficiency, similarExperts } from '../rules/insight.js';
 import { flowChange } from '../rules/flow.js';
+import { densityExplain, flowExplain, repeatExplain, similarExplain } from '../rules/explain.js';
+import { METHOD_LABELS, explainInsight } from '../llm/connector.js';
 import { el } from './dom.js';
 
 // 밀집 기준 N. 화면에서 바꾸면 이 세션 동안 유지되고 사람 상세의 "밀집 기준에 해당" 판정도 같은 값을 쓴다(저장하지 않음)
@@ -27,6 +29,17 @@ function chip(view, gid, onFocus) {
   return el('button', { type: 'button', class: 'evidence', title: `근거: ${gid}`, onclick: () => ev.node_gids[0] && onFocus(ev.node_gids[0]) }, `${ev.occurred_at} 이력`);
 }
 
+// 인사이트 설명(역할 b): 공급자 결과(사전 생성)가 있으면 그 문장, 없으면 규칙 기반 문장. 문장마다 근거 버튼
+function explainBox(view, req, o) {
+  if (!req) return null;
+  const exists = (g) => view.lookup(g).found || view.events.some((e) => e.gid === g);
+  const r = explainInsight(req, { provider: o.provider, exists });
+  return el('div', { class: 'explain', 'data-testid': 'insight-explain', 'data-method': r.method },
+    el('h4', {}, '설명', el('span', { class: `method-chip ${r.method}` }, METHOD_LABELS[r.method])),
+    el('ul', {}, ...r.sentences.map((s) => el('li', {}, s.text, ' ', chips(view, s.evidence_ids, o.onFocus)))),
+    r.fallback ? el('p', { class: 'muted small', 'data-testid': 'explain-fallback' }, `규칙 기반으로 대체함: ${r.fallback.reason}`) : null);
+}
+
 const chips = (view, ids, onFocus) => el('div', { class: 'evidence-list' }, ...[...new Set(ids)].map((g) => chip(view, g, onFocus)).filter(Boolean));
 
 /**
@@ -43,7 +56,7 @@ export function insightPanel(o) {
 
   function draw() {
     tabs.replaceChildren(tabButton('similar', '유사 경험자', 'tab-similar'), tabButton('repeat', '반복 비효율', 'tab-repeat'), tabButton('density', '밀집·공백', 'tab-density'), tabButton('flow', '흐름 변화', 'tab-flow'));
-    body.replaceChildren(kind === 'similar' ? similarView(o, view) : kind === 'repeat' ? repeatView(view, o.onFocus) : kind === 'density' ? densityView(o, view) : flowView(o, view));
+    body.replaceChildren(kind === 'similar' ? similarView(o, view) : kind === 'repeat' ? repeatView(view, o) : kind === 'density' ? densityView(o, view) : flowView(o, view));
   }
   draw();
 
@@ -70,7 +83,10 @@ function similarView(o, view) {
       out.replaceChildren(el('p', { class: 'muted' }, '업무를 고르면 비슷한 업무를 수행한 사람을 찾아 줍니다.'));
       return;
     }
-    renderSimilar(out, view, similarExperts(view, { works: [pick.value], asOf: o.asOf || todayLocal() }), o.onFocus);
+    const r = similarExperts(view, { works: [pick.value], asOf: o.asOf || todayLocal() });
+    renderSimilar(out, view, r, o.onFocus);
+    const box = explainBox(view, similarExplain(r, pick.value), o);
+    if (box) out.prepend(box);
   };
   pick.addEventListener('change', run);
   run();
@@ -109,7 +125,8 @@ function renderSimilar(box, view, r, onFocus) {
 }
 
 // ── 반복 비효율 ──
-function repeatView(view, onFocus) {
+function repeatView(view, o) {
+  const onFocus = o.onFocus;
   const r = repeatInefficiency(view);
   const parts = [el('p', { class: 'muted small' }, '담당자가 바뀔 때마다 같은 설명을 처음부터 반복하거나, 같은 문제가 여러 업무에서 되풀이되는 패턴입니다.')];
   if (r.status === 'insufficient') {
@@ -130,6 +147,7 @@ function repeatView(view, onFocus) {
       ),
     );
   }
+  parts.splice(1, 0, explainBox(view, repeatExplain(r, view.universe_id), o));
   return el('div', { 'data-testid': 'repeat-body' }, ...parts.filter(Boolean));
 }
 
@@ -140,7 +158,10 @@ function densityView(o, view) {
   const out = el('div', { 'data-testid': 'density-result' });
   const run = () => {
     if (nInput.value !== '') denseN = denseLimit(nInput.value);
-    renderDensity(out, view, densityGaps(view, { asOf, n: denseN }), o.onFocus);
+    const r = densityGaps(view, { asOf, n: denseN });
+    renderDensity(out, view, r, o.onFocus);
+    const box = explainBox(view, densityExplain(r, view.universe_id), o);
+    if (box) out.prepend(box);
   };
   nInput.addEventListener('input', run);
   run();
@@ -198,7 +219,10 @@ function flowView(o, view) {
   const out = el('div', { 'data-testid': 'flow-result' });
   const run = () => {
     flowUnit = unit.value;
-    renderFlow(out, view, flowChange(view, { unit: flowUnit, asOf: today }), o);
+    const r = flowChange(view, { unit: flowUnit, asOf: today });
+    renderFlow(out, view, r, o);
+    const box = explainBox(view, flowExplain(r, view.universe_id), o);
+    if (box) out.prepend(box);
   };
   unit.addEventListener('change', run);
   run();

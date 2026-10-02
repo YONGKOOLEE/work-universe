@@ -132,9 +132,10 @@ function renderDraft(box, d, view, onFocus) {
       copyBtn),
     el('h3', { class: 'draft-title' }, d.title),
     d.fallback ? el('p', { class: 'notice', 'data-testid': 'draft-fallback' }, `규칙 기반으로 대체함: ${d.fallback.reason}`) : null,
+    d.method !== 'rule' && d.counts && d.counts.rule ? el('p', { class: 'muted small', 'data-testid': 'draft-counts' }, `${METHOD_LABELS[d.method]} ${d.counts.provider}개 항목, 나머지 ${d.counts.rule}개는 규칙 기반(사전 생성 결과가 없거나 데이터가 바뀐 항목)`) : null,
     ...d.items.map((i) =>
       el('section', { class: `draft-item${i.insufficient ? ' insufficient' : ''}`, 'data-testid': `draft-item-${i.key}` },
-        el('h4', {}, i.title),
+        el('h4', {}, i.title, i.insufficient ? null : el('span', { class: `method-chip ${i.method || 'rule'}`, 'data-testid': 'item-method' }, i.method === 'pregen' ? '사전 생성' : i.method === 'llm' ? 'LLM' : '규칙 기반')),
         i.insufficient
           ? el('p', { class: 'muted', 'data-testid': 'insufficient' }, '이력 부족 — 근거가 되는 기록이 없어 내용을 만들지 않았습니다.')
           : el('ul', {}, ...i.sentences.map((s) => el('li', {}, el('span', {}, s.text), el('span', { class: 'evidence-list' }, ...s.evidence_ids.map((g) => evidenceChip(view, g, onFocus)))))),

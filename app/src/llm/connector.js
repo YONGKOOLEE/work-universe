@@ -1,50 +1,80 @@
-// LLM 연결부(D-07, 5.4)의 최소 형태(T-07). 화면·기능 코드는 이 함수만 쓴다(R-15).
-// 공급자: none(기본, 규칙 기반 그대로) — pregen(T-12)·claude_api(P2)·internal(P2)은 같은 자리에 붙인다.
-// 규칙: 공급자 결과의 문장마다 근거 ID를 검증하고, 근거가 없거나 데이터에 없는 문장은 규칙 기반 문장으로 대체한다.
-//       공급자가 실패하거나 형식이 깨지면 전체를 규칙 기반으로 두고 원인을 남긴다(R-04 ③).
+// LLM 연결부(D-07, 5.4). 화면·기능 코드는 이 함수들만 쓴다(R-15). 공급자는 providers.js에서 이름으로 만든다.
+// 규칙:
+//   - 공급자 문장마다 근거 ID를 검증한다. 근거가 비었거나, 데이터에 없거나, 그 항목의 규칙 기반 근거 밖이면
+//     그 항목은 규칙 기반 문장으로 대체한다("근거로 고른 것만" 쓴다, 5.4 · 검토 3-11).
+//   - 근거가 없는 항목(이력 부족)에는 문장을 지어내지 않는다.
+//   - 공급자가 실패하거나 형식이 깨지면 전체를 규칙 기반으로 두고 원인을 남긴다(R-04 ③).
+//   - 사전 생성 결과가 없는 항목(새로 입력한 데이터 등)은 규칙 기반 문장이 그대로 남는다(CR-1).
 // 브라우저 기능을 쓰지 않는다.
 
+import { itemEvidence } from './providers.js';
+
 export const METHOD_LABELS = { rule: '규칙 기반', pregen: '사전 생성(개발 시 Claude로 작성)', llm: 'LLM' };
+const FALLBACK = 'W-LLM-FALLBACK';
+
+const validSentences = (sentences, allowed, exists) =>
+  Array.isArray(sentences) && sentences.length > 0 &&
+  sentences.every((s) => s && typeof s.text === 'string' && s.text.trim() && Array.isArray(s.evidence_ids) && s.evidence_ids.length > 0 &&
+    s.evidence_ids.every((g) => allowed.has(g) && exists(g)));
 
 /**
  * @param {object} draft 규칙 기반 결과(rules/handover.js의 draft)
  * @param {{provider?: {name:string, method:'pregen'|'llm', refine:(task:string, draft:object)=>{items:object[]}}, exists:(gid:string)=>boolean}} opts
- *   exists(gid)는 근거 ID가 실제 데이터에 있는지 확인한다(view.lookup / 이벤트 목록).
- * @returns {object} draft와 같은 모양. method, fallback({code, reason})이 붙는다
+ * @returns {object} draft와 같은 모양. method(공급자 문장을 하나라도 썼으면 공급자 방식), fallback({code, reason}),
+ *   counts({provider, rule}) — 항목마다 method가 붙는다
  */
 export function refineDraft(draft, { provider = null, exists }) {
-  if (!provider || provider.name === 'none') return { ...draft, method: 'rule', fallback: null };
+  const asRule = (fallback) => ({ ...draft, items: draft.items.map((i) => ({ ...i, method: 'rule' })), method: 'rule', fallback, counts: { provider: 0, rule: draft.items.filter((i) => !i.insufficient).length } });
+  if (!provider || provider.name === 'none') return asRule(null);
 
   let result;
   try {
     result = provider.refine('handover', draft);
   } catch (err) {
-    return { ...draft, method: 'rule', fallback: { code: 'W-LLM-FALLBACK', reason: `공급자 오류: ${err && err.message ? err.message : err}` } };
+    return asRule({ code: FALLBACK, reason: `공급자 오류: ${err && err.message ? err.message : err}` });
   }
-  if (!result || !Array.isArray(result.items)) {
-    return { ...draft, method: 'rule', fallback: { code: 'W-LLM-FALLBACK', reason: '응답 형식 오류' } };
-  }
+  if (!result || !Array.isArray(result.items)) return asRule({ code: FALLBACK, reason: '응답 형식 오류' });
 
-  // 항목 단위 검증: 공급자 문장의 근거가 모두 실제로 있어야 쓴다. 아니면 그 항목은 규칙 기반 문장 유지
   let replaced = 0;
+  let used = 0;
   const items = draft.items.map((ruleItem) => {
     const got = result.items.find((i) => i && i.key === ruleItem.key);
-    if (!got || !Array.isArray(got.sentences)) return { ...ruleItem, method: 'rule' };
-    const valid = got.sentences.every(
-      (s) => s && typeof s.text === 'string' && Array.isArray(s.evidence_ids) && s.evidence_ids.length > 0 && s.evidence_ids.every(exists),
-    );
-    if (!valid) {
+    if (!got) return { ...ruleItem, method: 'rule' };
+    if (ruleItem.insufficient) return { ...ruleItem, method: 'rule' };
+    if (!validSentences(got.sentences, new Set(itemEvidence(ruleItem)), exists)) {
       replaced += 1;
       return { ...ruleItem, method: 'rule', replaced: true };
     }
-    // 근거가 없는 항목(이력 부족)에는 문장을 지어내지 않는다
-    if (ruleItem.insufficient) return { ...ruleItem, method: 'rule' };
+    used += 1;
     return { ...ruleItem, sentences: got.sentences, method: provider.method };
   });
   return {
     ...draft,
     items,
-    method: provider.method,
-    fallback: replaced ? { code: 'W-LLM-FALLBACK', reason: `근거가 확인되지 않은 항목 ${replaced}개는 규칙 기반 문장으로 대체` } : null,
+    method: used ? provider.method : 'rule',
+    fallback: replaced ? { code: FALLBACK, reason: `근거가 확인되지 않은 항목 ${replaced}개는 규칙 기반 문장으로 대체` } : null,
+    // 이력 부족 항목은 어느 쪽에도 세지 않는다(문장이 없음)
+    counts: { provider: used, rule: items.filter((i) => !i.insufficient).length - used },
   };
+}
+
+/**
+ * 인사이트 결과의 설명 문장(역할 b, 12.3 insight_explain). 공급자 결과가 없거나 검증에 실패하면 규칙 기반 문장.
+ * @param {{target:string, evidence_ids:string[], rule:{text:string, evidence_ids:string[]}[]}} req
+ * @returns {{sentences:object[], method:string, fallback:object|null}}
+ */
+export function explainInsight(req, { provider = null, exists }) {
+  const rule = { sentences: req.rule, method: 'rule', fallback: null };
+  if (!provider || provider.name === 'none' || typeof provider.explain !== 'function') return rule;
+  let got;
+  try {
+    got = provider.explain(req.target, req.evidence_ids);
+  } catch (err) {
+    return { ...rule, fallback: { code: FALLBACK, reason: `공급자 오류: ${err && err.message ? err.message : err}` } };
+  }
+  if (!got) return rule;
+  if (!validSentences(got.sentences, new Set(req.evidence_ids), exists)) {
+    return { ...rule, fallback: { code: FALLBACK, reason: '근거가 확인되지 않아 규칙 기반 설명으로 대체' } };
+  }
+  return { sentences: got.sentences, method: provider.method, fallback: null };
 }

@@ -1,6 +1,7 @@
 // 브라우저 저장소(12.4 키). DOM에 의존하지 않도록 storage 객체를 주입받는다.
 
 const INDEX_KEY = 'wu:v1:index';
+const SETTINGS_KEY = 'wu:v1:settings';
 const universeKey = (id) => `wu:v1:u:${id}`;
 
 // 저장소를 쓸 수 있으면 Storage 객체를, 아니면 null을 돌려준다.
@@ -89,3 +90,26 @@ export function createStore(storage) {
     listUniverses: readIndex,
   };
 }
+
+/** 설정(12.4 wu:v1:settings): 공급자 선택. 저장소가 없거나 값이 깨졌으면 기본값. 키는 저장하지 않는다(Claude API는 P2) */
+export function loadSettings(storage, defaults) {
+  if (!storage) return { ...defaults };
+  try {
+    const v = JSON.parse(storage.getItem(SETTINGS_KEY) || 'null');
+    return v && typeof v === 'object' ? { ...defaults, ...v } : { ...defaults };
+  } catch {
+    return { ...defaults };
+  }
+}
+
+/** 설정을 저장한다. 실패하면 false(화면에서는 이번 세션 동안만 유지) */
+export function saveSettings(storage, settings) {
+  if (!storage) return false;
+  try {
+    storage.setItem(SETTINGS_KEY, JSON.stringify({ provider: settings.provider }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+

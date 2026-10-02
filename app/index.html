@@ -127,6 +127,14 @@
   .flow-table details summary { cursor: pointer; }
   .flow-table td.nodata { color: var(--muted); font-style: italic; }
   .flow-table tr.current-row td { background: rgba(160, 210, 110, 0.12); }
+  .settings-list { display: grid; gap: 8px; margin: 8px 0 12px; }
+  .setting { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+  .setting > span { display: grid; gap: 2px; }
+  .explain { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 6px 0 10px; display: grid; gap: 4px; }
+  .explain h4 { margin: 0; font-size: 13px; display: flex; gap: 6px; align-items: center; }
+  .explain ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+  .method-chip { margin-left: 6px; font-size: 11px; padding: 0 6px; border-radius: 8px; border: 1px solid var(--line); color: var(--muted); font-weight: normal; }
+  .method-chip.pregen { border-color: var(--accent); color: var(--accent); }
   .dg-n { display: flex; align-items: center; gap: 6px; font-size: 13px; }
   .dg-n input { width: 4em; }
   .insight h3 { font-size: 14px; margin: 12px 0 4px; }
@@ -167,6 +175,7 @@
   <span class="spacer"></span>
   <button type="button" id="create-open" class="primary">새 유니버스</button>
   <button type="button" id="group-open">유니버스 묶기</button>
+  <button type="button" id="settings-open" title="초안 문장·인사이트 설명을 만드는 방식">생성 방식</button>
   <button type="button" id="reset">가상 데이터 초기화</button>
 </header>
 <div id="start-screen"></div>

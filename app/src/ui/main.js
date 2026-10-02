@@ -1,7 +1,10 @@
 // 화면 진입점. 빌드하면 모듈 없는 단일 스크립트(IIFE)가 된다(P-1).
 
 import { createApp } from '../app/app.js';
-import { createStore, openStorage } from '../store/local.js';
+import { createStore, loadSettings, openStorage, saveSettings } from '../store/local.js';
+import { PREGEN } from '../../data/pregen.js';
+import { DEFAULT_PROVIDER, PROVIDERS, createProvider } from '../llm/providers.js';
+import { settingsPanel } from './settings.js';
 import { SAMPLES, SAMPLE_GUIDE } from '../../data/index.js';
 import { startScreen } from './start.js';
 import { NODE_TYPES } from '../model/schema.js';
@@ -111,6 +114,11 @@ function start() {
   let drafting = null; // 인수인계 초안 화면: {target}
   let insight = null; // 인사이트 화면: {work, kind}
   let viewDate = null; // 시간 슬라이더로 고른 기준일(YYYY-MM-DD). null이면 오늘
+  // 생성 방식(R-15): 설정에서 고른 공급자. 기본은 사전 생성(12.4)
+  const settings = loadSettings(storage, { provider: DEFAULT_PROVIDER });
+  let provider = createProvider(settings.provider, { pregen: PREGEN });
+  let settingsOpen = false;
+  const providerLabel = () => (PROVIDERS.find((p) => p.name === settings.provider) || PROVIDERS[0]).label;
   const asOf = () => viewDate || todayLocal();
   const expanded = new Set(); // 펼친 하위 유니버스
   let view = app.view;
@@ -202,6 +210,7 @@ function start() {
   }
 
   function openDraft(targetGid) {
+    settingsOpen = false;
     editing = null;
     insight = null;
     drafting = { target: targetGid };
@@ -209,6 +218,7 @@ function start() {
   }
 
   function openInsight(workGid, kind = 'similar') {
+    settingsOpen = false;
     editing = null;
     drafting = null;
     insight = { work: workGid, kind };
@@ -365,12 +375,26 @@ function start() {
 
   function renderPanel() {
     const panel = $('detail');
+    if (settingsOpen) {
+      panel.replaceChildren(settingsPanel({
+        current: settings.provider,
+        persisted: !!storage,
+        onChange: (name) => {
+          settings.provider = name;
+          provider = createProvider(name, { pregen: PREGEN });
+          saveSettings(storage, settings);
+          renderSettingsButton();
+        },
+        onClose: () => { settingsOpen = false; renderPanel(); },
+      }));
+      return;
+    }
     if (insight) {
-      panel.replaceChildren(insightPanel({ view, work: insight.work, kind: insight.kind, asOf: asOf(), today: todayLocal(), onTime: setViewDate, onKind: (k) => { insight.kind = k; }, onFocus: showInGraph, onClose: () => { insight = null; renderPanel(); graph.highlight(selected); } }));
+      panel.replaceChildren(insightPanel({ view, provider, work: insight.work, kind: insight.kind, asOf: asOf(), today: todayLocal(), onTime: setViewDate, onKind: (k) => { insight.kind = k; }, onFocus: showInGraph, onClose: () => { insight = null; renderPanel(); graph.highlight(selected); } }));
       return;
     }
     if (drafting) {
-      panel.replaceChildren(draftPanel({ view, target: drafting.target, asOf: asOf(), onFocus: showInGraph, onClose: () => { drafting = null; renderPanel(); graph.highlight(selected); } }));
+      panel.replaceChildren(draftPanel({ view, provider, target: drafting.target, asOf: asOf(), onFocus: showInGraph, onClose: () => { drafting = null; renderPanel(); graph.highlight(selected); } }));
       return;
     }
     if (!selected) {
@@ -398,6 +422,7 @@ function start() {
 
   function select(gid) {
     if (gid !== selected) editing = null;
+    settingsOpen = false;
     drafting = null;
     insight = null;
     selected = gid;
@@ -504,6 +529,19 @@ function start() {
 
   // 유니버스 묶기(R-11 ①, CR-4 시제품): 사용자가 하위 유니버스와 이름·단위를 고른다
   const dialog = $('group-dialog');
+  // 생성 방식 버튼: 지금 방식을 이름에 보인다(R-15 "생성 방식 표시")
+  function renderSettingsButton() {
+    $('settings-open').textContent = `생성 방식: ${providerLabel().replace(/\s*\(.*\)$/, '')}`;
+  }
+  renderSettingsButton();
+  $('settings-open').addEventListener('click', () => {
+    settingsOpen = true;
+    insight = null;
+    drafting = null;
+    editing = null;
+    renderPanel();
+  });
+
   $('group-open').addEventListener('click', () => {
     const list = $('group-children');
     list.replaceChildren(

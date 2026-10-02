@@ -322,6 +322,19 @@ async function checkBrowser(browser, port) {
   check('숨기기 → 그래프에서 빠지고 문서에는 hidden으로 남음', !(await hasLabel(s.cdp, '점검표 양식')) && (await evaluate(s.cdp, "window.__wu.doc.nodes.find((n) => n.id === 'N-021').hidden === true && window.__wu.doc.events.some((e) => e.type === 'hidden' && e.payload.target_id === 'N-021')")));
   await shot(s.cdp, `${browser.name}-3b-edited`);
 
+  // ── T-12 생성 방식 설정: 기본은 사전 생성. 이 단계는 앞에서 데이터를 고친 상태라 규칙 기반 문장을 점검하려고 「규칙 기반만」으로 바꾼다 ──
+  check('R-15: 머리글에 지금 생성 방식(사전 생성) 표시', (await text(s.cdp, '#settings-open')).includes('사전 생성'));
+  const pickProvider = async (name) => {
+    await evaluate(s.cdp, "document.getElementById('settings-open').click()");
+    await sleep(150);
+    await evaluate(s.cdp, `(() => { const r = document.querySelector('[data-testid=provider-${name}]'); r.checked = true; r.dispatchEvent(new Event('change')); })()`);
+    await sleep(100);
+    await clickTestId(s.cdp, 'settings-close');
+    await sleep(100);
+  };
+  await pickProvider('none');
+  check('설정에서 「규칙 기반만」을 고르면 머리글 표시가 바뀌고 저장된다(12.4)', (await text(s.cdp, '#settings-open')).includes('규칙 기반만') && (await evaluate(s.cdp, "JSON.parse(localStorage.getItem('wu:v1:settings')).provider")) === 'none');
+
   // ── T-07 인수인계 초안 ──
   await evaluate(s.cdp, "window.__wu.select(null)");
   await clickTestId(s.cdp, 'btn-draft-universe');
@@ -358,11 +371,25 @@ async function checkBrowser(browser, port) {
   await sleep(250);
   check('근거 링크 → 그래프에서 해당 노드 선택, 초안은 그대로', (await evaluate(s.cdp, "window.__wu.cy.$(':selected').map((n) => n.id()).join()")) === 'U-A1/N-010' && (await evaluate(s.cdp, "!!document.querySelector('[data-testid=draft-status]')")));
   await shot(s.cdp, `${browser.name}-3c-draft`);
+  // R-04 ③ 화면 시연: 「실패 흉내」를 고르고 같은 초안을 만들면 규칙 기반으로 바뀌고 원인이 보인다
+  await pickProvider('fail');
+  await evaluate(s.cdp, "window.__wu.select(null)");
+  await clickTestId(s.cdp, 'btn-draft-universe');
+  await sleep(150);
+  await evaluate(s.cdp, `(() => {
+    const set = (id, v) => { const e = document.querySelector('[data-testid=' + id + ']'); e.value = v; e.dispatchEvent(new Event('change')); };
+    set('draft-target', 'U-A1/N-000'); set('draft-from', 'U-A1/N-011'); set('draft-to', 'U-A1/N-012');
+    document.querySelector('[data-testid=draft-form] button[type=submit]').click();
+  })()`);
+  await sleep(250);
+  check('R-04 ③: 실패 흉내 → 생성 방식 규칙 기반과 원인(호출 실패) 표시, 초안은 그대로 10개 항목', (await text(s.cdp, '[data-testid=draft-method]')).includes('규칙 기반') && (await text(s.cdp, '[data-testid=draft-fallback]')).includes('호출 실패') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid^=draft-item-]').length")) === 10);
+  await shot(s.cdp, `${browser.name}-3d-draft-fail`);
   // 화면 어디에도 'null' 글자가 들어가지 않는다(replaceChildren에 빈 값을 넘긴 실수 검출)
   const nullTexts = await evaluate(s.cdp, "(() => { document.querySelectorAll('details').forEach((d) => (d.open = true)); const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); const out = []; while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') out.push(w.currentNode.parentElement.id || w.currentNode.parentElement.className); return out; })()");
   check('화면에 "null" 글자 없음', nullTexts.length === 0, nullTexts.join(','));
   await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=draft-form] button')].find((b) => b.textContent === '닫기').click()");
 
+  await pickProvider('pregen'); // 이후 단계는 기본 생성 방식으로
   await s.cdp.send('Page.reload');
   await sleep(300);
   const reloaded = await waitFor(s.cdp, 'window.__wu && window.__wu.cy.nodes().length > 0');
@@ -724,6 +751,8 @@ async function checkBrowser(browser, port) {
     await sleep(200);
     const nodata = await text(s.cdp, '[data-testid=flow-nodata]');
     check('R-05 ②: 조직관리 흐름 변화 — 마지막 입력(2026-03-10) 이후 기간은 "입력 없음"으로 알림', nodata.includes('2026-03-10') && (await text(s.cdp, '[data-testid=flow-table]')).includes('입력 없음 — 데이터 부족'), nodata);
+    const explainO = await text(s.cdp, '[data-testid=insight-explain]');
+    check('T-12 인사이트 설명(사전 생성): 조직관리 흐름 변화에 2차 조직개편 설명과 방식 표시', explainO.includes('2차 조직개편') && (await evaluate(s.cdp, "document.querySelector('[data-testid=insight-explain]').dataset.method")) === 'pregen', explainO.slice(0, 80));
     check('조직개편 2026-01 행에 소속 변경 12', await evaluate(s.cdp, `(() => { const tr = document.querySelector('[data-testid=flow-table] tr[data-key="2026-01"]'); return !!tr && tr.children[4].textContent === '12'; })()`));
     await shot(s.cdp, `${browser.name}-10-org-flow`);
     await clickTestId(s.cdp, 'tab-density');
@@ -758,6 +787,27 @@ async function checkBrowser(browser, port) {
     const shortCount = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid^=draft-item-]')].filter((x) => x.textContent.includes('이력 부족')).length");
     check('R-03 ② 예외 5: 「신규 교육 과정」 초안은 8개 항목이 "이력 부족"', shortCount === 8, String(shortCount));
     await shot(s.cdp, `${browser.name}-11-edu-short`);
+    // T-12 사전 생성 초안: 신입 교육 운영, 이든빛 → 나래솔(데이터를 고치지 않은 상태)
+    await evaluate(s.cdp, "(() => { const f = document.querySelector('[data-testid=draft-form]'); const set = (t, v) => { const e = f.querySelector('[data-testid=' + t + ']'); e.value = v; e.dispatchEvent(new Event('change')); }; set('draft-target', 'U-C/N-101'); set('draft-from', 'U-C/N-202'); set('draft-to', 'U-C/N-201'); f.querySelector('button[type=submit]').click(); })()");
+    await sleep(250);
+    const pregenChips = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=item-method]')].filter((x) => x.textContent === '사전 생성').length");
+    check('T-12 사전 생성: 생성 방식 표시와 9개 항목(이력 부족 제외)에 「사전 생성」, 근거 버튼 유지', (await text(s.cdp, '[data-testid=draft-method]')).includes('사전 생성') && pregenChips === 9 && (await text(s.cdp, '[data-testid=draft-item-세부_업무_절차]')).includes('먼저 강의실·강사 섭외를 마친 뒤') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=draft-item-세부_업무_절차] .evidence').length")) >= 4, String(pregenChips));
+    await shot(s.cdp, `${browser.name}-11b-edu-pregen`);
+    // 새로 입력한 데이터: 메모를 하나 더하면 최근 이슈만 규칙 기반으로 돌아간다(K-9)
+    await evaluate(s.cdp, "window.__wu.select('U-C/N-101')");
+    await sleep(150);
+    await clickTestId(s.cdp, 'btn-event');
+    await sleep(150);
+    const memoOk = await evaluate(s.cdp, "(() => { const f = document.querySelector('[data-testid=event-form]'); if (!f) return 'no form'; const set = (t, v) => { const e = f.querySelector('[data-testid=' + t + ']'); if (!e) return false; e.value = v; e.dispatchEvent(new Event('change')); return true; }; set('event-type', 'memo'); set('event-date', '2026-10-02'); set('event-note', '10월 강의실 예약 시스템 점검 예정'); f.querySelector('button[type=submit]').click(); return 'ok'; })()");
+    await sleep(250);
+    await evaluate(s.cdp, "window.__wu.select('U-C/N-101')");
+    await sleep(150);
+    await clickTestId(s.cdp, 'btn-draft');
+    await sleep(150);
+    await evaluate(s.cdp, "(() => { const f = document.querySelector('[data-testid=draft-form]'); const set = (t, v) => { const e = f.querySelector('[data-testid=' + t + ']'); e.value = v; e.dispatchEvent(new Event('change')); }; set('draft-from', 'U-C/N-202'); set('draft-to', 'U-C/N-201'); f.querySelector('button[type=submit]').click(); })()");
+    await sleep(250);
+    const issueMethod = await text(s.cdp, '[data-testid=draft-item-최근_이슈] [data-testid=item-method]');
+    check('K-9: 새 메모를 더하면 최근 이슈만 규칙 기반, 나머지는 사전 생성(개수 안내)', memoOk === 'ok' && issueMethod === '규칙 기반' && (await text(s.cdp, '[data-testid=draft-counts]')).includes('나머지 1개는 규칙 기반'), `${memoOk} ${issueMethod}`);
   }
   {
     check('부서 화면에서도 화면에 "null" 글자 없음', (await evaluate(s.cdp, "(() => { const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') return false; return true; })()")));
