@@ -9,10 +9,11 @@
   :root { --bg: #0f1510; --panel: #141c15; --panel-2: #1b251c; --line: #2a3a2b; --text: #e6ecdf; --muted: #8f9d88; --accent: #a6d86b; --accent-ink: #13200f; --err: #ff8f86; --ok: #9be39f; --warn-bg: #3a3214; --warn-text: #f2dc8e; --chip: #243226; --link: #b9e07a; }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: "Malgun Gothic", system-ui, sans-serif; color: var(--text); background: var(--bg); display: flex; flex-direction: column; height: 100vh; }
-  header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
   header h1 { font-size: 17px; margin: 0; letter-spacing: .5px; }
   header h1 b { color: var(--accent); }
-  #universe-picker { border-radius: 999px; padding: 6px 12px; max-width: 420px; }
+  #universe-picker { border-radius: 999px; padding: 6px 12px; max-width: 420px; flex: 1 1 160px; min-width: 160px; }
+  header button { white-space: nowrap; }
   header .spacer { flex: 1; }
   button { font: inherit; padding: 6px 14px; border-radius: 999px; border: 1px solid #3c5a33; background: var(--panel-2); color: var(--text); cursor: pointer; }
   button:hover:not(:disabled) { border-color: var(--accent); }
@@ -168,6 +169,22 @@
   .card p { margin: 0; }
   .card .try { font-size: 13px; color: var(--text); background: var(--panel-2); border-radius: 6px; padding: 6px 8px; }
   .card button { justify-self: start; margin-top: 4px; }
+  dialog.wide { width: min(900px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto; }
+  .import-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .import-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0 10px; }
+  .import-notes { list-style: disc; padding-left: 18px; display: grid; gap: 4px; color: var(--warn-text); font-size: 13px; margin: 8px 0; }
+  .import-sections th, .import-sections td { white-space: normal !important; width: auto !important; text-align: left !important; }
+  .import-sections th:first-child, .import-sections td:first-child { width: 5.5em !important; white-space: nowrap !important; }
+  .import-nodes { display: grid; gap: 6px; }
+  .import-nodes summary, .import-memos { cursor: pointer; font-size: 14px; }
+  .import-nodes ul { display: grid; gap: 6px; margin: 6px 0 4px 8px; }
+  .import-memos { list-style: disc; padding-left: 18px; display: grid; gap: 4px; }
+  .clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-line; }
+  .chip.mark { margin-left: 6px; background: var(--warn-bg); color: var(--warn-text); border-color: #5a4c1c; }
+  .file-pick { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .import-actions { margin-top: 14px; position: sticky; bottom: -18px; background: var(--panel); padding: 10px 0; }
+  h4 { margin: 12px 0 4px; font-size: 14px; color: var(--accent); }
+  dd { white-space: pre-line; }
   @media (max-width: 800px) { main { flex-direction: column; } aside { width: auto; border-left: 0; border-top: 1px solid var(--line); max-height: 50vh; } .graph-wrap { min-height: 320px; } }
 </style>
 </head>
@@ -178,6 +195,7 @@
   <span class="spacer"></span>
   <button type="button" id="create-open" class="primary">새 유니버스</button>
   <button type="button" id="group-open">유니버스 묶기</button>
+  <button type="button" id="import-open" title="업무정의서 문서를 붙여 넣어 초벌로 바꾸거나, JSON 파일을 열거나, 지금 유니버스를 JSON 파일로 내려받습니다">가져오기·내보내기</button>
   <button type="button" id="settings-open" title="초안 문장·인사이트 설명을 만드는 방식">생성 방식</button>
   <button type="button" id="reset">가상 데이터 초기화</button>
 </header>
@@ -224,6 +242,7 @@
     <div class="row"><button type="submit">묶기</button><button type="button" id="group-cancel">취소</button></div>
   </form>
 </dialog>
+<dialog id="import-dialog" class="wide" aria-labelledby="import-title"></dialog>
 <script src="app.js"></script>
 </body>
 </html>

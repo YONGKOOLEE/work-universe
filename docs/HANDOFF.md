@@ -1,7 +1,7 @@
 # 세션 시작 안내 (HANDOFF)
 
 새 세션은 **이 파일 하나만 먼저 읽는다.** 문서 전체를 읽으면 약 18만 자(6만 토큰 안팎)라서, 작업마다 필요한 절만 골라 읽는다(아래 "작업별로 읽을 곳").
-마지막 갱신: 2026-10-03 (세 번째 전체 검토 수정 직후)
+마지막 갱신: 2026-10-03 (T-17 완료 직후)
 
 ## 1. 지금 상태 (한 줄씩)
 
@@ -11,7 +11,8 @@
   - 세 번째 전체 검토(2026-10-03) 결과와 수정: `docs/review-2026-10-02.md` 7절, tech-record 29절.
   - T-14는 구현만 끝났다. 완료 기준(대리 검증자 관찰, R-08)은 미확인.
   - 조력자 의견이 오면 데이터 내용만 교체: T-13 → T-12 → 시나리오(K-9).
-- 대기: T-17 문서 변환(T-10 뒤, 착수 전 CR-5 ② 확인 필요). CR-4(층별 보기)는 코드에만 있고 미승인. T-16 대본·소개자료는 기한(10-30) 즈음 검토 뒤에(사용자 결정 2026-10-03).
+- T-17 완료(2026-10-03): CR-5 ② 확정 "CR-5는 ②로 확정, 변환 세분화는 월말 정산 수준으로". 앱 안 규칙 기반 초벌 변환(02 12.9.1 규칙 v1) + 「가져오기·내보내기」(문서·JSON·내보내기). tech-record 32절.
+- 대기: CR-4(층별 보기)는 코드에만 있고 미승인. T-16 대본·소개자료는 기한(10-30) 즈음 검토 뒤에(사용자 결정 2026-10-03). 계획된 구현 T-ID는 모두 구현됨 — 남은 것은 사람 확인·결정(decisions-pending)과 조력자 의견 반영.
 - T-15 자동 부분 완료(실행 안내·압축·제출 점검 8/8). 남은 것은 사용자: 다른 PC 실행·메일 발송·태그. T-16 영상(사용자).
 - **연속 진행 모드(2026-10-02~):** 확인 없이 다음 작업으로, 작업마다 로컬 자동 커밋. 결정·확인은 `docs/decisions-pending.md`에 쌓는다(CLAUDE.md 작업 방식).
 - 진행 기록: `docs/.status`의 `implementation:` 절. 결정·해석: `docs/tech-record.md`(절 번호로 찾기).
@@ -28,7 +29,7 @@
 ## 3. 명령
 
 ```
-npm test                  # 단위 테스트(266개)
+npm test                  # 단위 테스트(291개)
 node tools/pregen-dump.mjs        # 사전 생성 작성용 근거 덤프(데이터를 바꾸면 다시 보고 app/data/pregen.js 고침)
 npm run build             # dist/index.html (바이트 크기 표시)
 npm run check:browser     # Chrome·Edge file:// 점검. SHOT_DIR=.tmp/shots 를 주면 화면 PNG 저장
@@ -58,20 +59,20 @@ node tools/perf-check.mjs 300 --browser   # 규모 점검
 | T-12 사전 생성(다시 쓸 때) | 01 R-15(CR-1), 02 5.4·12.3, tech-record 15·27절, `tools/pregen-dump.mjs`, `app/data/pregen.js` |
 | T-13 데이터(교체 시) | 02 4절(사례·예외 9건)·1.7, 03 7.2, tech-record 7·18·26절, `app/data/answers-v1.js`, `docs/limits.md` |
 | T-15 제출 | 03 T-15·K-6, review 3-1~3-7·4-10, README |
-| T-17 문서 변환 | 01 CR-3, 02 12.9, `.status` CR-3·CR-5, tech-record 9절 |
+| T-17 문서 변환·가져오기(다시 볼 때) | 01 CR-3·CR-5, 02 12.9·12.9.1, tech-record 9·32절, `app/src/rules/doc-convert.js`(`CONVERT_RULES`), `app/src/ui/import.js` |
 | 화면 수정 | `app/src/ui/*`, tech-record 8·12·17·21절 |
 
 ## 6. 코드 지도
 
-- `app/src/model`: 스키마 상수·검증·명령(순수 함수)
+- `app/src/model`: 스키마 상수·검증·명령·가져오기 미리 보기(`import.js`)(순수 함수)
 - `app/src/view`: 합성 뷰, 상세 문장, 층별 보기
 - `app/src/merge`: 통합 확인 목록(사번 자동 연결, 사번 충돌·없음, 업무 후보)
-- `app/src/rules`: 인수인계 초안(`handover.js`), 인사이트(`insight.js`)
+- `app/src/rules`: 인수인계 초안(`handover.js`), 인사이트(`insight.js`), 문서 초벌 변환(`doc-convert.js`)
 - `app/src/llm`: 연결부(`connector.js`)와 공급자(`providers.js`: 사전 생성 기본, Claude API·사내 LLM은 P2 자리)
 - `app/src/app`: 명령 흐름과 저장
 - `app/src/store`: 브라우저 저장소
-- `app/src/ui`: 화면(main, graph, detail, editor, draft, insight, start)
-- `app/data`: 샘플 7개(월말 정산·카드승인·결제운영팀·행사팀·부서·교육팀·조직관리), 정답 표(v2), 시작 화면 문구
+- `app/src/ui`: 화면(main, graph, detail, editor, draft, insight, start, merge, import)
+- `app/data`: 샘플 7개(월말 정산·카드승인·결제운영팀·행사팀·부서·교육팀·조직관리), 정답 표(v2), 시작 화면 문구, 가져오기 예시 문서(`doc-example.js`, inputs 원문 복사)
 - `tests/*.test.js`: 단위 테스트
 - `tools/`: 빌드, 브라우저 점검, 비밀값·데이터·규모 점검
 

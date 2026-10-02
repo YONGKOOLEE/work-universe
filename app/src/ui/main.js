@@ -22,6 +22,10 @@ import { personLoad, repeatPatternsFor, workLoad } from '../rules/insight.js';
 import { monthAsOf, timeMonths } from '../rules/flow.js';
 import { periodStatus } from '../view/describe.js';
 import { messageFor } from './messages.js';
+import { exportFileName, importDialog } from './import.js';
+import { convertDocument } from '../rules/doc-convert.js';
+import { convertDocumentWith } from '../llm/connector.js';
+import { DOC_EXAMPLE } from '../../data/doc-example.js';
 
 // ISO 8601 날짜·시각 + 현지 시간대(12.1)
 function nowIso() {
@@ -69,6 +73,31 @@ function wireCreateDialog(app, $) {
   return open;
 }
 
+// 가져오기(T-17): 문서 초벌 변환(CR-5 ②)·JSON 파일 → 미리 보기 → 가져오기. 시작 화면과 본 화면이 함께 쓴다
+function wireImportDialog(app, $, getProvider, methodLabel, onExport = null) {
+  const open = importDialog({
+    onExport,
+    dialog: $('import-dialog'),
+    app,
+    convert: (text) => convertDocumentWith(text, { provider: getProvider(), ruleConvert: (t) => convertDocument(t, { now: nowIso() }) }),
+    methodLabel,
+    example: DOC_EXAMPLE,
+    onImported: openUniverse,
+  });
+  $('import-open').addEventListener('click', open);
+  return open;
+}
+
+// 내보내기(D-06): 현재 유니버스를 JSON 파일로 내려받는다(file://에서도 동작하는 a[download])
+function exportCurrent(app) {
+  const url = URL.createObjectURL(new Blob([app.exportJson()], { type: 'application/json' }));
+  const a = el('a', { href: url, download: exportFileName(app.doc.universe) });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 // 시작 화면으로: 주소의 #유니버스ID를 지우고 다시 연다
 function goStart() {
   history.replaceState(null, '', location.pathname + location.search);
@@ -95,6 +124,12 @@ function start() {
 
   const $ = (id) => document.getElementById(id);
 
+  // 생성 방식(R-15): 설정에서 고른 공급자. 기본은 사전 생성(12.4)
+  const settings = loadSettings(storage, { provider: DEFAULT_PROVIDER }, PROVIDERS.map((p) => p.name));
+  let provider = createProvider(settings.provider, { pregen: PREGEN });
+  const providerLabel = () => (PROVIDERS.find((p) => p.name === settings.provider) || PROVIDERS[0]).label;
+  const openImport = wireImportDialog(app, $, () => provider, providerLabel, location.hash.slice(1) ? () => exportCurrent(app) : null);
+
   // 주소에 유니버스가 없으면(더블클릭으로 처음 열었을 때) 시작 화면을 보여 준다(R-08)
   if (!location.hash.slice(1)) {
     document.body.classList.add('start-mode');
@@ -106,6 +141,7 @@ function start() {
       readOnly: app.readOnly,
       onOpen: openUniverse,
       onCreate: openCreate,
+      onImport: openImport,
     }));
     window.__wu = { start: true, readOnly: app.readOnly };
     return;
@@ -115,12 +151,8 @@ function start() {
   let drafting = null; // 인수인계 초안 화면: {target}
   let insight = null; // 인사이트 화면: {work, kind}
   let viewDate = null; // 시간 슬라이더로 고른 기준일(YYYY-MM-DD). null이면 오늘
-  // 생성 방식(R-15): 설정에서 고른 공급자. 기본은 사전 생성(12.4)
-  const settings = loadSettings(storage, { provider: DEFAULT_PROVIDER }, PROVIDERS.map((p) => p.name));
-  let provider = createProvider(settings.provider, { pregen: PREGEN });
   let settingsOpen = false;
   let merging = false; // 통합 확인 목록(T-10)
-  const providerLabel = () => (PROVIDERS.find((p) => p.name === settings.provider) || PROVIDERS[0]).label;
   const asOf = () => viewDate || todayLocal();
   const expanded = new Set(); // 펼친 하위 유니버스
   let view = app.view;

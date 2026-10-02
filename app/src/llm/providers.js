@@ -58,7 +58,7 @@ function unavailable(name, reason) {
   const fail = () => {
     throw new Error(reason);
   };
-  return { name, method: 'llm', refine: fail, explain: fail };
+  return { name, method: 'llm', refine: fail, explain: fail, convert: fail };
 }
 
 /**

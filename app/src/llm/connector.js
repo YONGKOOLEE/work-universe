@@ -8,6 +8,7 @@
 // 브라우저 기능을 쓰지 않는다.
 
 import { itemEvidence } from './providers.js';
+import { validateDocument } from '../model/validate.js';
 
 export const METHOD_LABELS = { rule: '규칙 기반', pregen: '사전 생성(개발 시 Claude로 작성)', llm: 'LLM' };
 const FALLBACK = 'W-LLM-FALLBACK';
@@ -78,4 +79,35 @@ export function explainInsight(req, { provider = null, exists }) {
     return { ...rule, fallback: { code: FALLBACK, reason: '근거가 확인되지 않아 규칙 기반 설명으로 대체' } };
   }
   return { sentences: got.sentences, method: provider.method, fallback: null };
+}
+
+/**
+ * 문서 → 유니버스 변환(역할 d, CR-3·CR-5 ②). 규칙 기반 초벌 변환이 기본이고, 공급자가 문서 변환(convert)을 할 수 있으면 그 결과를 쓴다(CR-3 B 자리).
+ * 공급자 결과는 스키마 검증과 원문 근거(모든 노드의 attrs.원문)를 통과해야 쓴다. 아니면 규칙 기반 결과와 원인을 돌려준다(R-04 ③).
+ * 사전 생성은 내장 샘플용이라 새 문서에는 결과가 없다 → 규칙 기반.
+ * @param {string} text 문서 원문
+ * @param {{provider?:object|null, ruleConvert:(text:string)=>object}} opts ruleConvert: rules/doc-convert.js의 convertDocument를 감싼 것
+ * @returns {{ok:boolean, doc?:object, report?:object, error?:object, method:string, fallback:object|null, note?:string|null}}
+ *   fallback: 공급자가 실패해 규칙 기반으로 바꾼 원인. note: 실패는 아니지만 알릴 것(사전 생성)
+ */
+export function convertDocumentWith(text, { provider = null, ruleConvert }) {
+  const rule = (fallback, note = null) => ({ ...ruleConvert(text), method: 'rule', fallback, note });
+  if (!provider || provider.name === 'none') return rule(null);
+  if (typeof provider.convert !== 'function') return rule(null, '사전 생성 결과는 내장 샘플용이라, 새 문서는 규칙 기반으로 변환했습니다');
+  let got;
+  try {
+    got = provider.convert('doc_to_universe', text);
+  } catch (err) {
+    return rule({ code: FALLBACK, reason: `공급자 오류: ${err && err.message ? err.message : err}` });
+  }
+  const d = got && got.doc;
+  // 작성 주체는 미리 보기에서 사람이 채우므로 비어 있어도 된다
+  const blocking = d ? validateDocument(d).errors.filter((e) => e.path !== 'universe.owner') : [null];
+  if (blocking.length) {
+    return rule({ code: FALLBACK, reason: '변환 결과가 형식 검증을 통과하지 못해 규칙 기반으로 변환했습니다' });
+  }
+  if (!d.nodes.every((n) => n && n.attrs && typeof n.attrs.원문 === 'string' && n.attrs.원문.trim())) {
+    return rule({ code: FALLBACK, reason: '원문 근거가 없는 노드가 있어 규칙 기반으로 변환했습니다' });
+  }
+  return { ok: true, doc: d, report: got.report || null, method: provider.method, fallback: null, note: null };
 }

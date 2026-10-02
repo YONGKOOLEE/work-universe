@@ -8,6 +8,7 @@ import { validateDocument } from '../model/validate.js';
 import { CODES } from '../model/schema.js';
 import { buildView } from '../view/view.js';
 import { mergePlan } from '../merge/merge.js';
+import { previewImport } from '../model/import.js';
 
 // 사번 자동 연결(R-11 ①)을 문서에 적용한다. 판정자는 없다(emp_no_auto)
 function applyAuto(doc, resolve, ctx) {
@@ -240,6 +241,33 @@ export function createApp({ store, samples, currentId, now }) {
     /** 사람의 판정(같음 confirmed / 다름 rejected)을 기록한다(R-11 ②③, 12.7 흐름 3 ⑤). 원래 유니버스는 바뀌지 않는다(R-11 ⑤) */
     decideIdentity({ a, b, kind, status, reason, score }) {
       return guard() || commit(decideIdentity(doc, { a, b, kind, method: 'human', status, reason, score, decided_by: '사용자(이 브라우저)' }, { now: now() }));
+    },
+
+    /** 가져오기 미리 보기(T-17): 검증 결과·구성·같은 ID 유니버스 */
+    previewImport(d) {
+      return previewImport(d, { existing: this.universes() });
+    },
+
+    /**
+     * 사람이 미리 보기를 확인하고 「가져오기」를 눌렀을 때만 저장한다(CR-3 AC ③).
+     * 검증을 통과하지 못하면 저장하지 않는다(AC ①). 같은 ID가 있으면 overwrite가 true일 때만 덮어쓴다
+     */
+    importUniverse(d, { overwrite = false } = {}) {
+      if (guard()) return guard();
+      const p = previewImport(d, { existing: this.universes() });
+      if (p.version_mismatch) return { ok: false, error: { code: CODES.SCHEMA, reason: 'version', found: d && d.schema_version } };
+      if (!p.ok) return { ok: false, error: { code: CODES.SCHEMA, reason: 'invalid', count: p.errors.length }, preview: p };
+      if (p.conflict && !overwrite) return { ok: false, error: { code: CODES.DUP, field: 'universe', existing: p.conflict } };
+      const copy = clone(d);
+      const failed = save(copy);
+      if (failed) return failed;
+      if (copy.universe.id === doc.universe.id) doc = copy;
+      return { ok: true, doc: copy };
+    },
+
+    /** 내보내기(D-06): 현재 유니버스 문서를 JSON 글로. 다른 PC로 옮기거나 백업할 때 쓴다 */
+    exportJson() {
+      return JSON.stringify(doc, null, 2);
     },
 
     /** 현재 유니버스에서 하위 유니버스를 뺀다(참조 해제, 원본은 그대로) */

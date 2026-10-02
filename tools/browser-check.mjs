@@ -555,6 +555,93 @@ async function checkBrowser(browser, port) {
   await sleep(500);
   await waitFor(s.cdp, "window.__wu && window.__wu.doc.universe.id === 'U-A1'", 8000);
 
+  // ── T-17 가져오기: 문서 초벌 변환(CR-5 ②) → 미리 보기 → 가져오기, JSON 파일, 내보내기(D-06) ──
+  await evaluate(s.cdp, "window.confirm = () => true; document.getElementById('import-open').click()");
+  await sleep(200);
+  check('T-17 머리글 「가져오기·내보내기」 → 창이 열림', await evaluate(s.cdp, "document.getElementById('import-dialog').open && !!document.querySelector('[data-testid=import-convert]')"));
+  await clickTestId(s.cdp, 'import-convert');
+  await sleep(150);
+  check('오류: 빈 문서로 초벌 변환 → 변환하지 않고 사유 표시', (await text(s.cdp, '[data-testid=import-message]')).includes('붙여 넣거나') && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=import-confirm]')")));
+  await clickTestId(s.cdp, 'import-example');
+  await sleep(100);
+  await clickTestId(s.cdp, 'import-convert');
+  await sleep(300);
+  const pv = await text(s.cdp, '[data-testid=import-preview]');
+  check('T-17 예시 문서 초벌 변환 → 미리 보기(노드 18개, 세분화 맞음, 원문 근거 18/18, 표시 보존)', (await text(s.cdp, '[data-testid=import-summary]')).includes('노드 18개') && (await text(s.cdp, '[data-testid=import-granularity]')).includes('맞음') && (await text(s.cdp, '[data-testid=import-source]')).includes('18/18') && (await text(s.cdp, '[data-testid=import-marks]')).includes('[미확인] 노드 2개'), pv.slice(0, 120));
+  check('T-17 원문의 절 → 유니버스 표(업무 흐름은 절차 속성, 질문·리스크는 메모)', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=import-sections] tbody tr').length")) === 9 && pv.includes('절차 속성 5단계') && pv.includes('메모 5건'));
+  check('CR-3 AC ③: 작성 주체가 비면 「가져오기」가 막히고 고칠 것 표시', (await evaluate(s.cdp, "document.querySelector('[data-testid=import-confirm]').disabled")) && (await text(s.cdp, '[data-testid=import-errors]')).includes('작성 주체'));
+  check('미리 보기의 핵심 요소가 실제로 그려짐(크기 있음)', await evaluate(s.cdp, "['[data-testid=import-summary]', '[data-testid=import-sections]', '[data-testid=import-nodes]', '[data-testid=import-confirm]'].every((q) => { const r = document.querySelector(q).getBoundingClientRect(); return r.width > 0 && r.height > 0; })"));
+  await shot(s.cdp, browser.name + '-17a-import-preview');
+  await evaluate(s.cdp, "(() => { const i = document.getElementById('import-owner'); i.focus(); i.value = '가상 시스템분석팀'; i.dispatchEvent(new Event('input', { bubbles: true })); })()");
+  await sleep(150);
+  check('작성 주체를 넣으면 「가져오기」가 켜지고 입력 칸이 그대로(포커스 유지)', !(await evaluate(s.cdp, "document.querySelector('[data-testid=import-confirm]').disabled")) && (await evaluate(s.cdp, "!!document.activeElement && document.activeElement.id === 'import-owner'")));
+  await shot(s.cdp, browser.name + '-17a2-import-ready');
+  await evaluate(s.cdp, "(() => { const d = document.getElementById('import-dialog'); d.scrollTop = document.querySelector('[data-testid=import-sections]').offsetTop - 40; })()");
+  await shot(s.cdp, browser.name + '-17a3-import-sections');
+  await evaluate(s.cdp, "(() => { const d = document.getElementById('import-dialog'); d.scrollTop = d.scrollHeight; })()");
+  await shot(s.cdp, browser.name + '-17a4-import-nodes');
+  check('머리글이 한 줄(1280px 창에서 버튼이 아래로 넘어가지 않음)', (await evaluate(s.cdp, "document.querySelector('body > header').getBoundingClientRect().height")) < 70);
+  check('머리글 버튼 글자가 한 줄(꺾이지 않음)', await evaluate(s.cdp, "[...document.querySelectorAll('header button:not(#home)')].filter((b) => b.offsetParent).every((b) => b.getBoundingClientRect().height < 44)"));
+  await clickTestId(s.cdp, 'import-confirm');
+  await sleep(600);
+  const imported = await waitFor(s.cdp, "window.__wu && window.__wu.doc && (window.__wu.doc.universe.tags || []).includes('문서 변환') && window.__wu.cy.nodes().length === 18", 8000);
+  check('T-17 「가져오기」 → 가져온 유니버스가 열리고 그래프로 탐색됨(노드 18)', imported);
+  let exported = null;
+  if (imported) {
+    const mainId = await evaluate(s.cdp, "window.__wu.doc.universe.id + '/' + window.__wu.doc.nodes.find((n) => n.label === '승인').id");
+    await clickNode(s.cdp, mainId);
+    const d17 = await text(s.cdp, '#detail');
+    check('가져온 업무 노드에 원문 근거와 절차(①~⑤)가 보임', d17.includes('§1 범위, §2') && d17.includes('①') && d17.includes('⑤'), d17.slice(0, 100));
+    await shot(s.cdp, browser.name + '-17b-imported');
+    // 내보내기: a[download] 클릭을 가로채 파일 이름과 내용을 확인한다
+    await evaluate(s.cdp, "(() => { window.__dl = null; const orig = URL.createObjectURL; URL.createObjectURL = (b) => { window.__blob = b; return orig.call(URL, b); }; HTMLAnchorElement.prototype.click = function () { window.__dl = this.getAttribute('download'); }; document.getElementById('import-open').click(); document.querySelector('[data-testid=import-tab-export]').click(); document.querySelector('[data-testid=export-download]').click(); document.getElementById('import-dialog').close(); })()");
+    await sleep(200);
+    const dl = await evaluate(s.cdp, 'window.__dl');
+    const curId = await evaluate(s.cdp, 'window.__wu.doc.universe.id');
+    exported = await evaluate(s.cdp, 'window.__blob ? window.__blob.text() : null');
+    const parsedExport = exported ? JSON.parse(exported) : null;
+    check('D-06 「가져오기·내보내기」의 내보내기 탭 → 이름-ID.json 파일, 내용은 지금 유니버스', typeof dl === 'string' && dl.endsWith('.json') && dl.includes(curId) && !!parsedExport && parsedExport.universe.id === curId && parsedExport.nodes.length === 18, String(dl));
+  }
+  // JSON 파일 쪽 오류와 덮어쓰기
+  const pasteJson = async (value) => {
+    await evaluate(s.cdp, "window.confirm = () => true; document.getElementById('import-open').click()");
+    await sleep(150);
+    await clickTestId(s.cdp, 'import-tab-json');
+    await evaluate(s.cdp, '(() => { document.getElementById("import-json").value = ' + JSON.stringify(value) + '; document.querySelector("[data-testid=import-check]").click(); })()');
+    await sleep(250);
+  };
+  await pasteJson('{"schema_version": "1.0", "universe": ');
+  check('오류: 형식이 깨진 JSON → 가져오지 않고 원인 표시', (await text(s.cdp, '[data-testid=import-message]')).includes('JSON 형식이 아닙니다') && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=import-confirm]')")));
+  await evaluate(s.cdp, "document.getElementById('import-dialog').close()");
+  if (exported) {
+    const v2 = JSON.parse(exported);
+    v2.schema_version = '2.0';
+    await pasteJson(JSON.stringify(v2));
+    check('오류: 스키마 버전이 다른 파일 → 가져오지 않고 버전 차이 표시', (await text(s.cdp, '[data-testid=import-errors]')).includes('형식 버전이 다릅니다') && (await evaluate(s.cdp, "document.querySelector('[data-testid=import-confirm]').disabled")));
+    await evaluate(s.cdp, "document.getElementById('import-dialog').close()");
+    const same = JSON.parse(exported);
+    same.universe.description = '덮어쓴 판';
+    await pasteJson(JSON.stringify(same));
+    check('같은 ID 유니버스가 있으면 미리 보기에 덮어쓰기 안내', (await text(s.cdp, '[data-testid=import-conflict]')).includes('이미 있습니다'));
+    await evaluate(s.cdp, "window.confirm = () => true; document.querySelector('[data-testid=import-confirm]').click()").catch(() => {});
+    await sleep(600);
+    check('덮어쓰기 확인 → 같은 유니버스가 새 내용으로 열림', await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.description === '덮어쓴 판'", 8000));
+  } else {
+    check('내보낸 파일로 JSON 가져오기 점검', false, '내보내기 결과 없음');
+  }
+  check('가져오기 화면에 "null" 글자 없음', await evaluate(s.cdp, "(() => { const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') return false; return true; })()"));
+  if (await goBare(s.cdp)) {
+    await evaluate(s.cdp, "document.querySelector('[data-testid=start-import]').click()");
+    await sleep(200);
+    check('시작 화면의 「문서·파일 가져오기」로도 가져오기 창이 열림(내보내기 탭은 없음), 가져온 유니버스는 「내 유니버스」에', (await evaluate(s.cdp, "document.getElementById('import-dialog').open && !document.querySelector('[data-testid=import-tab-export]')")) && (await text(s.cdp, '[data-testid=start-mine]')).includes('대형가맹점 A 카드승인'));
+    await evaluate(s.cdp, "document.getElementById('import-dialog').close()");
+  } else {
+    check('시작 화면의 「문서·파일 가져오기」', false, '시작 화면이 열리지 않음');
+  }
+  await evaluate(s.cdp, "location.hash = 'U-A1'; location.reload()").catch(() => {});
+  await sleep(500);
+  await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1'", 8000);
+
   // ── T-11 반복 비효율(R-05 ⑤) ──
   await evaluate(s.cdp, "location.hash = 'U-A1'; location.reload()").catch(() => {});
   await sleep(500);
