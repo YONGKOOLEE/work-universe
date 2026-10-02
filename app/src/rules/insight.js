@@ -2,7 +2,7 @@
 // T-08: 유사 경험자. 선택한 업무와 주제·산출물 유형·라벨 토큰을 공유하는 "다른 업무"를 찾아 점수화하고,
 // 그 업무를 수행한 사람을 점수순으로 돌려준다. 현재 담당자는 제외한다. 근거 ID(공유 주제·업무 노드)를 함께 돌려준다.
 
-import { periodText } from '../view/describe.js';
+import { periodStatus, periodText } from '../view/describe.js';
 import { normalizeLabel } from '../model/schema.js';
 
 // 점수 가중치(D-08에 수치가 없어 정함): 주제 3, 산출물 유형 2, 라벨 토큰 1
@@ -22,9 +22,7 @@ function tokensOf(label) {
 
 /** 이 날짜에 담당 중인가: 시작 전이 아니고, 끝이 없거나 끝이 그날 이후 */
 export function isCurrent(period, asOf) {
-  if (!period) return true;
-  if (period.start && period.start > asOf) return false;
-  return !period.end || period.end >= asOf;
+  return periodStatus(period, asOf) === 'current';
 }
 
 // 업무 하나의 비교 기준: 주제(대표 노드·이름), 산출물 유형(하위 유형 이름), 라벨 토큰
@@ -131,6 +129,7 @@ export function similarExperts(view, { works, asOf, exclude = [] }) {
 
     for (const e of view.edges) {
       if (!live(e) || e.core_type !== 'performs' || e.target !== cand.gid || excludedGids.has(e.source)) continue;
+      if (periodStatus(e.period, asOf) === 'scheduled') continue; // 아직 시작하지 않은 담당은 경험이 아니다
       const person = view.getNode(e.source);
       if (!person || person.hidden || person.core_type !== 'person') continue;
       if (!people.has(person.gid)) people.set(person.gid, { gid: person.gid, label: person.label, emp_no: person.emp_no, score: 0, works: [] });
@@ -141,7 +140,7 @@ export function similarExperts(view, { works, asOf, exclude = [] }) {
         gid: cand.gid,
         label: cand.label,
         universe_name: cand.universe_name,
-        period: periodText(e.period),
+        period: periodText(e.period, asOf),
         current: isCurrent(e.period, asOf),
         score,
         reasons,
@@ -284,4 +283,167 @@ export function repeatInefficiency(view) {
     return { status: 'none', reason: '반복되는 패턴을 찾지 못했습니다', last_input: last, patterns: [] };
   }
   return { status: 'ok', reason: '', last_input: last, patterns };
+}
+
+// ── 밀집/공백(D-08, R-05) ────────────────────────────────────────────────
+// 조직(하위 유니버스)별로 업무 수·현재 수행 인원·공백 수를 집계한다.
+// 공백: 기준일에 담당자가 없는 업무. "담당 기록 없음"과 "이전 담당자만 있음"(끝난 업무일 수도 있음)을 나눠 보여 주고 판단은 사람이 한다.
+// 밀집: 기준일에 한 사람이 N개 이상 업무를 맡음. N은 화면에서 조정한다(기본값은 사용자 결정 전 임시값).
+// 데이터 부족: 수행 연결이 하나도 없는 유니버스(조직별로도 같은 기준).
+
+/** N의 임시 기본값. 02-design 5.5는 기본값을 데이터로 정하기로 했고 아직 정하지 않았다(사용자 결정 대기) */
+export const DENSE_DEFAULT_N = 3;
+
+/** 밀집 기준 N을 1 이상 정수로 맞춘다. 숫자가 아니거나 0이면 기본값 */
+export const denseLimit = (n) => Math.max(1, Math.floor(Number(n) || DENSE_DEFAULT_N));
+
+/**
+ * 업무 하나의 담당 상태(업무 상세의 한 줄, 밀집·공백의 공백 판정에 같이 쓴다).
+ * kind: covered(현재 담당 있음) | scheduled(시작 예정 담당자만) | ended(이전 담당자만) | never(담당 기록 없음)
+ * @returns {{kind:string, current:object[], last_person:object|null, last_end:string|null, next_person:object|null, next_start:string|null, work_ended:boolean}|null}
+ */
+export function workLoad(view, workGid, { asOf }) {
+  const work = view.getNode(view.canonical(workGid));
+  if (!work || work.core_type !== 'work' || work.hidden) return null;
+  const edges = view.edges.filter((e) => live(e) && e.core_type === 'performs' && e.target === work.gid && view.getNode(e.source)?.core_type === 'person' && !view.getNode(e.source).hidden);
+  const pick = (status) => edges.filter((e) => periodStatus(e.period, asOf) === status);
+  const current = [];
+  for (const e of pick('current')) {
+    const p = view.getNode(e.source);
+    if (!current.some((x) => x.gid === p.gid)) current.push({ gid: p.gid, label: p.label });
+  }
+  const past = pick('ended').sort((a, b) => (a.period.end < b.period.end ? 1 : -1));
+  const next = pick('scheduled').sort((a, b) => (a.period.start > b.period.start ? 1 : -1));
+  const person = (e) => (e ? { gid: view.getNode(e.source).gid, label: view.getNode(e.source).label } : null);
+  return {
+    kind: current.length ? 'covered' : next.length ? 'scheduled' : past.length ? 'ended' : 'never',
+    current,
+    last_person: person(past[0]),
+    last_end: past[0]?.period.end || null,
+    next_person: person(next[0]),
+    next_start: next[0]?.period.start || null,
+    work_ended: periodStatus(work.period, asOf) === 'ended',
+  };
+}
+
+/** 이 노드(업무·주제)가 들어 있는 반복 비효율 패턴(상세의 한 줄용) */
+export function repeatPatternsFor(view, gid) {
+  const g = view.canonical(gid);
+  return repeatInefficiency(view).patterns.filter((p) => p.work?.gid === g || (p.works || []).some((w) => w.gid === g) || (p.topic?.gids || []).some((t) => view.canonical(t) === g));
+}
+
+/**
+ * 한 사람이 기준일에 맡은 업무(사람 상세의 한 줄용). densityGaps의 밀집 판정과 같은 기준이다.
+ * @returns {{count:number, n:number, dense:boolean, works:{gid:string,label:string}[]}|null} 사람이 아니면 null
+ */
+export function personLoad(view, personGid, { asOf, n = DENSE_DEFAULT_N }) {
+  const person = view.getNode(view.canonical(personGid));
+  if (!person || person.core_type !== 'person' || person.hidden) return null;
+  const works = [];
+  for (const e of view.edges) {
+    if (!live(e) || e.core_type !== 'performs' || e.source !== person.gid || !isCurrent(e.period, asOf)) continue;
+    const w = view.getNode(e.target);
+    if (!w || w.core_type !== 'work' || w.hidden || works.some((x) => x.gid === w.gid)) continue;
+    works.push({ gid: w.gid, label: w.label });
+  }
+  const limit = denseLimit(n);
+  return { count: works.length, n: limit, dense: works.length >= limit, works };
+}
+
+/**
+ * @param {object} view buildView 결과
+ * @param {{asOf: string, n?: number}} opts asOf: 기준일(YYYY-MM-DD). n: 밀집 기준(1 이상 정수)
+ * @returns {{status:'ok'|'none'|'insufficient', reason:string, n:number, last_input:string|null, groups:object[], gaps:object[], dense:object[]}}
+ */
+export function densityGaps(view, { asOf, n = DENSE_DEFAULT_N }) {
+  const limit = denseLimit(n);
+  const last = view.events.length ? view.events[view.events.length - 1].occurred_at : null;
+  // 활성 업무: 숨기지 않았고, 업무 자체의 기간(12.2 node.period)이 기준일 전에 끝나지 않은 업무
+  const allWorks = view.nodes.filter((w) => w.core_type === 'work' && !w.hidden);
+  const works = allWorks.filter((w) => periodStatus(w.period, asOf) !== 'ended');
+  const ended = allWorks.length - works.length;
+  const workIds = new Set(works.map((w) => w.gid));
+  const performs = view.edges.filter((e) => live(e) && e.core_type === 'performs' && workIds.has(e.target) && view.getNode(e.source)?.core_type === 'person' && !view.getNode(e.source).hidden);
+  const base = { n: limit, last_input: last, ended_works: ended, groups: [], gaps: [], dense: [] };
+  if (performs.length === 0) {
+    return { ...base, status: 'insufficient', reason: '업무에 담당자(수행) 연결이 없어 밀집·공백을 셀 수 없습니다' };
+  }
+
+  const byWork = new Map(works.map((w) => [w.gid, []]));
+  for (const e of performs) if (byWork.has(e.target)) byWork.get(e.target).push(e);
+  const currentOf = (gid) => byWork.get(gid).filter((e) => isCurrent(e.period, asOf));
+  const children = new Map();
+  for (const e of view.edges) {
+    if (!live(e) || e.core_type !== 'contains' || !byWork.has(e.source) || !byWork.has(e.target)) continue;
+    if (!children.has(e.source)) children.set(e.source, []);
+    children.get(e.source).push(e.target);
+  }
+
+  // 공백
+  const gaps = [];
+  for (const w of works) {
+    if (currentOf(w.gid).length) continue;
+    const wl = workLoad(view, w.gid, { asOf });
+    const kids = children.get(w.gid) || [];
+    const covered = kids.filter((k) => currentOf(k).length).length;
+    const lastPerson = wl.last_person;
+    const nextPerson = wl.next_person;
+    gaps.push({
+      gid: w.gid,
+      label: w.label,
+      universe_id: w.universe_id,
+      universe_name: w.universe_name,
+      kind: wl.kind,
+      next_person: nextPerson,
+      next_start: wl.next_start,
+      last_person: lastPerson,
+      last_end: wl.last_end,
+      children: kids.length,
+      children_covered: covered,
+      evidence_ids: [w.gid, ...(nextPerson ? [nextPerson.gid] : []), ...(lastPerson ? [lastPerson.gid] : [])],
+    });
+  }
+
+  // 밀집: 사람별 현재 맡은 업무(같은 업무는 한 번)
+  const load = new Map();
+  for (const w of works) {
+    for (const e of currentOf(w.gid)) {
+      const p = view.getNode(e.source);
+      if (!load.has(p.gid)) load.set(p.gid, { gid: p.gid, label: p.label, emp_no: p.emp_no, works: [] });
+      const entry = load.get(p.gid);
+      if (!entry.works.some((x) => x.gid === w.gid)) entry.works.push({ gid: w.gid, label: w.label, universe_name: w.universe_name });
+    }
+  }
+  const dense = [...load.values()]
+    .filter((p) => p.works.length >= limit)
+    .map((p) => ({ ...p, count: p.works.length, evidence_ids: [p.gid, ...p.works.map((w) => w.gid)] }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+
+  // 조직(유니버스)별 집계. 업무가 있는 유니버스만, 보기 순서대로
+  const groups = [];
+  for (const [uid, u] of view.universes) {
+    const ws = works.filter((w) => w.universe_id === uid);
+    if (ws.length === 0) continue;
+    const people = new Set(ws.flatMap((w) => currentOf(w.gid).map((e) => e.source)));
+    const hasPerforms = ws.some((w) => byWork.get(w.gid).length > 0);
+    groups.push({
+      universe_id: uid,
+      name: u.name,
+      insufficient: !hasPerforms,
+      works: ws.length,
+      people: people.size,
+      gaps: gaps.filter((g) => g.universe_id === uid).length,
+      dense: dense.filter((p) => p.works.some((w) => ws.some((x) => x.gid === w.gid))).length,
+    });
+  }
+
+  // 수행 연결이 없는 유니버스의 업무는 공백 목록에서 뺀다(그 유니버스는 "데이터 부족"만 표시, R-05 ②)
+  const noData = new Set(groups.filter((g) => g.insufficient).map((g) => g.universe_id));
+  const shownGaps = gaps.filter((g) => !noData.has(g.universe_id));
+  for (const g of groups) if (g.insufficient) g.gaps = 0;
+
+  if (shownGaps.length === 0 && dense.length === 0) {
+    return { ...base, groups, status: 'none', reason: `담당자가 없는 업무도, ${limit}개 이상을 맡은 사람도 없습니다` };
+  }
+  return { ...base, groups, gaps: shownGaps, dense, status: 'ok', reason: '' };
 }

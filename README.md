@@ -6,7 +6,7 @@
 
 ```
 npm install
-npm test              # model 단위 테스트
+npm test              # 단위 테스트(model·view·rules·llm·app·store)
 npm run build         # dist/index.html (스크립트 포함, 파일 하나)
 npm run check:browser # Chrome·Edge에서 file:// 점검(P-1·P-3)
 ```

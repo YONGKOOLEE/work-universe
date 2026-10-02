@@ -44,6 +44,7 @@ export function renderNodeDetail(panel, d, { onFocus, extra = null, toolbar = nu
           el('span', { class: 'arrow', title: l.direction === 'out' ? '이 노드에서 나가는 연결' : '이 노드로 들어오는 연결' }, l.direction === 'out' ? '→' : '←'),
           el('button', { type: 'button', class: 'link', onclick: () => onFocus(l.other.gid) }, l.other.label),
           el('span', { class: 'muted small' }, ` ${l.other.type_label}`),
+          l.status ? el('span', { class: `chip status-${l.status === '현재' ? 'current' : 'other'}`, 'data-testid': 'link-status' }, l.status) : null,
           l.period ? el('div', { class: 'muted small' }, l.period) : null,
           l.note ? el('div', { class: 'muted small' }, l.note) : null,
           linkTools(l),

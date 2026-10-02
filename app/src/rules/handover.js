@@ -144,7 +144,9 @@ export function buildHandoverDraft(view, input) {
   // 범위 업무가 속한 유니버스의 메모만 쓴다(다른 업무의 이슈가 섞이지 않게)
   const related = new Set([start.gid, ...workIds]);
   for (const w of works) for (const e of edgesFrom(w.gid, 'relates_to')) related.add(e.target);
-  const scopeUniverses = new Set([start.universe_id, ...works.map((w) => w.universe_id)]);
+  // 사람이 확인해 합친 노드는 합쳐진 쪽 유니버스의 메모도 범위에 든다(대표 노드의 유니버스만 보면 빠짐)
+  const universeOf = (g) => g.slice(0, g.indexOf('/'));
+  const scopeUniverses = new Set([start, ...works].flatMap((n) => [n.universe_id, ...(n.merged_from || []).map(universeOf)]));
   const memos = view.events.filter((ev) => ev.type === 'memo' && scopeUniverses.has(ev.universe_id) && ev.node_gids.some((g) => related.has(g)));
   const memoSentence = (ev) => sentence(`${ev.occurred_at} ${ev.note || '메모'}`, [ev.gid]);
   const ofCategory = (cat) => memos.filter((ev) => memoCategoryOf(ev.payload) === cat);
@@ -161,7 +163,9 @@ export function buildHandoverDraft(view, input) {
   items.진행_중 = ofCategory('in_progress')
     .filter((ev) => {
       const t = canonTarget(ev);
-      return !(t && resolved.some((r) => canonTarget(r) === t && r.occurred_at >= ev.occurred_at));
+      // "이후"는 이력 정렬 순서로 본다(같은 날짜면 기록 순서, tech-record 14절)
+      const at = view.events.indexOf(ev);
+      return !(t && resolved.some((r) => canonTarget(r) === t && view.events.indexOf(r) > at));
     })
     .map(memoSentence);
 

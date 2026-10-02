@@ -11,7 +11,7 @@ import { validateDocument } from '../app/src/model/validate.js';
 import { buildView } from '../app/src/view/view.js';
 import { projectView } from '../app/src/view/collapse.js';
 import { buildHandoverDraft, scopeWorks } from '../app/src/rules/handover.js';
-import { similarExperts, repeatInefficiency } from '../app/src/rules/insight.js';
+import { similarExperts, repeatInefficiency, densityGaps } from '../app/src/rules/insight.js';
 
 export function makeUniverse(n) {
   const ctx = { now: '2026-10-01T09:00:00+09:00' };
@@ -68,6 +68,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   time('층별 보기(projectView)', () => projectView(view));
   time('유사 경험자(업무 1개)', () => similarExperts(view, { works: [`${doc.universe.id}/${works[0]}`], asOf: '2026-10-02' }));
   time('반복 비효율(전체)', () => repeatInefficiency(view));
+  time('밀집·공백(전체)', () => densityGaps(view, { asOf: '2026-10-02' }));
   time('인수인계 초안(유니버스 전체)', () => buildHandoverDraft(view, { target: `${doc.universe.id}/${doc.universe.root_node_id}`, from: `${doc.universe.id}/${people[0]}`, to: `${doc.universe.id}/${people[1]}`, similar: [] }));
   time('초안 범위(scopeWorks)', () => scopeWorks(view, `${doc.universe.id}/${doc.universe.root_node_id}`));
 

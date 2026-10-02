@@ -50,12 +50,35 @@ export function createStore(storage) {
       return ok ? doc : null;
     },
 
+    // 본문을 쓴 뒤 목록 쓰기가 실패하면 본문을 이전 값으로 되돌린다(보이지 않는 키가 남지 않게). 예외는 그대로 던진다
     saveUniverse(doc) {
       const { id, name } = doc.universe;
-      storage.setItem(universeKey(id), JSON.stringify(doc));
       const index = readIndex().filter((e) => e.id !== id);
       index.push({ id, name });
-      storage.setItem(INDEX_KEY, JSON.stringify(index));
+      const before = storage.getItem(universeKey(id));
+      storage.setItem(universeKey(id), JSON.stringify(doc));
+      try {
+        storage.setItem(INDEX_KEY, JSON.stringify(index));
+      } catch (err) {
+        try {
+          if (before === null) storage.removeItem(universeKey(id));
+          else storage.setItem(universeKey(id), before);
+        } catch {
+          // 되돌리기도 실패하면 남은 키는 초기화(purgeExcept)가 지운다
+        }
+        throw err;
+      }
+    },
+
+    /** 유니버스 키 중 keep에 없는 것을 모두 지운다(초기화용). key·length가 없는 저장소에서는 아무것도 안 함 */
+    purgeExcept(keep) {
+      if (typeof storage.key !== 'function' || typeof storage.length !== 'number') return;
+      const doomed = [];
+      for (let i = 0; i < storage.length; i += 1) {
+        const k = storage.key(i);
+        if (k && k.startsWith('wu:v1:u:') && !keep.has(k.slice('wu:v1:u:'.length))) doomed.push(k);
+      }
+      for (const k of doomed) storage.removeItem(k);
     },
 
     removeUniverse(id) {

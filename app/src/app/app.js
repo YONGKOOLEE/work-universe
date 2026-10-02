@@ -29,6 +29,12 @@ function memoryStore() {
   };
 }
 
+// 저장 실패가 용량 초과인지(브라우저마다 이름·코드가 다르다: Chrome·Edge QuotaExceededError/22, 구형 Firefox NS_ERROR_DOM_QUOTA_REACHED/1014)
+export function storageFailReason(err) {
+  if (!err) return 'write';
+  return err.code === 22 || err.code === 1014 || /quota/i.test(String(err.name || '')) ? 'quota' : 'write';
+}
+
 /**
  * @param {{store: object|null, samples: object[], currentId?: string, now: ()=>string}} deps
  *   store가 null이면 저장소를 쓸 수 없는 상태다(W-STORAGE → 샘플 읽기 전용, 5.3).
@@ -36,23 +42,33 @@ function memoryStore() {
  */
 export function createApp({ store, samples, currentId, now }) {
   const warnings = [];
-  const db = store || memoryStore();
+  let db = store || memoryStore();
+  let writable = !!store; // 저장소에 쓸 수 있는가. 샘플 설치가 실패하면 false(읽기 전용)
   if (!store) warnings.push({ code: CODES.STORAGE });
 
   // 모든 내장 샘플을 저장소에 넣어 둔다. 상위 유니버스가 하위 유니버스를 찾을 수 있어야 한다(참조).
   // 판이 바뀐 샘플을 사용자가 고쳐 두었다면, 고친 내용이 사라진다는 것을 알린다.
   // 목록(index)이 깨져 샘플이 빠졌으면 다시 등록한다
-  const listed = new Set(db.listUniverses().map((e) => e.id));
-  for (const sample of samples) {
-    const stored = db.loadUniverse(sample.universe.id);
-    if (!stored || isStaleSample(stored, sample)) {
-      if (stored && stored.events.some((e) => e.source === 'user')) {
-        warnings.push({ code: 'W-SAMPLE-RESET', name: sample.universe.name });
+  // 설치 중 저장이 실패하면(용량 부족 등) 빈 화면이 되지 않도록 메모리 저장소의 샘플을 읽기 전용으로 연다
+  try {
+    const listed = new Set(db.listUniverses().map((e) => e.id));
+    for (const sample of samples) {
+      const stored = db.loadUniverse(sample.universe.id);
+      if (!stored || isStaleSample(stored, sample)) {
+        if (stored && stored.events.some((e) => e.source === 'user')) {
+          warnings.push({ code: 'W-SAMPLE-RESET', name: sample.universe.name });
+        }
+        db.saveUniverse(clone(sample));
+      } else if (!listed.has(sample.universe.id)) {
+        db.saveUniverse(stored);
       }
-      db.saveUniverse(clone(sample));
-    } else if (!listed.has(sample.universe.id)) {
-      db.saveUniverse(stored);
     }
+  } catch (err) {
+    const persisted = db;
+    db = memoryStore();
+    for (const sample of samples) db.saveUniverse(persisted.loadUniverse(sample.universe.id) || clone(sample));
+    writable = false;
+    warnings.push({ code: CODES.STORAGE, reason: 'install', quota: storageFailReason(err) === 'quota' });
   }
 
   let doc = (currentId && db.loadUniverse(currentId)) || db.loadUniverse(samples[0].universe.id);
@@ -62,7 +78,7 @@ export function createApp({ store, samples, currentId, now }) {
   const docReadOnly = checked.readOnly;
   if (docReadOnly) warnings.push({ code: CODES.SCHEMA, reason: 'version', found: doc.schema_version });
   else if (!checked.ok) warnings.push({ code: CODES.SCHEMA, reason: 'invalid', count: checked.errors.length });
-  const readOnly = !store || docReadOnly;
+  const readOnly = !writable || docReadOnly;
   const resolve = (id) => (id === doc.universe.id ? doc : db.loadUniverse(id));
 
   // 저장(브라우저 저장소 용량 초과 등)이 실패하면 화면 상태를 바꾸지 않고 W-STORAGE로 알린다.
@@ -72,7 +88,7 @@ export function createApp({ store, samples, currentId, now }) {
       db.saveUniverse(d);
       return null;
     } catch (err) {
-      return { ok: false, error: { code: CODES.STORAGE, reason: err && err.name === 'QuotaExceededError' ? 'quota' : 'write' } };
+      return { ok: false, error: { code: CODES.STORAGE, reason: storageFailReason(err) } };
     }
   }
   function commit(result) {
@@ -82,7 +98,7 @@ export function createApp({ store, samples, currentId, now }) {
     doc = result.doc;
     return result;
   }
-  const guard = () => (!store ? { ok: false, error: { code: CODES.STORAGE } } : docReadOnly ? { ok: false, error: { code: CODES.SCHEMA, reason: 'version' } } : null);
+  const guard = () => (!writable ? { ok: false, error: { code: CODES.STORAGE } } : docReadOnly ? { ok: false, error: { code: CODES.SCHEMA, reason: 'version' } } : null);
 
   return {
     get doc() {
@@ -195,14 +211,21 @@ export function createApp({ store, samples, currentId, now }) {
     },
 
     // 가상 데이터 초기화(6절 복구): 모든 샘플을 처음 상태로 되돌리고 사용자가 만든 유니버스를 지운다
+    // 목록에 없는 유니버스 키(목록 쓰기 실패로 남은 것)도 지운다. 저장이 실패하면 {ok:false}
     resetAll() {
-      if (!store) return;
-      for (const e of db.listUniverses()) {
-        const d = db.loadUniverse(e.id);
-        if (!d || !d.universe.is_sample) db.removeUniverse(e.id);
+      if (!store) return { ok: false, error: { code: CODES.STORAGE } };
+      try {
+        const keep = new Set(samples.map((s) => s.universe.id));
+        for (const e of store.listUniverses()) if (!keep.has(e.id)) store.removeUniverse(e.id);
+        if (store.purgeExcept) store.purgeExcept(keep);
+        for (const sample of samples) store.saveUniverse(clone(sample));
+      } catch (err) {
+        return { ok: false, error: { code: CODES.STORAGE, reason: storageFailReason(err) } };
       }
-      for (const sample of samples) db.saveUniverse(clone(sample));
+      db = store;
+      writable = true;
       doc = db.loadUniverse(samples[0].universe.id);
+      return { ok: true };
     },
   };
 }

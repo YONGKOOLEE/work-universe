@@ -1,8 +1,12 @@
-// 인사이트 화면(R-05, T-08·T-11). 탭 둘: 유사 경험자 / 반복 비효율. 모두 규칙으로 계산하고 근거를 함께 보여 준다.
+// 인사이트 화면(R-05, T-08·T-11). 탭 셋: 유사 경험자 / 반복 비효율 / 밀집·공백. 모두 규칙으로 계산하고 근거를 함께 보여 준다.
 // 해석과 인력 배치는 사람이 한다(R-05 ③): 화면은 참고 정보임을 밝히고 자동 결정을 하지 않는다.
 
-import { repeatInefficiency, similarExperts } from '../rules/insight.js';
+import { DENSE_DEFAULT_N, denseLimit, densityGaps, repeatInefficiency, similarExperts } from '../rules/insight.js';
 import { el } from './dom.js';
+
+// 밀집 기준 N. 화면에서 바꾸면 이 세션 동안 유지되고 사람 상세의 "밀집 기준에 해당" 판정도 같은 값을 쓴다(저장하지 않음)
+let denseN = DENSE_DEFAULT_N;
+export const currentDenseN = () => denseN;
 
 // 오늘 날짜(현지 기준). 현재 담당자를 가르는 기준일이다
 export function todayLocal() {
@@ -25,7 +29,7 @@ function chip(view, gid, onFocus) {
 const chips = (view, ids, onFocus) => el('div', { class: 'evidence-list' }, ...[...new Set(ids)].map((g) => chip(view, g, onFocus)).filter(Boolean));
 
 /**
- * @param {{view:object, kind?:'similar'|'repeat', work?:string, asOf?:string, onFocus:(gid)=>void, onClose:()=>void}} o
+ * @param {{view:object, kind?:'similar'|'repeat'|'density', work?:string, asOf?:string, onFocus:(gid)=>void, onClose:()=>void}} o
  */
 export function insightPanel(o) {
   const { view } = o;
@@ -37,8 +41,8 @@ export function insightPanel(o) {
     el('button', { type: 'button', role: 'tab', class: kind === key ? 'tab active' : 'tab', 'data-testid': testid, onclick: () => { kind = key; draw(); } }, label);
 
   function draw() {
-    tabs.replaceChildren(tabButton('similar', '유사 경험자', 'tab-similar'), tabButton('repeat', '반복 비효율', 'tab-repeat'));
-    body.replaceChildren(kind === 'similar' ? similarView(o, view) : repeatView(view, o.onFocus));
+    tabs.replaceChildren(tabButton('similar', '유사 경험자', 'tab-similar'), tabButton('repeat', '반복 비효율', 'tab-repeat'), tabButton('density', '밀집·공백', 'tab-density'));
+    body.replaceChildren(kind === 'similar' ? similarView(o, view) : kind === 'repeat' ? repeatView(view, o.onFocus) : densityView(o, view));
   }
   draw();
 
@@ -124,4 +128,61 @@ function repeatView(view, onFocus) {
     );
   }
   return el('div', { 'data-testid': 'repeat-body' }, ...parts.filter(Boolean));
+}
+
+// ── 밀집·공백 ──
+function densityView(o, view) {
+  const asOf = o.asOf || todayLocal();
+  const nInput = el('input', { type: 'number', min: '1', step: '1', value: String(denseN), 'data-testid': 'dense-n' });
+  const out = el('div', { 'data-testid': 'density-result' });
+  const run = () => {
+    if (nInput.value !== '') denseN = denseLimit(nInput.value);
+    renderDensity(out, view, densityGaps(view, { asOf, n: denseN }), o.onFocus);
+  };
+  nInput.addEventListener('input', run);
+  run();
+  return el('div', { 'data-testid': 'density-body' },
+    el('p', { class: 'muted small' }, `기준일 ${asOf}에 담당자가 없는 업무(공백)와 한 사람이 여러 업무를 맡은 경우(밀집)입니다. 기간이 끝난 업무는 세지 않습니다.`),
+    el('label', { class: 'dg-n' }, el('span', {}, '밀집 기준: 한 사람이'), nInput, el('span', {}, '개 이상 맡음')),
+    out);
+}
+
+const gapText = (g) => {
+  const base = g.kind === 'scheduled' ? `시작 예정 담당자만 있음(${g.next_person.label}, ${g.next_start}부터)` : g.kind === 'ended' ? `이전 담당자만 있음(${g.last_person.label}, ${g.last_end}까지) — 끝난 업무인지 확인` : '담당 기록 없음';
+  return g.children ? `${base}. 하위 업무 ${g.children}개 중 ${g.children_covered}개에 담당자 있음` : base;
+};
+
+function renderDensity(box, view, r, onFocus) {
+  if (r.status === 'insufficient') {
+    box.replaceChildren(el('p', { class: 'notice', 'data-testid': 'density-insufficient' }, `데이터 부족 — ${r.reason}${r.last_input ? ` (마지막 입력 ${r.last_input})` : ''}.`));
+    return;
+  }
+  const parts = [
+    el('table', { class: 'dg-table', 'data-testid': 'density-groups' },
+      el('thead', {}, el('tr', {}, el('th', {}, '조직(유니버스)'), el('th', {}, '업무'), el('th', { title: '기준일에 업무를 맡고 있는 사람 수' }, '인원'), el('th', {}, '공백'), el('th', {}, '밀집'))),
+      el('tbody', {}, ...r.groups.map((g) => el('tr', {},
+        el('td', {}, g.name),
+        ...(g.insufficient
+          ? [el('td', { colspan: '4', class: 'muted' }, '데이터 부족(담당자 연결 없음)')]
+          : [el('td', {}, String(g.works)), el('td', {}, String(g.people)), el('td', {}, String(g.gaps)), el('td', {}, String(g.dense))]))))),
+  ];
+  if (r.ended_works) parts.push(el('p', { class: 'muted small', 'data-testid': 'density-ended' }, `기간이 끝난 업무 ${r.ended_works}개는 세지 않았습니다.`));
+  if (r.status === 'none') parts.push(el('p', { class: 'muted', 'data-testid': 'density-none' }, `${r.reason}.`));
+  if (r.gaps.length) {
+    parts.push(el('h3', {}, `공백 ${r.gaps.length}건`),
+      el('ul', { class: 'patterns', 'data-testid': 'density-gaps' },
+        ...r.gaps.map((g) => el('li', { 'data-kind': g.kind },
+          el('div', {}, el('strong', {}, `「${g.label}」`), el('span', { class: 'muted small' }, ` ${g.universe_name}`)),
+          el('div', { class: 'muted small' }, gapText(g)),
+          chips(view, g.evidence_ids, onFocus)))));
+  }
+  if (r.dense.length) {
+    parts.push(el('h3', {}, `밀집 ${r.dense.length}명 (${r.n}개 이상)`),
+      el('ul', { class: 'patterns', 'data-testid': 'density-dense' },
+        ...r.dense.map((p) => el('li', {},
+          el('div', { class: 'who' }, el('strong', {}, p.label), p.emp_no ? el('span', { class: 'muted small' }, ` ${p.emp_no}`) : null, el('span', { class: 'chip' }, `${p.count}개`)),
+          el('div', { class: 'muted small' }, p.works.map((w) => `「${w.label}」`).join(', ')),
+          chips(view, p.evidence_ids, onFocus)))));
+  }
+  box.replaceChildren(...parts.filter(Boolean));
 }

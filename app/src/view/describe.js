@@ -5,18 +5,34 @@ import { EDGE_TYPES, MEMO_CATEGORIES, eventTypeLabel, memoCategoryOf } from '../
 import { toGid } from './view.js';
 
 const FIELD_NAMES = {
-  label: '라벨', description: '설명', attrs: '속성', tags: '태그', period: '기간', subtype: '하위 유형', emp_no: '사번', note: '메모',
+  label: '라벨', description: '설명', attrs: '속성', tags: '태그', period: '기간', subtype: '하위 유형', emp_no: '사번', note: '메모', exposed: '위층에 드러내기',
 };
 const EDGE_ORDER = Object.keys(EDGE_TYPES);
 
-// 기간 표시. 끝이 없으면 진행 중이다(12.2)
-export function periodText(period) {
+/**
+ * 기준일에 이 기간이 어떤 상태인가(12.2: 끝이 없으면 진행 중). 기간이 없으면 current.
+ * 담당 판정(인사이트·초안·상세)이 모두 이 함수를 쓴다.
+ * @returns {'current'|'ended'|'scheduled'}
+ */
+export function periodStatus(period, asOf) {
+  if (!period) return 'current';
+  if (period.start && period.start > asOf) return 'scheduled';
+  if (period.end && period.end < asOf) return 'ended';
+  return 'current';
+}
+
+// 기간 표시. 끝이 없으면 진행 중이다(12.2). 기준일을 주면 아직 시작 전인 기간은 "예정"으로 쓴다
+export function periodText(period, asOf = null) {
   if (!period || (!period.start && !period.end)) return '';
+  if (asOf && periodStatus(period, asOf) === 'scheduled') return `${period.start}${period.end ? ` ~ ${period.end}` : '부터'} (시작 예정)`;
   return `${period.start || '?'} ~ ${period.end || '진행 중'}`;
 }
 
+const STATUS_LABEL = { current: '현재', ended: '종료', scheduled: '예정' };
+
 function fieldValue(v) {
   if (v === null || v === undefined) return '(없음)';
+  if (typeof v === 'boolean') return v ? '예' : '아니요';
   if (typeof v === 'object') return periodText(v) || JSON.stringify(v);
   return String(v);
 }
@@ -66,7 +82,7 @@ export function eventText(view, ev) {
  * 노드 상세. 없는 노드는 {found:false}. 숨긴 노드도 내용을 돌려주고 hidden으로 알린다(4절 "숨김 후 참조").
  * links가 비어 있으면 "연결 없음"이다(R-01 ②).
  */
-export function describeNode(view, gid) {
+export function describeNode(view, gid, { asOf = null } = {}) {
   const { found, hidden, node } = view.lookup(gid);
   if (!found) return { found: false };
 
@@ -74,7 +90,7 @@ export function describeNode(view, gid) {
   if (node.emp_no) rows.push({ label: '사번', value: node.emp_no });
   if (node.description) rows.push({ label: '설명', value: node.description });
   for (const [k, v] of Object.entries(node.attrs || {})) rows.push({ label: k, value: String(v) });
-  if (node.period) rows.push({ label: '기간', value: periodText(node.period) });
+  if (node.period) rows.push({ label: '기간', value: periodText(node.period, asOf) });
   if (node.tags && node.tags.length) rows.push({ label: '태그', value: node.tags.join(', ') });
   rows.push({
     label: '출처',
@@ -91,7 +107,9 @@ export function describeNode(view, gid) {
       direction,
       relation: edge.synthetic ? '포함(참조)' : edge.type_label + (edge.subtype ? ` > ${edge.subtype}` : ''),
       relation_type: edge.core_type,
-      period: periodText(edge.period),
+      period: periodText(edge.period, asOf),
+      // 수행 연결은 기준일 기준 현재·종료·예정을 붙인다(사람·업무 상세에서 지금 담당을 구분하도록)
+      status: asOf && edge.core_type === 'performs' && !edge.synthetic ? STATUS_LABEL[periodStatus(edge.period, asOf)] : null,
       note: edge.note || '',
       other: { gid: other.gid, label: other.label, type_label: other.type_label },
     }))

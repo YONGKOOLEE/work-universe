@@ -75,6 +75,13 @@ export const ANSWERS_V1 = {
     },
   ],
 
+  // R-05 밀집/공백(T-11). 공백 종류: never = 담당 기록 없음, ended = 이전 담당자만 있음(끝난 업무일 수 있음)
+  density_gaps: [
+    { id: 'DG-A1', view: 'U-A1', asOf: '2026-10-02', n: 3, status: 'ok', gaps: ['U-A1/N-002:never', 'U-A1/N-003:never'], dense: [] },
+    { id: 'DG-B', view: 'U-B', asOf: '2026-10-02', n: 3, status: 'ok', gaps: ['U-B/N-101:ended'], dense: ['U-B/N-201'] },
+    { id: 'DG-B-N4', view: 'U-B', asOf: '2026-10-02', n: 4, status: 'ok', gaps: ['U-B/N-101:ended'], dense: [] },
+  ],
+
   // R-11 같은 업무 쌍: A·B·C 데이터가 있어야 한다
   same_work_pairs: [],
 };

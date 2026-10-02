@@ -13,7 +13,8 @@ import { createGraph, legendItems } from './graph.js';
 import { renderNodeDetail, renderUniverseSummary } from './detail.js';
 import { edgeEditForm, edgeForm, eventForm, nodeForm } from './editor.js';
 import { draftPanel } from './draft.js';
-import { insightPanel } from './insight.js';
+import { currentDenseN, insightPanel, todayLocal } from './insight.js';
+import { personLoad, repeatPatternsFor, workLoad } from '../rules/insight.js';
 import { messageFor } from './messages.js';
 
 // ISO 8601 날짜·시각 + 현지 시간대(12.1)
@@ -68,12 +69,21 @@ function goStart() {
   location.reload();
 }
 
+// 주소의 #유니버스ID. 깨진 인코딩(#%E0 등)이면 빈 값으로 보고 시작 화면을 연다
+function hashId() {
+  try {
+    return decodeURIComponent(location.hash.slice(1));
+  } catch {
+    return '';
+  }
+}
+
 function start() {
   const storage = openStorage(() => window.localStorage);
   const app = createApp({
     store: storage ? createStore(storage) : null,
     samples: SAMPLES,
-    currentId: decodeURIComponent(location.hash.slice(1)),
+    currentId: hashId(),
     now: nowIso,
   });
 
@@ -184,7 +194,7 @@ function start() {
   function draftButton(gid) {
     const node = view.getNode(gid);
     if (!node || !['root', 'work'].includes(node.core_type)) return null;
-    return el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft', onclick: () => openDraft(node.gid) }, '인수인계 초안');
+    return el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft', onclick: () => openDraft(node.gid) }, '인수인계 초안 만들기');
   }
 
   function openDraft(targetGid) {
@@ -206,6 +216,40 @@ function start() {
     const node = view.getNode(gid);
     if (!node || node.core_type !== 'work') return null;
     return el('button', { type: 'button', 'data-testid': 'btn-similar', onclick: () => openInsight(node.gid) }, '유사 경험자');
+  }
+
+  // 사람 노드: 지금 맡은 업무 수와 밀집 기준 해당 여부. 누르면 인사이트의 밀집·공백 탭이 열린다
+  function loadNote(gid) {
+    const load = personLoad(view, gid, { asOf: todayLocal(), n: currentDenseN() });
+    if (!load) return null;
+    const text = load.count === 0 ? '지금 맡은 업무 없음' : `지금 맡은 업무 ${load.count}개 — ${load.dense ? `밀집 기준(${load.n}개 이상)에 해당` : `밀집 기준(${load.n}개 이상) 아래`}`;
+    return el('p', { class: load.dense ? 'notice' : 'muted small', 'data-testid': 'person-load' }, text, ' ',
+      el('button', { type: 'button', class: 'link', 'data-testid': 'btn-person-density', onclick: () => openInsight('', 'density') }, '밀집·공백 보기'));
+  }
+
+  // 업무 노드: 현재 담당 또는 공백 종류. 누르면 밀집·공백 탭
+  function workNote(gid) {
+    const w = workLoad(view, gid, { asOf: todayLocal() });
+    if (!w) return null;
+    const text = w.work_ended ? '기간이 끝난 업무'
+      : w.kind === 'covered' ? `현재 담당: ${w.current.map((p) => p.label).join(', ')}`
+      : w.kind === 'scheduled' ? `공백 — 시작 예정 담당자만 있음(${w.next_person.label}, ${w.next_start}부터)`
+      : w.kind === 'ended' ? `공백 — 이전 담당자만 있음(${w.last_person.label}, ${w.last_end}까지). 끝난 업무인지 확인`
+      : '공백 — 담당 기록 없음';
+    const gap = !w.work_ended && w.kind !== 'covered';
+    return el('p', { class: gap ? 'notice' : 'muted small', 'data-testid': 'work-load' }, text, ' ',
+      el('button', { type: 'button', class: 'link', 'data-testid': 'btn-work-density', onclick: () => openInsight('', 'density') }, '밀집·공백 보기'));
+  }
+
+  // 업무·주제 노드가 반복 비효율 패턴에 들어 있으면 한 줄
+  function repeatNote(gid) {
+    const node = view.getNode(gid);
+    if (!node || node.hidden || !['work', 'topic'].includes(node.core_type)) return null;
+    const hits = repeatPatternsFor(view, gid);
+    if (!hits.length) return null;
+    const kinds = [...new Set(hits.map((p) => (p.kind === 'handover_chain' ? '인수인계 반복' : '주제 반복')))].join('·');
+    return el('p', { class: 'notice', 'data-testid': 'repeat-note' }, `반복 비효율 패턴 ${hits.length}건에 포함(${kinds}) `,
+      el('button', { type: 'button', class: 'link', 'data-testid': 'btn-repeat-note', onclick: () => openInsight('', 'repeat') }, '반복 비효율 보기'));
   }
 
   function toolbar(gid) {
@@ -282,9 +326,32 @@ function start() {
     }
   }
 
-  // 초안의 근거를 누르면 패널은 그대로 두고 그래프에서 그 노드를 보여 준다
+  // 그래프에 없는 노드(접힌 하위 유니버스 안)면 그 유니버스와 위쪽 유니버스를 펼친다. 펼쳤으면 true
+  function reveal(gid) {
+    const g = view.canonical(gid);
+    if (!graph.cy.getElementById(g).empty()) return false;
+    const node = view.getNode(g);
+    if (!node || node.hidden) return false;
+    const parentOf = new Map(view.ref_links.map((l) => [l.child, l.parent]));
+    let changed = false;
+    for (let u = node.universe_id; u && u !== app.doc.universe.id; u = parentOf.get(u)) {
+      if (!expanded.has(u)) {
+        expanded.add(u);
+        changed = true;
+      }
+    }
+    if (!changed) return false;
+    display = projectView(view, { expanded });
+    graph.render(display, selected);
+    renderLegend();
+    graph.relayout();
+    return true;
+  }
+
+  // 초안의 근거를 누르면 패널은 그대로 두고 그래프에서 그 노드를 보여 준다(접혀 있으면 펼친다)
   function showInGraph(gid) {
     const g = view.canonical(gid);
+    reveal(g);
     graph.highlight(g);
     const node = graph.cy.getElementById(g);
     if (!node.empty()) graph.cy.animate({ center: { eles: node } }, { duration: 200 });
@@ -305,17 +372,20 @@ function start() {
       const rootGid = toGid(currentId(), app.doc.universe.root_node_id);
       panel.append(el('div', { class: 'row' },
         el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft-universe', onclick: () => openDraft(rootGid) }, '인수인계 초안 만들기'),
-        el('button', { type: 'button', 'data-testid': 'btn-insight-universe', onclick: () => openInsight('', 'repeat') }, '인사이트 보기')));
+        el('button', { type: 'button', 'data-testid': 'btn-insight-universe', onclick: () => openInsight('', 'repeat') }, '인사이트 보기')),
+        el('p', { class: 'muted small', 'data-testid': 'insight-hint' }, '인사이트(반복 비효율 탭부터 열림): 유사 경험자 · 반복 비효율 · 밀집·공백(일이 몰린 사람, 담당자 없는 업무)'));
       return;
     }
     if (editing && isOwn(selected) && localNode(selected)) {
       panel.replaceChildren(el('h2', {}, localNode(selected).label), editorFor(selected));
       return;
     }
-    return renderNodeDetail(panel, describeNode(view, selected), {
+    const notes = [loadNote(selected), workNote(selected), repeatNote(selected)].filter(Boolean);
+    const tools = toolbar(selected);
+    return renderNodeDetail(panel, describeNode(view, selected, { asOf: todayLocal() }), {
       onFocus: focus,
       extra: layerControls(selected),
-      toolbar: toolbar(selected),
+      toolbar: notes.length || tools ? el('div', {}, ...notes, tools) : null,
       linkTools,
     });
   }
@@ -329,8 +399,9 @@ function start() {
     renderPanel();
   }
 
-  // 상세 패널의 연결된 노드를 눌렀을 때: 그래프에서도 그 노드로 이동한다(접혀 있어 안 보이면 이동만 생략)
+  // 상세 패널의 연결된 노드를 눌렀을 때: 그래프에서도 그 노드로 이동한다(접혀 있으면 펼친다)
   function focus(gid) {
+    reveal(gid);
     select(view.canonical(gid));
     const node = graph.cy.getElementById(view.canonical(gid));
     if (!node.empty()) graph.cy.animate({ center: { eles: node } }, { duration: 200 });
@@ -426,7 +497,8 @@ function start() {
 
   $('reset').addEventListener('click', () => {
     if (!window.confirm('모든 가상 데이터를 초기 샘플로 되돌립니다. 추가한 노드와 직접 묶은 유니버스는 사라집니다.')) return;
-    app.resetAll();
+    const r = app.resetAll();
+    if (r && !r.ok) return window.alert(messageFor(r.error));
     openUniverse(app.doc.universe.id);
   });
 

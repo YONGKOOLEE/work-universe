@@ -83,6 +83,7 @@ export function messageFor(err, ctx = {}) {
     case 'W-NO-EMPNO':
       return '사번 없이 저장했습니다. 통합할 때 확인 목록에 오릅니다.';
     case 'W-STORAGE':
+      if (err.reason === 'install') return `브라우저 저장소${err.quota ? ' 공간이 부족해' : '에 쓰지 못해'} 샘플을 저장하지 못했습니다. 샘플을 읽기 전용으로 엽니다. 「가상 데이터 초기화」로 공간을 비우면 다시 쓸 수 있습니다.`;
       if (err.reason === 'quota') return '브라우저 저장 공간이 가득 차서 저장하지 못했습니다. 바뀐 내용은 반영되지 않았습니다. 「가상 데이터 초기화」로 공간을 비울 수 있습니다.';
       if (err.reason === 'write') return '브라우저 저장소에 쓰지 못해 저장하지 못했습니다. 바뀐 내용은 반영되지 않았습니다.';
       return '브라우저 저장소를 쓸 수 없습니다. 샘플을 읽기 전용으로 엽니다. 편집한 내용은 저장되지 않습니다.';

@@ -1,8 +1,8 @@
 // 인수인계 초안 화면(R-03·R-04, T-07). 입력: 대상(유니버스 꼭지 또는 업무), 보내는 사람, 받는 사람.
-// 결과: 8개 항목, 항목별 근거 링크, 생성 방식 표시, "초안" 상태. 확정은 사람이 한다.
+// 결과: 10개 항목(CR-6), 항목별 근거 링크, 생성 방식 표시, "초안" 상태. 확정은 사람이 한다.
 
 import { buildHandoverDraft, scopeWorks } from '../rules/handover.js';
-import { similarExperts, similarSentences } from '../rules/insight.js';
+import { similarExperts, similarSentences, workLoad } from '../rules/insight.js';
 import { todayLocal } from './insight.js';
 import { METHOD_LABELS, refineDraft } from '../llm/connector.js';
 import { el } from './dom.js';
@@ -50,6 +50,15 @@ export function draftPanel(o) {
   from.dataset.testid = 'draft-from';
   const to = options(people, '받는 사람', '');
   to.dataset.testid = 'draft-to';
+  // 대상이 업무면 현재 담당자를 알려 주고, 한 명이면 보내는 사람으로 미리 고른다(사람이 바꿀 수 있음)
+  const holder = el('p', { class: 'muted small', 'data-testid': 'draft-holder' });
+  const showHolder = () => {
+    const w = target.value ? workLoad(view, target.value, { asOf: o.asOf || todayLocal() }) : null;
+    holder.textContent = !w ? '' : w.current.length ? `현재 담당: ${w.current.map((p) => p.label).join(', ')}` : '현재 담당자 없음';
+    if (w && w.current.length === 1 && !from.value && people.some((p) => p.gid === w.current[0].gid)) from.value = w.current[0].gid;
+  };
+  target.addEventListener('change', showHolder);
+  showHolder();
   const msg = el('div', { class: 'form-message', 'data-testid': 'draft-message', 'aria-live': 'polite' });
   const result = el('div', { 'data-testid': 'draft-result' });
 
@@ -58,6 +67,7 @@ export function draftPanel(o) {
     'form',
     { class: 'editor', novalidate: true, 'data-testid': 'draft-form' },
     field('대상(유니버스 또는 업무)', target),
+    holder,
     field('보내는 사람', from),
     field('받는 사람', to),
     msg,

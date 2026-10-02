@@ -112,6 +112,15 @@
   .patterns > li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; gap: 6px; }
   .steps { display: grid; gap: 3px; font-size: 13px; color: var(--muted); padding-left: 0; }
   .steps .missed { color: var(--err); }
+  .dg-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 4px 0 10px; }
+  .dg-table th, .dg-table td { border-bottom: 1px solid var(--line); padding: 4px 6px; text-align: right; }
+  .dg-table th:first-child, .dg-table td:first-child { text-align: left; }
+  .dg-table th:not(:first-child), .dg-table td:not(:first-child) { white-space: nowrap; width: 1%; }
+  .chip.status-current { background: var(--accent); color: var(--accent-ink); }
+  .chip.status-other { opacity: 0.75; }
+  .dg-n { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+  .dg-n input { width: 4em; }
+  .insight h3 { font-size: 14px; margin: 12px 0 4px; }
   .subtype-box { display: grid; gap: 6px; }
   #create-form { display: grid; gap: 8px; font-size: 14px; }
   #create-form label { display: grid; gap: 4px; color: var(--muted); }

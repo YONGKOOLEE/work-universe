@@ -510,6 +510,10 @@ async function checkBrowser(browser, port) {
     await sleep(200);
     const insuf = await text(s.cdp, '[data-testid=repeat-insufficient]');
     check('오류(R-05 ②): 기록이 없는 새 유니버스 → 반복 비효율 "데이터 부족"과 마지막 입력 시점만', insuf.includes('데이터 부족') && insuf.includes('마지막 입력') && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=repeat-patterns]')")), insuf);
+    await clickTestId(s.cdp, 'tab-density');
+    await sleep(150);
+    const dinsuf = await text(s.cdp, '[data-testid=density-insufficient]');
+    check('오류(R-05 ②): 담당 연결이 없는 새 유니버스 → 밀집·공백도 "데이터 부족"만(표·목록 없음)', dinsuf.includes('데이터 부족') && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=density-groups]')")), dinsuf);
   }
   const countBefore = await evaluate(s.cdp, "document.getElementById('universe-picker').options.length");
   // 페이지를 다시 열면 confirm이 원래대로 돌아가 자동화가 멈추므로 다시 자동 수락으로 바꾼다
@@ -538,6 +542,42 @@ async function checkBrowser(browser, port) {
     await sleep(150);
     check('탭 전환: 유사 경험자', !!(await evaluate(s.cdp, "!!document.querySelector('[data-testid=insight-work]')")));
     await clickTestId(s.cdp, 'tab-repeat');
+    // ── T-11 밀집·공백(R-05) ──
+    await clickTestId(s.cdp, 'tab-density');
+    await sleep(150);
+    const groups = await text(s.cdp, '[data-testid=density-groups]');
+    const gapsTxt = await text(s.cdp, '[data-testid=density-gaps]');
+    // 앞의 편집 점검에서 서하늘 → 보고 수행 연결을 더했으므로 보고는 공백이 아니다
+    check('R-05 밀집·공백: 조직별 집계 표와 공백 업무(자료 수집, 담당 기록 없음)가 근거와 함께 나오고, 앞에서 담당자를 연결한 보고는 빠짐', groups.includes('월말 정산') && gapsTxt.includes('자료 수집') && !gapsTxt.includes('보고') && gapsTxt.includes('담당 기록 없음') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=density-gaps] .evidence').length")) >= 1, gapsTxt.slice(0, 120));
+    check('밀집·공백 표가 실제로 그려짐(크기 있음)', (await evaluate(s.cdp, "(() => { const r = document.querySelector('[data-testid=density-groups]').getBoundingClientRect(); return r.width > 50 && r.height > 20; })()")));
+    check('N=3이면 밀집 없음', !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=density-dense]')")));
+    await evaluate(s.cdp, "(() => { const i = document.querySelector('[data-testid=dense-n]'); i.value = '1'; i.dispatchEvent(new Event('input')); })()");
+    await sleep(150);
+    const today = await evaluate(s.cdp, "(() => { const d = new Date(); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; })()");
+    const expectDense = today >= '2026-10-01' ? '서하늘' : '윤바다';
+    check(`N을 1로 바꾸면 밀집에 현재 담당자(${expectDense})가 나옴`, (await text(s.cdp, '[data-testid=density-dense]')).includes(expectDense));
+    check('밀집 사람에도 근거 버튼(사람 + 업무)이 붙음', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=density-dense] .evidence').length")) >= 2);
+    await shot(s.cdp, `${browser.name}-7b-density`);
+    // 업무 상세: 현재 담당·공백 한 줄, 수행 연결의 현재·종료 표시, 반복 비효율 포함 한 줄
+    await evaluate(s.cdp, "window.__wu.select('U-A1/N-002')");
+    await sleep(150);
+    check('업무 상세(자료 수집): "공백 — 담당 기록 없음"', (await text(s.cdp, '[data-testid=work-load]')).includes('공백 — 담당 기록 없음'));
+    await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+    await sleep(150);
+    check('업무 상세(대사 확인): "현재 담당: 서하늘"', (await text(s.cdp, '[data-testid=work-load]')).includes('현재 담당: 서하늘'));
+    const statuses = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=link-status]')].map((x) => x.textContent).sort().join()");
+    check('수행 연결에 현재·종료 표시(현재 1, 종료 2)', statuses === '종료,종료,현재', statuses);
+    check('업무 상세(대사 확인): 반복 비효율 패턴 포함 한 줄', (await text(s.cdp, '[data-testid=repeat-note]')).includes('인수인계 반복'));
+    await shot(s.cdp, `${browser.name}-7c-work-detail`);
+    await clickTestId(s.cdp, 'btn-repeat-note');
+    await sleep(150);
+    check('「반복 비효율 보기」 → 반복 비효율 탭이 열림', !!(await evaluate(s.cdp, "!!document.querySelector('[data-testid=repeat-patterns]')")));
+    // 초안: 대상 업무의 현재 담당자가 한 명이면 보내는 사람으로 미리 골라짐
+    await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+    await sleep(150);
+    await clickTestId(s.cdp, 'btn-draft');
+    await sleep(150);
+    check('초안: 현재 담당 표시와 보내는 사람 미리 고름(서하늘)', (await text(s.cdp, '[data-testid=draft-holder]')).includes('서하늘') && (await evaluate(s.cdp, "document.querySelector('[data-testid=draft-from]').value")) === 'U-A1/N-012');
   }
 
   // ── T-08 유사 경험자(R-05) ──
@@ -581,6 +621,48 @@ async function checkBrowser(browser, port) {
     await sleep(250);
     const sim = await text(s.cdp, '[data-testid=draft-item-유사_경험자]');
     check('인수인계 초안의 "유사 경험자" 항목에 윤바다와 근거 링크가 들어감', sim.includes('윤바다(V-1002)') && !sim.includes('이력 부족') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=draft-item-유사_경험자] .evidence').length")) >= 3);
+    // 밀집·공백(부서 화면): 조직별 표, 끝난 업무는 "이전 담당자만 있음", 도하람 3개 밀집
+    await evaluate(s.cdp, "window.__wu.select(null)");
+    await clickTestId(s.cdp, 'btn-insight-universe');
+    await sleep(200);
+    await clickTestId(s.cdp, 'tab-density');
+    await sleep(150);
+    const dg = await text(s.cdp, '[data-testid=density-groups]');
+    check('부서 화면 밀집·공백: 조직(유니버스)별로 집계', ['월말 정산', '카드승인', '행사'].every((k) => dg.includes(k)), dg.slice(0, 120));
+    check('끝난 업무(2025 행사)는 "이전 담당자만 있음"과 마지막 담당자로 표시', (await text(s.cdp, '[data-testid=density-gaps]')).includes('이전 담당자만 있음(윤바다, 2025-12-15까지)'));
+    check('밀집(3개 이상): 도하람', (await text(s.cdp, '[data-testid=density-dense]')).includes('도하람'));
+    await shot(s.cdp, `${browser.name}-9b-density-dept`);
+    // 개요의 인사이트 안내, 사람 상세의 "지금 맡은 업무 N개 — 밀집 기준에 해당"
+    await evaluate(s.cdp, "window.__wu.select(null)");
+    await sleep(150);
+    check('개요에 인사이트 종류 안내(밀집·공백 포함)', (await text(s.cdp, '[data-testid=insight-hint]')).includes('밀집·공백'));
+    await evaluate(s.cdp, "window.__wu.select(window.__wu.view.canonical('U-B/N-201'))");
+    await sleep(200);
+    const load = await text(s.cdp, '[data-testid=person-load]');
+    check('사람 상세: 도하람 "지금 맡은 업무 3개 — 밀집 기준(3개 이상)에 해당"', load.includes('지금 맡은 업무 3개') && load.includes('밀집 기준(3개 이상)에 해당'), load);
+    check('사람 상세의 한 줄이 실제로 그려짐(크기 있음)', (await evaluate(s.cdp, "(() => { const r = document.querySelector('[data-testid=person-load]').getBoundingClientRect(); return r.width > 50 && r.height > 10; })()")));
+    await shot(s.cdp, `${browser.name}-9c-person-load`);
+    await clickTestId(s.cdp, 'btn-person-density');
+    await sleep(200);
+    check('「밀집·공백 보기」 → 인사이트 밀집·공백 탭이 열림', (await text(s.cdp, '[data-testid=density-dense]')).includes('도하람'));
+    // N을 4로 바꾸면 사람 상세도 같은 기준으로 바뀐다
+    await evaluate(s.cdp, "(() => { const i = document.querySelector('[data-testid=dense-n]'); i.value = '4'; i.dispatchEvent(new Event('input')); })()");
+    await sleep(150);
+    await evaluate(s.cdp, "window.__wu.select(window.__wu.view.canonical('U-B/N-201'))");
+    await sleep(200);
+    check('N을 4로 바꾸면 사람 상세도 "밀집 기준(4개 이상) 아래"', (await text(s.cdp, '[data-testid=person-load]')).includes('밀집 기준(4개 이상) 아래'));
+    // 접힌 하위 유니버스(카드승인) 안의 공백 업무 근거를 누르면 펼쳐서 보여 준다
+    const hiddenGid = await evaluate(s.cdp, "window.__wu.view.nodes.find((n) => n.label === '요청 검증').gid");
+    check('요청 검증(하위 단계 업무)은 접힌 유니버스 안이라 그래프에 없음', await evaluate(s.cdp, `window.__wu.cy.getElementById(${JSON.stringify(hiddenGid)}).empty()`));
+    await evaluate(s.cdp, "window.__wu.select(null)");
+    await clickTestId(s.cdp, 'btn-insight-universe');
+    await sleep(200);
+    await clickTestId(s.cdp, 'tab-density');
+    await sleep(150);
+    await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=density-gaps] .evidence')].find((b) => b.textContent === '요청 검증').click()");
+    await sleep(500);
+    check('근거 버튼 → 접힌 유니버스를 펼쳐 그 노드를 보여 줌', !(await evaluate(s.cdp, `window.__wu.cy.getElementById(${JSON.stringify(hiddenGid)}).empty()`)));
+    await shot(s.cdp, `${browser.name}-9d-reveal`);
     check('부서 화면에서도 화면에 "null" 글자 없음', (await evaluate(s.cdp, "(() => { const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') return false; return true; })()")));
   }
 
