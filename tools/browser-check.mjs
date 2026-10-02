@@ -10,7 +10,8 @@ import { SAMPLE_A1 } from '../app/data/sample-a1.js';
 import { SAMPLES } from '../app/data/index.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const pageUrl = pathToFileURL(join(root, 'dist/index.html')).href;
+// PAGE를 주면 그 파일을 점검한다(T-15: 제출 압축을 푼 index.html)
+const pageUrl = pathToFileURL(process.env.PAGE || join(root, 'dist/index.html')).href;
 const tmp = join(root, '.tmp/browser-check');
 
 const BROWSERS = [

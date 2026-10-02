@@ -1,5 +1,6 @@
 # 빌드 결과(제출용은 T-15에서 별도 압축)
 dist/
+release/
 node_modules/
 
 # 비밀값·키 관련 파일 (02-design 5.4, CLAUDE.md)

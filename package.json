@@ -8,7 +8,9 @@
     "build": "node tools/build.mjs",
     "test": "node --test \"tests/**/*.test.js\"",
     "check:browser": "node tools/browser-check.mjs",
-    "check:secrets": "node tools/secret-scan.mjs"
+    "check:secrets": "node tools/secret-scan.mjs",
+    "package": "node tools/package.mjs",
+    "check:submit": "node tools/submit-check.mjs"
   },
   "dependencies": {
     "cytoscape": "3.34.3"

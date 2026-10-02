@@ -403,7 +403,7 @@ function start() {
       panel.append(el('div', { class: 'row' },
         el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft-universe', onclick: () => openDraft(rootGid) }, '인수인계 초안 만들기'),
         el('button', { type: 'button', 'data-testid': 'btn-insight-universe', onclick: () => openInsight('', 'repeat') }, '인사이트 보기')),
-        el('p', { class: 'muted small', 'data-testid': 'insight-hint' }, '인사이트(반복 비효율 탭부터 열림): 유사 경험자 · 반복 비효율 · 밀집·공백(일이 몰린 사람, 담당자 없는 업무)'));
+        el('p', { class: 'muted small', 'data-testid': 'insight-hint' }, '인사이트(반복 비효율 탭부터 열림): 유사 경험자 · 반복 비효율 · 밀집·공백(일이 몰린 사람, 담당자 없는 업무) · 흐름 변화'));
       return;
     }
     if (editing && isOwn(selected) && localNode(selected)) {

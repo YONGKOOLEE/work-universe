@@ -11,7 +11,7 @@
   - T-14는 구현만 끝났다. 완료 기준(대리 검증자 관찰, R-08)은 미확인.
   - 조력자 의견이 오면 데이터 내용만 교체: T-13 → T-12 → 시나리오(K-9).
 - 대기(조력자 의견): T-10 통합, T-17 문서 변환. CR-4(층별 보기)는 코드에만 있고 미승인.
-- 이후: T-15 제출 점검(일부는 사용자: 깨끗한 PC·메일 발송), T-16 영상(사용자).
+- T-15 자동 부분 완료(실행 안내·압축·제출 점검 8/8). 남은 것은 사용자: 다른 PC 실행·메일 발송·태그. T-16 영상(사용자).
 - **연속 진행 모드(2026-10-02~):** 확인 없이 다음 작업으로, 작업마다 로컬 자동 커밋. 결정·확인은 `docs/decisions-pending.md`에 쌓는다(CLAUDE.md 작업 방식).
 - 진행 기록: `docs/.status`의 `implementation:` 절. 결정·해석: `docs/tech-record.md`(절 번호로 찾기).
 
@@ -32,6 +32,8 @@ node tools/pregen-dump.mjs        # 사전 생성 작성용 근거 덤프(데이
 npm run build             # dist/index.html (바이트 크기 표시)
 npm run check:browser     # Chrome·Edge file:// 점검. SHOT_DIR=.tmp/shots 를 주면 화면 PNG 저장
 npm run check:secrets     # 비밀값 형식 검색(dist 포함). 0건이어야 함
+npm run package           # 제출 압축 release/업무유니버스-제출본-날짜.zip
+npm run check:submit      # 제출 점검 8단계(압축을 풀어 새 프로필로 브라우저 점검까지). --quick은 브라우저 생략
 node tools/virtual-data-check.mjs   # R-06 형식 점검
 node tools/perf-check.mjs 300 --browser   # 규모 점검
 ```

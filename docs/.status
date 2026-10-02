@@ -164,6 +164,13 @@ implementation:
       error_checks: 통과 (새로 입력한 데이터 → 근거가 바뀐 항목만 규칙 기반과 개수 안내(K-9), 사전 생성 결과가 없는 유니버스 → 전부 규칙 기반, 실패 흉내 → 규칙 기반 + 원인(R-04 ③ 화면 시연), Claude API·사내 LLM 선택 → 규칙 기반 + P2 이유, 항목 근거 밖 노드를 단 문장 → 그 항목만 규칙 기반(검토 3-11 일부 대응), 결과 파일 형식 오류 → 전체 규칙 기반)
       unverified: [사전 생성 문장이 근거 내용과 맞는지 사람 검토(근거 ID 존재·범위는 자동 검증, 내용 일치는 사람 몫 — review 3-11), 정답 표 기준 근거 ID 유효율은 100%(자동), Claude API 실제 호출(P2·K-2), 업무 후보 이유(역할 c)는 T-10 뒤]
       decisions: docs/tech-record.md 27절
+    - id: T-15(일부)
+      status: 자동으로 할 수 있는 부분 완료(실행 안내 1쪽, 제출 압축, 제출 점검 자동화). 사람이 해야 하는 부분(깨끗한 다른 PC 실행, 메일 발송 K-6, 태그)은 대기
+      date: 2026-10-03
+      normal_checks: 통과 (npm run check:submit 8/8 — 빌드, 단위 테스트 246, 비밀값 0건(소스·dist·풀린 파일), R-06 형식(샘플 7개), 압축 204,515바이트, PowerShell Expand-Archive로 풀면 원본과 같은 파일 3개(한글 폴더), 풀린 index.html을 새 프로필로 Chrome·Edge 전체 점검 통과)
+      unverified: [다른 PC에서 실행(1.4 대체: 조력자 PC 또는 다른 계정), 메일 첨부 차단 여부(K-6), 실행 안내 문구 사용자 확인, 제출 태그]
+      outputs: docs/submission/실행안내.html, tools/package.mjs(npm run package), tools/submit-check.mjs(npm run check:submit), release/(Git 제외)
+      decisions: docs/tech-record.md 28절
     - id: REVIEW2-2026-10-02
       status: 두 번째 전체 검토(4범주: 화면 발견성, 규칙 정합성, 요구사항 추적·문서, 실행 조건·보안). 결함 수정·검증 완료, 결정 필요 항목 정리 — 사용자 확인·커밋 대기
       date: 2026-10-02
