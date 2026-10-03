@@ -1,21 +1,12 @@
 // 통합 확인 목록(R-11 ②③④, T-10). 사람이 "같음/다름"을 정해야 동일성 연결이 생긴다. 확인하지 않은 항목이 있어도
 // 통합 유니버스는 그대로 탐색할 수 있다(R-11 ④). 원래 유니버스는 바뀌지 않는다(R-11 ⑤).
 import { METHOD_LABELS, explainInsight } from '../llm/connector.js';
-import { eventChipLabel } from './chip-label.js';
 import { el } from './dom.js';
-
-function chips(view, ids, onFocus) {
-  return el('span', { class: 'evidence-list' }, ...[...new Set(ids)].map((g) => {
-    const hit = view.lookup(g);
-    if (hit.found) return el('button', { type: 'button', class: 'evidence', title: `근거: ${g}`, onclick: () => onFocus(hit.node.gid) }, `${hit.node.label}`);
-    const ev = view.events.find((e) => e.gid === g);
-    return ev ? el('button', { type: 'button', class: 'evidence', title: `근거: ${g}`, onclick: () => ev.node_gids[0] && onFocus(ev.node_gids[0]) }, eventChipLabel(view, ev)) : null;
-  }).filter(Boolean));
-}
+import { evidenceChips as chips } from './evidence.js';
 
 /** 업무 후보 이유(역할 c): 사전 생성이 있으면 그 문장, 없으면 규칙 기반 문장 */
 export function candidateReason(view, item, provider) {
-  const exists = (g) => view.lookup(g).found || view.events.some((e) => e.gid === g);
+  const exists = view.exists;
   return explainInsight({ task: 'work_candidate_reason', target: `work_candidate|${[item.a, item.b].sort().join('|')}`, evidence_ids: item.evidence_ids, rule: [{ text: item.reason, evidence_ids: item.evidence_ids }] }, { provider, exists });
 }
 

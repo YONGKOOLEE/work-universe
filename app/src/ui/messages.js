@@ -1,4 +1,5 @@
 // 오류·경고 코드(12.5) → 한국어 화면 메시지
+import { EDGE_TYPES, NODE_TYPES } from '../model/schema.js';
 
 const FIELD_NAMES = {
   label: '라벨',
@@ -26,8 +27,9 @@ const FIELD_NAMES = {
   id: '노드',
 };
 
-const TYPE_NAMES = { root: '꼭지', person: '사람', work: '업무', artifact: '산출물', org: '조직', topic: '주제' };
-const EDGE_NAMES = { contains: '포함', performs: '수행', produces: '산출', precedes: '선후행', belongs_to: '소속', relates_to: '관련', references: '참조' };
+// 유형·관계의 표시 이름은 스키마 한 곳에서 가져온다(검토5 C-7)
+const TYPE_NAMES = NODE_TYPES;
+const EDGE_NAMES = EDGE_TYPES;
 
 // 관계별로 연결할 수 있는 조합(12.2). E-PAIR 안내에 쓴다
 export const PAIR_TEXT = {

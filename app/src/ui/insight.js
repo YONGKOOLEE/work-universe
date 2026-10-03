@@ -6,35 +6,20 @@ import { flowChange } from '../rules/flow.js';
 import { densityExplain, flowExplain, repeatExplain, similarExplain } from '../rules/explain.js';
 import { METHOD_LABELS, explainInsight } from '../llm/connector.js';
 import { el } from './dom.js';
-import { eventChipLabel } from './chip-label.js';
+import { evidenceChips } from './evidence.js';
+import { todayLocal } from './time.js';
 
 // 밀집 기준 N. 화면에서 바꾸면 이 세션 동안 유지되고 사람 상세의 "밀집 기준에 해당" 판정도 같은 값을 쓴다(저장하지 않음)
 let denseN = DENSE_DEFAULT_N;
 export const currentDenseN = () => denseN;
 
-// 오늘 날짜(현지 기준). 현재 담당자를 가르는 기준일이다
-export function todayLocal() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-function chip(view, gid, onFocus) {
-  const hit = view.lookup(gid);
-  if (hit.found) {
-    const label = hit.hidden ? `${hit.node.label}(숨김 처리된 노드)` : hit.node.label;
-    return el('button', { type: 'button', class: 'evidence', title: `근거: ${gid}`, onclick: () => onFocus(hit.node.gid) }, label);
-  }
-  const ev = view.events.find((e) => e.gid === gid);
-  if (!ev) return null;
-  return el('button', { type: 'button', class: 'evidence', title: `근거: ${gid}`, onclick: () => ev.node_gids[0] && onFocus(ev.node_gids[0]) }, eventChipLabel(view, ev));
-}
+// 근거 칩 묶음(인사이트는 div.evidence-list)
+const chips = (view, ids, onFocus) => evidenceChips(view, ids, onFocus, { tag: 'div' });
 
 // 인사이트 설명(역할 b): 공급자 결과(사전 생성)가 있으면 그 문장, 없으면 규칙 기반 문장. 문장마다 근거 버튼
 function explainBox(view, req, o) {
   if (!req) return null;
-  const exists = (g) => view.lookup(g).found || view.events.some((e) => e.gid === g);
-  const r = explainInsight(req, { provider: o.provider, exists });
+  const r = explainInsight(req, { provider: o.provider, exists: view.exists });
   return el('div', { class: 'explain', 'data-testid': 'insight-explain', 'data-method': r.method },
     el('h4', {}, '설명', el('span', { class: `method-chip ${r.method}` }, METHOD_LABELS[r.method])),
     // 근거가 많으면 접어 둔다(표를 밀어내지 않게)
@@ -43,8 +28,6 @@ function explainBox(view, req, o) {
       : chips(view, s.evidence_ids, o.onFocus)))),
     r.fallback ? el('p', { class: 'muted small', 'data-testid': 'explain-fallback' }, `규칙 기반으로 대체함: ${r.fallback.reason}`) : null);
 }
-
-const chips = (view, ids, onFocus) => el('div', { class: 'evidence-list' }, ...[...new Set(ids)].map((g) => chip(view, g, onFocus)).filter(Boolean));
 
 /**
  * @param {{view:object, kind?:'similar'|'repeat'|'density'|'flow', today?:string, onTime?:(date)=>void, work?:string, asOf?:string, onFocus:(gid)=>void, onClose:()=>void}} o

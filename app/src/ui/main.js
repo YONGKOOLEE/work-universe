@@ -17,7 +17,8 @@ import { createGraph, legendItems } from './graph.js';
 import { renderNodeDetail, renderUniverseSummary } from './detail.js';
 import { edgeEditForm, edgeForm, eventForm, nodeForm } from './editor.js';
 import { draftPanel } from './draft.js';
-import { currentDenseN, insightPanel, todayLocal } from './insight.js';
+import { currentDenseN, insightPanel } from './insight.js';
+import { nowIso, todayLocal } from './time.js';
 import { personLoad, repeatPatternsFor, workLoad } from '../rules/insight.js';
 import { monthAsOf, timeMonths } from '../rules/flow.js';
 import { messageFor } from './messages.js';
@@ -28,19 +29,6 @@ import { DOC_EXAMPLE } from '../../data/doc-example.js';
 
 // 점검 도구(tools/*-check.mjs)만 주소에 ?check를 붙여 연다. 그때만 점검용 전역 window.__wu를 만든다(D-4-10, 사용자 결정 2026-10-03)
 const CHECK_MODE = new URLSearchParams(location.search).has('check');
-
-// ISO 8601 날짜·시각 + 현지 시간대(12.1)
-function nowIso() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  const off = -d.getTimezoneOffset();
-  const sign = off >= 0 ? '+' : '-';
-  const oh = pad(Math.floor(Math.abs(off) / 60));
-  const om = pad(Math.abs(off) % 60);
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(
-    d.getMinutes(),
-  )}:${pad(d.getSeconds())}${sign}${oh}:${om}`;
-}
 
 // 다른 유니버스로 이동: 주소 끝의 #유니버스ID를 바꾸고 다시 연다(file://에서도 동작)
 function openUniverse(id) {
@@ -201,7 +189,7 @@ function start() {
         el('div', { class: 'row' },
           el('button', { type: 'button', 'data-testid': 'toggle', onclick: () => toggle(node.universe_id) }, info ? '펼치기' : '접기'),
           el('button', { type: 'button', onclick: () => openUniverse(node.universe_id) }, '이 유니버스 열기'),
-          app.doc.refs.some((r) => r.child_universe_id === node.universe_id && !r.hidden)
+          app.hasChild(node.universe_id)
             ? el('button', { type: 'button', disabled: app.readOnly, onclick: () => removeChild(node.universe_id, node.label) }, '묶음에서 빼기')
             : null,
         ),
@@ -236,7 +224,7 @@ function start() {
   // ── 자료 편집(R-02, T-06) ───────────────────────────────────────────
   const currentId = () => app.doc.universe.id;
   const isOwn = (gid) => !!gid && parseGid(gid).universe_id === currentId();
-  const localNode = (gid) => app.doc.nodes.find((n) => n.id === parseGid(gid).local_id);
+  const localNode = (gid) => app.findNode(parseGid(gid).local_id);
   // 양식에서 고를 수 있는 이 유니버스의 노드(숨김 제외)
   const ownNodes = () => view.nodes.filter((n) => n.universe_id === currentId() && !n.hidden);
 
@@ -379,13 +367,13 @@ function start() {
     const focusLocal = (id) => { editing = null; focus(toGid(currentId(), id)); };
     switch (editing.kind) {
       case 'node':
-        return nodeForm({ mode: 'edit', node, subtypes: app.doc.universe.subtypes || [], onAddSubtype: (t, nm) => app.addSubtype(t, nm), onCancel: cancel, onFocusLocal: focusLocal,
+        return nodeForm({ mode: 'edit', node, subtypes: app.subtypes(), onAddSubtype: (t, nm) => app.addSubtype(t, nm), onCancel: cancel, onFocusLocal: focusLocal,
           onSubmit: (values) => afterSave(app.updateNode(currentId(), node.id, values)) });
       case 'edge':
-        return edgeForm({ node, subtypes: app.doc.universe.subtypes || [], onAddSubtype: (t, nm) => app.addSubtype(t, nm), candidates: ownNodes().filter((n) => n.id !== node.id), onCancel: cancel,
+        return edgeForm({ node, subtypes: app.subtypes(), onAddSubtype: (t, nm) => app.addSubtype(t, nm), candidates: ownNodes().filter((n) => n.id !== node.id), onCancel: cancel,
           onSubmit: (values) => afterSave(app.addEdge(values)) });
       case 'edge-edit': {
-        const edge = app.doc.edges.find((e) => e.id === editing.edgeId);
+        const edge = app.findEdge(editing.edgeId);
         return edgeEditForm({ edge, title: editing.title, onCancel: cancel, onSubmit: (values) => afterSave(app.updateEdge(edge.id, values)) });
       }
       case 'event': {
@@ -488,7 +476,7 @@ function start() {
       renderUniverseSummary(panel, describeUniverse(view), display.nodes.length);
       // 꼭지만 있으면 「노드 추가」를 펼쳐 둔다(검토5 U-5). 노드가 있으면 사용자가 접은 상태를 건드리지 않는다
       if (view.nodes.filter((n) => n.universe_id === currentId()).length <= 1 && !app.readOnly) document.querySelector('details.add').open = true;
-      const rootGid = toGid(currentId(), app.doc.universe.root_node_id);
+      const rootGid = app.rootGid();
       panel.append(...[el('div', { class: 'row' },
         el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft-universe', onclick: () => openDraft(rootGid) }, '인수인계 초안 만들기'),
         el('button', { type: 'button', 'data-testid': 'btn-insight-universe', onclick: () => openInsight('', 'repeat') }, '인사이트 보기')),
@@ -693,7 +681,7 @@ function start() {
       ...(doneText ? [el('p', { class: 'ok-text', 'data-testid': 'add-done' }, doneText)] : []),
       nodeForm({
         mode: 'add',
-        subtypes: app.doc.universe.subtypes || [],
+        subtypes: app.subtypes(),
         onAddSubtype: (t, nm) => app.addSubtype(t, nm),
         onFocusLocal: (id) => focus(toGid(currentId(), id)),
         onSubmit: (values) => {

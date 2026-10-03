@@ -3,10 +3,10 @@
 
 import { buildHandoverDraft, scopeWorks } from '../rules/handover.js';
 import { similarExperts, similarSentences, workLoad } from '../rules/insight.js';
-import { todayLocal } from './insight.js';
+import { todayLocal } from './time.js';
 import { METHOD_LABELS, refineDraft } from '../llm/connector.js';
 import { el } from './dom.js';
-import { eventChipLabel } from './chip-label.js';
+import { evidenceChips } from './evidence.js';
 import { messageFor } from './messages.js';
 
 const DRAFT_FIELDS = { target: '대상', from: '보내는 사람', to: '받는 사람' };
@@ -109,26 +109,12 @@ export function draftPanel(o) {
       result.replaceChildren();
       return;
     }
-    const exists = (gid) => view.lookup(gid).found || view.events.some((e) => e.gid === gid);
-    renderDraft(result, refineDraft(r.draft, { provider: o.provider, exists }), view, o.onFocus, o);
+    renderDraft(result, refineDraft(r.draft, { provider: o.provider, exists: view.exists }), view, o.onFocus, o);
   });
 
   return el('div', { class: 'draft' }, el('h2', {}, '인수인계 초안'),
     o.viewDate ? el('p', { class: 'notice', 'data-testid': 'draft-today' }, `초안은 오늘(${o.asOf}) 기준으로 만듭니다. 시간 보기의 기준일(${o.viewDate})과 상관없습니다.`) : null,
     form, result);
-}
-
-function evidenceChip(view, gid, onFocus) {
-  const node = view.lookup(gid);
-  if (node.found) {
-    const label = node.hidden ? `${node.node.label}(숨김 처리된 노드)` : node.node.label;
-    return el('button', { type: 'button', class: 'evidence', title: `근거: ${gid}`, onclick: () => onFocus(node.node.gid) }, label);
-  }
-  // 이벤트 근거: 날짜와 종류
-  const ev = view.events.find((e) => e.gid === gid);
-  const label = ev ? eventChipLabel(view, ev) : gid;
-  const first = ev && ev.node_gids[0];
-  return el('button', { type: 'button', class: 'evidence', title: `근거: ${gid}`, onclick: () => first && onFocus(first) }, label);
 }
 
 function confirmError(err) {
@@ -194,7 +180,7 @@ function renderDraft(box, d, view, onFocus, o = {}) {
           ? el('p', { class: 'muted', 'data-testid': 'not-found' }, `해당 없음 — ${i.empty_reason}`)
           : i.insufficient
           ? el('p', { class: 'muted', 'data-testid': 'insufficient' }, '이력 부족 — 근거가 되는 기록이 없어 내용을 만들지 않았습니다.')
-          : el('ul', {}, ...i.sentences.map((s) => el('li', {}, el('span', {}, s.text), el('span', { class: 'evidence-list' }, ...s.evidence_ids.map((g) => evidenceChip(view, g, onFocus)))))),
+          : el('ul', {}, ...i.sentences.map((s) => el('li', {}, el('span', {}, s.text), evidenceChips(view, s.evidence_ids, onFocus, { dedupe: false, unknown: true })))),
       ),
     ),
     el('p', { class: 'muted small' }, '축적된 이력으로 만든 초안입니다. 근거를 눌러 확인하고, 담당자가 검토해 확정하세요.'),

@@ -30,6 +30,9 @@ export function periodText(period, asOf = null) {
 
 const STATUS_LABEL = { current: '현재', ended: '종료', scheduled: '예정' };
 
+/** 문장·근거 칩에 쓰는 노드 이름. 숨긴 노드는 표시를 붙인다(4절 "숨김 후 참조"). 초안·이력 문장·근거 칩이 모두 이것을 쓴다(검토5 C-2) */
+export const displayName = (node) => (node.hidden ? `${node.label}(숨김 처리된 노드)` : node.label);
+
 function fieldValue(v) {
   if (v === null || v === undefined) return '(없음)';
   if (typeof v === 'boolean') return v ? '예' : '아니요';
@@ -44,7 +47,7 @@ export function eventText(view, ev) {
     if (!id) return null;
     const node = view.getNode(refGid(ev.universe_id, id));
     if (!node) return id;
-    return node.hidden ? `${node.label}(숨김 처리된 노드)` : node.label;
+    return displayName(node);
   };
   switch (ev.type) {
     case 'assign_start':

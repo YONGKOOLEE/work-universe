@@ -5,6 +5,7 @@
 import { EDGE_TYPES, MEMO_CATEGORIES, NODE_TYPES, allowedRelations } from '../model/schema.js';
 import { el } from './dom.js';
 import { messageFor } from './messages.js';
+import { todayLocal } from './time.js';
 
 // 하위 유형 선택 칸: 목록에서 고르거나 "새 하위 유형"을 입력한다(1.3 ②).
 // getType()은 지금 고른 핵심 유형(노드 유형 또는 관계)을 돌려준다. refresh()로 유형이 바뀔 때 목록을 다시 채운다.
@@ -48,13 +49,6 @@ function resolveSubtype(sub, coreType, onAddSubtype) {
   const r = onAddSubtype(coreType, v.name);
   return r.ok ? { ok: true, name: v.name } : { ok: false, error: r.error };
 }
-
-// 오늘 날짜(현지 기준). toISOString은 UTC라 한국 새벽에는 전날이 된다
-const today = () => {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-};
 
 function field(label, input, attrs = {}) {
   return el('label', { class: 'field', ...attrs }, el('span', {}, label), input);
@@ -297,7 +291,7 @@ export function eventForm(o) {
   const byType = (t) => o.nodes.filter((n) => n.core_type === t);
   const pre = (t) => (o.node.core_type === t ? o.node.id : '');
   const type = select(EVENT_CHOICES, 'memo', { 'data-testid': 'event-type' });
-  const date = el('input', { type: 'date', value: today(), 'data-testid': 'event-date' });
+  const date = el('input', { type: 'date', value: todayLocal(), 'data-testid': 'event-date' });
   const note = el('textarea', { rows: 2, 'data-testid': 'event-note', placeholder: '예: 대사 불일치 3건 재발' });
   const person = select(nodeOptions(byType('person'), { empty: '사람을 고르세요' }), pre('person'));
   const work = select(nodeOptions(byType('work'), { empty: '업무를 고르세요' }), pre('work'));

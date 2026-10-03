@@ -128,6 +128,28 @@ export function createApp({ store, samples, currentId, now }) {
     canReset: !!store,
     warnings,
 
+    // 현재 문서 조회(검토5 C-8): 화면이 doc 내부 배열을 직접 뒤지지 않게 한다
+    /** 현재 유니버스의 노드(문서 안 ID). 없으면 undefined */
+    findNode(id) {
+      return doc.nodes.find((n) => n.id === id);
+    },
+    /** 현재 유니버스의 연결(문서 안 ID). 없으면 undefined */
+    findEdge(id) {
+      return doc.edges.find((e) => e.id === id);
+    },
+    /** 현재 유니버스에 등록된 하위 유형 [{core_type, name}]. 없으면 빈 배열 */
+    subtypes() {
+      return doc.universe.subtypes || [];
+    },
+    /** 그 유니버스를 하위 유니버스로 묶고 있는가(숨긴 참조 제외) */
+    hasChild(universeId) {
+      return (doc.refs || []).some((r) => r.child_universe_id === universeId && !r.hidden);
+    },
+    /** 현재 유니버스 꼭지의 전역 참조 */
+    rootGid() {
+      return toGid(doc.universe.id, doc.universe.root_node_id);
+    },
+
     /** 고를 수 있는 유니버스 목록(샘플 + 사용자가 만든 것) */
     universes() {
       return db

@@ -5,7 +5,7 @@
 // 업무 고유 정보는 데이터 틀을 바꾸지 않고 노드의 자유 속성(attrs)과 메모로 담는다(R-07). 속성 이름은 약속이다(02-design 5.6):
 //   업무: 절차, 사용 시스템, 주기, 마감, 주의사항 / 산출물: 위치 / 사람: 연락처 / 메모: payload.category
 
-import { periodText } from '../view/describe.js';
+import { displayName, periodText } from '../view/describe.js';
 import { parseGid, refGid } from '../view/view.js';
 import { CODES, DRAFT_TARGET_TYPES, memoCategoryOf } from '../model/schema.js';
 
@@ -92,7 +92,7 @@ const sentence = (text, evidence) => ({ text, evidence_ids: [...new Set(evidence
 const name = (view, gid) => {
   const n = view.getNode(gid);
   if (!n) return '(찾을 수 없는 노드)';
-  return n.hidden ? `${n.label}(숨김 처리된 노드)` : n.label;
+  return displayName(n);
 };
 
 /**

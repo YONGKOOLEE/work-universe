@@ -2,7 +2,7 @@
 // 입력은 층별 보기 결과(view/collapse.js projectView)다. 접힌 하위 유니버스는 꼭지를 크게 그리고 가려진 노드 수를 붙인다.
 
 import cytoscape from 'cytoscape';
-import { NODE_TYPES } from '../model/schema.js';
+import { NODE_TYPES, UNKNOWN_TYPE_LABEL } from '../model/schema.js';
 
 // 노드 유형별 색(어두운 배경용 파스텔). 범례도 이 표를 쓴다
 export const TYPE_COLORS = {
@@ -113,7 +113,7 @@ export function legendItems(display) {
   const items = Object.entries(NODE_TYPES)
     .filter(([key]) => present.has(key))
     .map(([key, label]) => ({ key, label, color: TYPE_COLORS[key] }));
-  if ([...present].some((t) => !NODE_TYPES[t])) items.push({ key: 'unknown', label: '기타', color: UNKNOWN_COLOR });
+  if ([...present].some((t) => !NODE_TYPES[t])) items.push({ key: 'unknown', label: UNKNOWN_TYPE_LABEL, color: UNKNOWN_COLOR });
   return items;
 }
 

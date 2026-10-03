@@ -256,6 +256,9 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
       return node ? { found: true, hidden: node.hidden, node } : { found: false, hidden: false, node: null };
     },
 
+    // 근거 ID가 가리키는 노드나 이력이 있는가(공급자 결과의 근거 검증용, 검토5 C-2)
+    exists: (gid) => view.lookup(gid).found || events.some((e) => e.gid === gid),
+
     // 화면에 보일 노드·연결(숨김 제외). 끝점이 숨겨진 연결도 뺀다
     visible() {
       const vn = viewNodes.filter((n) => !n.hidden);
