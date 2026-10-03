@@ -105,7 +105,7 @@ final_check:
   notes: R-09는 P2로 1차 제외되어 T-ID 없음(사용자 결정). 차단 조건 없음
 remaining_nonblocking_assumptions: [A-1, A-2, RA-1, DA-1, 기본안 가상 데이터(T-15 전까지 교체 가능), P-1~P-3(T-01·T-02 실측), 주최 측 공지 미확인 항목]
 first_implementation_task: T-01 (최소 종단 흐름 + P-1·P-3 실측 + 그래프 라이브러리·빌드 방식 확정)
-next_session_first_action: (2026-10-03 일괄 결정·네 번째 검토 뒤 갱신) docs/HANDOFF.md를 먼저 읽는다. 결정·확인은 모두 처리됨(decisions-pending 머리말). 남은 것은 사람 몫(T-14 대리 관찰, T-15 다른 PC 실행·메일·태그, T-16 영상·대본)과 조력자 의견 반영(K-9). 새 기능은 사용자 요청이 있을 때만
+next_session_first_action: (2026-10-03 세션 종료 인계) docs/HANDOFF.md 1절을 먼저 읽는다. 계획된 구현·결정·확인은 모두 처리됨(CR-8까지). 사용자에게 남은 것(T-14 대리 관찰, T-15 다른 PC·메일·태그, T-16 영상·대본, 조력자 의견 반영, 결정 D3-28·D3-29 확인) 중 무엇을 할지 먼저 묻는다. 새 기능은 요청이 있을 때만. 답은 한국어로만
 
 implementation:
   current_task: (2026-10-03) 일괄 결정 반영, N-1~N-5, 네 번째 검토 수정, CR-8 초안 확정 구현 완료. 단위 테스트 319, Chrome·Edge·제출 점검. 남은 것은 사람 몫과 조력자 의견
