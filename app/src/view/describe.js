@@ -2,7 +2,7 @@
 // ui는 이 결과를 그리기만 한다. 그래야 Node에서 테스트할 수 있다(12.7).
 
 import { EDGE_TYPES, MEMO_CATEGORIES, eventTypeLabel, memoCategoryOf } from '../model/schema.js';
-import { toGid } from './view.js';
+import { refGid } from './view.js';
 
 const FIELD_NAMES = {
   label: '라벨', description: '설명', attrs: '속성', tags: '태그', period: '기간', subtype: '하위 유형', emp_no: '사번', note: '메모', exposed: '위층에 드러내기',
@@ -42,7 +42,7 @@ export function eventText(view, ev) {
   const p = ev.payload || {};
   const name = (id) => {
     if (!id) return null;
-    const node = view.getNode(id.includes('/') ? id : toGid(ev.universe_id, id));
+    const node = view.getNode(refGid(ev.universe_id, id));
     if (!node) return id;
     return node.hidden ? `${node.label}(숨김 처리된 노드)` : node.label;
   };
@@ -98,7 +98,7 @@ export function affiliationAt(view, personGid, asOf) {
   const evs = (view.index.eventsByNode.get(g) || []).filter((ev) => ev.type === 'affiliation_change' && ev.occurred_at <= asOf);
   if (!evs.length) return { label: '미기재', from: null, event_gid: null, note: '' };
   const ev = evs[evs.length - 1];
-  const to = ev.payload.to_org_id ? view.getNode(ev.payload.to_org_id.includes('/') ? ev.payload.to_org_id : toGid(ev.universe_id, ev.payload.to_org_id)) : null;
+  const to = ev.payload.to_org_id ? view.getNode(refGid(ev.universe_id, ev.payload.to_org_id)) : null;
   return { label: to ? to.label : '미기재', from: 'event', event_gid: ev.gid, note: `${ev.occurred_at} 소속 변경${ev.note ? `: ${ev.note}` : ''}` };
 }
 

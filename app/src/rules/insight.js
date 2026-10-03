@@ -3,19 +3,20 @@
 // 그 업무를 수행한 사람을 점수순으로 돌려준다. 현재 담당자는 제외한다. 근거 ID(공유 주제·업무 노드)를 함께 돌려준다.
 
 import { periodStatus, periodText } from '../view/describe.js';
-import { normalizeLabel, memoCategoryOf } from '../model/schema.js';
+import { refGid } from '../view/view.js';
+import { SUBTYPE_HANDOVER_DOC, normalizeLabel, memoCategoryOf } from '../model/schema.js';
 import { lastInput } from './flow.js';
 
 // 점수 가중치(D-08에 수치가 없어 정함): 주제 3, 산출물 유형 2, 라벨 토큰 1
 export const WEIGHTS = { topic: 3, artifactType: 2, token: 1 };
 const STOP_TOKENS = new Set(['업무', '관리', '처리', '확인']);
-// 어떤 업무든 인계할 때 생기는 산출물 유형은 업무가 비슷하다는 근거가 아니다(T-13에서 발견, 결정 대기 D3-3)
-export const GENERIC_ARTIFACT_TYPES = new Set(['인수인계서']);
+// 어떤 업무든 인계할 때 생기는 산출물 유형은 업무가 비슷하다는 근거가 아니다(T-13에서 발견, 결정 D3-3: 뺌)
+export const GENERIC_ARTIFACT_TYPES = new Set([SUBTYPE_HANDOVER_DOC]);
 
 const live = (e) => !e.hidden;
 
-// 라벨 토큰: 공백·구두점으로 나눈 2자 이상 낱말(흔한 낱말 제외)
-function tokensOf(label) {
+// 라벨 토큰: 공백·구두점으로 나눈 2자 이상 낱말(흔한 낱말 제외). 통합 업무 후보(merge)도 같은 토큰·가중치를 쓴다(검토5 C-6)
+export function tokensOf(label) {
   return new Set(
     normalizeLabel(label)
       .split(/[\s·,.()/\-_]+/)
@@ -178,7 +179,7 @@ export function similarSentences(result) {
 // ② 같은 주제의 메모·인수인계가 서로 다른 업무 2곳 이상에서 반복됨
 // 데이터 부족: 인수인계·메모 이벤트가 2건 미만. 모든 결과에 근거 이벤트·노드 ID가 붙는다.
 
-const eventGidIn = (ev, id) => (id.includes('/') ? id : `${ev.universe_id}/${id}`);
+const eventGidIn = (ev, id) => refGid(ev.universe_id, id);
 const fmtDate = (d) => d;
 
 /**
@@ -317,10 +318,10 @@ export function repeatInefficiency(view, { asOf = null } = {}) {
 // ── 밀집/공백(D-08, R-05) ────────────────────────────────────────────────
 // 조직(하위 유니버스)별로 업무 수·현재 수행 인원·공백 수를 집계한다.
 // 공백: 기준일에 담당자가 없는 업무. "담당 기록 없음"과 "이전 담당자만 있음"(끝난 업무일 수도 있음)을 나눠 보여 주고 판단은 사람이 한다.
-// 밀집: 기준일에 한 사람이 N개 이상 업무를 맡음. N은 화면에서 조정한다(기본값은 사용자 결정 전 임시값).
+// 밀집: 기준일에 한 사람이 N개 이상 업무를 맡음. N은 화면에서 조정한다(기본값 3은 사용자 결정 D-N).
 // 데이터 부족: 수행 연결이 하나도 없는 유니버스(조직별로도 같은 기준).
 
-/** N의 임시 기본값. 02-design 5.5는 기본값을 데이터로 정하기로 했고 아직 정하지 않았다(사용자 결정 대기) */
+/** 밀집 기준 N의 기본값. 결정: 3(decisions-pending D-N, 2026-10-03). 화면에서 바꿀 수 있다 */
 export const DENSE_DEFAULT_N = 3;
 
 /** 밀집 기준 N을 1 이상 정수로 맞춘다. 숫자가 아니거나 0이면 기본값 */
@@ -329,7 +330,7 @@ export const denseLimit = (n) => Math.max(1, Math.floor(Number(n) || DENSE_DEFAU
 /**
  * 업무 하나의 담당 상태(업무 상세의 한 줄, 밀집·공백의 공백 판정에 같이 쓴다).
  * kind: covered(현재 담당 있음) | scheduled(시작 예정 담당자만) | ended(이전 담당자만) | never(담당 기록 없음)
- * @returns {{kind:string, current:object[], last_person:object|null, last_end:string|null, next_person:object|null, next_start:string|null, work_ended:boolean}|null}
+ * @returns {{kind:string, current:object[], last_person:object|null, last_end:string|null, next_person:object|null, next_start:string|null, work_ended:boolean, work_scheduled:boolean, work_start:string|null}|null}
  */
 export function workLoad(view, workGid, { asOf }) {
   const work = view.getNode(view.canonical(workGid));
@@ -384,7 +385,7 @@ export function personLoad(view, personGid, { asOf, n = DENSE_DEFAULT_N }) {
 /**
  * @param {object} view buildView 결과
  * @param {{asOf: string, n?: number}} opts asOf: 기준일(YYYY-MM-DD). n: 밀집 기준(1 이상 정수)
- * @returns {{status:'ok'|'none'|'insufficient', reason:string, n:number, last_input:string|null, groups:object[], gaps:object[], dense:object[]}}
+ * @returns {{status:'ok'|'none'|'insufficient', reason:string, n:number, last_input:string|null, groups:object[], gaps:object[], dense:object[], ended_works:object[], scheduled_works:object[]}}
  */
 export function densityGaps(view, { asOf, n = DENSE_DEFAULT_N }) {
   const limit = denseLimit(n);

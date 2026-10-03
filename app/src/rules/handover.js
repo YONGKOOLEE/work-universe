@@ -6,7 +6,8 @@
 //   업무: 절차, 사용 시스템, 주기, 마감, 주의사항 / 산출물: 위치 / 사람: 연락처 / 메모: payload.category
 
 import { periodText } from '../view/describe.js';
-import { MEMO_CATEGORIES, memoCategoryOf } from '../model/schema.js';
+import { parseGid, refGid } from '../view/view.js';
+import { CODES, DRAFT_TARGET_TYPES, memoCategoryOf } from '../model/schema.js';
 
 export const HANDOVER_ITEMS = [
   { key: '업무_개요', title: '업무 개요' },
@@ -57,7 +58,7 @@ function scopeOf(view, targetGid) {
 /** 초안 대상의 범위 업무(전역 참조). 유사 경험자 계산의 기준이 된다 */
 export function scopeWorks(view, targetGid) {
   const target = view.getNode(targetGid);
-  if (!target || !['root', 'work'].includes(target.core_type)) return [];
+  if (!target || !DRAFT_TARGET_TYPES.includes(target.core_type)) return [];
   return scopeOf(view, target.gid).works.map((w) => w.gid);
 }
 
@@ -104,19 +105,19 @@ const name = (view, gid) => {
 export function buildHandoverDraft(view, input) {
   const asOf = input.asOf || null;
   for (const f of ['target', 'from', 'to']) {
-    if (!input[f]) return { ok: false, error: { code: 'E-REQUIRED', field: f } };
+    if (!input[f]) return { ok: false, error: { code: CODES.REQUIRED, field: f } };
   }
   const target = view.getNode(input.target);
-  if (!target || !['root', 'work'].includes(target.core_type)) return { ok: false, error: { code: 'E-SCHEMA', field: 'target' } };
-  if (target.hidden) return { ok: false, error: { code: 'E-SCHEMA', field: 'target', hidden: true } };
+  if (!target || !DRAFT_TARGET_TYPES.includes(target.core_type)) return { ok: false, error: { code: CODES.SCHEMA, field: 'target' } };
+  if (target.hidden) return { ok: false, error: { code: CODES.SCHEMA, field: 'target', hidden: true } };
   for (const f of ['from', 'to']) {
     const p = view.getNode(input[f]);
-    if (!p || p.core_type !== 'person') return { ok: false, error: { code: 'E-SCHEMA', field: f, expected: 'person' } };
-    if (p.hidden) return { ok: false, error: { code: 'E-SCHEMA', field: f, hidden: true } };
+    if (!p || p.core_type !== 'person') return { ok: false, error: { code: CODES.SCHEMA, field: f, expected: 'person' } };
+    if (p.hidden) return { ok: false, error: { code: CODES.SCHEMA, field: f, hidden: true } };
   }
   const from = view.canonical(input.from);
   const to = view.canonical(input.to);
-  if (from === to) return { ok: false, error: { code: 'E-SCHEMA', field: 'to', same_person: true } };
+  if (from === to) return { ok: false, error: { code: CODES.SCHEMA, field: 'to', same_person: true } };
 
   const { start, works, workIds } = scopeOf(view, target.gid);
   const edgesFrom = (gid, type) => view.edges.filter((e) => live(e) && e.core_type === type && e.source === gid);
@@ -148,11 +149,11 @@ export function buildHandoverDraft(view, input) {
   const related = new Set([start.gid, ...workIds]);
   for (const w of works) for (const e of edgesFrom(w.gid, 'relates_to')) related.add(e.target);
   // 사람이 확인해 합친 노드는 합쳐진 쪽 유니버스의 메모도 범위에 든다(대표 노드의 유니버스만 보면 빠짐)
-  const universeOf = (g) => g.slice(0, g.indexOf('/'));
+  const universeOf = (g) => parseGid(g).universe_id;
   const scopeUniverses = new Set([start, ...works].flatMap((n) => [n.universe_id, ...(n.merged_from || []).map(universeOf)]));
   const memos = view.events.filter((ev) => ev.type === 'memo' && scopeUniverses.has(ev.universe_id) && ev.node_gids.some((g) => related.has(g)));
   // 메모의 대상(전역 참조). 대상이 범위 업무가 아니면(주제를 공유한 다른 업무의 메모) 문장에 그 업무 이름을 붙인다(검토5 I-9)
-  const canonTarget = (ev) => (ev.payload.target_id ? view.canonical(ev.payload.target_id.includes('/') ? ev.payload.target_id : `${ev.universe_id}/${ev.payload.target_id}`) : null);
+  const canonTarget = (ev) => (ev.payload.target_id ? view.canonical(refGid(ev.universe_id, ev.payload.target_id)) : null);
   const memoSentence = (ev) => {
     const t = canonTarget(ev);
     const outside = t && !related.has(t) && view.getNode(t);
@@ -210,7 +211,7 @@ export function buildHandoverDraft(view, input) {
 
   // 9) 이전 인수인계: 범위 업무의 인수인계 이벤트 전부. 같은 두 사람 사이의 과거 인수인계도 받는 사람이 봐야 할 근거다(검토5 I-1).
   //    오늘(asOf) 같은 사람 사이에 이미 확정한 것만 "지금 만드는 인수인계"로 보고 뺀다
-  const canonOf = (ev, id) => view.canonical(id.includes('/') ? id : `${ev.universe_id}/${id}`);
+  const canonOf = (ev, id) => view.canonical(refGid(ev.universe_id, id));
   const samePair = (ev) => canonOf(ev, ev.payload.from_person_id) === from && canonOf(ev, ev.payload.to_person_id) === to;
   items.이전_인수인계 = view.events
     .filter((ev) => ev.type === 'handover' && workIds.has(canonOf(ev, ev.payload.work_id)))
@@ -246,9 +247,5 @@ export function buildHandoverDraft(view, input) {
   };
 }
 
-/** 항목의 근거 ID 합집합(정답 표 비교·근거 ID 검증용) */
-export function itemEvidence(item) {
-  return [...new Set(item.sentences.flatMap((s) => s.evidence_ids))].sort();
-}
-
-export { MEMO_CATEGORIES };
+/** 항목의 근거 ID 합집합(정답 표 비교·근거 ID 검증용). 구현은 llm/providers.js 한 벌만 둔다(검토5 C-6) */
+export { itemEvidence } from '../llm/providers.js';

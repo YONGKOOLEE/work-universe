@@ -13,7 +13,7 @@
 // [가정]·[미확인] 표시는 글자 그대로 남기고, 해당 노드의 attrs.상태에도 적는다(CR-3 AC ④).
 
 import { newId } from '../model/commands.js';
-import { ID_PREFIX, LABEL_MAX, SCHEMA_VERSION, TEXT_MAX, normalizeLabel } from '../model/schema.js';
+import { ID_PREFIX, LABEL_MAX, SCHEMA_VERSION, SUBTYPE_ROLE, TEXT_MAX, normalizeLabel } from '../model/schema.js';
 
 /** 변환 규칙의 값. 바꾸기 쉽게 한 곳에 둔다(CLAUDE.md 연속 진행 모드) */
 export const CONVERT_RULES = {
@@ -427,7 +427,7 @@ export function convertDocument(text, ctx) {
   const nodes = [];
   const byKey = new Map();
   let seq = 0;
-  const addNode = (core_type, label, { ref, description, subtype, attrs = {}, status } = {}) => {
+  const pushNode = (core_type, label, { ref, description, subtype, attrs = {}, status } = {}) => {
     const clean = stripMarks(label).slice(0, LABEL_MAX) || label.slice(0, LABEL_MAX);
     const key = `${core_type}|${normalizeLabel(clean)}`;
     const found = byKey.get(key);
@@ -477,7 +477,7 @@ export function convertDocument(text, ctx) {
   const works = [];
   for (const item of info.scope) {
     for (const part of item.desc ? [item.text] : splitList(item.text)) {
-      const w = addNode('work', part, { ref: item.ref, status: statusOf(part), description: item.desc || undefined });
+      const w = pushNode('work', part, { ref: item.ref, status: statusOf(part), description: item.desc || undefined });
       if (!works.includes(w)) works.push(w);
     }
   }
@@ -495,7 +495,7 @@ export function convertDocument(text, ctx) {
   }
   if (!works.length) {
     // 범위가 없으면 업무 하나(문서 이름)로 만든다
-    works.push(addNode('work', name, { ref: stepRefs[0] || (parsed.title ? '제목' : '전체') }));
+    works.push(pushNode('work', name, { ref: stepRefs[0] || (parsed.title ? '제목' : '전체') }));
     notes.push({ code: 'C-NO-SCOPE' });
   }
   const main = works[0];
@@ -533,7 +533,7 @@ export function convertDocument(text, ctx) {
     const description = [headNote, ...lines.map((l) => (l.kind === 'bullet' || l.n !== undefined || l.row ? `- ${l.text}` : l.text))].filter(Boolean).join('\n');
     const sub = TOPIC_SUBTYPES.find(([, re]) => re.test(label));
     if (sub) subtypes.set(`topic|${sub[0]}`, { core_type: 'topic', name: sub[0] });
-    const t = addNode('topic', label, { ref: refOf(s), description, subtype: sub ? sub[0] : undefined, status: statusOf(s.title, ...lines.map((l) => l.text)) });
+    const t = pushNode('topic', label, { ref: refOf(s), description, subtype: sub ? sub[0] : undefined, status: statusOf(s.title, ...lines.map((l) => l.text)) });
     const same = topics.find((x) => x.node === t);
     if (same) {
       // 제목이 같은 절이 또 있으면(예: 2.1 예외, 3.1 예외) 노드는 하나, 설명을 이어 붙인다(연결이 두 번 생기지 않게)
@@ -577,7 +577,7 @@ export function convertDocument(text, ctx) {
   for (const item of roleItems) {
     for (const label of item.desc ? [item.text] : expandRoles(item.text)) {
       const { org } = roleParts(label);
-      const r = addNode('person', label, { ref: item.ref, subtype: '역할', description: item.desc, attrs: org ? { 소속: org } : {}, status: statusOf(label, item.desc) });
+      const r = pushNode('person', label, { ref: item.ref, subtype: SUBTYPE_ROLE, description: item.desc, attrs: org ? { 소속: org } : {}, status: statusOf(label, item.desc) });
       if (!roles.includes(r)) roles.push(r);
       if (item.desc) {
         if (!roleDuty.has(r)) roleDuty.set(r, []);
@@ -585,7 +585,7 @@ export function convertDocument(text, ctx) {
       }
     }
   }
-  if (roles.length) subtypes.set('person|역할', { core_type: 'person', name: '역할' });
+  if (roles.length) subtypes.set(`person|${SUBTYPE_ROLE}`, { core_type: 'person', name: SUBTYPE_ROLE });
 
   // 산출물: "가 → 나 → 다", 목록, 표 첫 칸
   const artifacts = [];
@@ -604,7 +604,7 @@ export function convertDocument(text, ctx) {
           label = `${label.slice(0, CONVERT_RULES.artifactLabelMax - 1)}…`;
         }
         if (ordered) order += 1;
-        const a = addNode('artifact', label, { ref: refOf(s), description: desc || undefined, attrs: ordered ? { 순서: order } : {}, status: statusOf(p) });
+        const a = pushNode('artifact', label, { ref: refOf(s), description: desc || undefined, attrs: ordered ? { 순서: order } : {}, status: statusOf(p) });
         if (!artifacts.includes(a)) artifacts.push(a);
         made += 1;
       }
@@ -627,20 +627,20 @@ export function convertDocument(text, ctx) {
 
   // 3) 연결
   const edges = [];
-  const addEdge = (source, target, core_type, note) => {
+  const pushEdge = (source, target, core_type, note) => {
     edges.push({ id: `L-${String(edges.length + 1).padStart(3, '0')}`, source, target, core_type, ...(note ? { note } : {}), hidden: false, created_at: ctx.now });
   };
-  for (const w of works) addEdge(rootId, w.id, 'contains');
+  for (const w of works) pushEdge(rootId, w.id, 'contains');
   for (const t of topics) {
     const hits = works.filter((w) => contains(t.text, w.label));
-    if (hits.length) for (const w of hits) addEdge(w.id, t.node.id, 'relates_to', '규칙 기반 추정: 주제 내용에 업무 이름이 나옴');
-    else addEdge(rootId, t.node.id, 'contains');
+    if (hits.length) for (const w of hits) pushEdge(w.id, t.node.id, 'relates_to', '규칙 기반 추정: 주제 내용에 업무 이름이 나옴');
+    else pushEdge(rootId, t.node.id, 'contains');
   }
   let performs = 0;
   for (const r of roles) {
     const { core } = roleParts(r.label);
     const hits = topics.filter((t) => contains(t.node.label, core));
-    for (const t of hits) addEdge(r.id, t.node.id, 'relates_to', '규칙 기반 추정: 역할 이름과 주제 이름이 겹침');
+    for (const t of hits) pushEdge(r.id, t.node.id, 'relates_to', '규칙 기반 추정: 역할 이름과 주제 이름이 겹침');
     // 담당(수행): 원문이 그 역할의 하는 일로 업무 이름을 적은 경우만. 기간은 원문에 없으므로 두지 않는다(= 지금 담당으로 계산)
     // 하는 일을 쉼표로 나눈 항목이 업무 이름과 같을 때만 잇는다(D3-33). "결과 승인"처럼 업무 이름이 일부만 들어간 항목(결재·수강)은 담당이 아니다
     const duties = roleDuty.get(r) || [];
@@ -648,20 +648,20 @@ export function convertDocument(text, ctx) {
     const done = works.filter((w) => dutyItems.some((t) => compact(t.text) === compact(w.label)));
     for (const w of done) {
       const d = dutyItems.find((t) => compact(t.text) === compact(w.label));
-      addEdge(r.id, w.id, 'performs', `규칙 기반 추정: 원문 ${d.ref}의 하는 일에 「${w.label}」이(가) 나옴(기간 미기재)`);
+      pushEdge(r.id, w.id, 'performs', `규칙 기반 추정: 원문 ${d.ref}의 하는 일에 「${w.label}」이(가) 나옴(기간 미기재)`);
       performs += 1;
     }
-    if (!hits.length && !done.length) addEdge(rootId, r.id, 'contains');
+    if (!hits.length && !done.length) pushEdge(rootId, r.id, 'contains');
   }
   if (performs) notes.push({ code: 'C-PERFORMS-GUESS', count: performs });
-  for (const a of artifacts) addEdge(rootId, a.id, 'contains');
+  for (const a of artifacts) pushEdge(rootId, a.id, 'contains');
 
   // 4) 메모: 미확정 질문·리스크(원문 번호를 앞에)
   const events = [];
-  const addEvent = (type, payload, note, occurred_at = docDate) => {
+  const pushEvent = (type, payload, note, occurred_at = docDate) => {
     events.push({ id: `E-${String(events.length + 1).padStart(3, '0')}`, type, occurred_at, recorded_at: ctx.now, source: 'system', payload, ...(note ? { note } : {}) });
   };
-  addEvent('created', { target_kind: 'node', target_id: rootId }, `문서에서 규칙 기반 초벌 변환으로 만듦(규칙 ${CONVERT_RULES.version})`, today);
+  pushEvent('created', { target_kind: 'node', target_id: rootId }, `문서에서 규칙 기반 초벌 변환으로 만듦(규칙 ${CONVERT_RULES.version})`, today);
   const byLength = [...works].sort((a, b) => b.label.length - a.label.length);
   for (const s of parsed.sections.filter((x) => x.kind === 'memos')) {
     const lines = linesOf(s.blocks);
@@ -672,7 +672,7 @@ export function convertDocument(text, ctx) {
       const note = truncate(`[원문 ${refOf(s)}-${no} ${kind}] ${l.text}`, TEXT_MAX, notes, `${refOf(s)}-${no}`);
       const target = byLength.find((w) => contains(l.text, w.label));
       const topicIds = topics.filter((t) => contains(l.text, t.node.label)).map((t) => t.node.id);
-      addEvent('memo', { target_id: target ? target.id : rootId, category: caution ? 'caution' : 'issue', ...(topicIds.length ? { topic_ids: topicIds } : {}) }, note);
+      pushEvent('memo', { target_id: target ? target.id : rootId, category: caution ? 'caution' : 'issue', ...(topicIds.length ? { topic_ids: topicIds } : {}) }, note);
     });
     if (lines.length) sections.push({ order: parsed.sections.indexOf(s), ref: refOf(s), title: s.heading, kind: 'memos', made: lines.length });
   }

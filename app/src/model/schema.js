@@ -49,7 +49,25 @@ export const CODES = {
   EMPNO_CONFLICT: 'W-EMPNO-CONFLICT',
   STORAGE: 'W-STORAGE',
   LLM_FALLBACK: 'W-LLM-FALLBACK',
+  // 아래는 12.5 표에 아직 없는 코드(CR-9-d 후보). 화면 메시지는 ui/draft.js·ui/import.js·ui/main.js가 만든다
+  CONFIRM: 'E-CONFIRM', // 초안 확정 거부(reason: no_work | duplicate)
+  SAME_NAME: 'W-SAME-NAME',
+  NO_SOURCE: 'W-NO-SOURCE',
+  MISSING_CHILD: 'W-MISSING-CHILD',
+  SAMPLE_OVERWRITE: 'W-SAMPLE-OVERWRITE',
+  SAMPLE_FLAG: 'W-SAMPLE-FLAG',
+  SAMPLE_RESET: 'W-SAMPLE-RESET',
+  REAL_NAME_LIKE: 'W-REAL-NAME-LIKE',
+  EMPNO_LIKE: 'W-EMPNO-LIKE',
 };
+
+// 유니버스 문서의 배열 컬렉션(12.2). 불러오기·검증이 같은 목록을 본다
+export const DOC_COLLECTIONS = ['nodes', 'edges', 'events', 'refs', 'identity_links'];
+// 인수인계 초안의 대상으로 고를 수 있는 노드 유형(5.6)
+export const DRAFT_TARGET_TYPES = ['root', 'work'];
+// 규칙이 이름으로 가리키는 하위 유형(바꾸면 규칙 분기도 함께 바뀐다)
+export const SUBTYPE_HANDOVER_DOC = '인수인계서';
+export const SUBTYPE_ROLE = '역할';
 
 export function nodeTypeLabel(coreType) {
   return NODE_TYPES[coreType] || UNKNOWN_TYPE_LABEL;
@@ -128,6 +146,9 @@ export const EVENT_REF_TYPES = {
 export const IDENTITY_KINDS = ['person', 'work', 'topic'];
 export const IDENTITY_METHODS = ['emp_no_auto', 'human'];
 export const IDENTITY_STATUSES = ['pending', 'confirmed', 'rejected'];
+
+// 동일성 연결 쌍의 키(순서 무관). 판정 기록(commands)과 통합 확인 목록(merge)이 같은 키를 쓴다
+export const pairKey = (a, b) => [a, b].sort().join('|');
 
 // 12.2 관계 유형별 허용 조합(출발 유형, 도착 유형)
 const PAIR_RULES = {

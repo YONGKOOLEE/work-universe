@@ -66,7 +66,7 @@ export function activeAt(view, at) {
  * @param {object} view buildView 결과
  * @param {{unit?:'month'|'quarter', asOf:string}} opts asOf: 오늘(기간 목록의 끝)
  * @returns {{status:'ok'|'insufficient', reason:string, unit:string, first_input:string|null, last_input:string|null,
- *   no_data_periods:number, periods:object[]}}
+ *   no_data_periods:number, periods:{key:string, start:string, end:string, at:string, no_data:boolean, counts:object(total·other·이력 종류별 건수), active_works:number, active_people:number, evidence_ids:string[]}[]}}
  */
 export function flowChange(view, { unit = 'month', asOf }) {
   const events = view.events.filter((e) => e.occurred_at && e.occurred_at <= asOf);

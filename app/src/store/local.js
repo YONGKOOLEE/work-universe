@@ -1,5 +1,7 @@
 // 브라우저 저장소(12.4 키). DOM에 의존하지 않도록 storage 객체를 주입받는다.
 
+import { DOC_COLLECTIONS } from '../model/schema.js';
+
 const INDEX_KEY = 'wu:v1:index';
 const SETTINGS_KEY = 'wu:v1:settings';
 const universeKey = (id) => `wu:v1:u:${id}`;
@@ -47,7 +49,7 @@ export function createStore(storage) {
   return {
     loadUniverse(id) {
       const doc = parse(storage.getItem(universeKey(id)), null);
-      const ok = doc && doc.universe && ['nodes', 'edges', 'events', 'refs', 'identity_links'].every((k) => Array.isArray(doc[k]));
+      const ok = doc && doc.universe && DOC_COLLECTIONS.every((k) => Array.isArray(doc[k]));
       return ok ? doc : null;
     },
 

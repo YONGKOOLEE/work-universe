@@ -3,11 +3,10 @@
 import {
   addEdge, addEvent, addNode, addRef, addSubtype, createUniverse, decideIdentity, hideEdge, hideNode, hideRef, updateEdge, updateNode,
 } from '../model/commands.js';
-import { normalizeLabel } from '../model/schema.js';
+import { CODES, DRAFT_TARGET_TYPES, SUBTYPE_HANDOVER_DOC, TEXT_MAX, normalizeLabel } from '../model/schema.js';
 import { validateDocument } from '../model/validate.js';
-import { CODES, TEXT_MAX } from '../model/schema.js';
 import { subtypeRegistered } from '../model/checks.js';
-import { buildView, toGid } from '../view/view.js';
+import { buildView, refGid, toGid } from '../view/view.js';
 import { scopeWorks } from '../rules/handover.js';
 import { mergePlan } from '../merge/merge.js';
 import { previewImport } from '../model/import.js';
@@ -71,7 +70,7 @@ export function createApp({ store, samples, currentId, now }) {
       const stored = db.loadUniverse(sample.universe.id);
       if (!stored || isStaleSample(stored, sample)) {
         if (stored && stored.events.some((e) => e.source === 'user')) {
-          warnings.push({ code: 'W-SAMPLE-RESET', name: sample.universe.name });
+          warnings.push({ code: CODES.SAMPLE_RESET, name: sample.universe.name });
         }
         db.saveUniverse(clone(sample));
       } else if (!listed.has(sample.universe.id)) {
@@ -293,19 +292,19 @@ export function createApp({ store, samples, currentId, now }) {
       if (guard()) return guard();
       const v = buildView(doc, resolve);
       const target = draft && v.getNode(draft.target);
-      if (!target || !['root', 'work'].includes(target.core_type)) return { ok: false, error: { code: CODES.SCHEMA, field: 'target' } };
+      if (!target || !DRAFT_TARGET_TYPES.includes(target.core_type)) return { ok: false, error: { code: CODES.SCHEMA, field: 'target' } };
       const uid = target.universe_id;
       let d = uid === doc.universe.id ? doc : db.loadUniverse(uid);
       if (!d) return { ok: false, error: { code: CODES.SCHEMA, field: 'universe_id' } };
       const local = (gid) => (gid.startsWith(`${uid}/`) ? gid.slice(uid.length + 1) : gid); // 다른 유니버스는 전역 참조 그대로
-      const canon = (ev, id) => v.canonical(id.includes('/') ? id : `${ev.universe_id}/${id}`);
+      const canon = (ev, id) => v.canonical(refGid(ev.universe_id, id));
       const performed = (w) => v.edges.some((e) => !e.hidden && e.core_type === 'performs' && e.target === w && e.source === draft.from);
       const works = target.core_type === 'work' ? [target.gid] : scopeWorks(v, target.gid).map((g) => v.canonical(g)).filter(performed);
-      if (!works.length) return { ok: false, error: { code: 'E-CONFIRM', reason: 'no_work' } };
+      if (!works.length) return { ok: false, error: { code: CODES.CONFIRM, reason: 'no_work' } };
       const handovers = v.events.filter((ev) => ev.type === 'handover');
       const dup = handovers.some((ev) => ev.occurred_at === date && works.includes(canon(ev, ev.payload.work_id)) &&
         canon(ev, ev.payload.from_person_id) === draft.from && canon(ev, ev.payload.to_person_id) === draft.to);
-      if (dup) return { ok: false, error: { code: 'E-CONFIRM', reason: 'duplicate' } };
+      if (dup) return { ok: false, error: { code: CODES.CONFIRM, reason: 'duplicate' } };
 
       const ctx = { now: now() };
       const step = (r) => {
@@ -314,7 +313,7 @@ export function createApp({ store, samples, currentId, now }) {
         return r;
       };
       try {
-        if (!subtypeRegistered(d, 'artifact', '인수인계서')) step(addSubtype(d, { core_type: 'artifact', name: '인수인계서' }));
+        if (!subtypeRegistered(d, 'artifact', SUBTYPE_HANDOVER_DOC)) step(addSubtype(d, { core_type: 'artifact', name: SUBTYPE_HANDOVER_DOC }));
         // 본문: 설명(2000자)에 넣고, 넘치면 "본문(이어서 N)" 속성으로 나눠 잃지 않게 한다
         const body = String(text || '');
         const extra = {};
@@ -325,7 +324,7 @@ export function createApp({ store, samples, currentId, now }) {
         for (let k = 2; taken.has(label); k += 1) label = `${base} (${k})`;
         const name = (gid) => (v.getNode(gid) || { label: gid }).label;
         const art = step(addNode(d, {
-          core_type: 'artifact', subtype: '인수인계서', label, description: body.slice(0, TEXT_MAX),
+          core_type: 'artifact', subtype: SUBTYPE_HANDOVER_DOC, label, description: body.slice(0, TEXT_MAX),
           attrs: { 확정자: '사용자(이 브라우저)', '확정 시각': ctx.now, '보내는 사람': name(draft.from), '받는 사람': name(draft.to), ...(draft.method ? { '초안 생성 방식': draft.method } : {}), ...extra },
         }, ctx)).node;
         let linked = false;

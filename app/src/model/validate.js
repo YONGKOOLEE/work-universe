@@ -17,6 +17,7 @@ import {
   NODE_TYPES,
   SCHEMA_VERSION,
   pairAllowed,
+  DOC_COLLECTIONS,
 } from './schema.js';
 
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -44,7 +45,7 @@ export function validateDocument(doc) {
     return result(true);
   }
   if (!isObject(doc.universe)) err(CODES.SCHEMA, 'universe');
-  for (const k of ['nodes', 'edges', 'events', 'refs', 'identity_links']) {
+  for (const k of DOC_COLLECTIONS) {
     if (!Array.isArray(doc[k])) err(CODES.SCHEMA, k);
   }
   if (errors.length) return result();

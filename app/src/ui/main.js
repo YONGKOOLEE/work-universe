@@ -8,10 +8,10 @@ import { settingsPanel } from './settings.js';
 import { mergePanel } from './merge.js';
 import { SAMPLES, SAMPLE_GUIDE } from '../../data/index.js';
 import { startScreen } from './start.js';
-import { NODE_TYPES } from '../model/schema.js';
-import { describeNode, describeUniverse, eventText } from '../view/describe.js';
+import { describeNode, describeUniverse, eventText, periodStatus } from '../view/describe.js';
 import { exposureOf, projectView } from '../view/collapse.js';
 import { parseGid, toGid } from '../view/view.js';
+import { DRAFT_TARGET_TYPES } from '../model/schema.js';
 import { el } from './dom.js';
 import { createGraph, legendItems } from './graph.js';
 import { renderNodeDetail, renderUniverseSummary } from './detail.js';
@@ -20,7 +20,6 @@ import { draftPanel } from './draft.js';
 import { currentDenseN, insightPanel, todayLocal } from './insight.js';
 import { personLoad, repeatPatternsFor, workLoad } from '../rules/insight.js';
 import { monthAsOf, timeMonths } from '../rules/flow.js';
-import { periodStatus } from '../view/describe.js';
 import { messageFor } from './messages.js';
 import { exportFileName, importDialog } from './import.js';
 import { convertDocument } from '../rules/doc-convert.js';
@@ -181,11 +180,11 @@ function start() {
   function renderLegend() {
     $('legend').replaceChildren(
       ...[
-      ...legendItems(display).map((i) => el('li', {}, el('span', { class: 'dot', style: `background:${i.color}` }), i.label)),
-      display.collapsed.size
-        ? el('li', { class: 'legend-note' }, el('span', { class: 'dot collapsed' }), '이중 테두리 + 숫자: 접힌 하위 유니버스(더블클릭하면 펼침) · 점선: 요약 연결')
-        : null,
-      ].flat().filter(Boolean),
+        ...legendItems(display).map((i) => el('li', {}, el('span', { class: 'dot', style: `background:${i.color}` }), i.label)),
+        display.collapsed.size
+          ? el('li', { class: 'legend-note' }, el('span', { class: 'dot collapsed' }), '이중 테두리 + 숫자: 접힌 하위 유니버스(더블클릭하면 펼침) · 점선: 요약 연결')
+          : null,
+      ].filter(Boolean),
     );
   }
 
@@ -251,7 +250,7 @@ function start() {
 
   function draftButton(gid) {
     const node = view.getNode(gid);
-    if (!node || !['root', 'work'].includes(node.core_type)) return null;
+    if (!node || !DRAFT_TARGET_TYPES.includes(node.core_type)) return null;
     return el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft', onclick: () => openDraft(node.gid) }, '인수인계 초안 만들기');
   }
 

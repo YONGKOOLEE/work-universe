@@ -8,6 +8,9 @@ export function toGid(universeId, localId) {
   return `${universeId}/${localId}`;
 }
 
+/** 이벤트·연결 안의 ID를 전역 참조로: "/"가 있으면 이미 전역, 없으면 그 문서(유니버스) 안의 ID다(12.1). 규칙·화면이 모두 이것을 쓴다(검토5 C-4) */
+export const refGid = (universeId, id) => (id.includes('/') ? id : toGid(universeId, id));
+
 export function parseGid(gid) {
   const i = typeof gid === 'string' ? gid.indexOf('/') : -1;
   return i < 0 ? null : { universe_id: gid.slice(0, i), local_id: gid.slice(i + 1) };
@@ -173,7 +176,7 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
     for (const ev of doc.events) {
       const rule = EVENT_PAYLOAD[ev.type] || {};
       const payload = ev.payload || {};
-      const toNodeGid = (id) => canonical(id.includes('/') ? id : toGid(doc.universe.id, id));
+      const toNodeGid = (id) => canonical(refGid(doc.universe.id, id));
       const nodeGids = [];
       for (const k of rule.nodeRefs || []) if (payload[k]) nodeGids.push(toNodeGid(payload[k]));
       for (const k of rule.nodeListRefs || []) for (const id of payload[k] || []) nodeGids.push(toNodeGid(id));

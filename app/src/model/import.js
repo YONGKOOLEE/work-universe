@@ -34,7 +34,8 @@ const markOf = (n) => (n.attrs && typeof n.attrs.상태 === 'string' ? n.attrs.�
  *   existing: 이미 있는 유니버스, resolve: 저장된 유니버스 문서 찾기(순환 검사), sampleIds: 내장 샘플 ID
  * @returns {{ok:boolean, errors:object[], warnings:object[], version_mismatch:boolean, conflict:object|null,
  *   counts:{type:string, label:string, count:number}[], node_total:number, edge_total:number, memo_total:number,
- *   source:{with:number, total:number, missing:string[]}|null, marks:{가정:number, 미확인:number}, missing_children:string[]}}
+ *   source:{with:number, total:number, missing:string[]}|null, marks:{가정:number, 미확인:number}, missing_children:string[],
+ *   same_name:object|null(이름·단위가 같은 기존 유니버스), as_sample:boolean(내장 샘플 ID면 true)}}
  *   ok가 false면 가져오지 않는다(오류가 있거나 버전이 다름)
  */
 export function previewImport(doc, { existing = [], resolve = null, sampleIds = [] } = {}) {
@@ -62,31 +63,31 @@ export function previewImport(doc, { existing = [], resolve = null, sampleIds = 
   const withSource = nodes.filter((n) => n.attrs && typeof n.attrs.원문 === 'string' && n.attrs.원문.trim());
   const source = converted || withSource.length ? { with: withSource.length, total: nodes.length, missing: nodes.filter((n) => !withSource.includes(n)).map((n) => n.id) } : null;
   const warnings = [...checked.warnings];
-  if (source && source.missing.length) warnings.push({ code: 'W-NO-SOURCE', count: source.missing.length, ids: source.missing });
+  if (source && source.missing.length) warnings.push({ code: CODES.NO_SOURCE, count: source.missing.length, ids: source.missing });
 
   const marks = { 가정: 0, 미확인: 0 };
   for (const n of nodes) if (markOf(n) in marks) marks[markOf(n)] += 1;
 
   const ids = new Set(existing.map((u) => u.id));
   const missingChildren = (doc.refs || []).filter((r) => r && !r.hidden && !ids.has(r.child_universe_id) && r.child_universe_id !== doc.universe.id).map((r) => r.child_universe_id);
-  if (missingChildren.length) warnings.push({ code: 'W-MISSING-CHILD', ids: missingChildren });
+  if (missingChildren.length) warnings.push({ code: CODES.MISSING_CHILD, ids: missingChildren });
 
   const conflict = existing.find((u) => u.id === doc.universe.id) || null;
   // 같은 문서를 두 번 변환하면 ID는 달라도 이름·단위가 같다(N-2). 막지 않고 알린다(1.2: 사용자가 정한다)
   const sameName = conflict ? null : existing.find((u) => u.id !== doc.universe.id && typeof doc.universe.name === 'string' &&
     normalizeLabel(u.name) === normalizeLabel(doc.universe.name) && normalizeLabel(u.level || '') === normalizeLabel(doc.universe.level || '')) || null;
-  if (sameName) warnings.push({ code: 'W-SAME-NAME', id: sameName.id, name: sameName.name, level: sameName.level });
+  if (sameName) warnings.push({ code: CODES.SAME_NAME, id: sameName.id, name: sameName.name, level: sameName.level });
   // 샘플 표시: 내장 샘플 ID면 "고친 샘플"로 두고(초기화로 원래 샘플), 그 밖의 is_sample은 내 유니버스로 바꿔 저장한다
   const asSample = sampleIds.includes(doc.universe.id);
-  if (asSample) warnings.push({ code: 'W-SAMPLE-OVERWRITE', name: doc.universe.name });
-  else if (doc.universe.is_sample) warnings.push({ code: 'W-SAMPLE-FLAG' });
+  if (asSample) warnings.push({ code: CODES.SAMPLE_OVERWRITE, name: doc.universe.name });
+  else if (doc.universe.is_sample) warnings.push({ code: CODES.SAMPLE_FLAG });
   // 가상 데이터 원칙(R-06, 검토5 V-9): 실명·실제 사번처럼 보이는 값은 막지 않고 알린다.
   // 사람 이름이 한글 2~4자뿐이고 역할 낱말(담당·팀·역할·장)이 없으면 실명일 수 있다. 숫자 6자리 이상은 사번·번호일 수 있다
   // 문서 변환 결과(원문 근거가 있는 문서)만 본다. 내장 샘플의 가상 이름(윤바다 등)을 내보낸 JSON은 대상이 아니다
   const realNameLike = source ? nodes.filter((n) => n.core_type === 'person' && /^[가-힣]{2,4}$/.test(String(n.label || '').trim()) && !/(담당|팀|역할|장|자)$/.test(n.label)) : [];
-  if (realNameLike.length) warnings.push({ code: 'W-REAL-NAME-LIKE', count: realNameLike.length, labels: realNameLike.slice(0, 5).map((n) => n.label) });
+  if (realNameLike.length) warnings.push({ code: CODES.REAL_NAME_LIKE, count: realNameLike.length, labels: realNameLike.slice(0, 5).map((n) => n.label) });
   const numberLike = nodes.filter((n) => [n.description, ...Object.values(n.attrs || {})].some((v) => /(?<!\d)\d{6,}(?!\d)/.test(String(v || ''))));
-  if (numberLike.length) warnings.push({ code: 'W-EMPNO-LIKE', count: numberLike.length, ids: numberLike.map((n) => n.id) });
+  if (numberLike.length) warnings.push({ code: CODES.EMPNO_LIKE, count: numberLike.length, ids: numberLike.map((n) => n.id) });
   return {
     ...base,
     ok: checked.ok,

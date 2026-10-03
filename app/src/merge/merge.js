@@ -5,16 +5,12 @@
 //   ③ 업무 후보: 다른 유니버스의 업무 쌍을 규칙으로 점수 매긴 목록(R-11 ②). 이유 문장은 역할 (c)의 규칙 기반 문장
 // 을 만든다. 사람이 이미 판정한 쌍(확정·거부)과 이미 합쳐진 쌍은 다시 내지 않는다(12.2 "거부한 쌍은 다시 제안하지 않는다").
 
-import { normalizeLabel } from '../model/schema.js';
-import { GENERIC_ARTIFACT_TYPES } from '../rules/insight.js';
+import { SUBTYPE_ROLE, normalizeLabel, pairKey } from '../model/schema.js';
+// 업무 후보 점수(주제 3, 산출물 유형 2, 라벨 낱말 1)·라벨 토큰·일반 산출물 유형은 유사 경험자(D-08)와 같은 것을 쓴다(검토5 C-6)
+import { GENERIC_ARTIFACT_TYPES, WEIGHTS, tokensOf } from '../rules/insight.js';
 
-// 업무 후보 점수: 주제 3, 산출물 유형 2, 라벨 낱말 1(유사 경험자 D-08과 같은 비중)
-export const MERGE_WEIGHTS = { topic: 3, artifactType: 2, token: 1 };
 export const WORK_CANDIDATE_LIMIT = 12;
-const STOP_TOKENS = new Set(['업무', '관리', '처리', '확인']);
 const normEmp = (v) => String(v || '').trim().toUpperCase();
-const pairKey = (a, b) => [a, b].sort().join('|');
-const tokensOf = (label) => new Set(normalizeLabel(label).split(/[\s·,.()/\-_]+/).filter((t) => t.length >= 2 && !STOP_TOKENS.has(t)));
 
 /**
  * @param {object} view 통합 유니버스의 buildView 결과
@@ -33,7 +29,7 @@ export function mergePlan(view, links = []) {
   const uname = (n) => n.universe_name;
 
   // ── 사람 ──
-  const persons = raw.filter((n) => n.core_type === 'person' && n.subtype !== '역할');
+  const persons = raw.filter((n) => n.core_type === 'person' && n.subtype !== SUBTYPE_ROLE);
   const auto = [];
   const personItems = [];
   const byEmp = new Map();
@@ -110,7 +106,7 @@ export function mergePlan(view, links = []) {
       const topics = [...x.prof.topics.keys()].filter((k) => y.prof.topics.has(k));
       const types = [...x.prof.types.keys()].filter((k) => y.prof.types.has(k));
       const tokens = [...x.prof.tokens].filter((t) => y.prof.tokens.has(t));
-      const score = MERGE_WEIGHTS.topic * topics.length + MERGE_WEIGHTS.artifactType * types.length + MERGE_WEIGHTS.token * tokens.length;
+      const score = WEIGHTS.topic * topics.length + WEIGHTS.artifactType * types.length + WEIGHTS.token * tokens.length;
       if (score <= 0) continue;
       const why = [
         ...topics.map((k) => `같은 주제 「${x.prof.topics.get(k).label}」`),

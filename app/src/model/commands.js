@@ -7,12 +7,16 @@ import {
   CODES,
   EDGE_TYPES,
   ID_PREFIX,
+  IDENTITY_KINDS,
+  IDENTITY_METHODS,
+  IDENTITY_STATUSES,
   LABEL_MAX,
   NODE_TYPES,
   SCHEMA_VERSION,
   TEXT_MAX,
   USER_EVENT_TYPES,
   pairAllowed,
+  pairKey,
 } from './schema.js';
 import { eventPayloadErrors } from './validate.js';
 
@@ -413,8 +417,6 @@ export function hideRef(doc, childId, ctx) {
 
 // ── 동일성 연결 판정(R-11, D-03, 12.7 흐름 3) ─────────────────────────────
 
-const pairKey = (a, b) => [a, b].sort().join('|');
-
 /**
  * 두 노드(전역 참조)가 같은지 판정을 기록한다. 같은 쌍의 연결이 있으면 상태를 바꾸고, 없으면 새로 만든다.
  * 사람 확인(human)의 확정·거부는 판정자·시각이 필수다(12.2). 이벤트는 created/updated + target_kind "identity_link"(12.2, CR-7)
@@ -425,9 +427,9 @@ export function decideIdentity(doc, input, ctx) {
   const { a, b, kind, method = 'human', status } = input || {};
   if (isEmpty(a) || isEmpty(b)) return fail(CODES.REQUIRED, { field: isEmpty(a) ? 'a' : 'b' });
   if (a === b) return fail(CODES.SCHEMA, { field: 'b', same_node: true });
-  if (!['person', 'work', 'topic'].includes(kind)) return fail(CODES.SCHEMA, { field: 'kind' });
-  if (!['emp_no_auto', 'human'].includes(method)) return fail(CODES.SCHEMA, { field: 'method' });
-  if (!['pending', 'confirmed', 'rejected'].includes(status)) return fail(CODES.SCHEMA, { field: 'status' });
+  if (!IDENTITY_KINDS.includes(kind)) return fail(CODES.SCHEMA, { field: 'kind' });
+  if (!IDENTITY_METHODS.includes(method)) return fail(CODES.SCHEMA, { field: 'method' });
+  if (!IDENTITY_STATUSES.includes(status)) return fail(CODES.SCHEMA, { field: 'status' });
   if (method === 'emp_no_auto' && kind !== 'person') return fail(CODES.SCHEMA, { field: 'method' });
   const decided = method === 'human' && status !== 'pending';
   if (decided && isEmpty(input.decided_by)) return fail(CODES.REQUIRED, { field: 'decided_by' });
