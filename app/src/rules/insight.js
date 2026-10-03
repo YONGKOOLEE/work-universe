@@ -181,16 +181,23 @@ export function similarSentences(result) {
 const eventGidIn = (ev, id) => (id.includes('/') ? id : `${ev.universe_id}/${id}`);
 const fmtDate = (d) => d;
 
-/** 이후 인수인계가 이전 인수인계서를 이어받았는가: 이전 인수인계를 가리키거나, 같은/참조하는 산출물을 쓴다 */
+/**
+ * 이후 인수인계가 바로 앞 인수인계를 이어받았는가(D2-6 가, 사용자 결정 2026-10-03: 바로 앞만 인정).
+ * - previous_handover_id가 바로 앞 인수인계를 가리키면 이어받음
+ * - 인수인계서는 가장 최근 인수인계서(바로 앞이 문서 없이 했으면 그 전의 가장 최근 문서)와 같거나 그것을 참조해야 이어받음.
+ *   그보다 오래된 문서만 쓰면 중간에 쌓인 내용이 빠진 것으로 본다
+ */
 function continuesPrevious(view, later, earlier) {
-  const prevIds = new Set(earlier.map((e) => e.gid));
+  const prev = earlier[earlier.length - 1];
   const ref = later.payload.previous_handover_id;
-  if (ref && prevIds.has(eventGidIn(later, ref))) return true;
+  if (ref && eventGidIn(later, ref) === prev.gid) return true;
   const art = later.payload.artifact_id ? view.canonical(eventGidIn(later, later.payload.artifact_id)) : null;
   if (!art) return false;
-  const earlierArts = new Set(earlier.filter((e) => e.payload.artifact_id).map((e) => view.canonical(eventGidIn(e, e.payload.artifact_id))));
-  if (earlierArts.has(art)) return true; // 같은 인수인계서를 이어서 씀
-  return view.edges.some((e) => !e.hidden && e.core_type === 'references' && e.source === art && earlierArts.has(e.target));
+  const lastDoc = [...earlier].reverse().find((e) => e.payload.artifact_id);
+  if (!lastDoc) return false;
+  const lastArt = view.canonical(eventGidIn(lastDoc, lastDoc.payload.artifact_id));
+  if (art === lastArt) return true; // 같은 인수인계서를 이어서 씀
+  return view.edges.some((e) => !e.hidden && e.core_type === 'references' && e.source === art && e.target === lastArt);
 }
 
 /**

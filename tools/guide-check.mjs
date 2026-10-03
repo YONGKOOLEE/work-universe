@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const pageUrl = pathToFileURL(process.env.PAGE || join(root, 'dist/index.html')).href;
+const pageUrl = `${pathToFileURL(process.env.PAGE || join(root, 'dist/index.html')).href}?check`; // ?check: 점검용 전역을 켠다
 const BROWSERS = [
   { name: 'Chrome', exe: 'C:/Program Files/Google/Chrome/Application/chrome.exe' },
   { name: 'Edge', exe: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe' },

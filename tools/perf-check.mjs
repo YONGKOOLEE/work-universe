@@ -105,7 +105,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     const send = (method, params = {}) => new Promise((r) => { pend.set(++id, r); ws.send(JSON.stringify({ id, method, params })); });
     const ev = async (e) => (await send('Runtime.evaluate', { expression: e, returnByValue: true, awaitPromise: true })).result?.value;
     const url = pathToFileURL(join(root, 'dist/index.html')).href;
-    await send('Page.navigate', { url: `${url}#U-A1` });
+    await send('Page.navigate', { url: `${url}?check#U-A1` });
     await sleep(1500);
     await ev(`(() => { const d = ${JSON.stringify(JSON.stringify(doc))}; const o = JSON.parse(d); localStorage.setItem('wu:v1:u:' + o.universe.id, d);
       const idx = JSON.parse(localStorage.getItem('wu:v1:index') || '[]'); idx.push({ id: o.universe.id, name: o.universe.name }); localStorage.setItem('wu:v1:index', JSON.stringify(idx)); })()`);

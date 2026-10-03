@@ -176,7 +176,7 @@ test('같은 인수인계서를 이어서 쓰거나, 새 인수인계서가 이�
   same.events.find((e) => e.id === 'E-007').payload.artifact_id = 'N-020';
   assert.ok(!repeatInefficiency(buildView(same)).patterns.some((p) => p.kind === 'handover_chain'));
 
-  let doc = addNode(SAMPLE_A1, { core_type: 'artifact', subtype: '인수인계서', label: '2026-09 인수인계서' }, T0).doc;
+  let doc = addNode(JSON.parse(JSON.stringify(SAMPLE_A1)), { core_type: 'artifact', subtype: '인수인계서', label: '2026-09 인수인계서' }, T0).doc; // 깊은 복사: 공용 샘플을 바꾸지 않게
   const art = doc.nodes.at(-1).id;
   doc = addEdge(doc, { source: art, target: 'N-020', core_type: 'references' }, T0).doc;
   doc.events.find((e) => e.id === 'E-007').payload.artifact_id = art;
@@ -190,6 +190,29 @@ test('인수인계가 세 번이면 이어받지 않은 횟수를 센다', () =>
   assert.deepEqual([p.total, p.missed], [3, 1]); // 두 번째만 이어받지 않음
   assert.equal(p.steps[2].referenced, true);
   assert.equal(p.evidence_ids.length, 3);
+});
+
+// D2-6 가(사용자 결정 2026-10-03): 바로 앞 인수인계(가장 최근 인수인계서)만 이어받은 것으로 인정
+test('인수인계 3회: 바로 앞 인수인계서를 건너뛰고 더 오래된 것만 쓰면 이어받지 않은 것이다', () => {
+  // 1차 E-002(인수인계서 N-020) → 2차 E-007(새 인수인계서 B, N-020 참조) → 3차
+  let base = addNode(JSON.parse(JSON.stringify(SAMPLE_A1)), { core_type: 'artifact', subtype: '인수인계서', label: '2026-09 인수인계서' }, T0).doc; // 깊은 복사
+  const b = base.nodes.at(-1).id;
+  base = addEdge(base, { source: b, target: 'N-020', core_type: 'references' }, T0).doc;
+  base.events.find((e) => e.id === 'E-007').payload.artifact_id = b;
+  const third = (payload) => {
+    const d = addEvent(base, { type: 'handover', occurred_at: '2026-12-01', payload: { work_id: 'N-001', from_person_id: 'N-012', to_person_id: 'N-010', ...payload } }, T0).doc;
+    return repeatInefficiency(buildView(d)).patterns.find((x) => x.kind === 'handover_chain');
+  };
+  const skipped = third({ artifact_id: 'N-020' }); // B를 건너뛰고 A만 봄
+  assert.deepEqual([skipped.total, skipped.missed], [3, 1]);
+  assert.equal(skipped.steps[2].referenced, false);
+  assert.equal(third({ previous_handover_id: 'E-002' }).steps[2].referenced, false, '1차를 가리켜도 바로 앞(2차)이 아니면 인정하지 않음');
+  assert.equal(third({ artifact_id: b }), undefined, '바로 앞 인수인계서를 쓰면 반복 아님');
+  // 바로 앞(2차)이 문서 없이 했으면 그 전의 가장 최근 문서(A)를 쓰면 이어받은 것
+  const oral = JSON.parse(JSON.stringify(SAMPLE_A1));
+  const d = addEvent(oral, { type: 'handover', occurred_at: '2026-12-01', payload: { work_id: 'N-001', from_person_id: 'N-012', to_person_id: 'N-010', artifact_id: 'N-020' } }, T0).doc;
+  const p = repeatInefficiency(buildView(d)).patterns.find((x) => x.kind === 'handover_chain');
+  assert.deepEqual([p.total, p.missed, p.steps[2].referenced], [3, 1, true]);
 });
 
 test('반복 비효율 ②: 같은 주제가 여러 업무에서 반복되면 근거와 함께 나온다(부서 화면)', () => {

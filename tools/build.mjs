@@ -38,6 +38,7 @@ if (/type\s*=\s*["']module["']/i.test(template)) problems.push('index.html에 ty
 if (/^\s*(import|export)\s/m.test(js)) problems.push('스크립트에 import/export 문이 남아 있음');
 if (/\bfetch\s*\(/.test(js)) problems.push('스크립트에 fetch( 호출이 있음');
 if (!template.includes('<script src="app.js"></script>')) problems.push('index.html에 스크립트 자리(<script src="app.js">)가 없음');
+if (!/http-equiv="Content-Security-Policy"[^>]*connect-src 'none'/.test(template)) problems.push('index.html에 외부 요청 차단(CSP, connect-src none)이 없음(D2-9)');
 if (problems.length) {
   console.error('빌드 점검 실패:\n- ' + problems.join('\n- '));
   process.exit(1);

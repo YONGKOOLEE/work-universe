@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- 외부 요청 차단(D2-9, 사용자 결정 2026-10-03). 스크립트·스타일은 이 파일 안에만 있다. blob:은 내보내기 파일용 -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'">
 <title>업무 유니버스</title>
 <style>
   /* 어두운 녹색 배경 + 파스텔 노드 색. 그래프 색은 app/src/ui/graph.js의 TYPE_COLORS */

@@ -11,7 +11,7 @@ import { SAMPLES } from '../app/data/index.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 // PAGE를 주면 그 파일을 점검한다(T-15: 제출 압축을 푼 index.html)
-const pageUrl = pathToFileURL(process.env.PAGE || join(root, 'dist/index.html')).href;
+const pageUrl = `${pathToFileURL(process.env.PAGE || join(root, 'dist/index.html')).href}?check`; // ?check: 점검용 전역(window.__wu)을 켠다
 const tmp = join(root, '.tmp/browser-check');
 
 const BROWSERS = [
@@ -190,7 +190,7 @@ async function shot(cdp, name) {
 
 // 주소의 #유니버스ID를 지우고 다시 연다 = 더블클릭으로 처음 연 상태(시작 화면)
 async function goBare(cdp) {
-  await evaluate(cdp, "history.replaceState(null, '', location.pathname); location.reload()").catch(() => {});
+  await evaluate(cdp, "history.replaceState(null, '', location.pathname + location.search); location.reload()").catch(() => {});
   await sleep(500);
   return waitFor(cdp, 'window.__wu && window.__wu.start === true', 8000);
 }
@@ -639,6 +639,17 @@ async function checkBrowser(browser, port) {
     check('시작 화면의 「문서·파일 가져오기」', false, '시작 화면이 열리지 않음');
   }
   await evaluate(s.cdp, "location.hash = 'U-A1'; location.reload()").catch(() => {});
+  await sleep(500);
+  await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1'", 8000);
+
+  // ── D-4-10: ?check 없이 열면(제출본을 그냥 더블클릭) 점검용 전역이 없고 화면은 그대로 동작 ──
+  await s.cdp.send('Page.navigate', { url: pageUrl.replace(/\?check$/, '') });
+  await sleep(1200);
+  check('D-4-10 ?check 없이 열면 window.__wu가 없고 시작 화면 카드가 보임', await evaluate(s.cdp, "typeof window.__wu === 'undefined' && document.querySelectorAll('[data-testid=start-samples] .card').length > 0"));
+  await evaluate(s.cdp, "document.querySelector('[data-testid=start-primary]').click()");
+  await sleep(1500);
+  check('D-4-10 ?check 없이도 샘플을 열면 그래프가 그려짐(캔버스 크기 있음)', await evaluate(s.cdp, "(() => { const c = document.querySelector('#graph canvas'); return typeof window.__wu === 'undefined' && !!c && c.width > 0 && location.hash === '#U-A1'; })()"));
+  await s.cdp.send('Page.navigate', { url: `${pageUrl}#U-A1` });
   await sleep(500);
   await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1'", 8000);
 

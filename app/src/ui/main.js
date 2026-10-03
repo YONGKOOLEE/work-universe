@@ -27,6 +27,9 @@ import { convertDocument } from '../rules/doc-convert.js';
 import { convertDocumentWith } from '../llm/connector.js';
 import { DOC_EXAMPLE } from '../../data/doc-example.js';
 
+// 점검 도구(tools/*-check.mjs)만 주소에 ?check를 붙여 연다. 그때만 점검용 전역 window.__wu를 만든다(D-4-10, 사용자 결정 2026-10-03)
+const CHECK_MODE = new URLSearchParams(location.search).has('check');
+
 // ISO 8601 날짜·시각 + 현지 시간대(12.1)
 function nowIso() {
   const d = new Date();
@@ -143,7 +146,7 @@ function start() {
       onCreate: openCreate,
       onImport: openImport,
     }));
-    window.__wu = { start: true, readOnly: app.readOnly };
+    if (CHECK_MODE) window.__wu = { start: true, readOnly: app.readOnly };
     return;
   }
   let selected = null; // 선택한 노드의 전역 ID
@@ -215,9 +218,12 @@ function start() {
       if (!r.ok) return window.alert(messageFor(r.error));
       refresh();
     });
+    // 다른 유니버스의 노드면 바꾼 값이 그 노드의 원래 유니버스에 저장된다(CR-4, D2-4 가)
+    const owner = uid !== app.doc.universe.id ? (app.universes().find((u) => u.id === uid) || { name: uid }).name : null;
     box.append(
       el('label', { class: 'check' }, cb, ' 위층(상위 유니버스)에 드러내기'),
       el('div', { class: 'muted small' }, `${exp.explicit ? '직접 지정' : '기본 규칙'}: ${exp.reason}`),
+      owner ? el('div', { class: 'muted small', 'data-testid': 'exposed-owner' }, `바꾸면 원본 유니버스 「${owner}」에 저장됩니다.`) : null,
     );
     return box;
   }
@@ -695,8 +701,8 @@ function start() {
 
   refresh();
 
-  // 개발 점검 도구(tools/browser-check.mjs)가 그래프 좌표와 상태를 읽기 위한 연결점
-  window.__wu = {
+  // 개발 점검 도구(tools/browser-check.mjs)가 그래프 좌표와 상태를 읽기 위한 연결점(?check일 때만)
+  if (CHECK_MODE) window.__wu = {
     cy: graph.cy,
     select,
     toggle,
