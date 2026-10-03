@@ -232,11 +232,13 @@ const refOf = (s) => (s.num ? `§${s.num}` : `「${s.title}」`);
 const titleCore = (title) => title.replace(/\([^)]*\)/g, '').replace(MARK, '').trim();
 // 글 속 날짜를 YYYY-MM-DD로. "2026-09-15", "2026.09.15", "2026. 9. 15.", "2026년 9월 15일", "2026/9/15"를 읽는다(검토5 V-6). 없으면 null
 export function findDate(text) {
-  // 앞: 숫자·점·하이픈·빗금·v(버전)에 붙어 있으면 날짜가 아니다. 뒤: 숫자나 금액·개수 단위(만원·건·개…)로 끝나면 날짜가 아니다. "15 회의록"처럼 그 글자로 시작하는 다른 낱말은 날짜로 읽는다(재검증 3·2차 A)
-  const re = /(?<![\d.\-\/vV])(\d{4})\s*[.\-\/년]\s*(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})(?!\d)(?!\s*(만|억|천)?\s*(원|건|개|명|회)(?![가-힣]))(?!\s*(만|억|천)(?![가-힣]))\s*일?/g;
+  // 앞 경계만 본다: 숫자·점·하이픈·빗금·v에 붙어 있으면 버전(v2026.1.2)·전화번호·긴 번호의 일부다(재검증 3).
+  // 뒤쪽 글자(만원·건·회…)로 금액을 가려내려던 조건은 뺐다: "2026.09.15 회의록"·"2026.5.3건의"처럼 낱말·조사와 구분할 수 없어
+  // 고칠 때마다 다른 쪽이 틀렸고(재검증 2·3차), 세 부분으로 된 수(2026.5.12)는 금액·개수 표기가 아니기 때문이다(금액은 "2026.5만원" — 날짜 꼴이 아님)
+  const re = /(?<![\d.\-\/vV])(\d{4})\s*[.\-\/년]\s*(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})(?!\d)/g;
   for (const m of String(text || '').matchAll(re)) {
     const [, y, mo, d] = m;
-    // 실제 달력 날짜만(2026.2.31 같은 값은 건너뛴다)
+    // 실제 달력 날짜만(2026.2.31 같은 값은 건너뛰고 다음 후보를 본다)
     const t = new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d)));
     if (t.getUTCFullYear() !== Number(y) || t.getUTCMonth() !== Number(mo) - 1 || t.getUTCDate() !== Number(d)) continue;
     return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
@@ -668,8 +670,9 @@ export function convertDocument(text, ctx) {
     const bare = (t) => compact(stripMarks(t).replace(/\([^)]*\)|（[^）]*）/g, '').replace(/[.。·\s]+$/, ''));
     const dutyItems = duties.flatMap((d) => splitList(d.text).map((t) => ({ text: t, ref: d.ref })));
     // 글자 그대로 같은 업무가 먼저다. 그런 업무가 없을 때만 괄호를 뗀 값으로 비교한다(「승인(재처리)」 업무가 있으면 「승인」에 붙이지 않는다, 2차 B)
-    const exact = (t) => compact(stripMarks(t).replace(/[.。·\s]+$/, ''));
-    const dutyHit = (t, w) => exact(t.text) === compact(w.label) || (!works.some((x) => exact(t.text) === compact(x.label)) && bare(t.text) === compact(w.label));
+    const half = (t) => t.replace(/（/g, '(').replace(/）/g, ')'); // 전각 괄호는 반각과 같게 본다(3차 3)
+    const exact = (t) => compact(half(stripMarks(t)).replace(/[.。·\s]+$/, ''));
+    const dutyHit = (t, w) => exact(t.text) === exact(w.label) || (!works.some((x) => exact(t.text) === exact(x.label)) && bare(t.text) === compact(w.label));
     const done = works.filter((w) => dutyItems.some((t) => dutyHit(t, w)));
     for (const w of done) {
       const d = dutyItems.find((t) => dutyHit(t, w));
