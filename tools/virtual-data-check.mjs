@@ -35,6 +35,8 @@ export function scanVirtualData(doc) {
     if (n.core_type === 'org' && !n.label.startsWith('가상')) add(`nodes[${i}].label`, '조직 이름은 "가상"으로 시작', n.label);
   });
   if (doc.universe.is_sample !== true) add('universe.is_sample', '샘플 유니버스는 is_sample=true', doc.universe.is_sample);
+  // 작성 주체도 가상 이름이어야 한다(검토5 V-2: 실제 팀 이름이 들어간 적이 있음)
+  if (typeof doc.universe.owner === 'string' && !doc.universe.owner.startsWith('가상')) add('universe.owner', '작성 주체는 "가상"으로 시작', doc.universe.owner);
   return problems;
 }
 

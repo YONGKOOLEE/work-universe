@@ -26,7 +26,8 @@ function noteText(n) {
     case 'C-TOPIC-GUESS': return `규칙에 없는 제목의 절 ${n.count}개를 주제로 만들었습니다(표에 「규칙 밖」 표시). 맞는지 확인하세요.`;
     case 'C-TOO-MANY': return `노드가 ${n.count}개로, 정한 세분화(월말 정산 수준, ${n.max}개 이하)보다 많습니다. 범위 항목을 묶을 수 있는지 확인하세요.`;
     case 'C-TOO-FEW': return `노드가 ${n.count}개로 적습니다(${n.min}개 이상 목표). 원문에 제목(#)·표·번호 목록이 있는지 확인하세요.`;
-    case 'C-PERFORMS-GUESS': return `담당(수행) 연결 ${n.count}건을 추정했습니다 — 원문의 역할 「하는 일」에 업무 이름이 나온 경우만이고, 기간이 없어 '지금 담당'으로 계산됩니다. 맞는지 확인하세요.`;
+    case 'C-PERFORMS-GUESS': return `담당(수행) 연결 ${n.count}건을 추정했습니다 — 원문의 역할 「하는 일」 항목이 업무 이름과 같은 경우만이고(결재·검토처럼 이름이 일부만 들어간 항목은 잇지 않음), 기간이 없어 '지금 담당'으로 계산됩니다. 맞는지 확인하세요.`;
+    case 'C-TABLE-NAME-COL': return `${n.ref} 표에서 ${n.col}번째 칸을 업무 이름으로 썼습니다(첫 칸은 구분·순서로 보임). 이름이 엉뚱하면 표 머리글을 「업무」로 바꿔 다시 변환하세요.`;
     case 'C-NO-SCOPE': return '원문에서 범위(업무 목록)를 찾지 못해 문서 이름으로 업무 하나를 만들었습니다.';
     case 'C-NO-STRUCTURE': return '제목(#)이 없어 구조를 거의 읽지 못했습니다. 마크다운 제목·표·번호 목록이 있으면 더 잘 바뀝니다.';
     case 'C-TRUNCATED': return `「${n.where}」 글이 너무 길어 ${n.max}자에서 잘랐습니다.`;
@@ -38,6 +39,8 @@ function noteText(n) {
 function warningText(w, from) {
   if (w.code === 'W-SAMPLE-OVERWRITE') return `내장 샘플「${w.name}」을(를) 덮어씁니다. 「가상 데이터 초기화」를 누르면 원래 샘플로 돌아갑니다.`;
   if (w.code === 'W-SAMPLE-FLAG') return '파일에 샘플 표시가 있지만 내장 샘플이 아니므로 「내 유니버스」로 가져옵니다.';
+  if (w.code === 'W-REAL-NAME-LIKE') return `실명처럼 보이는 사람 이름 ${w.count}개가 있습니다(${w.labels.join(', ')}). 이 도구는 가상 데이터용입니다. 실제 이름이면 가져오기 전에 역할 이름(예: 정산 담당)으로 바꾸세요.`;
+  if (w.code === 'W-EMPNO-LIKE') return `사번·주민번호처럼 보이는 숫자(6자리 이상)가 ${w.count}곳에 있습니다. 실제 번호면 지우거나 V-0000 형식의 가상 사번으로 바꾸세요.`;
   if (w.code === 'W-SAME-NAME' && from === 'json') return `이름·단위가 같은 유니버스「${w.name}」(${w.level})가 이미 있습니다. 가져오면 따로 하나 더 생깁니다.`;
   if (w.code === 'W-NO-SOURCE') return `원문 근거가 없는 노드 ${w.count}개가 있습니다(${w.ids.slice(0, 5).join(', ')}${w.ids.length > 5 ? ' …' : ''}).`;
   if (w.code === 'W-SAME-NAME') return `이름·단위가 같은 유니버스「${w.name}」(${w.level})가 이미 있습니다. 같은 문서를 다시 가져오는 것이면 위에서 이름을 바꾸거나 취소하세요. 가져오면 따로 하나 더 생깁니다.`;

@@ -30,7 +30,7 @@ const SECTION_KINDS = [
   ['steps', /흐름|절차|프로세스|처리 ?순서|진행 ?순서/],
   ['people', /이해관계자|관계자|역할|담당자|연락처/],
   ['cautions', /주의사항|유의사항|유의 ?점|주의 ?점/],
-  ['scope_out', /범위 ?제외|제외 ?범위/],
+  ['scope_out', /범위 ?(제외|외|밖)|제외|비 ?범위|대상 ?외/], // 「범위 외」·「제외 사항」도 범위 제외(검토5 V-3 가)
   ['scope', /범위|대상 ?업무|업무 ?목록|하위 ?업무/],
   ['overview', /개요|요약|기본 ?정보|업무 ?정보/],
 ];
@@ -42,14 +42,15 @@ const OVERVIEW_KEYS = [
   ['name', /^(업무명|업무 ?이름|이름|제목)$/],
   ['purpose', /^(목적|업무 ?개요|개요|설명)$/],
   ['background', /^배경$/],
-  ['scope_out', /^(범위 ?제외|제외 ?범위|제외)$/],
+  ['scope_out', /^(범위 ?제외|제외 ?범위|제외|범위 ?외|범위 ?밖)$/],
   ['scope', /^(범위|업무 ?범위|대상 ?업무|주요 ?업무)$/],
-  ['people', /^(이해관계자|관계자|담당자|역할)$/],
+  ['people', /^(이해관계자|관계자|담당자|역할|담당)$/], // 「담당: 이름」도 사람으로(검토5 V-9: 목적에 섞이지 않게)
   ['date', /^(작성일|작성 ?일자|일자|날짜|기준일)$/],
   ['owner', /^(작성 ?주체|작성자|작성 ?부서|주관|주관 ?부서|담당 ?부서|담당 ?팀)$/],
   ['work_attr', /^(주기|마감|사용 ?시스템|주의사항)$/], // 02-design 5.6 업무 속성 약속 → 대표 업무 속성
 ];
 const ORG_HINT = /(사|팀|부|처|실|센터|기관|은행|공단|VAN)$|\//; // 소속으로 볼 앞 낱말(A사, 당사, 카드사/VAN, …팀)
+const NOT_ORG = /^(외부|내부|일부|전부|본부|상부|하부|세부|실제|실무)$/; // '부'·'실'로 끝나지만 기관이 아닌 낱말(검토5 V-10)
 const ROLE_SUFFIX = /^(담당|담당자|팀|부서|책임자|역할)$/;
 const MARK = /\[(가정|미확인)[^\]]*\]/;
 const CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳';
@@ -228,6 +229,30 @@ function listItem(line, plain) {
 
 const refOf = (s) => (s.num ? `§${s.num}` : `「${s.title}」`);
 const titleCore = (title) => title.replace(/\([^)]*\)/g, '').replace(MARK, '').trim();
+// 글 속 날짜를 YYYY-MM-DD로. "2026-09-15", "2026.09.15", "2026. 9. 15.", "2026년 9월 15일", "2026/9/15"를 읽는다(검토5 V-6). 없으면 null
+export function findDate(text) {
+  const m = /(\d{4})\s*[.\-\/년]\s*(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})\s*일?/.exec(String(text || ''));
+  if (!m) return null;
+  const [, y, mo, d] = m;
+  if (Number(mo) < 1 || Number(mo) > 12 || Number(d) < 1 || Number(d) > 31) return null;
+  return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
+}
+// 표에서 이름으로 쓸 칸(검토5 V-1): 머리글에 업무·이름 칸이 있으면 그 칸, 첫 머리글이 구분·순서·번호면 그다음 칸, 아니면 첫 칸
+const NAME_HEADER = /^(업무|업무명|업무 ?이름|이름|명칭|항목|작업|내용|역할|담당|담당자|산출물|문서)$/;
+const INDEX_HEADER = /^(구분|분류|유형|순서|번호|단계|no\.?|#)$/i;
+function nameCellIndex(header) {
+  if (!header || !header.length) return 0;
+  const named = header.findIndex((h) => NAME_HEADER.test(cleanText(h)));
+  if (named >= 0) return named;
+  return INDEX_HEADER.test(cleanText(header[0])) && header.length > 1 ? 1 : 0;
+}
+// 표 행에서 이름 칸과 나머지(설명)로 나눈다. 구분 칸 같은 앞 칸은 "머리글: 값"으로 설명에 넣는다
+function nameAndRest(cells, header) {
+  const i = nameCellIndex(header);
+  const name = cells[i] || cells[0];
+  const rest = cells.map((c, k) => (k === i || !c ? '' : header && header[k] && k < i ? `${cleanText(header[k])}: ${c}` : c)).filter(Boolean);
+  return { name, desc: rest.join(' — ') || null };
+}
 const statusOf = (...texts) => {
   const all = texts.filter(Boolean).join(' ');
   if (/\[미확인/.test(all)) return '미확인';
@@ -258,7 +283,12 @@ function overviewKey(key) {
 
 // 표 한 줄을 글로: 머리글이 있으면 "머리글: 값", 없으면 첫 칸 + 나머지
 function rowText(row, header) {
-  const cells = row.map((c) => c.trim());
+  let cells = row.map((c) => c.trim());
+  // 「단계 | 내용」 표의 번호 칸은 글에 넣지 않는다(검토5 V-11: "① 1: …"처럼 번호가 겹치지 않게)
+  if (header && header.length === cells.length && cells.length > 1 && /^(단계|순서|번호|no\.?|#)$/i.test(cleanText(header[0])) && /^\d+$/.test(cells[0])) {
+    cells = cells.slice(1);
+    header = header.slice(1);
+  }
   if (header && header.length === cells.length && cells.length > 2) {
     return `${cells[0]} — ${cells.slice(1).map((c, i) => (c ? `${header[i + 1]}: ${c}` : '')).filter(Boolean).join(' / ')}`;
   }
@@ -323,7 +353,7 @@ function roleParts(label) {
   if (tokens.length > 1 && ROLE_SUFFIX.test(tokens[tokens.length - 1])) tokens.pop();
   const core = tokens[tokens.length - 1] || label;
   // 앞 낱말이 기관처럼 보일 때만 소속으로 본다(A사, 당사, 카드사/VAN, …팀). '교육 운영 담당'의 '교육'은 소속이 아니다
-  const org = tokens.length > 1 && ORG_HINT.test(tokens[0]) ? tokens.slice(0, -1).join(' ') : '';
+  const org = tokens.length > 1 && ORG_HINT.test(tokens[0]) && !NOT_ORG.test(tokens[0]) ? tokens.slice(0, -1).join(' ') : '';
   return { core, org };
 }
 
@@ -368,7 +398,7 @@ export function convertDocument(text, ctx) {
       else if (k === 'scope_out') info.scope_out.push(v);
       else if (k === 'people') info.people.push({ text: v, ref: `${ref} ${cleanText(key)}` });
       else if (k === 'work_attr') info.work_attrs[cleanText(key).replace(/\s/g, ' ')] = v;
-      else if (k === 'date') info.date = info.date || (/\d{4}-\d{2}-\d{2}/.exec(v) || [null])[0];
+      else if (k === 'date') info.date = info.date || findDate(v);
       else if (!info[k]) info[k] = v;
     }
     return used;
@@ -385,10 +415,7 @@ export function convertDocument(text, ctx) {
       if (s.blocks.length) sections.push({ order: parsed.sections.indexOf(s), ref: refOf(s), title: s.heading, kind: 'overview', made: used });
     }
   }
-  if (!info.date) {
-    const m = /\d{4}-\d{2}-\d{2}/.exec([parsed.title, ...intro].filter(Boolean).join(' '));
-    info.date = m ? m[0] : null;
-  }
+  if (!info.date) info.date = findDate([parsed.title, ...intro].filter(Boolean).join(' '));
   const docDate = info.date || today;
   if (!info.date) notes.push({ code: 'C-DATE-ASSUMED', date: today });
 
@@ -407,6 +434,8 @@ export function convertDocument(text, ctx) {
     const marks = marksOf(label).join(' ');
     if (found) {
       if (ref && !found.attrs.원문.split(', ').includes(ref)) found.attrs.원문 += `, ${ref}`;
+      // 앞서 이름만 나온 노드(머리말 「담당: 이름」 등)에 뒤에서 설명이 붙으면 채운다(검토5 V-9)
+      if (description && !found.description) found.description = truncate(description, TEXT_MAX, notes, clean);
       if (status && !found.attrs.상태) found.attrs.상태 = status;
       if (marks && !String(found.attrs.표시 || '').includes(marks)) found.attrs.표시 = [found.attrs.표시, marks].filter(Boolean).join(' ');
       return found;
@@ -432,7 +461,12 @@ export function convertDocument(text, ctx) {
   for (const s of parsed.sections.filter((x) => x.kind === 'scope')) {
     readOverview(s.blocks, refOf(s));
     const lines = linesOf(s.blocks.filter((b) => !b.used));
-    for (const l of lines) info.scope.push({ text: l.cells ? l.cells[0] : l.text, ref: refOf(s), desc: l.cells ? l.cells.slice(1).filter(Boolean).join(' — ') : null });
+    for (const l of lines) {
+      if (!l.cells) { info.scope.push({ text: l.text, ref: refOf(s), desc: null }); continue; }
+      const { name: cellName, desc } = nameAndRest(l.cells, l.header); // 구분 열이 있는 표도 업무 이름 칸을 쓴다(검토5 V-1)
+      info.scope.push({ text: cellName, ref: refOf(s), desc });
+    }
+    if (lines.some((l) => l.cells && nameCellIndex(l.header) > 0)) notes.push({ code: 'C-TABLE-NAME-COL', ref: refOf(s), col: nameCellIndex(lines.find((l) => l.cells).header) + 1 });
     sections.push({ order: parsed.sections.indexOf(s), ref: refOf(s), title: s.heading, kind: 'scope', made: lines.length });
   }
   for (const s of parsed.sections.filter((x) => x.kind === 'scope_out')) {
@@ -530,7 +564,7 @@ export function convertDocument(text, ctx) {
   for (const s of parsed.sections.filter((x) => x.kind === 'people')) {
     const lines = linesOf(s.blocks);
     for (const l of lines) {
-      if (l.cells) roleItems.push({ text: l.cells[0], ref: refOf(s), desc: l.cells.slice(1).filter(Boolean).join(' — ') });
+      if (l.cells) { const { name: cellName, desc } = nameAndRest(l.cells, l.header); roleItems.push({ text: cellName, ref: refOf(s), desc: desc || '' }); }
       else {
         const kv = /^([^:：[]{1,30})[:：]\s*(.+)$/.exec(l.text);
         roleItems.push(kv ? { text: kv[1], ref: refOf(s), desc: kv[2] } : { text: l.text, ref: refOf(s) });
@@ -608,10 +642,12 @@ export function convertDocument(text, ctx) {
     const hits = topics.filter((t) => contains(t.node.label, core));
     for (const t of hits) addEdge(r.id, t.node.id, 'relates_to', '규칙 기반 추정: 역할 이름과 주제 이름이 겹침');
     // 담당(수행): 원문이 그 역할의 하는 일로 업무 이름을 적은 경우만. 기간은 원문에 없으므로 두지 않는다(= 지금 담당으로 계산)
+    // 하는 일을 쉼표로 나눈 항목이 업무 이름과 같을 때만 잇는다(D3-33). "결과 승인"처럼 업무 이름이 일부만 들어간 항목(결재·수강)은 담당이 아니다
     const duties = roleDuty.get(r) || [];
-    const done = works.filter((w) => duties.some((d) => contains(d.text, w.label)));
+    const dutyItems = duties.flatMap((d) => splitList(d.text).map((t) => ({ text: stripMarks(t), ref: d.ref })));
+    const done = works.filter((w) => dutyItems.some((t) => compact(t.text) === compact(w.label)));
     for (const w of done) {
-      const d = duties.find((x) => contains(x.text, w.label));
+      const d = dutyItems.find((t) => compact(t.text) === compact(w.label));
       addEdge(r.id, w.id, 'performs', `규칙 기반 추정: 원문 ${d.ref}의 하는 일에 「${w.label}」이(가) 나옴(기간 미기재)`);
       performs += 1;
     }
