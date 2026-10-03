@@ -8,7 +8,8 @@
 //   - 요건·예외·보안 같은 절은 절마다 주제 노드 하나로 만들고, 항목은 설명에 줄마다 적는다
 //   - 이해관계자의 기관(A사, 카드사 등)은 조직 노드를 만들지 않고 역할 노드의 '소속' 속성에 적는다
 //   - 미확정 질문·리스크는 메모 이력(원문 번호를 내용 앞에)으로 둔다
-// 지어내지 않기: 모든 노드에 원문 근거(attrs.원문 = 절 번호)를 두고, 원문에 없는 사번·담당(수행) 연결은 만들지 않는다.
+// 지어내지 않기: 모든 노드에 원문 근거(attrs.원문 = 절 번호)를 두고, 원문에 없는 사번은 만들지 않는다.
+// 담당(수행) 연결은 원문이 역할의 하는 일로 업무 이름을 적은 경우만 만든다(D3-21 나, 사용자 결정 2026-10-03).
 // [가정]·[미확인] 표시는 글자 그대로 남기고, 해당 노드의 attrs.상태에도 적는다(CR-3 AC ④).
 
 import { newId } from '../model/commands.js';
@@ -398,11 +399,16 @@ export function convertDocument(text, ctx) {
     sections.push({ order: parsed.sections.indexOf(s), ref: refOf(s), title: s.heading, kind: 'people', made: lines.length });
   }
   const roles = [];
+  const roleDuty = new Map(); // 역할 노드 → [{text, ref}] 원문에 적힌 하는 일(담당 추정의 근거)
   for (const item of roleItems) {
     for (const label of item.desc ? [item.text] : expandRoles(item.text)) {
       const { org } = roleParts(label);
       const r = addNode('person', label, { ref: item.ref, subtype: '역할', description: item.desc, attrs: org ? { 소속: org } : {}, status: statusOf(label, item.desc) });
       if (!roles.includes(r)) roles.push(r);
+      if (item.desc) {
+        if (!roleDuty.has(r)) roleDuty.set(r, []);
+        roleDuty.get(r).push({ text: item.desc, ref: item.ref });
+      }
     }
   }
   if (roles.length) subtypes.set('person|역할', { core_type: 'person', name: '역할' });
@@ -455,12 +461,22 @@ export function convertDocument(text, ctx) {
     if (hits.length) for (const w of hits) addEdge(w.id, t.node.id, 'relates_to', '규칙 기반 추정: 주제 내용에 업무 이름이 나옴');
     else addEdge(rootId, t.node.id, 'contains');
   }
+  let performs = 0;
   for (const r of roles) {
     const { core } = roleParts(r.label);
     const hits = topics.filter((t) => contains(t.node.label, core));
-    if (hits.length) for (const t of hits) addEdge(r.id, t.node.id, 'relates_to', '규칙 기반 추정: 역할 이름과 주제 이름이 겹침');
-    else addEdge(rootId, r.id, 'contains');
+    for (const t of hits) addEdge(r.id, t.node.id, 'relates_to', '규칙 기반 추정: 역할 이름과 주제 이름이 겹침');
+    // 담당(수행): 원문이 그 역할의 하는 일로 업무 이름을 적은 경우만. 기간은 원문에 없으므로 두지 않는다(= 지금 담당으로 계산)
+    const duties = roleDuty.get(r) || [];
+    const done = works.filter((w) => duties.some((d) => contains(d.text, w.label)));
+    for (const w of done) {
+      const d = duties.find((x) => contains(x.text, w.label));
+      addEdge(r.id, w.id, 'performs', `규칙 기반 추정: 원문 ${d.ref}의 하는 일에 「${w.label}」이(가) 나옴(기간 미기재)`);
+      performs += 1;
+    }
+    if (!hits.length && !done.length) addEdge(rootId, r.id, 'contains');
   }
+  if (performs) notes.push({ code: 'C-PERFORMS-GUESS', count: performs });
   for (const a of artifacts) addEdge(rootId, a.id, 'contains');
 
   // 4) 메모: 미확정 질문·리스크(원문 번호를 앞에)

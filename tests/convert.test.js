@@ -209,3 +209,32 @@ test('연결부: 공급자 결과는 검증·원문 근거를 통과해야 쓴�
   assert.match(convertDocumentWith('x', { provider: fake(broken), ruleConvert }).fallback.reason, /형식 검증/);
   assert.equal(convertDocumentWith('x', { provider: fake(null), ruleConvert }).method, 'rule');
 });
+
+// D3-21 나(사용자 결정 2026-10-03): 담당(수행) 연결은 원문이 역할의 하는 일로 업무 이름을 적은 경우만
+test('담당(수행) 추정: 역할의 하는 일에 업무 이름이 있으면 수행 연결(기간 없음, 근거 메모), 없으면 만들지 않는다', () => {
+  const text = `# 가상 정산 지원
+- 업무명: 가상 정산 지원
+- 작성 주체: 가상정산팀
+## 범위
+- 자료 수집
+- 대사 확인
+- 보고
+## 이해관계자
+| 역할 | 하는 일 |
+|---|---|
+| 정산 담당 | 자료 수집, 대사 확인 |
+| 팀장 | 결과 승인 |
+`;
+  const { doc, report } = conv(text);
+  assert.equal(validateDocument(doc).ok, true);
+  const perf = doc.edges.filter((e) => e.core_type === 'performs');
+  const id = (l) => byLabel(doc, l).id;
+  assert.deepEqual(perf.map((e) => `${e.source}>${e.target}`), [`${id('정산 담당')}>${id('자료 수집')}`, `${id('정산 담당')}>${id('대사 확인')}`]);
+  assert.ok(perf.every((e) => !e.period && /^규칙 기반 추정: 원문 「이해관계자」의 하는 일에 「.+」이\(가\) 나옴\(기간 미기재\)$/.test(e.note)));
+  assert.ok(report.notes.some((n) => n.code === 'C-PERFORMS-GUESS' && n.count === 2));
+  // 근거 없는 역할(팀장)은 담당 없이 꼭지에 포함, 담당이 있는 역할은 꼭지에 따로 매달지 않는다
+  assert.ok(doc.edges.some((e) => e.core_type === 'contains' && e.source === 'N-000' && e.target === id('팀장')));
+  assert.ok(!doc.edges.some((e) => e.core_type === 'contains' && e.target === id('정산 담당')));
+  // 하는 일이 없는 문서(예시 카드승인)는 지금처럼 담당 연결 0건
+  assert.ok(!card().report.notes.some((n) => n.code === 'C-PERFORMS-GUESS'));
+});

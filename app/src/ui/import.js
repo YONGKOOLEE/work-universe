@@ -25,6 +25,7 @@ function noteText(n) {
     case 'C-TOPIC-GUESS': return `규칙에 없는 제목의 절 ${n.count}개를 주제로 만들었습니다(표에 「규칙 밖」 표시). 맞는지 확인하세요.`;
     case 'C-TOO-MANY': return `노드가 ${n.count}개로, 정한 세분화(월말 정산 수준, ${n.max}개 이하)보다 많습니다. 범위 항목을 묶을 수 있는지 확인하세요.`;
     case 'C-TOO-FEW': return `노드가 ${n.count}개로 적습니다(${n.min}개 이상 목표). 원문에 제목(#)·표·번호 목록이 있는지 확인하세요.`;
+    case 'C-PERFORMS-GUESS': return `담당(수행) 연결 ${n.count}건을 추정했습니다 — 원문의 역할 「하는 일」에 업무 이름이 나온 경우만이고, 기간이 없어 '지금 담당'으로 계산됩니다. 맞는지 확인하세요.`;
     case 'C-NO-SCOPE': return '원문에서 범위(업무 목록)를 찾지 못해 문서 이름으로 업무 하나를 만들었습니다.';
     case 'C-NO-STRUCTURE': return '제목(#)이 없어 구조를 거의 읽지 못했습니다. 마크다운 제목·표·번호 목록이 있으면 더 잘 바뀝니다.';
     case 'C-TRUNCATED': return `「${n.where}」 글이 너무 길어 ${n.max}자에서 잘랐습니다.`;
