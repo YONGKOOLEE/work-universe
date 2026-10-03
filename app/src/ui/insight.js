@@ -21,7 +21,7 @@ function explainBox(view, req, o) {
   if (!req) return null;
   const r = explainInsight(req, { provider: o.provider, exists: view.exists });
   return el('div', { class: 'explain', 'data-testid': 'insight-explain', 'data-method': r.method },
-    el('h4', {}, '설명', el('span', { class: `method-chip ${r.method}` }, METHOD_LABELS[r.method])),
+    el('h4', {}, '설명', el('span', { class: `method-chip ${r.method}`, title: METHOD_LABELS[r.method] }, METHOD_LABELS[r.method].replace(/\(.*\)$/, ''))),
     // 근거가 많으면 접어 둔다(표를 밀어내지 않게)
     el('ul', {}, ...r.sentences.map((s) => el('li', {}, s.text, ' ', s.evidence_ids.length > 4
       ? el('details', { class: 'evidence-fold' }, el('summary', { class: 'muted small' }, `근거 ${s.evidence_ids.length}건`), chips(view, s.evidence_ids, o.onFocus))
@@ -256,7 +256,7 @@ function renderFlow(box, view, r, o) {
   parts.push(el('table', { class: 'dg-table flow-table', 'data-testid': 'flow-table' },
     el('thead', {}, el('tr', {},
       el('th', {}, '기간'), el('th', { title: '이 기간에 기록된 이력 전체' }, '이력'), el('th', { title: '담당 시작·종료' }, '담당'),
-      el('th', { title: '인수인계 이력 수' }, '인수인계'), el('th', { title: '소속 변경(조직개편 등)' }, '소속'), el('th', { title: '기간 말에 담당자가 있는 업무 수' }, '업무'), el('th', { title: '기간 말에 업무를 맡은 사람 수' }, '인원'))),
+      el('th', { title: '인수인계 이력 수' }, '인수', el('br'), '인계'), el('th', { title: '소속 변경(조직개편 등)' }, '소속'), el('th', { title: '기간 말에 담당자가 있는 업무 수' }, '업무'), el('th', { title: '기간 말에 업무를 맡은 사람 수' }, '인원'))),
     el('tbody', {}, ...r.periods.map(row))));
   if (noPerforms) parts.push(el('p', { class: 'muted small', 'data-testid': 'flow-na' }, '이 유니버스에는 업무 담당(수행) 기록이 없어 업무·인원은 세지 않습니다(—).'));
   box.replaceChildren(...parts);

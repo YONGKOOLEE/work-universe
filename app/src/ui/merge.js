@@ -32,7 +32,7 @@ export function mergePanel(o) {
       const r = candidateReason(view, w, o.provider);
       return el('li', { 'data-type': 'work' },
         el('div', { class: 'who' }, el('strong', {}, w.title), el('span', { class: 'chip' }, `${w.score}점`)),
-        el('div', { class: 'small' }, ...r.sentences.map((s) => el('div', {}, s.text)), el('span', { class: `method-chip ${r.method}` }, METHOD_LABELS[r.method])),
+        el('div', { class: 'small' }, ...r.sentences.map((s) => el('div', {}, s.text)), el('span', { class: `method-chip ${r.method}`, title: METHOD_LABELS[r.method] }, METHOD_LABELS[r.method].replace(/\(.*\)$/, ''))),
         chips(view, w.evidence_ids, o.onFocus),
         decideButtons(w, '같은 업무', '다른 업무'));
     }))

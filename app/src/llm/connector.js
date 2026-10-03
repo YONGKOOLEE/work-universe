@@ -78,9 +78,7 @@ export function explainInsight(req, { provider = null, exists }) {
   if (!validSentences(got.sentences, new Set(req.evidence_ids), exists)) {
     return { ...rule, fallback: { code: FALLBACK, reason: '근거가 확인되지 않아 규칙 기반 설명으로 대체' } };
   }
-  // keep 표시가 있는 규칙 문장(기준일에 따라 바뀌는 경고 등)은 공급자 문장 뒤에 그대로 붙인다(검토5 I-6)
-  const kept = req.rule.filter((s) => s.keep);
-  return { sentences: [...got.sentences, ...kept], method: provider.method, fallback: null };
+  return { sentences: got.sentences, method: provider.method, fallback: null };
 }
 
 /**

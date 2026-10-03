@@ -766,6 +766,7 @@ async function checkBrowser(browser, port) {
     check('R-05 흐름 변화: 월별 표(2025-03 ~ 이번 달)와 2026-01·2026-06 행', flow.includes('2025-03') && flow.includes('2026-01') && flow.includes('2026-06'), flow.slice(0, 80));
     check('검토3 UI-4: 흐름 변화 표가 패널 안에 들어온다(오른쪽이 잘리지 않음)', await evaluate(s.cdp, "(() => { const t = document.querySelector('[data-testid=flow-table]').getBoundingClientRect(); const a = document.getElementById('detail').getBoundingClientRect(); return t.right <= a.right + 1; })()"));
     check('흐름 변화 표가 실제로 그려짐(크기 있음)', await evaluate(s.cdp, "(() => { const r = document.querySelector('[data-testid=flow-table]').getBoundingClientRect(); return r.width > 100 && r.height > 100; })()"));
+    check('흐름 변화 표의 마지막 열(인원)이 패널 안에 다 보임(재검증: 열 잘림)', await evaluate(s.cdp, "(() => { const t = document.querySelector('[data-testid=flow-table]'); const a = document.querySelector('aside'); if (!t || !a) return false; const last = t.querySelector('thead th:last-child').getBoundingClientRect(); return last.width > 0 && last.right <= a.getBoundingClientRect().right + 1; })()"));
     await shot(s.cdp, `${browser.name}-7e-flow`);
     await clickTestId(s.cdp, 'flow-goto-2026-06');
     await sleep(250);
@@ -909,6 +910,7 @@ async function checkBrowser(browser, port) {
     const explainO = await text(s.cdp, '[data-testid=insight-explain]');
     check('T-12 인사이트 설명(사전 생성): 조직관리 흐름 변화에 2차 조직개편 설명과 방식 표시', explainO.includes('2차 조직개편') && (await evaluate(s.cdp, "document.querySelector('[data-testid=insight-explain]').dataset.method")) === 'pregen', explainO.slice(0, 80));
     check('조직개편 2026-01 행에 소속 변경 12', await evaluate(s.cdp, `(() => { const tr = document.querySelector('[data-testid=flow-table] tr[data-key="2026-01"]'); return !!tr && tr.children[4].textContent === '12'; })()`));
+    check('흐름 변화 표의 마지막 열(인원)이 패널 안에 다 보임(재검증: 열 잘림)', await evaluate(s.cdp, "(() => { const t = document.querySelector('[data-testid=flow-table]'); const a = document.querySelector('aside'); if (!t || !a) return false; const last = t.querySelector('thead th:last-child').getBoundingClientRect(); return last.width > 0 && last.right <= a.getBoundingClientRect().right + 1; })()"));
     await shot(s.cdp, `${browser.name}-10-org-flow`);
     await clickTestId(s.cdp, 'tab-density');
     await sleep(150);

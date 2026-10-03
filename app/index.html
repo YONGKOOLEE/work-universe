@@ -107,7 +107,7 @@
   .experts { display: grid; gap: 12px; margin-top: 8px; padding: 0; }
   .experts > li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; gap: 4px; }
   .who { display: flex; align-items: center; gap: 6px; }
-  .who .chip { margin-left: auto; }
+  .who .chip { margin-left: auto; white-space: nowrap; flex: none; }
   .why { display: grid; gap: 2px; }
   .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
   .tab { padding: 4px 12px; font-size: 13px; white-space: nowrap; }
@@ -128,7 +128,9 @@
   .timebar.past { background: var(--warn-bg); color: var(--warn-text); }
   .history li.after { opacity: 0.45; }
   .flow-table { table-layout: auto; }
-  .flow-table td:first-child { white-space: normal; min-width: 5.5em; }
+  .flow-table { font-size: 12px; }
+  .flow-table th, .flow-table td { padding: 4px 2px; } /* 7열이 좁은 패널에서 잘리지 않게 */
+  .flow-table td:first-child { white-space: normal; min-width: 4.6em; }
   .flow-table td:first-child > .link { white-space: nowrap; }
   .flow-table details .evidence-list { max-width: 12em; }
   .flow-table details summary { cursor: pointer; }

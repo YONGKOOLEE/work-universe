@@ -172,6 +172,8 @@ function start() {
         display.collapsed.size
           ? el('li', { class: 'legend-note' }, el('span', { class: 'dot collapsed' }), '이중 테두리 + 숫자: 접힌 하위 유니버스(더블클릭하면 펼침) · 점선: 요약 연결')
           : null,
+        // 노드가 많은 화면(부서 등)은 글자가 작다: 확대·이동 방법을 범례 끝에 알린다(재검증 5-2)
+        el('li', { class: 'legend-note', 'data-testid': 'legend-zoom' }, '마우스 휠: 확대·축소 · 빈 곳 끌기: 이동'),
       ].filter(Boolean),
     );
   }
@@ -216,6 +218,7 @@ function start() {
     box.append(el('div', {},
       el('label', { class: 'check' }, cb, ` ${where} 화면에서도 이 노드 보이기`),
       el('div', { class: 'muted small' }, `지금 적용: ${exp.explicit ? '직접 지정' : '기본 규칙'}(${exp.reason})`),
+      own ? el('div', { class: 'muted small' }, `${where}은(는) 이 유니버스를 묶은 상위 유니버스입니다.`) : null,
       owner ? el('div', { class: 'muted small', 'data-testid': 'exposed-owner' }, `바꾸면 원본 유니버스 「${owner}」에 저장됩니다.`) : null,
     ));
     return box;

@@ -174,16 +174,18 @@ test('T-10 역할 (c): 통합 화면의 업무 후보 이유가 모두 사전 �
   }
 });
 
-test('흐름 변화 설명(검토5 I-6): 사전 생성 문장을 써도 기준일에 따라 바뀌는 "기록 없는 기간" 경고(keep)는 그대로 덧붙는다', async () => {
+// 검토5 I-6(되돌림): 기준일에 따라 바뀌는 "기록 없는 기간" 경고는 설명 상자가 아니라 표 아래 알림(flow-nodata, ui/insight.js)이 항상 보여 준다.
+// 사전 생성 문장에 규칙 경고를 덧붙이면 같은 말이 겹치므로 붙이지 않는다. 규칙 기반 설명에는 경고 문장이 그대로 있다
+test('흐름 변화 설명: 사전 생성 문장에는 규칙 경고를 덧붙이지 않고, 규칙 기반 설명에는 "기록 없는 기간" 경고가 있다', async () => {
   const { flowChange } = await import('../app/src/rules/flow.js');
   const { flowExplain } = await import('../app/src/rules/explain.js');
   const view = viewOf('U-O');
-  for (const asOf of ['2026-10-02', '2027-06-01']) {
-    const req = flowExplain(flowChange(view, { unit: 'month', asOf }), 'U-O');
-    const r = explainInsight(req, { provider: pregen, exists: existsIn(view) });
-    assert.equal(r.method, 'pregen', asOf + ': 조회 키는 기준일과 무관');
-    const warn = r.sentences.filter((s) => s.text.includes('기간은 기록이 없어 판단하지 않습니다'));
-    assert.equal(warn.length, 1, asOf);
-    assert.ok(warn[0].text.includes(asOf === '2027-06-01' ? '15개 기간' : '7개 기간'), warn[0].text);
-  }
+  const r = flowChange(view, { unit: 'month', asOf: '2027-06-01' });
+  assert.equal(r.no_data_periods, 15, '표 아래 알림이 쓰는 값');
+  const req = flowExplain(r, 'U-O');
+  const withPregen = explainInsight(req, { provider: pregen, exists: existsIn(view) });
+  assert.equal(withPregen.method, 'pregen');
+  assert.ok(!withPregen.sentences.some((s) => s.text.includes('개 기간은 기록이 없어 판단하지 않습니다')));
+  const ruleOnly = explainInsight(req, { provider: null, exists: existsIn(view) });
+  assert.equal(ruleOnly.sentences.filter((s) => s.text.includes('15개 기간은 기록이 없어 판단하지 않습니다')).length, 1);
 });

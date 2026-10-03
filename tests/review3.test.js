@@ -77,11 +77,11 @@ test('RL-4: 같은 날 "해결됨" 다음에 기록한 "진행 중"은 진행 �
   assert.ok(items.find((i) => i.key === '진행_중').sentences.some((s) => s.text.includes('새로 생긴 건')));
 });
 
-test('이력 문구: 위층에 드러내기 수정은 내부 이름(exposed)·true/false 대신 우리말로', async () => {
+test('이력 문구: 드러내기(상위 화면에서 보이기, 검토5 U-4로 문구 통일) 수정은 내부 이름(exposed)·true/false 대신 우리말로', async () => {
   const { updateNode } = await import('../app/src/model/commands.js');
   const { SAMPLE_EVENT } = await import('../app/data/sample-event.js');
   const { eventText } = await import('../app/src/view/describe.js');
   const r = updateNode(SAMPLE_EVENT, 'N-201', { exposed: false }, { now: '2026-10-02T10:00:00+09:00' });
   const v = buildView(r.doc);
-  assert.equal(eventText(v, v.events[v.events.length - 1]), '수정 — 위층에 드러내기: (없음) → 아니요');
+  assert.equal(eventText(v, v.events[v.events.length - 1]), '수정 — 상위 화면에서 보이기: (없음) → 아니요');
 });

@@ -47,8 +47,7 @@ export function flowExplain(result, universeId) {
   }
   const last = live[live.length - 1];
   if (result.no_data_periods && last) {
-    // keep: 기준일에 따라 바뀌는 경고라 공급자(사전 생성) 문장을 쓸 때도 그대로 덧붙인다(검토5 I-6). 조회 키에는 기준일이 없다
-    rule.push({ text: `마지막 입력(${result.last_input}) 뒤 ${result.no_data_periods}개 기간은 기록이 없어 판단하지 않습니다.`, evidence_ids: uniq(last.evidence_ids.length ? last.evidence_ids.slice(-1) : []), keep: true });
+    rule.push({ text: `마지막 입력(${result.last_input}) 뒤 ${result.no_data_periods}개 기간은 기록이 없어 판단하지 않습니다.`, evidence_ids: uniq(last.evidence_ids.length ? last.evidence_ids.slice(-1) : []) });
   }
   const withEvidence = rule.filter((s) => s.evidence_ids.length);
   if (!withEvidence.length) return null;
