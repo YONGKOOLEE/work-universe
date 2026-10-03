@@ -81,19 +81,21 @@ const isSeparatorRow = (cells) => cells.length > 0 && cells.every((c) => /^:?-{2
  */
 export function parseDocument(text) {
   const src = String(text).replace(/\r\n?/g, '\n');
-  const plain = !/^\s{0,3}#{1,6}\s/m.test(src) && !/^\s*\|.*\|\s*$/m.test(src);
+  // # 제목이 없으면 일반 글 방식(| 표가 섞여 있어도 제목 규칙을 쓴다). [ \t]: 줄바꿈을 넘지 않게(긴 빈 줄에서 느려지지 않게)
+  const plain = !/^[ \t]{0,3}#{1,6}[ \t]/m.test(src);
   const out = { title: null, preamble: [], sections: [], plain };
   let cur = null;
   let table = null;
   let lastItem = null;
   const stack = [];
   const target = () => (cur ? cur.blocks : out.preamble);
-  const seq = { top: 0, sub: 0 }; // 일반 글 제목의 차례(마지막 "N." 번호, 그 안의 마지막 "가." 차례)
-  const openSection = (level, num, title, heading) => {
+  // 일반 글 제목의 차례: 마지막 "N." 번호, 그 안의 마지막 "가." 차례, Ⅰ·■·【】 같은 큰 제목을 본 적이 있는지
+  const seq = { top: 0, sub: 0, major: false };
+  const openSection = (level, num, title, heading, demote = 0) => {
     lastItem = null;
     table = null;
     while (stack.length && stack[stack.length - 1].level >= level) stack.pop();
-    cur = { level, num, title, heading, blocks: [], parent: stack[stack.length - 1] || null };
+    cur = { level, num, title, heading, blocks: [], parent: stack[stack.length - 1] || null, ...(demote ? { demote } : {}) };
     stack.push(cur);
     out.sections.push(cur);
   };
@@ -101,12 +103,12 @@ export function parseDocument(text) {
     const tabCells = raw.includes('\t') ? raw.split('\t').map((c) => cleanText(c)) : null;
     const line = raw.replace(/\t/g, '    ');
     const isPipeRow = /^\s*\|.*\|\s*$/.test(line);
-    const isTabRow = !!tabCells && tabCells.filter(Boolean).length >= 2;
+    const isTabRow = !!tabCells && tabCells.filter(Boolean).length >= 2 && !listItem(line, plain); // "1)\t항목"은 목록
     if (!isPipeRow && !isTabRow) table = null;
-    const h = /^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+    const h = /^ {0,3}(#{1,6})[ \t]+(\S.*)$/.exec(line.trimEnd());
     if (h) {
       const level = h[1].length;
-      const heading = cleanText(h[2]);
+      const heading = cleanText(h[2].replace(/#+$/, ''));
       if (level === 1 && !out.title && !out.sections.length) {
         out.title = heading;
         lastItem = null;
@@ -123,12 +125,10 @@ export function parseDocument(text) {
     if (plain) {
       const ph = plainHeading(line, seq);
       if (ph) {
-        if (ph.top) {
-          seq.top = ph.top;
-          seq.sub = 0;
-        }
+        if (ph.major) Object.assign(seq, { top: 0, sub: 0, major: true }); // 큰 제목 아래에서는 번호가 1부터 다시
+        if (ph.top) Object.assign(seq, { top: ph.top, sub: 0 });
         if (ph.sub) seq.sub = ph.sub;
-        openSection(ph.level, ph.num, ph.title, ph.heading);
+        openSection(ph.level, ph.num, ph.title, ph.heading, ph.demote || 0);
         continue;
       }
       // 일반 글의 첫 줄(제목·목록·표가 아닌 것)은 문서 제목
@@ -153,6 +153,13 @@ export function parseDocument(text) {
           continue;
         }
       }
+      // 첫 칸이 빈 행은 병합 셀을 붙여 넣은 것이므로 앞 행에 이어 붙인다(이름 없는 노드가 생기지 않게)
+      if (!cells[0] && table.rows.length) {
+        const prev = table.rows[table.rows.length - 1];
+        cells.forEach((c, i) => { if (i > 0 && c) prev[i] = prev[i] ? `${prev[i]} ${c}` : c; });
+        continue;
+      }
+      if (!cells[0]) continue; // 이어 붙일 앞 행도 없으면 이름이 없어 노드로 만들 수 없다
       table.rows.push(cells);
       continue;
     }
@@ -163,6 +170,16 @@ export function parseDocument(text) {
     else if (lastItem && /^\s{2,}\S/.test(line)) lastItem.text = cleanText(`${lastItem.text} ${line}`); // 목록 항목의 이어지는 줄
     else target().push((lastItem = { kind: 'para', text: cleanText(line) }));
   }
+  // 일반 글의 "N."·"가." 제목인데 내용도 하위 절도 없으면 목록 항목이었다고 보고 앞 절의 번호 목록으로 되돌린다(검토 2026-10-03:
+  // "■ 업무 범위" 아래 "1. 카드 승인 정산", "1. 업무 범위" 아래 "가. …"가 제목으로 읽혀 업무가 사라지던 문제)
+  for (let i = 0; i < out.sections.length; i += 1) {
+    const sec = out.sections[i];
+    if (!sec.demote || sec.blocks.length || out.sections.some((x) => x.parent === sec && !x.removed)) continue;
+    const prev = out.sections.slice(0, i).reverse().find((x) => !x.removed);
+    (prev ? prev.blocks : out.preamble).push({ kind: 'num', n: sec.demote, text: sec.title });
+    sec.removed = true;
+  }
+  out.sections = out.sections.filter((x) => !x.removed);
   return out;
 }
 
@@ -177,17 +194,18 @@ function plainHeading(line, seq = { top: 0, sub: 0 }) {
   if (/^\s{2,}/.test(line)) return null;
   const t = cleanText(line);
   const ok = (title) => title && title.length <= 30 && !looksLikeSentence(title);
+  const base = seq.major ? 1 : 0; // Ⅰ·■·【】 큰 제목이 있으면 번호 제목은 그 아래 단계
   let m = /^(\d+(?:\.\d+)+)\.?\s+(.+)$/.exec(t);
-  if (m && ok(m[2]) && [seq.top, seq.top + 1].includes(Number(m[1].split('.')[0]))) return { level: 1 + m[1].split('.').length, num: m[1], title: m[2], heading: t };
+  if (m && ok(m[2]) && [seq.top, seq.top + 1].includes(Number(m[1].split('.')[0]))) return { level: base + 1 + m[1].split('.').length, num: m[1], title: m[2], heading: t };
   // "N."은 목록과 모양이 같으므로 바로 앞 제목 번호의 다음 차례일 때만 제목으로 본다(5. 산출물 아래의 "1. 교육 일정표"는 목록)
   m = /^(\d+)\.\s+(.+)$/.exec(t);
-  if (m && ok(m[2]) && Number(m[1]) === seq.top + 1) return { level: 2, num: m[1], title: m[2], heading: t, top: Number(m[1]) };
+  if (m && ok(m[2]) && Number(m[1]) === seq.top + 1) return { level: base + 2, num: m[1], title: m[2], heading: t, top: Number(m[1]), demote: Number(m[1]) };
   m = /^([IVX]+|[Ⅰ-Ⅻ])\.\s+(.+)$/.exec(t);
-  if (m && ok(m[2])) return { level: 2, num: null, title: m[2], heading: t };
+  if (m && ok(m[2])) return { level: 2, num: null, title: m[2], heading: t, major: true };
   m = /^([가-하])\.\s+(.+)$/.exec(t);
-  if (m && HANGUL_ORDER.indexOf(m[1]) === seq.sub && ok(m[2])) return { level: 3, num: seq.top ? seq.top + '-' + m[1] : null, title: m[2], heading: t, sub: seq.sub + 1 }; // 원문 §5-가
+  if (m && HANGUL_ORDER.indexOf(m[1]) === seq.sub && ok(m[2])) return { level: base + 3, num: seq.top ? seq.top + '-' + m[1] : null, title: m[2], heading: t, sub: seq.sub + 1, demote: seq.sub + 1 }; // 원문 §5-가
   m = /^[■◆▣]\s*(.+)$/.exec(t) || /^【\s*(.+?)\s*】$/.exec(t);
-  if (m && ok(m[1])) return { level: 2, num: null, title: m[1], heading: m[1] };
+  if (m && ok(m[1])) return { level: 2, num: null, title: m[1], heading: m[1], major: true };
   return null;
 }
 
@@ -216,6 +234,7 @@ const statusOf = (...texts) => {
   if (/\[가정/.test(all)) return '가정';
   return null;
 };
+const marksOf = (t) => (String(t).match(new RegExp(MARK.source, 'g')) || []);
 const stripMarks = (s) => s.replace(new RegExp(MARK.source, 'g'), '').replace(/\s+/g, ' ').trim();
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const compact = (s) => normalizeLabel(s).replace(/\s/g, '');
@@ -264,18 +283,35 @@ function keyValues(blocks) {
     if (b.kind === 'table') {
       for (const row of b.rows) if (row.length >= 2 && row[0]) out.push([row[0], row.slice(1).filter(Boolean).join(' — '), b]);
     } else {
-      const m = /^([^:：]{1,20})[:：]\s*(.+)$/.exec(b.text);
+      const m = /^([^:：[]{1,20})[:：]\s*(.+)$/.exec(b.text); // 키에 "["가 들면 표시([미확인: …]) 안의 콜론이다
       if (m) out.push([m[1], m[2], b]);
     }
   }
   return out;
 }
 
-const splitList = (s) => s.split(/\s*[,，、;]\s*/).map((x) => x.trim()).filter(Boolean);
+// 쉼표 목록 나누기. [미확인: 카드사, VAN]처럼 괄호 안의 쉼표에서는 나누지 않는다(검토 2026-10-03)
+function splitList(s) {
+  const out = [];
+  let depth = 0;
+  let buf = '';
+  for (const ch of s) {
+    if ('[(（'.includes(ch)) depth += 1;
+    if ('])）'.includes(ch)) depth = Math.max(0, depth - 1);
+    if (depth === 0 && ',，、;'.includes(ch)) {
+      out.push(buf);
+      buf = '';
+    } else buf += ch;
+  }
+  out.push(buf);
+  return out.map((x) => x.trim()).filter(Boolean);
+}
 
 // "당사 운영·보안·정산 담당" → 당사 운영 담당, 당사 보안 담당, 당사 정산 담당
 function expandRoles(item) {
-  const tokens = item.split(' ').filter(Boolean);
+  const marks = marksOf(item).join(' ');
+  const tokens = stripMarks(item).split(' ').filter(Boolean);
+  if (marks) return expandRoles(stripMarks(item)).map((x) => `${x} ${marks}`);
   const i = tokens.findIndex((t) => t.includes('·'));
   if (i < 0 || tokens.length < 2) return [item];
   return tokens[i].split('·').filter(Boolean).map((p) => [...tokens.slice(0, i), p, ...tokens.slice(i + 1)].join(' '));
@@ -356,7 +392,9 @@ export function convertDocument(text, ctx) {
   const docDate = info.date || today;
   if (!info.date) notes.push({ code: 'C-DATE-ASSUMED', date: today });
 
-  const name = truncate(stripMarks(info.name || parsed.title || cleanText(src.split('\n').find((l) => l.trim()) || '이름 없는 문서')), LABEL_MAX, notes, '이름');
+  const rawName = info.name || parsed.title || cleanText(src.split('\n').find((l) => l.trim()) || '');
+  const name = truncate(stripMarks(rawName) || '이름 없는 문서', LABEL_MAX, notes, '이름');
+  const nameMarks = marksOf(rawName); // 이름에 붙은 [가정]·[미확인]은 꼭지의 표시·상태로 남긴다
 
   // 2) 노드 모으기. 같은 유형·이름은 하나로 합치고 원문 근거를 잇는다(12.1 중복 규칙)
   const nodes = [];
@@ -366,9 +404,11 @@ export function convertDocument(text, ctx) {
     const clean = stripMarks(label).slice(0, LABEL_MAX) || label.slice(0, LABEL_MAX);
     const key = `${core_type}|${normalizeLabel(clean)}`;
     const found = byKey.get(key);
+    const marks = marksOf(label).join(' ');
     if (found) {
       if (ref && !found.attrs.원문.split(', ').includes(ref)) found.attrs.원문 += `, ${ref}`;
       if (status && !found.attrs.상태) found.attrs.상태 = status;
+      if (marks && !String(found.attrs.표시 || '').includes(marks)) found.attrs.표시 = [found.attrs.표시, marks].filter(Boolean).join(' ');
       return found;
     }
     seq += 1;
@@ -378,7 +418,7 @@ export function convertDocument(text, ctx) {
       label: clean,
       ...(subtype ? { subtype } : {}),
       ...(description ? { description: truncate(description, TEXT_MAX, notes, clean) } : {}),
-      attrs: { 원문: ref, ...attrs, ...(status ? { 상태: status } : {}) },
+      attrs: { 원문: ref, ...attrs, ...(status ? { 상태: status } : {}), ...(marks ? { 표시: marks } : {}) },
       hidden: false,
       created_at: ctx.now,
       updated_at: ctx.now,
@@ -390,7 +430,8 @@ export function convertDocument(text, ctx) {
 
   // 업무: 개요의 범위 + 범위 절의 목록
   for (const s of parsed.sections.filter((x) => x.kind === 'scope')) {
-    const lines = linesOf(s.blocks);
+    readOverview(s.blocks, refOf(s));
+    const lines = linesOf(s.blocks.filter((b) => !b.used));
     for (const l of lines) info.scope.push({ text: l.cells ? l.cells[0] : l.text, ref: refOf(s), desc: l.cells ? l.cells.slice(1).filter(Boolean).join(' — ') : null });
     sections.push({ order: parsed.sections.indexOf(s), ref: refOf(s), title: s.heading, kind: 'scope', made: lines.length });
   }
@@ -454,13 +495,21 @@ export function convertDocument(text, ctx) {
     const lines = linesOf(s.blocks);
     if (!lines.length) continue; // 하위 절만 있는 절
     const label = titleCore(s.title) || s.title;
-    const headNote = s.title !== label ? s.title.slice(label.length).trim() : '';
+    const headNote = (s.title.match(new RegExp(`\\([^)]*\\)|${MARK.source}`, 'g')) || []).join(' ');
     const description = [headNote, ...lines.map((l) => (l.kind === 'bullet' || l.n !== undefined || l.row ? `- ${l.text}` : l.text))].filter(Boolean).join('\n');
     const sub = TOPIC_SUBTYPES.find(([, re]) => re.test(label));
     if (sub) subtypes.set(`topic|${sub[0]}`, { core_type: 'topic', name: sub[0] });
     const t = addNode('topic', label, { ref: refOf(s), description, subtype: sub ? sub[0] : undefined, status: statusOf(s.title, ...lines.map((l) => l.text)) });
-    topics.push({ node: t, text: `${label} ${description}`, known: !!sub });
-    sections.push({ order: parsed.sections.indexOf(s), ref: refOf(s), title: s.heading, kind: 'topic', made: 1, ...(sub ? {} : { unknown: true }) });
+    const same = topics.find((x) => x.node === t);
+    if (same) {
+      // 제목이 같은 절이 또 있으면(예: 2.1 예외, 3.1 예외) 노드는 하나, 설명을 이어 붙인다(연결이 두 번 생기지 않게)
+      t.description = truncate(`${t.description || ''}\n${description}`.trim(), TEXT_MAX, notes, label);
+      same.text += ` ${description}`;
+      sections.push({ order: parsed.sections.indexOf(s), ref: refOf(s), title: s.heading, kind: 'topic', made: 0, merged: label });
+    } else {
+      topics.push({ node: t, text: `${label} ${description}`, known: !!sub });
+      sections.push({ order: parsed.sections.indexOf(s), ref: refOf(s), title: s.heading, kind: 'topic', made: 1, ...(sub ? {} : { unknown: true }) });
+    }
     // "망취소는 …" 처럼 업무 이름으로 시작하는 문장은 그 업무의 설명으로 쓴다
     for (const l of lines) {
       for (const w of [...works].sort((a, b) => b.label.length - a.label.length)) {
@@ -483,7 +532,7 @@ export function convertDocument(text, ctx) {
     for (const l of lines) {
       if (l.cells) roleItems.push({ text: l.cells[0], ref: refOf(s), desc: l.cells.slice(1).filter(Boolean).join(' — ') });
       else {
-        const kv = /^([^:：]{1,30})[:：]\s*(.+)$/.exec(l.text);
+        const kv = /^([^:：[]{1,30})[:：]\s*(.+)$/.exec(l.text);
         roleItems.push(kv ? { text: kv[1], ref: refOf(s), desc: kv[2] } : { text: l.text, ref: refOf(s) });
       }
     }
@@ -534,6 +583,7 @@ export function convertDocument(text, ctx) {
   const rootId = 'N-000';
   const rootAttrs = { 원문: info.refs.size ? [...info.refs].join(', ') : parsed.title ? '제목' : '전체' };
   if (info.background) rootAttrs.배경 = truncate(info.background, TEXT_MAX, notes, '배경');
+  if (nameMarks.length) Object.assign(rootAttrs, { 표시: nameMarks.join(' '), 상태: statusOf(...nameMarks) });
   rootAttrs.변환 = `규칙 기반 초벌(규칙 ${CONVERT_RULES.version}, ${today})`;
   const root = {
     id: rootId, core_type: 'root', label: name,

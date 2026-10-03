@@ -70,18 +70,22 @@ export function projectView(view, { expanded = new Set() } = {}) {
     }
   }
 
-  // 2) 원래(합치기 전) 노드 단위로 보일지 정한 뒤, 대표 노드는 하나라도 보이면 보인다
-  const rawVisible = (gid) => {
-    const n = view.rawNode(gid);
-    if (!n || n.hidden) return false;
-    if (full.has(n.universe_id)) return true;
-    if (collapsedU.has(n.universe_id)) return exposureOf(view, gid).exposed;
-    return false;
-  };
+  // 2) 원래(합치기 전) 노드 단위로 보일지 정한다. 펼친 유니버스의 원본이 있으면 보인다.
+  //    접힌 원본만 있으면: 어느 원본에든 직접 지정(위층에 드러내기)이 있으면 그 지정을 따르고, 없으면 기본 규칙 중 하나라도 맞으면 보인다
+  //    (검토 2026-10-03: 합쳐진 윤바다의 드러내기를 꺼도 다른 원본의 기본 규칙 때문에 계속 보이던 문제)
   const visible = new Set();
   for (const n of view.nodes) {
     if (n.hidden) continue;
-    if ([n.gid, ...n.merged_from].some(rawVisible)) visible.add(n.gid);
+    const raws = [n.gid, ...n.merged_from].map((g) => view.rawNode(g)).filter((r) => r && !r.hidden);
+    if (raws.some((r) => full.has(r.universe_id))) {
+      visible.add(n.gid);
+      continue;
+    }
+    // 직접 지정은 원본이 어느 단계에 있든(손자 유니버스여도) 본다. 직접 숨김만 있으면 숨긴다
+    const explicit = raws.map((r) => exposureOf(view, r.gid)).filter((e) => e.explicit);
+    if (explicit.length && !explicit.some((e) => e.exposed)) continue;
+    const exp = raws.filter((r) => collapsedU.has(r.universe_id)).map((r) => exposureOf(view, r.gid));
+    if (exp.some((e) => e.exposed)) visible.add(n.gid);
   }
 
   // 3) 숨겨진 노드의 대리 노드: 포함 관계를 따라 올라가 처음 만나는 보이는 노드

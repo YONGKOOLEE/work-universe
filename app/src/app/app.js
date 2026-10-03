@@ -111,6 +111,7 @@ export function createApp({ store, samples, currentId, now }) {
     doc = result.doc;
     return result;
   }
+  const importCtx = (existing) => ({ existing, resolve: (id) => db.loadUniverse(id), sampleIds: samples.map((s) => s.universe.id) });
   const guard = () => (!writable ? { ok: false, error: { code: CODES.STORAGE } } : docReadOnly ? { ok: false, error: { code: CODES.SCHEMA, reason: 'version' } } : null);
 
   return {
@@ -245,7 +246,7 @@ export function createApp({ store, samples, currentId, now }) {
 
     /** 가져오기 미리 보기(T-17): 검증 결과·구성·같은 ID 유니버스 */
     previewImport(d) {
-      return previewImport(d, { existing: this.universes() });
+      return previewImport(d, importCtx(this.universes()));
     },
 
     /**
@@ -254,11 +255,15 @@ export function createApp({ store, samples, currentId, now }) {
      */
     importUniverse(d, { overwrite = false } = {}) {
       if (guard()) return guard();
-      const p = previewImport(d, { existing: this.universes() });
+      const p = previewImport(d, importCtx(this.universes()));
       if (p.version_mismatch) return { ok: false, error: { code: CODES.SCHEMA, reason: 'version', found: d && d.schema_version } };
       if (!p.ok) return { ok: false, error: { code: CODES.SCHEMA, reason: 'invalid', count: p.errors.length }, preview: p };
       if (p.conflict && !overwrite) return { ok: false, error: { code: CODES.DUP, field: 'universe', existing: p.conflict } };
       const copy = clone(d);
+      // 내장 샘플 ID면 그 판(created_at)을 따라 "고친 샘플"로 둔다. 다시 열 때 새 샘플로 바뀌어 사라지지 않게(검토 2026-10-03)
+      const sample = samples.find((s) => s.universe.id === copy.universe.id);
+      if (sample) Object.assign(copy.universe, { is_sample: true, created_at: sample.universe.created_at });
+      else copy.universe.is_sample = false;
       const failed = save(copy);
       if (failed) return failed;
       if (copy.universe.id === doc.universe.id) doc = copy;

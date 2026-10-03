@@ -22,6 +22,7 @@ import {
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const isBlank = (v) => typeof v !== 'string' || v.trim() === '';
 const isGlobalRef = (v) => typeof v === 'string' && v.includes('/');
+const ID_PATTERN = /^[^\s/]+$/;
 
 /**
  * @param {object} doc 12.2 유니버스 문서
@@ -52,6 +53,12 @@ export function validateDocument(doc) {
   for (const k of ['id', 'name', 'level', 'owner', 'root_node_id']) {
     if (isBlank(u[k])) err(CODES.REQUIRED, `universe.${k}`);
   }
+  // 전역 참조는 "유니버스ID/노드ID"이므로 ID에 '/'나 공백이 있으면 둘로 잘못 갈린다(검토 2026-10-03, 가져온 파일)
+  const badId = (v) => typeof v === 'string' && !isBlank(v) && !ID_PATTERN.test(v);
+  if (badId(u.id)) err(CODES.SCHEMA, 'universe.id', { bad_id: true });
+  ['nodes', 'edges', 'events'].forEach((k) => doc[k].forEach((x, i) => {
+    if (isObject(x) && badId(x.id)) err(CODES.SCHEMA, `${k}[${i}].id`, { bad_id: true });
+  }));
   if (typeof u.name === 'string' && u.name.trim().length > LABEL_MAX) err(CODES.REQUIRED, 'universe.name');
   if (u.subtypes !== undefined && !Array.isArray(u.subtypes)) err(CODES.SCHEMA, 'universe.subtypes');
   const seenSubtypes = new Set();
@@ -201,7 +208,7 @@ export function eventPayloadErrors(doc, nodesById, edgeIds, ev) {
   }
   if (ev.type === 'created' || ev.type === 'hidden' || ev.type === 'updated') {
     // ref: 꼭지 참조의 추가·해제(CR-4). target_id는 하위 유니버스 ID
-    // identity_link: 동일성 연결 판정(T-10, 12.7 흐름 3의 "이벤트를 기록한다". 12.2 표에 없는 값이라 CR 후보)
+    // identity_link: 동일성 연결 판정(T-10, 12.7 흐름 3의 "이벤트를 기록한다". 12.2 표에 반영됨(CR-7))
     const kinds = ev.type === 'updated' ? ['node', 'edge', 'identity_link'] : ['node', 'edge', 'ref', 'identity_link'];
     if (!kinds.includes(payload.target_kind)) out.push({ code: CODES.SCHEMA, field: 'target_kind' });
     else if (payload.target_kind === 'identity_link') {

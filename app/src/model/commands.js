@@ -378,7 +378,7 @@ export function createUniverse(input, ctx) {
 const activeRefs = (doc) => (doc.refs || []).filter((r) => !r.hidden);
 
 // childId에서 참조를 따라 내려가다 targetId를 만나면 true(순환)
-function reaches(childId, targetId, resolveUniverse, seen = new Set()) {
+export function reaches(childId, targetId, resolveUniverse, seen = new Set()) {
   if (childId === targetId) return true;
   if (seen.has(childId)) return false;
   seen.add(childId);
@@ -417,7 +417,7 @@ const pairKey = (a, b) => [a, b].sort().join('|');
 
 /**
  * 두 노드(전역 참조)가 같은지 판정을 기록한다. 같은 쌍의 연결이 있으면 상태를 바꾸고, 없으면 새로 만든다.
- * 사람 확인(human)의 확정·거부는 판정자·시각이 필수다(12.2). 이벤트는 created/updated + target_kind "identity_link"
+ * 사람 확인(human)의 확정·거부는 판정자·시각이 필수다(12.2). 이벤트는 created/updated + target_kind "identity_link"(12.2, CR-7)
  * (12.2 이벤트 표에 없는 값이라 CR 후보로 기록, tech-record 31절).
  * @param {{a:string, b:string, kind:'person'|'work'|'topic', method:'emp_no_auto'|'human', status:'pending'|'confirmed'|'rejected', score?:number, reason?:string, decided_by?:string}} input
  */

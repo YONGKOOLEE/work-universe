@@ -116,7 +116,7 @@ async function walk(browser, port) {
     await sleep(300);
     const p3 = await panel(cdp);
     const chips = await ev(cdp, "document.querySelectorAll('.draft .evidence').length");
-    check('3단계: 빈 곳 → 「인수인계 초안 만들기」 → 윤바다·서하늘 → 「초안 만들기」: 근거 버튼과 "이력 부족"', ok3a && ok3b && ok3c && chips > 5 && p3.includes('이력 부족'), `근거 ${chips}개`);
+    check('3단계: 빈 곳 → 「인수인계 초안 만들기」 → 윤바다·서하늘 → 「초안 만들기」: 근거 버튼과 "해당 없음"(유사 경험자, N-5)', ok3a && ok3b && ok3c && chips > 5 && p3.includes('해당 없음'), `근거 ${chips}개`);
     check('3단계: 생성 방식이 보임(기본 사전 생성)', p3.includes('생성 방식: 사전 생성'));
     await shot(cdp, `${browser.name}-g3-draft`);
     // 4단계

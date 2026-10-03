@@ -27,10 +27,11 @@ function options(nodes, placeholder, selected) {
 
 // 비교했지만 해당자가 없을 때의 안내. 꼭지(유니버스 전체)가 대상이면 그 유니버스의 업무는 모두 비교 대상 안이라
 // 다른 유니버스가 함께 보이는 화면(팀·부서)에서만 찾을 수 있다는 것을 덧붙인다
-function scopeHint(view, targetGid, reason) {
+export function scopeHint(view, targetGid, reason) {
   const t = view.getNode(targetGid);
-  const others = view.nodes.some((n) => n.core_type === 'work' && !n.hidden && t && n.universe_id !== t.universe_id);
-  if (t && t.core_type === 'root' && !others) return `${reason}. 유니버스 전체가 대상이라 비교할 다른 업무가 없습니다. 팀·부서 화면에서 업무를 대상으로 만들면 다른 유니버스와 비교합니다`;
+  const inScope = new Set(scopeWorks(view, targetGid).map((g) => view.canonical(g)));
+  const others = view.nodes.some((n) => n.core_type === 'work' && !n.hidden && !inScope.has(n.gid));
+  if (t && t.core_type === 'root' && !others) return `${reason}. 유니버스 전체가 대상이라 화면 안에 비교할 다른 업무가 없습니다. 업무 하나를 대상으로 하거나, 더 큰 묶음(팀·부서) 화면에서 만들면 다른 업무와 비교합니다`;
   return reason;
 }
 

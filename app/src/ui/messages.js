@@ -67,6 +67,7 @@ export function messageFor(err, ctx = {}) {
       const what = ` 고른 노드: 「${s.label}」은(는) ${TYPE_NAMES[s.core_type] || s.core_type}, 「${t.label}」은(는) ${TYPE_NAMES[t.core_type] || t.core_type}입니다.`;
       const ok = (ctx.suggestions || []).map((x) => {
         const name = EDGE_NAMES[x.relation] || x.relation;
+        if (x.forward && x.backward) return `「${name}」(어느 방향이든)`;
         return x.forward ? `「${name}」(${s.label} → ${t.label})` : `「${name}」(${t.label} → ${s.label})`;
       });
       return base + what + (ok.length ? ` 이 두 노드에는 ${ok.join(', ')}을(를) 쓸 수 있습니다.` : ' 이 두 노드는 직접 연결할 수 있는 관계가 없습니다.');

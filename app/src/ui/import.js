@@ -3,7 +3,7 @@
 
 import { el } from './dom.js';
 import { messageFor } from './messages.js';
-import { nodeTypeLabel } from '../model/schema.js';
+import { SCHEMA_VERSION, nodeTypeLabel } from '../model/schema.js';
 import { parseImportText } from '../model/import.js';
 import { METHOD_LABELS } from '../llm/connector.js';
 
@@ -35,7 +35,10 @@ function noteText(n) {
   }
 }
 
-function warningText(w) {
+function warningText(w, from) {
+  if (w.code === 'W-SAMPLE-OVERWRITE') return `내장 샘플「${w.name}」을(를) 덮어씁니다. 「가상 데이터 초기화」를 누르면 원래 샘플로 돌아갑니다.`;
+  if (w.code === 'W-SAMPLE-FLAG') return '파일에 샘플 표시가 있지만 내장 샘플이 아니므로 「내 유니버스」로 가져옵니다.';
+  if (w.code === 'W-SAME-NAME' && from === 'json') return `이름·단위가 같은 유니버스「${w.name}」(${w.level})가 이미 있습니다. 가져오면 따로 하나 더 생깁니다.`;
   if (w.code === 'W-NO-SOURCE') return `원문 근거가 없는 노드 ${w.count}개가 있습니다(${w.ids.slice(0, 5).join(', ')}${w.ids.length > 5 ? ' …' : ''}).`;
   if (w.code === 'W-SAME-NAME') return `이름·단위가 같은 유니버스「${w.name}」(${w.level})가 이미 있습니다. 같은 문서를 다시 가져오는 것이면 위에서 이름을 바꾸거나 취소하세요. 가져오면 따로 하나 더 생깁니다.`;
   if (w.code === 'W-MISSING-CHILD') return `이 유니버스가 묶는 하위 유니버스가 이 브라우저에 없습니다(${w.ids.join(', ')}). 가져와도 그 부분은 비어 보입니다.`;
@@ -45,6 +48,8 @@ function warningText(w) {
 function errorText(e) {
   if (e.path === 'universe.owner') return '작성 주체를 입력하세요.';
   if (e.path === 'universe.name') return '이름을 입력하세요(1~100자).';
+  if (e.bad_id) return `${e.path} — ID에 '/'나 공백을 쓸 수 없습니다.`;
+  if (e.code === 'E-CYCLE') return `${e.path} — 묶은 유니버스를 따라가면 이 유니버스로 다시 돌아옵니다(순환). 가져올 수 없습니다.`;
   return `${e.path} — ${messageFor({ ...e, field: e.path.split('.').pop().replace(/\[\d+\]$/, '') })}`;
 }
 
@@ -81,6 +86,7 @@ export function importDialog(o) {
     if (!f) return;
     try {
       st[key] = await f.text();
+      st.result = null; // 새 파일을 고르면 이전 미리 보기를 지운다(다른 파일이 가져와지지 않게)
       st.message = '';
     } catch {
       st.message = '파일을 읽지 못했습니다.';
@@ -158,7 +164,7 @@ export function importDialog(o) {
     const blocks = [];
 
     if (p.version_mismatch) {
-      blocks.push(el('p', { class: 'error-text', 'data-testid': 'import-errors' }, `형식 버전이 다릅니다(파일: ${doc.schema_version ?? '없음'}, 이 앱: 1.0). 가져오지 않았습니다.`));
+      blocks.push(el('p', { class: 'error-text', 'data-testid': 'import-errors' }, `형식 버전이 다릅니다(파일: ${doc.schema_version ?? '없음'}, 이 앱: ${SCHEMA_VERSION}). 가져오지 않았습니다.`));
     } else {
       const summary = el('dl', { 'data-testid': 'import-summary' },
         el('dt', {}, '구성'), el('dd', {}, `노드 ${p.node_total}개(${p.counts.map((c) => `${c.label} ${c.count}`).join(', ')}), 연결 ${p.edge_total}개, 메모 ${p.memo_total}건`));
@@ -183,7 +189,7 @@ export function importDialog(o) {
       const notes = [
         ...(report ? report.notes.map(noteText) : []),
         ...(noEmp ? [`사번 없는 사람 ${noEmp}명 — 원문에 사번이 없어 비워 두었습니다. 통합할 때 확인 목록에 오르고, 가져온 뒤 입력할 수 있습니다.`] : []),
-        ...p.warnings.filter((w) => w.code !== 'W-NO-EMPNO').map(warningText),
+        ...p.warnings.filter((w) => w.code !== 'W-NO-EMPNO').map((w) => warningText(w, st.result.from)),
       ];
       if (notes.length) blocks.push(el('ul', { class: 'import-notes', 'data-testid': 'import-notes' }, ...notes.map((t) => el('li', {}, t))));
 
@@ -192,7 +198,7 @@ export function importDialog(o) {
         blocks.push(el('table', { class: 'dg-table import-sections', 'data-testid': 'import-sections' },
           el('thead', {}, el('tr', {}, el('th', {}, '원문'), el('th', {}, '제목'), el('th', {}, '바뀐 것'))),
           el('tbody', {}, ...report.sections.map((s) => el('tr', {},
-            el('td', {}, s.ref), el('td', {}, s.title), el('td', {}, (KIND_TEXT[s.kind] || (() => s.kind))(s.made) + (s.unknown ? ' · 규칙 밖' : '')))))));
+            el('td', {}, s.ref), el('td', {}, s.title), el('td', {}, s.merged ? `같은 이름의 주제 「${s.merged}」에 합침` : (KIND_TEXT[s.kind] || (() => s.kind))(s.made) + (s.unknown ? ' · 규칙 밖' : '')))))));
       }
 
       blocks.push(el('h4', {}, '노드'));
@@ -231,8 +237,16 @@ export function importDialog(o) {
     slot.replaceChildren(...blocks);
   }
 
+  // 입력칸 값은 변환·확인을 눌러야 저장되므로, 탭을 바꾸기 전에 옮겨 둔다(바꿨다 돌아와도 남게)
+  function keepInputs() {
+    const d = o.dialog.querySelector('#import-doc');
+    const j = o.dialog.querySelector('#import-json');
+    if (d) st.docText = d.value;
+    if (j) st.jsonText = j.value;
+  }
+
   function render() {
-    const tab = (key, label) => el('button', { type: 'button', class: `tab${st.tab === key ? ' active' : ''}`, 'data-testid': `import-tab-${key}`, onclick: () => { st.tab = key; st.result = null; st.message = ''; render(); } }, label);
+    const tab = (key, label) => el('button', { type: 'button', class: `tab${st.tab === key ? ' active' : ''}`, 'data-testid': `import-tab-${key}`, onclick: () => { keepInputs(); st.tab = key; st.result = null; st.message = ''; render(); } }, label);
     const u = o.app.doc.universe;
     const exportBody = () => el('div', { class: 'editor' },
       el('p', { class: 'muted small' }, '지금 연 유니버스를 JSON 파일로 내려받습니다. 다른 PC에서 「JSON 파일」 탭으로 열면 그대로 이어서 쓸 수 있습니다. 브라우저 저장은 이 PC에만 남으므로, 시연 전후에 내려받아 두면 안전합니다.'),
@@ -244,7 +258,7 @@ export function importDialog(o) {
         el('textarea', { id: 'import-doc', rows: '9', 'aria-label': '문서 원문', placeholder: '# 업무 이름\n## 1. 개요\n| 항목 | 내용 |\n…' }, st.docText),
         el('div', { class: 'row' },
           el('label', { class: 'file-pick' }, '파일 열기(.md, .txt) ', el('input', { type: 'file', accept: '.md,.txt,.markdown,text/plain,text/markdown', 'data-testid': 'import-doc-file', onchange: (e) => readFile(e.target, 'docText') })),
-          el('button', { type: 'button', 'data-testid': 'import-example', onclick: () => { st.docText = o.example.text; st.message = ''; render(); } }, `예시 문서 넣기: ${o.example.title}`)),
+          el('button', { type: 'button', 'data-testid': 'import-example', onclick: () => { st.docText = o.example.text; st.result = null; st.message = ''; render(); } }, `예시 문서 넣기: ${o.example.title}`)),
         el('div', { class: 'row' },
           el('button', { type: 'button', class: 'primary', 'data-testid': 'import-convert', onclick: runConvert }, '초벌 변환'),
           el('span', { class: 'muted small' }, `생성 방식: ${o.methodLabel()}`)))

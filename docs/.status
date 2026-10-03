@@ -56,7 +56,10 @@ approvals:   # 형식: gate / 대상 문서 / 사용자 승인 표현(원문) / 
     rule_status: 확정 — 규칙 v1(세분화 월말 정산 수준, 노드 10~20개), 사용자 "CR-5는 ②로 확정, 변환 세분화는 월말 정산 수준으로" (2026-10-03). 02 12.9.1. v0(U-K1, 38개)은 기록으로 남김. 조력자 의견이 오면 CONVERT_RULES·규칙 v1만 다시 봄
   - change: CR-4 (층별 보기: 위로 드러낼 노드, 접어서 보기와 요약 연결, 주제 동일성 연결, 참조 해제, 유니버스 묶기 화면)
     requested: 사용자 "두가지를 넣어 시제품 준비" (2026-10-01)
-    status: 제안 — 시제품 구현·검증 완료, 사용자 승인 대기. 승인 전에는 02-design·03-plan을 고치지 않음
+    status: 승인
+    user_expression: "1,2,3,4,5 전부 승인 및 진행"
+    date: 2026-10-03
+    documents: 02 2.1·3절 6~7·12.2(nodes.exposed, events target_kind ref·identity_link, refs.hidden·removed_at, identity_links.kind topic), 03 머리말
     affects: 02 2·3절, 12.2(nodes.exposed, refs.hidden·removed_at, identity_links.kind에 topic, 이벤트 target_kind에 ref), 03 T-10(일부 선반영)
     record: docs/tech-record.md 10절
   - change: CR-5 (문서를 넣으면 정리해 주는 기능: 규칙 기반 초벌 변환 + LLM 선택, CR-3 B의 일부를 1차 제출로)
@@ -74,6 +77,16 @@ approvals:   # 형식: gate / 대상 문서 / 사용자 승인 표현(원문) / 
     user_expression: "1은 나중에 검토 이후 실제 기한일즈음 하자 / 2는 진행 / 3진행 / 4는 진행 이후 한느게 낫겠지?"
     date: 2026-10-03
     conditions: T-16 대본·소개자료는 기한 즈음에(검토 뒤). 추가 검증(규모·실행 안내 따라가기 자동 점검) 진행. T-10 통합을 기본안 데이터로 진행(조력자 의견 오면 수정). T-17은 T-10 뒤, 착수 전에 CR-5 ② 확인
+  - change: CR-7 (요구사항·설계 문구 정리: 검토 1-6~1-9·4-9, D2-8, D3-10, D3-16)
+    status: 승인
+    user_expression: "1,2,3,4,5 전부 승인 및 진행"
+    date: 2026-10-03
+    documents: 01 우선순위 표·R-03 ③·R-06·R-13·R-15 AC ①·우선순위, 02 5.3·12.2·12.3·12.7
+    note: R-03 ③ 확정 방식은 "초안 표시 + 사람이 확인·수정해 복사해 씀, 앱 안 확정 기록은 1차 범위 밖"으로 적었다(구현 그대로를 문구로. 예시안 "확정자·시각 기록"은 하지 않음 — 사용자 확인 필요 시 다시)
+  - change: 일괄 결정 (확인 가이드 1~5절, N-1~N-5)
+    user_expression: "1,2,3,4,5 전부 승인 및 진행"
+    date: 2026-10-03
+    conditions: decisions-pending 1·3절 결정은 추천안으로 확정, 화면·내용 확인(T-09·T-10·T-11·T-12·T-13·T-17, D3-6·D3-7·D3-8·D3-11)은 확인됨. 사람 몫(T-14 관찰, T-15 다른 PC·메일·태그, T-16)은 일정 미정
   - change: CR-6 (인수인계 초안 항목 보강 8 → 10개, 메모 범주, 업무 속성 약속, 월말 정산 가상 데이터 보강)
     documents: 02 5.6·D-09·12.2 메모 payload, 03 T-07 표기, 01 머리말
     user_expression: "둘 다 진행해"
@@ -87,11 +100,17 @@ final_check:
   notes: R-09는 P2로 1차 제외되어 T-ID 없음(사용자 결정). 차단 조건 없음
 remaining_nonblocking_assumptions: [A-1, A-2, RA-1, DA-1, 기본안 가상 데이터(T-15 전까지 교체 가능), P-1~P-3(T-01·T-02 실측), 주최 측 공지 미확인 항목]
 first_implementation_task: T-01 (최소 종단 흐름 + P-1·P-3 실측 + 그래프 라이브러리·빌드 방식 확정)
-next_session_first_action: (2026-10-03 T-17 뒤 갱신) docs/HANDOFF.md를 먼저 읽는다. 계획된 구현은 모두 끝났다. 사용자에게 docs/decisions-pending.md 확인·결정을 묶어 받고(새 항목 D3-19~D3-25 포함), 조력자 의견이 오면 K-9 순서(T-13 → T-12 → 시나리오, 규칙 v1)로 고친다. 기한(10-30) 즈음 T-16 대본·소개자료
+next_session_first_action: (2026-10-03 일괄 결정·네 번째 검토 뒤 갱신) docs/HANDOFF.md를 먼저 읽는다. 결정·확인은 모두 처리됨(decisions-pending 머리말). 남은 것은 사람 몫(T-14 대리 관찰, T-15 다른 PC 실행·메일·태그, T-16 영상·대본)과 조력자 의견 반영(K-9). 새 기능은 사용자 요청이 있을 때만
 
 implementation:
-  current_task: (2026-10-03) T-17 완료(CR-5 ② 초벌 변환·가져오기·내보내기). 계획된 구현 T-ID는 모두 구현됨. 남은 것은 사람 몫(decisions-pending 확인·결정, T-14 관찰, T-15 다른 PC·메일, T-16 영상·대본), 조력자 의견이 오면 데이터·규칙 조정(K-9)
+  current_task: (2026-10-03) 일괄 결정 반영(CR-4·CR-7 승인, 결정 27건), N-1~N-5, 네 번째 검토(N-3) 수정 완료. 단위 테스트 313, Chrome·Edge·제출 점검 9/9. 남은 것은 사람 몫과 조력자 의견
   tasks:
+    - id: DECIDE-N-2026-10-03
+      status: 완료(사용자 "1,2,3,4,5 전부 승인 및 진행")
+      date: 2026-10-03
+      done: CR-4·CR-7 문서 반영, D2-4 원본 저장 안내, D2-6 바로 앞 인수인계만 인정, D2-9 CSP, D-4-10 ?check, N-1 한글·워드 문서 읽기, N-2 같은 이름 경고, N-4 연결 오류 안내, N-5 유사 경험자 해당 없음
+      review: 네 번째 검토(N-3, 하위 에이전트 3범주: 변환기·가져오기·규칙/문서). 재현된 결함 25건 중 24건 수정·회귀 테스트(tests/review5.test.js), 1건은 한계로 기록(L-13 같은 날짜 소급 인수인계). L-14(모양 기반 변환)는 별도 추가. 상세 tech-record 33절
+      checks: 단위 테스트 313, Chrome 154.0.8037.93·Edge 154.0.4258.53 전체 점검, 제출 점검 9/9(실행 안내 따라가기 포함), 비밀값 0건, R-06 형식 통과
     - id: T-17
       status: 구현·검증 완료(CR-5 ② 확정, 세분화 월말 정산 수준 — 사용자 "CR-5는 ②로 확정, 변환 세분화는 월말 정산 수준으로", 2026-10-03)
       date: 2026-10-03
@@ -171,7 +190,7 @@ implementation:
       normal_checks: 통과 (R-13 ① A팀 U-T1·B팀 U-B·C팀 U-C·조직관리 U-O가 같은 틀(노드 6·관계 7유형)로 오류 없이 불러와짐, 두 사용법(참조·직접 생성), 인물 20명(역할 노드 제외, 검토3 DATA-4로 정정 — DA-1 하한)·조직개편 2회(DA-1), 교육팀 초안 10개 항목이 근거와 함께, 정답 표 v2)
       error_checks: 통과 (예외 9건 재현: 중복 추가 E-DUP, 필수값 누락 E-REQUIRED, 사번 없음 W-NO-EMPNO, 사번 충돌 V-1002 알림·합치지 않음, 이력 부족 8개 항목, 값 변경 before/after, 숨김 후 참조, 순환 참조 E-CYCLE, 재입사는 한계 목록 L-1. R-06 형식 점검 통과)
       outputs: app/data/sample-edu.js(U-C), app/data/sample-org.js(U-O), 부서 U-D1에 U-C 추가, answers-v1.js v2, docs/limits.md(한계 목록), tests/t13.test.js
-      unverified: [R-06 사람 확인(실명·실제 조직명과 겹치는지 — 사용자), 조력자 뼈대 정보로 교체(대기), A팀(U-T1)·부서(U-D1)는 미승인 CR-4 확장(주제 동일성 연결, ref 이벤트)에 의존 — CR-4가 거절되면 R-13 ①·R-07 ① 판정과 사전 생성 X1·X3·X4를 다시 봐야 함(검토3 DOCS-3)]
+      unverified: [R-06 사람 확인(실명·실제 조직명과 겹치는지 — 사용자), 조력자 뼈대 정보로 교체(대기), A팀(U-T1)·부서(U-D1)의 CR-4 확장은 2026-10-03 승인으로 해소]
       decisions: docs/tech-record.md 26절
     - id: T-12
       status: 구현·검증 완료 — (a) 초안·(b) 인사이트 설명·(c) 업무 후보 이유(T-10과 함께 2026-10-03). Claude API·사내 LLM은 P2라 연결하지 않고 자리만 둠(고르면 이유 표시 후 규칙 기반)

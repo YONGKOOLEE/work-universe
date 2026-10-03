@@ -3,6 +3,7 @@
 
 import { CODES, NODE_TYPES, nodeTypeLabel, normalizeLabel } from './schema.js';
 import { validateDocument } from './validate.js';
+import { reaches } from './commands.js';
 
 export const IMPORT_MAX_CHARS = 5000000; // 가져올 JSON 글자 수 상한(브라우저 저장소 용량보다 작게)
 
@@ -29,14 +30,24 @@ const markOf = (n) => (n.attrs && typeof n.attrs.상태 === 'string' ? n.attrs.�
 /**
  * 가져오기 전에 보여 줄 내용과 막을 이유.
  * @param {object} doc 12.2 유니버스 문서
- * @param {{existing?: {id:string, name:string, level?:string, is_sample:boolean}[]}} ctx 이미 있는 유니버스
+ * @param {{existing?: {id:string, name:string, level?:string, is_sample:boolean}[], resolve?:(id:string)=>object|null, sampleIds?:string[]}} ctx
+ *   existing: 이미 있는 유니버스, resolve: 저장된 유니버스 문서 찾기(순환 검사), sampleIds: 내장 샘플 ID
  * @returns {{ok:boolean, errors:object[], warnings:object[], version_mismatch:boolean, conflict:object|null,
  *   counts:{type:string, label:string, count:number}[], node_total:number, edge_total:number, memo_total:number,
  *   source:{with:number, total:number, missing:string[]}|null, marks:{가정:number, 미확인:number}, missing_children:string[]}}
  *   ok가 false면 가져오지 않는다(오류가 있거나 버전이 다름)
  */
-export function previewImport(doc, { existing = [] } = {}) {
+export function previewImport(doc, { existing = [], resolve = null, sampleIds = [] } = {}) {
   const checked = validateDocument(doc);
+  // 다른 유니버스를 거쳐 자기에게 돌아오는 참조(순환)는 저장 때처럼 거부한다(E-CYCLE, 검토 2026-10-03)
+  if (checked.ok && resolve && Array.isArray(doc.refs)) {
+    doc.refs.forEach((r, i) => {
+      if (r && !r.hidden && r.child_universe_id !== doc.universe.id && reaches(r.child_universe_id, doc.universe.id, (x) => (x === doc.universe.id ? doc : resolve(x)))) {
+        checked.errors.push({ code: CODES.CYCLE, path: `refs[${i}]` });
+        checked.ok = false;
+      }
+    });
+  }
   const base = { ok: false, errors: checked.errors, warnings: checked.warnings, version_mismatch: checked.readOnly, conflict: null, counts: [], node_total: 0, edge_total: 0, memo_total: 0, source: null, marks: { 가정: 0, 미확인: 0 }, missing_children: [] };
   if (checked.readOnly || !doc || !Array.isArray(doc.nodes)) return base;
 
@@ -65,12 +76,17 @@ export function previewImport(doc, { existing = [] } = {}) {
   const sameName = conflict ? null : existing.find((u) => u.id !== doc.universe.id && typeof doc.universe.name === 'string' &&
     normalizeLabel(u.name) === normalizeLabel(doc.universe.name) && normalizeLabel(u.level || '') === normalizeLabel(doc.universe.level || '')) || null;
   if (sameName) warnings.push({ code: 'W-SAME-NAME', id: sameName.id, name: sameName.name, level: sameName.level });
+  // 샘플 표시: 내장 샘플 ID면 "고친 샘플"로 두고(초기화로 원래 샘플), 그 밖의 is_sample은 내 유니버스로 바꿔 저장한다
+  const asSample = sampleIds.includes(doc.universe.id);
+  if (asSample) warnings.push({ code: 'W-SAMPLE-OVERWRITE', name: doc.universe.name });
+  else if (doc.universe.is_sample) warnings.push({ code: 'W-SAMPLE-FLAG' });
   return {
     ...base,
     ok: checked.ok,
     warnings,
     conflict,
     same_name: sameName,
+    as_sample: asSample,
     counts,
     node_total: nodes.length,
     edge_total: doc.edges.filter((e) => e && !e.hidden).length,
