@@ -8,6 +8,7 @@ import { createProvider } from '../app/src/llm/providers.js';
 import { validateDocument } from '../app/src/model/validate.js';
 import { DOC_EXAMPLE } from '../app/data/doc-example.js';
 import { DOC_EDU } from './fixtures/doc-edu.js';
+import { DOC_HWP } from './fixtures/doc-hwp.js';
 
 const ctx = { now: '2026-10-03T10:00:00+09:00', random: () => 0.5 };
 const conv = (text) => convertDocument(text, ctx);
@@ -240,7 +241,6 @@ test('담당(수행) 추정: 역할의 하는 일에 업무 이름이 있으면 
 });
 
 // N-1(사용자 승인 2026-10-03): 한글·워드에서 복사한 모양(마크다운 표시 없음)
-import { DOC_HWP } from './fixtures/doc-hwp.js';
 
 test('일반 글 읽기: 첫 줄 제목, 차례가 맞는 "N." 제목, "가." 소제목, 산출물 아래 "1."은 목록', () => {
   const p = parseDocument(DOC_HWP);

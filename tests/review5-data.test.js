@@ -7,8 +7,8 @@ import { SAMPLE_A1 } from '../app/data/sample-a1.js';
 import { ANSWERS_V1 } from '../app/data/answers-v1.js';
 import { PREGEN } from '../app/data/pregen.js';
 import { scanVirtualData } from '../tools/virtual-data-check.mjs';
+import { clone } from './helpers.js';
 
-const clone = (d) => JSON.parse(JSON.stringify(d));
 const labels = new Set(SAMPLES.flatMap((d) => d.nodes.map((n) => n.label)));
 const universeNames = new Set(SAMPLES.map((d) => d.universe.name));
 

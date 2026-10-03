@@ -1,5 +1,5 @@
 import { test } from 'node:test';
-import { SAMPLES } from '../app/data/index.js';
+import { allSamples, viewOf } from './helpers.js';
 import assert from 'node:assert/strict';
 import { SAMPLE_A1 } from '../app/data/sample-a1.js';
 import { SAMPLE_CARD } from '../app/data/sample-card.js';
@@ -7,14 +7,13 @@ import { SAMPLE_TEAM } from '../app/data/sample-team.js';
 import { SAMPLE_EVENT } from '../app/data/sample-event.js';
 import { SAMPLE_DEPT } from '../app/data/sample-dept.js';
 import { ANSWERS_V1 } from '../app/data/answers-v1.js';
-import { hideNode } from '../app/src/model/commands.js';
+import { addEdge, addEvent, addNode, createUniverse, hideNode } from '../app/src/model/commands.js';
 import { validateDocument } from '../app/src/model/validate.js';
 import { buildView } from '../app/src/view/view.js';
-import { isCurrent, similarExperts, similarSentences } from '../app/src/rules/insight.js';
+import { isCurrent, repeatInefficiency, similarExperts, similarSentences } from '../app/src/rules/insight.js';
 import { buildHandoverDraft } from '../app/src/rules/handover.js';
 
-const all = Object.fromEntries(SAMPLES.map((d) => [d.universe.id, d])); // T-13: 부서(U-D1)는 교육팀(U-C)까지 포함
-const viewOf = (id, override = {}) => buildView(override[id] || all[id], (x) => override[x] || all[x] || null);
+const all = allSamples(); // T-13: 부서(U-D1)는 교육팀(U-C)까지 포함
 const ASOF = '2026-10-02';
 
 test('사례 2와 부서 샘플은 검증을 통과한다', () => {
@@ -147,8 +146,6 @@ test('인수인계 초안의 "유사 경험자" 항목: 근거가 있는 문장�
 
 // ── 반복 비효율(T-11, R-05 ⑤) ──
 
-import { repeatInefficiency } from '../app/src/rules/insight.js';
-import { addEvent, addEdge, addNode, createUniverse } from '../app/src/model/commands.js';
 
 const T0 = { now: '2026-10-02T10:00:00+09:00' };
 

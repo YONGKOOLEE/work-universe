@@ -1,18 +1,16 @@
 // 2026-10-02 두 번째 검토(화면 UI-1·UI-2): 업무 상세의 담당 상태, 반복 비효율 포함 여부
 import { test } from 'node:test';
-import { SAMPLES } from '../app/data/index.js';
+import { allSamples, viewOf } from './helpers.js';
 import assert from 'node:assert/strict';
 import { SAMPLE_A1 } from '../app/data/sample-a1.js';
 import { SAMPLE_CARD } from '../app/data/sample-card.js';
 import { SAMPLE_TEAM } from '../app/data/sample-team.js';
 import { SAMPLE_EVENT } from '../app/data/sample-event.js';
 import { SAMPLE_DEPT } from '../app/data/sample-dept.js';
-import { buildView } from '../app/src/view/view.js';
 import { densityGaps, repeatPatternsFor, workLoad } from '../app/src/rules/insight.js';
 import { describeNode } from '../app/src/view/describe.js';
 
-const all = Object.fromEntries(SAMPLES.map((d) => [d.universe.id, d])); // T-13: 부서(U-D1)는 교육팀(U-C)까지 포함
-const viewOf = (id) => buildView(all[id], (x) => all[x] || null);
+const all = allSamples(); // T-13: 부서(U-D1)는 교육팀(U-C)까지 포함
 const ASOF = '2026-10-02';
 
 test('업무 상세: 대사 확인은 현재 담당 서하늘, 자료 수집은 담당 기록 없음, 2025 행사는 이전 담당자만', () => {

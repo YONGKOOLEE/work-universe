@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SAMPLES } from '../app/data/index.js';
+import { allSamples, viewOf } from './helpers.js';
 import { ANSWERS_V1 } from '../app/data/answers-v1.js';
 import { createApp } from '../app/src/app/app.js';
 import { createStore } from '../app/src/store/local.js';
@@ -12,8 +13,7 @@ import { describeNode, eventText } from '../app/src/view/describe.js';
 import { mergePlan } from '../app/src/merge/merge.js';
 import { buildHandoverDraft } from '../app/src/rules/handover.js';
 
-const all = Object.fromEntries(SAMPLES.map((d) => [d.universe.id, d]));
-const viewOf = (id, override = {}) => buildView(override[id] || all[id], (x) => override[x] || all[x] || null);
+const all = allSamples();
 const ctx = { now: '2026-10-03T10:00:00+09:00' };
 const pairIn = (list, a, b) => list.some((x) => [x.a, x.b].sort().join('|') === [a, b].sort().join('|'));
 function memStorage() {

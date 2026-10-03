@@ -10,6 +10,7 @@ import { SAMPLE_A1 } from '../app/data/sample-a1.js';
 import { SAMPLE_CARD } from '../app/data/sample-card.js';
 import { DOC_EXAMPLE } from '../app/data/doc-example.js';
 import { exportFileName } from '../app/src/ui/import.js';
+import { clone } from './helpers.js';
 
 function memoryStorage() {
   const m = new Map();
@@ -17,7 +18,6 @@ function memoryStorage() {
 }
 const now = () => '2026-10-03T12:00:00+09:00';
 const open = (storage, currentId) => createApp({ store: createStore(storage), samples: SAMPLES, currentId, now });
-const clone = (x) => JSON.parse(JSON.stringify(x));
 const converted = (owner = '가상 시스템분석팀') => {
   const { doc } = convertDocument(DOC_EXAMPLE.text, { now: now(), random: () => 0.25 });
   doc.universe.owner = owner;

@@ -4,8 +4,8 @@ import { validateDocument } from '../app/src/model/validate.js';
 import { nodeTypeLabel } from '../app/src/model/schema.js';
 import { SAMPLE_T01 } from './fixtures/sample-t01.js';
 import { EXAMPLE_12_6 } from './fixtures/example-12-6.js';
+import { clone } from './helpers.js';
 
-const clone = (d) => JSON.parse(JSON.stringify(d));
 const codes = (r) => r.errors.map((e) => e.code);
 
 test('12.6 예시 JSON을 불러와 검증을 통과한다', () => {

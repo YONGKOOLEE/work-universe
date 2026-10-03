@@ -1,7 +1,7 @@
 // 2026-10-03 세 번째 전체 검토(규칙 RULES-1·2·3·5·6) 재발 방지
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SAMPLES } from '../app/data/index.js';
+import { allSamples, viewOf, mkNode as n, mkEdge as e, FIXTURE_TS as S } from './helpers.js';
 import { updateNode } from '../app/src/model/commands.js';
 import { buildView } from '../app/src/view/view.js';
 import { flowChange, lastInput } from '../app/src/rules/flow.js';
@@ -9,8 +9,7 @@ import { densityGaps, personLoad, repeatInefficiency, repeatPatternsFor, workLoa
 import { densityExplain } from '../app/src/rules/explain.js';
 import { describeNode } from '../app/src/view/describe.js';
 
-const all = Object.fromEntries(SAMPLES.map((d) => [d.universe.id, d]));
-const viewOf = (id, override = {}) => buildView(override[id] || all[id], (x) => override[x] || all[x] || null);
+const all = allSamples();
 const ASOF = '2026-10-03';
 const ctx = { now: '2026-10-03T09:00:00+09:00' };
 
@@ -33,10 +32,6 @@ test('RULES-2: 반복 비효율은 기준일까지의 기록만 본다(2026-03�
 });
 
 // 업무 기간이 끝났는데 수행 연결은 열려 있는 경우, 시작 전 업무
-const S = '2026-09-01T00:00:00+09:00';
-const n = (id, t, l, r = {}) => ({ id, core_type: t, label: l, hidden: false, created_at: S, updated_at: S, ...r });
-let k = 0;
-const e = (s, t, c, r = {}) => ({ id: `L-${++k}`, source: s, target: t, core_type: c, hidden: false, created_at: S, ...r });
 const doc = (nodes, edges) => ({ schema_version: '1.0', universe: { id: 'U-R', name: 'R', level: '팀', root_node_id: 'N-000', subtypes: [], created_at: S }, nodes: [n('N-000', 'root', 'R'), ...nodes], edges, events: [], refs: [], identity_links: [] });
 
 test('RULES-3: 기간이 끝난 업무는 사람의 "맡은 업무"에서도 빠진다(밀집·공백·흐름과 같은 기준), 사유도 구분', () => {

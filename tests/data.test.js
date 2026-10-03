@@ -6,9 +6,9 @@ import { ANSWERS_V1 } from '../app/data/answers-v1.js';
 import { validateDocument } from '../app/src/model/validate.js';
 import { buildView, parseGid } from '../app/src/view/view.js';
 import { scanVirtualData } from '../tools/virtual-data-check.mjs';
+import { clone } from './helpers.js';
 
 const view = buildView(SAMPLE_A1);
-const clone = (d) => JSON.parse(JSON.stringify(d));
 
 test('내장 샘플은 모두 검증을 통과한다(불러오기 성공)', () => {
   for (const doc of SAMPLES) {

@@ -13,13 +13,13 @@ import { updateNode } from '../app/src/model/commands.js';
 import { allowedRelations } from '../app/src/model/schema.js';
 import { messageFor } from '../app/src/ui/messages.js';
 import { scopeHint } from '../app/src/ui/draft.js';
+import { clone } from './helpers.js';
 
 const ctx = { now: '2026-10-03T10:00:00+09:00', random: () => 0.5 };
 const conv = (t) => convertDocument(t, ctx).doc;
 const withOwner = (d) => ({ ...d, universe: { ...d.universe, owner: '가상' } });
 const valid = (d) => validateDocument(withOwner(d));
 const labels = (d, type) => d.nodes.filter((n) => n.core_type === type).map((n) => n.label);
-const clone = (x) => JSON.parse(JSON.stringify(x));
 
 // ── 변환기 ──
 test('같은 제목의 절이 둘이면 주제 하나로 합치고 설명을 잇는다(연결 중복 없음)', () => {

@@ -3,19 +3,18 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { SAMPLES } from '../app/data/index.js';
+import { allSamples, viewOf } from './helpers.js';
 import { ANSWERS_V1 } from '../app/data/answers-v1.js';
 import { NODE_TYPES, EDGE_TYPES } from '../app/src/model/schema.js';
 import { addNode, addRef, hideNode, updateNode } from '../app/src/model/commands.js';
 import { validateDocument } from '../app/src/model/validate.js';
-import { buildView } from '../app/src/view/view.js';
 import { affiliationAt, describeUniverse } from '../app/src/view/describe.js';
 import { buildHandoverDraft } from '../app/src/rules/handover.js';
 import { densityGaps } from '../app/src/rules/insight.js';
 import { flowChange } from '../app/src/rules/flow.js';
 import { scanVirtualData } from '../tools/virtual-data-check.mjs';
 
-const all = Object.fromEntries(SAMPLES.map((d) => [d.universe.id, d]));
-const viewOf = (id, override = {}) => buildView(override[id] || all[id], (x) => override[x] || all[x] || null);
+const all = allSamples();
 const ctx = { now: '2026-10-02T10:00:00+09:00' };
 const ASOF = '2026-10-02';
 

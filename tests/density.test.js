@@ -1,6 +1,6 @@
 // T-11 밀집/공백(D-08, R-05 ① ② ③)
 import { test } from 'node:test';
-import { SAMPLES } from '../app/data/index.js';
+import { allSamples, viewOf } from './helpers.js';
 import assert from 'node:assert/strict';
 import { SAMPLE_A1 } from '../app/data/sample-a1.js';
 import { SAMPLE_CARD } from '../app/data/sample-card.js';
@@ -9,11 +9,9 @@ import { SAMPLE_EVENT } from '../app/data/sample-event.js';
 import { SAMPLE_DEPT } from '../app/data/sample-dept.js';
 import { ANSWERS_V1 } from '../app/data/answers-v1.js';
 import { hideEdge, hideNode } from '../app/src/model/commands.js';
-import { buildView } from '../app/src/view/view.js';
 import { densityGaps, DENSE_DEFAULT_N, personLoad } from '../app/src/rules/insight.js';
 
-const all = Object.fromEntries(SAMPLES.map((d) => [d.universe.id, d])); // T-13: 부서(U-D1)는 교육팀(U-C)까지 포함
-const viewOf = (id, override = {}) => buildView(override[id] || all[id], (x) => override[x] || all[x] || null);
+const all = allSamples(); // T-13: 부서(U-D1)는 교육팀(U-C)까지 포함
 const ASOF = '2026-10-02';
 const now = { now: '2026-10-01T10:00:00+09:00' };
 

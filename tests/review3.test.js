@@ -5,17 +5,9 @@ import { buildView } from '../app/src/view/view.js';
 import { densityGaps, similarExperts } from '../app/src/rules/insight.js';
 import { buildHandoverDraft } from '../app/src/rules/handover.js';
 import { describeNode, periodStatus, periodText } from '../app/src/view/describe.js';
+import { mkNode as n, mkEdge as e, mkDoc as doc, FIXTURE_TS as S } from './helpers.js';
 
-const S = '2026-09-01T00:00:00+09:00';
 const ASOF = '2026-10-02';
-const n = (id, t, l, r = {}) => ({ id, core_type: t, label: l, hidden: false, created_at: S, updated_at: S, ...r });
-let k = 0;
-const e = (s, t, c, r = {}) => ({ id: `L-${++k}`, source: s, target: t, core_type: c, hidden: false, created_at: S, ...r });
-const doc = (id, nodes, edges, events = [], extra = {}) => ({
-  schema_version: '1.0',
-  universe: { id, name: id, level: '팀', root_node_id: 'N-000', subtypes: [], created_at: S },
-  nodes: [n('N-000', 'root', id), ...nodes], edges, events, refs: [], identity_links: [], ...extra,
-});
 const memo = (id, date, rec, target, category, note) => ({ id, type: 'memo', occurred_at: date, recorded_at: rec, source: 't', payload: { target_kind: 'node', target_id: target, ...(category ? { category } : {}) }, note });
 
 test('기간 상태: 시작 전 = 예정, 끝난 뒤 = 종료, 끝나는 날까지 = 현재', () => {
