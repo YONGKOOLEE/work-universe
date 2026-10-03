@@ -238,3 +238,52 @@ test('담당(수행) 추정: 역할의 하는 일에 업무 이름이 있으면 
   // 하는 일이 없는 문서(예시 카드승인)는 지금처럼 담당 연결 0건
   assert.ok(!card().report.notes.some((n) => n.code === 'C-PERFORMS-GUESS'));
 });
+
+// N-1(사용자 승인 2026-10-03): 한글·워드에서 복사한 모양(마크다운 표시 없음)
+import { DOC_HWP } from './fixtures/doc-hwp.js';
+
+test('일반 글 읽기: 첫 줄 제목, 차례가 맞는 "N." 제목, "가." 소제목, 산출물 아래 "1."은 목록', () => {
+  const p = parseDocument(DOC_HWP);
+  assert.equal(p.plain, true);
+  assert.equal(p.title, '가상 신입 교육 운영 업무정의서');
+  assert.deepEqual(p.sections.map((s) => `${s.num}:${s.title}`), ['1:개요', '2:업무 절차', '3:이해관계자', '4:유의사항', '5:운영 기준', '5-가:강의실 기준', '5-나:강사 기준', '6:확인할 질문', '7:산출물']);
+  const arts = p.sections.find((s) => s.title === '산출물').blocks;
+  assert.deepEqual(arts.map((b) => `${b.kind}${b.n}`), ['num1', 'num2', 'num3']);
+  // 탭 표: 첫 줄 "역할"은 머리글
+  const roles = p.sections.find((s) => s.title === '이해관계자').blocks[0];
+  assert.deepEqual([roles.kind, roles.header, roles.rows.length], ['table', ['역할', '하는 일'], 2]);
+  // 1) ① □ ○ 목록
+  assert.deepEqual(p.sections[1].blocks.map((b) => b.kind), ['num', 'num', 'num']);
+  assert.deepEqual(p.sections.find((s) => s.title === '확인할 질문').blocks.map((b) => b.n), [1, 2]);
+  assert.ok(p.sections[0].blocks.every((b) => b.kind === 'bullet'));
+  // 마크다운 문서는 예전 방식 그대로
+  assert.equal(parseDocument(DOC_EXAMPLE.text).plain, false);
+});
+
+test('일반 글 읽기: 문장 모양이거나 차례가 안 맞는 번호 줄은 제목이 아니다', () => {
+  const p = parseDocument('업무 메모\n1. 개요\n1. 자료를 받는다\n3. 엉뚱한 번호\n2. 절차\n가. 첫째\n다. 순서가 건너뜀');
+  assert.deepEqual(p.sections.map((s) => s.title), ['개요', '절차', '첫째']);
+  assert.deepEqual(p.sections[0].blocks.map((b) => b.text), ['자료를 받는다', '엉뚱한 번호']);
+});
+
+test('한글 문서 모양 변환: 개요·절차·탭 표 이해관계자·유의사항·질문·산출물이 마크다운과 같은 규칙으로 바뀐다', () => {
+  const { doc, report } = conv(DOC_HWP);
+  assert.equal(validateDocument(doc).ok, true);
+  assert.deepEqual([doc.universe.name, doc.universe.owner], ['가상 신입 교육 운영', '가상교육팀']);
+  assert.ok(doc.nodes.length >= 10 && doc.nodes.length <= 20, `노드 ${doc.nodes.length}`);
+  assert.deepEqual(doc.nodes.filter((n) => n.core_type === 'work').map((n) => n.label), ['강의실 예약', '강사 섭외', '만족도 조사']);
+  const main = byLabel(doc, '강의실 예약');
+  assert.match(main.attrs.절차, /^① 입사 예정 인원을 받는다 ② .* ③ /);
+  assert.equal(main.attrs.주의사항, '강의실 예약은 2주 전까지 끝낸다 / 강사 일정이 바뀌면 바로 안내문을 다시 보낸다');
+  assert.equal(main.attrs.원문, '§1 범위, §2, §4');
+  assert.deepEqual(doc.nodes.filter((n) => n.core_type === 'topic').map((n) => `${n.label}/${n.attrs.원문}`), ['강의실 기준/§5-가', '강사 기준/§5-나']);
+  assert.equal(byLabel(doc, '사내 강사').attrs.상태, '미확인');
+  assert.equal(byLabel(doc, '교육 운영 담당').attrs.소속, undefined, "'교육'은 기관이 아니다");
+  assert.ok(doc.edges.some((e) => e.core_type === 'performs' && e.source === byLabel(doc, '교육 운영 담당').id && e.target === main.id));
+  const memos = doc.events.filter((e) => e.type === 'memo');
+  assert.deepEqual(memos.map((m) => m.note), ['[원문 §6-1 질문] 원격 참여자에게도 만족도 조사를 보내는가?', '[원문 §6-2 질문] 강의실 예약 시스템 권한은 누가 주는가?']);
+  assert.ok(memos.every((m) => m.occurred_at === '2026-09-20'));
+  assert.deepEqual(doc.nodes.filter((n) => n.core_type === 'artifact').map((n) => `${n.label}/${n.attrs.순서}`), ['교육 일정표/1', '출석부/2', '만족도 결과 보고서/3']);
+  assert.deepEqual(report.sections.map((s) => s.kind), ['overview', 'steps', 'people', 'cautions', 'topic', 'topic', 'memos', 'artifacts']);
+  assert.ok(!report.notes.some((n) => ['C-NO-STRUCTURE', 'C-NO-SCOPE', 'C-TOO-FEW'].includes(n.code)));
+});

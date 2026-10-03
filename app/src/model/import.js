@@ -1,7 +1,7 @@
 // 가져오기 미리 보기(T-17, 12.9 흐름: 검증 → 미리 보기 → 사람이 "가져오기"). 순수 함수.
 // JSON 파일(내보낸 유니버스, 개발 중 변환한 문서 — CR-3 A)과 문서 초벌 변환 결과(CR-5 ②)를 같은 검사로 본다.
 
-import { CODES, NODE_TYPES, nodeTypeLabel } from './schema.js';
+import { CODES, NODE_TYPES, nodeTypeLabel, normalizeLabel } from './schema.js';
 import { validateDocument } from './validate.js';
 
 export const IMPORT_MAX_CHARS = 5000000; // 가져올 JSON 글자 수 상한(브라우저 저장소 용량보다 작게)
@@ -29,7 +29,7 @@ const markOf = (n) => (n.attrs && typeof n.attrs.상태 === 'string' ? n.attrs.�
 /**
  * 가져오기 전에 보여 줄 내용과 막을 이유.
  * @param {object} doc 12.2 유니버스 문서
- * @param {{existing?: {id:string, name:string, is_sample:boolean}[]}} ctx 이미 있는 유니버스
+ * @param {{existing?: {id:string, name:string, level?:string, is_sample:boolean}[]}} ctx 이미 있는 유니버스
  * @returns {{ok:boolean, errors:object[], warnings:object[], version_mismatch:boolean, conflict:object|null,
  *   counts:{type:string, label:string, count:number}[], node_total:number, edge_total:number, memo_total:number,
  *   source:{with:number, total:number, missing:string[]}|null, marks:{가정:number, 미확인:number}, missing_children:string[]}}
@@ -61,11 +61,16 @@ export function previewImport(doc, { existing = [] } = {}) {
   if (missingChildren.length) warnings.push({ code: 'W-MISSING-CHILD', ids: missingChildren });
 
   const conflict = existing.find((u) => u.id === doc.universe.id) || null;
+  // 같은 문서를 두 번 변환하면 ID는 달라도 이름·단위가 같다(N-2). 막지 않고 알린다(1.2: 사용자가 정한다)
+  const sameName = conflict ? null : existing.find((u) => u.id !== doc.universe.id && typeof doc.universe.name === 'string' &&
+    normalizeLabel(u.name) === normalizeLabel(doc.universe.name) && normalizeLabel(u.level || '') === normalizeLabel(doc.universe.level || '')) || null;
+  if (sameName) warnings.push({ code: 'W-SAME-NAME', id: sameName.id, name: sameName.name, level: sameName.level });
   return {
     ...base,
     ok: checked.ok,
     warnings,
     conflict,
+    same_name: sameName,
     counts,
     node_total: nodes.length,
     edge_total: doc.edges.filter((e) => e && !e.hidden).length,

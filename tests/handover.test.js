@@ -233,3 +233,15 @@ test('공급자 문장의 근거가 없거나 가짜면 그 항목만 규칙 기
   assert.deepEqual(item(r, '유사_경험자').sentences, []);
   assert.match(r.fallback.reason, /1개는 규칙 기반 문장으로 대체/);
 });
+
+// N-5(사용자 확인 중 발견, 2026-10-03): 유사 경험자를 비교했지만 해당자가 없으면 "이력 부족"과 구별한다
+test('유사 경험자 해당 없음(similarNone)은 문장 없이 이유만 남기고, 다른 항목에는 붙지 않는다', () => {
+  const v = buildView(SAMPLE_A1);
+  const input = { target: 'U-A1/N-000', from: 'U-A1/N-011', to: 'U-A1/N-012', similar: [], similarNone: '비슷한 업무를 수행한 사람이 없습니다' };
+  const d = buildHandoverDraft(v, input).draft;
+  const sim = d.items.find((i) => i.key === '유사_경험자');
+  assert.deepEqual([sim.insufficient, sim.empty_reason, sim.sentences.length], [true, '비슷한 업무를 수행한 사람이 없습니다', 0]);
+  assert.ok(d.items.filter((i) => i.key !== '유사_경험자').every((i) => i.empty_reason === undefined));
+  // 비교를 안 했으면(similarNone 없음) 예전처럼 이력 부족만
+  assert.equal(buildHandoverDraft(v, { ...input, similarNone: undefined }).draft.items.find((i) => i.key === '유사_경험자').empty_reason, undefined);
+});

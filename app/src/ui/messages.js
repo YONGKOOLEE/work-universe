@@ -26,7 +26,8 @@ const FIELD_NAMES = {
   id: '노드',
 };
 
-const TYPE_NAMES = { person: '사람', work: '업무', artifact: '산출물', org: '조직', topic: '주제' };
+const TYPE_NAMES = { root: '꼭지', person: '사람', work: '업무', artifact: '산출물', org: '조직', topic: '주제' };
+const EDGE_NAMES = { contains: '포함', performs: '수행', produces: '산출', precedes: '선후행', belongs_to: '소속', relates_to: '관련', references: '참조' };
 
 // 관계별로 연결할 수 있는 조합(12.2). E-PAIR 안내에 쓴다
 export const PAIR_TEXT = {
@@ -55,10 +56,21 @@ export function messageFor(err, ctx = {}) {
       if (err.field === 'name') return '같은 이름의 하위 유형이 이미 있습니다.';
       if (err.field === 'child_universe_id') return '이미 묶여 있는 유니버스입니다.';
       return '같은 노드가 이미 있습니다(같은 유형·라벨, 또는 같은 사번). 기존 노드를 확인하세요.';
-    case 'E-PAIR':
-      return ctx.relation && PAIR_TEXT[ctx.relation]
-        ? `이 조합으로는 연결할 수 없습니다. 이 관계는 ${PAIR_TEXT[ctx.relation]}만 가능합니다.`
+    case 'E-PAIR': {
+      const base = ctx.relation && PAIR_TEXT[ctx.relation]
+        ? `이 조합으로는 연결할 수 없습니다. 「${EDGE_NAMES[ctx.relation] || ctx.relation}」은(는) ${PAIR_TEXT[ctx.relation]}만 가능합니다.`
         : '이 조합으로는 연결할 수 없습니다.';
+      if (!ctx.source || !ctx.target) return base;
+      // 고른 두 노드의 유형과, 이 두 노드에 쓸 수 있는 관계(N-4)
+      const s = ctx.source;
+      const t = ctx.target;
+      const what = ` 고른 노드: 「${s.label}」은(는) ${TYPE_NAMES[s.core_type] || s.core_type}, 「${t.label}」은(는) ${TYPE_NAMES[t.core_type] || t.core_type}입니다.`;
+      const ok = (ctx.suggestions || []).map((x) => {
+        const name = EDGE_NAMES[x.relation] || x.relation;
+        return x.forward ? `「${name}」(${s.label} → ${t.label})` : `「${name}」(${t.label} → ${s.label})`;
+      });
+      return base + what + (ok.length ? ` 이 두 노드에는 ${ok.join(', ')}을(를) 쓸 수 있습니다.` : ' 이 두 노드는 직접 연결할 수 있는 관계가 없습니다.');
+    }
     case 'E-SUBTYPE':
       return '등록되지 않은 하위 유형입니다.';
     case 'E-CYCLE':

@@ -96,7 +96,8 @@ const name = (view, gid) => {
 
 /**
  * @param {object} view buildView 결과
- * @param {{target:string, from:string, to:string, similar?:object[]}} input 전역 참조. target은 꼭지 또는 업무, from·to는 사람
+ * @param {{target:string, from:string, to:string, similar?:object[], similarNone?:string}} input 전역 참조. target은 꼭지 또는 업무, from·to는 사람.
+ *   similarNone: 유사 경험자를 비교했지만 해당자가 없을 때 그 이유. 있으면 "이력 부족" 대신 "해당 없음"으로 표시한다(N-5)
  * @returns {{ok:true, draft:object} | {ok:false, error:{code:string, field:string}}}
  */
 export function buildHandoverDraft(view, input) {
@@ -227,6 +228,8 @@ export function buildHandoverDraft(view, input) {
         title,
         sentences: items[key],
         insufficient: items[key].length === 0, // R-03 ② 근거가 없으면 이력 부족
+        // 비교는 했지만 해당자가 없음(기록이 모자란 것과 다름, N-5). 문장이 없는 것은 같아 insufficient는 그대로 둔다
+        ...(key === '유사_경험자' && items[key].length === 0 && input.similarNone ? { empty_reason: input.similarNone } : {}),
       })),
     },
   };

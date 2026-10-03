@@ -146,3 +146,24 @@ test('내보내기 → 가져오기: 내보낸 JSON을 다른 저장소에 가�
   assert.equal(exportFileName(a.doc.universe), '월말_정산_점검-U-A1.json');
   assert.equal(exportFileName({ name: 'a/b:c*?', id: 'U-X' }), 'a_b_c_-U-X.json');
 });
+
+// N-2(2026-10-03): 같은 문서를 두 번 가져오면 ID가 달라 충돌로 안 걸린다 → 이름·단위가 같으면 알린다(막지는 않음)
+test('미리 보기: 이름·단위가 같은 유니버스가 있으면 W-SAME-NAME으로 알리고, 이름을 바꾸면 사라진다', () => {
+  const storage = memoryStorage();
+  const app = open(storage);
+  assert.equal(app.importUniverse(converted()).ok, true);
+  const again = convertDocument(DOC_EXAMPLE.text, { now: now(), random: () => 0.75 }).doc;
+  again.universe.owner = '가상 시스템분석팀';
+  const p = app.previewImport(again);
+  assert.equal(p.ok, true);
+  assert.equal(p.conflict, null);
+  assert.equal(p.same_name.name, '대형가맹점 A 카드승인 전문 송수신 신규 업무');
+  assert.ok(p.warnings.some((w) => w.code === 'W-SAME-NAME'));
+  again.universe.name = '대형가맹점 A 카드승인(2차)';
+  assert.equal(app.previewImport(again).same_name, null);
+  // 단위가 다르면 다른 유니버스로 본다
+  const team = clone(again);
+  team.universe.name = '대형가맹점 A 카드승인 전문 송수신 신규 업무';
+  team.universe.level = '팀';
+  assert.equal(app.previewImport(team).same_name, null);
+});

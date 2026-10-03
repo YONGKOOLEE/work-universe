@@ -14,6 +14,7 @@ const KIND_TEXT = {
   steps: (n) => `업무 흐름 → 대표 업무의 절차 속성 ${n}단계(노드로 만들지 않음)`,
   topic: () => '주제 노드 1개(항목은 설명에)',
   people: (n) => `역할 ${n}개`,
+  cautions: (n) => `주의사항 → 대표 업무의 주의사항 속성 ${n}줄`,
   artifacts: (n) => `산출물 ${n}개`,
   memos: (n) => `메모 ${n}건`,
 };
@@ -36,6 +37,7 @@ function noteText(n) {
 
 function warningText(w) {
   if (w.code === 'W-NO-SOURCE') return `원문 근거가 없는 노드 ${w.count}개가 있습니다(${w.ids.slice(0, 5).join(', ')}${w.ids.length > 5 ? ' …' : ''}).`;
+  if (w.code === 'W-SAME-NAME') return `이름·단위가 같은 유니버스「${w.name}」(${w.level})가 이미 있습니다. 같은 문서를 다시 가져오는 것이면 위에서 이름을 바꾸거나 취소하세요. 가져오면 따로 하나 더 생깁니다.`;
   if (w.code === 'W-MISSING-CHILD') return `이 유니버스가 묶는 하위 유니버스가 이 브라우저에 없습니다(${w.ids.join(', ')}). 가져와도 그 부분은 비어 보입니다.`;
   return messageFor(w);
 }
@@ -113,6 +115,7 @@ export function importDialog(o) {
   }
 
   function doImport(preview) {
+    if (preview.same_name && !window.confirm(`이름·단위가 같은 유니버스「${preview.same_name.name}」가 이미 있습니다. 그래도 하나 더 가져올까요?`)) return;
     if (preview.conflict && !window.confirm(`같은 ID(${preview.conflict.id})의 유니버스「${preview.conflict.name}」가 이미 있습니다. 덮어쓸까요? 덮어쓰면 그 유니버스에 고친 내용은 사라집니다.`)) return;
     const r = o.app.importUniverse(st.result.doc, { overwrite: !!preview.conflict });
     if (!r.ok) {

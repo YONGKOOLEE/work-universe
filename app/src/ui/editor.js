@@ -2,7 +2,7 @@
 // 양식은 값을 모아 onSubmit(values)을 부르고, 돌려받은 결과({ok, error})로 오류 사유를 보여 준다.
 // 저장·검증은 app → model이 한다. 여기서는 입력과 표시만 한다.
 
-import { EDGE_TYPES, MEMO_CATEGORIES, NODE_TYPES } from '../model/schema.js';
+import { EDGE_TYPES, MEMO_CATEGORIES, NODE_TYPES, allowedRelations } from '../model/schema.js';
 import { el } from './dom.js';
 import { messageFor } from './messages.js';
 
@@ -247,7 +247,15 @@ export function edgeForm(o) {
       period: period.value(),
       note: note.value,
     };
-    msg.show(o.onSubmit(values), { kind: 'edge', relation: relation.value });
+    const result = o.onSubmit(values);
+    const ctx = { kind: 'edge', relation: relation.value };
+    if (!result.ok && result.error.code === 'E-PAIR') {
+      const byId = (id) => (id === o.node.id ? o.node : o.candidates.find((n) => n.id === id));
+      const s = byId(values.source);
+      const t = byId(values.target);
+      if (s && t) Object.assign(ctx, { source: s, target: t, suggestions: allowedRelations(s.core_type, t.core_type) });
+    }
+    msg.show(result, ctx);
   });
   return form;
 }

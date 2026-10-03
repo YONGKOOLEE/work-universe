@@ -25,12 +25,21 @@ function options(nodes, placeholder, selected) {
   return s;
 }
 
+// 비교했지만 해당자가 없을 때의 안내. 꼭지(유니버스 전체)가 대상이면 그 유니버스의 업무는 모두 비교 대상 안이라
+// 다른 유니버스가 함께 보이는 화면(팀·부서)에서만 찾을 수 있다는 것을 덧붙인다
+function scopeHint(view, targetGid, reason) {
+  const t = view.getNode(targetGid);
+  const others = view.nodes.some((n) => n.core_type === 'work' && !n.hidden && t && n.universe_id !== t.universe_id);
+  if (t && t.core_type === 'root' && !others) return `${reason}. 유니버스 전체가 대상이라 비교할 다른 업무가 없습니다. 팀·부서 화면에서 업무를 대상으로 만들면 다른 유니버스와 비교합니다`;
+  return reason;
+}
+
 // 초안을 글로 옮긴다(복사용)
 function draftText(d) {
   const lines = [`[초안] ${d.title}`, `생성 방식: ${METHOD_LABELS[d.method]}`, ''];
   for (const i of d.items) {
     lines.push(`■ ${i.title}`);
-    if (i.insufficient) lines.push('  - 이력 부족');
+    if (i.insufficient) lines.push(i.empty_reason ? `  - 해당 없음: ${i.empty_reason}` : '  - 이력 부족');
     for (const s of i.sentences) lines.push(`  - ${s.text}`);
   }
   lines.push('', '※ 축적된 이력으로 만든 초안입니다. 담당자가 확인하고 확정하세요.');
@@ -82,10 +91,14 @@ export function draftPanel(o) {
     // 유사 경험자(D-08): 초안 범위 업무와 비슷한 다른 업무를 한 사람. 받는 사람(이미 담당)은 뺀다
     const base = { target: target.value, from: from.value, to: to.value };
     let similar;
+    let similarNone = null;
     if (target.value && to.value) {
-      similar = similarSentences(similarExperts(view, { works: scopeWorks(view, target.value), asOf: o.asOf || todayLocal(), exclude: [to.value] }));
+      const found = similarExperts(view, { works: scopeWorks(view, target.value), asOf: o.asOf || todayLocal(), exclude: [to.value] });
+      similar = similarSentences(found);
+      // 비교했지만 해당자가 없으면 "이력 부족"과 구별해 보여 준다(N-5)
+      if (found.status === 'none') similarNone = scopeHint(view, target.value, found.reason);
     }
-    const r = buildHandoverDraft(view, { ...base, similar });
+    const r = buildHandoverDraft(view, { ...base, similar, similarNone });
     if (!r.ok) {
       msg.classList.add('error');
       msg.dataset.code = r.error.code;
@@ -139,7 +152,9 @@ function renderDraft(box, d, view, onFocus) {
     ...d.items.map((i) =>
       el('section', { class: `draft-item${i.insufficient ? ' insufficient' : ''}`, 'data-testid': `draft-item-${i.key}` },
         el('h4', {}, i.title, i.insufficient ? null : el('span', { class: `method-chip ${i.method || 'rule'}`, 'data-testid': 'item-method' }, i.method === 'pregen' ? '사전 생성' : i.method === 'llm' ? 'LLM' : '규칙 기반')),
-        i.insufficient
+        i.insufficient && i.empty_reason
+          ? el('p', { class: 'muted', 'data-testid': 'not-found' }, `해당 없음 — ${i.empty_reason}`)
+          : i.insufficient
           ? el('p', { class: 'muted', 'data-testid': 'insufficient' }, '이력 부족 — 근거가 되는 기록이 없어 내용을 만들지 않았습니다.')
           : el('ul', {}, ...i.sentences.map((s) => el('li', {}, el('span', {}, s.text), el('span', { class: 'evidence-list' }, ...s.evidence_ids.map((g) => evidenceChip(view, g, onFocus)))))),
       ),

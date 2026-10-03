@@ -298,6 +298,7 @@ async function checkBrowser(browser, port) {
   await sleep(150);
   const pairErr = await panelMessage(s.cdp);
   check('오류: 허용되지 않는 연결 → E-PAIR와 가능한 조합 안내', pairErr && pairErr.code === 'E-PAIR' && pairErr.text.includes('사람 → 업무'), pairErr && pairErr.text);
+  check('N-4 연결 오류에 고른 두 노드의 유형과 쓸 수 있는 관계(관련: 대사 확인 → 대사 불일치)', !!pairErr && pairErr.text.includes('「대사 불일치」은(는) 주제') && pairErr.text.includes('「대사 확인」은(는) 업무') && pairErr.text.includes('「관련」(대사 확인 → 대사 불일치)'), pairErr && pairErr.text);
   // 연결 오류: 같은 연결(기간 겹침) → E-DUP
   await fillPanelForm(s.cdp, { 'edge-type': 'relates_to', 'edge-direction': 'in', 'edge-other': 'N-001' });
   await sleep(150);
@@ -356,7 +357,9 @@ async function checkBrowser(browser, port) {
   const itemsCount = await evaluate(s.cdp, "document.querySelectorAll('[data-testid^=draft-item-]').length");
   check('R-03 초안 10개 항목, "초안" 상태와 생성 방식(규칙 기반) 표시(R-03 ③, R-04 ②)', itemsCount === 10 && (await text(s.cdp, '[data-testid=draft-status]')) === '초안' && (await text(s.cdp, '[data-testid=draft-method]')).includes('규칙 기반'));
   check('R-03 ① 항목에 근거 링크가 붙는다(관계자: 한가람, 이전 인수인계: 인수인계서)', (await text(s.cdp, '[data-testid=draft-item-관계자_연락처]')).includes('한가람') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=draft-item-이전_인수인계] .evidence').length")) === 2);
-  check('R-03 ② 근거가 없는 항목은 "이력 부족"(유사 경험자)', (await text(s.cdp, '[data-testid=draft-item-유사_경험자]')).includes('이력 부족'));
+  // N-5: 유니버스 전체가 대상이면 비교할 다른 업무가 없어 '해당 없음'(이력 부족과 구별). R-03 ② 이력 부족은 교육팀 신규 과정 단계에서 확인
+  const simItem = await text(s.cdp, '[data-testid=draft-item-유사_경험자]');
+  check('N-5 유사 경험자: 비교했지만 해당자 없음 → "해당 없음"과 이유(이력 부족과 구별)', simItem.includes('해당 없음') && simItem.includes('비교할 다른 업무가 없습니다') && !simItem.includes('이력 부족'), simItem.slice(0, 120));
   check('숨긴 노드가 근거면 "숨김 처리된 노드"로 표시(점검표 양식을 숨긴 상태)', (await text(s.cdp, '[data-testid=draft-item-산출물_문서]')).includes('점검표 양식(숨김 처리된 노드)'));
   // 근거를 누르면 패널은 그대로 두고 그래프에서 그 노드를 보여 준다
   // CR-6 새 항목: 절차·마감·주의사항·진행 중·문의 연락처가 실제로 보인다

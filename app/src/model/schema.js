@@ -147,6 +147,16 @@ export function pairAllowed(edgeType, sourceType, targetType) {
   return rule(sourceType, targetType);
 }
 
+/**
+ * 두 노드 유형 사이에 쓸 수 있는 관계 목록. forward는 a → b, backward는 b → a 방향이 된다(N-4 연결 오류 안내)
+ * @returns {{relation:string, forward:boolean, backward:boolean}[]}
+ */
+export function allowedRelations(aType, bType) {
+  return Object.keys(PAIR_RULES)
+    .map((relation) => ({ relation, forward: PAIR_RULES[relation](aType, bType), backward: PAIR_RULES[relation](bType, aType) }))
+    .filter((x) => x.forward || x.backward);
+}
+
 export function eventTypeLabel(type) {
   return EVENT_TYPES[type] || UNKNOWN_TYPE_LABEL;
 }
