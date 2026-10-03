@@ -31,15 +31,16 @@ export const EXPLAIN_SCENARIOS = [
 /** 초안 시나리오의 규칙 기반 초안(화면 draft.js와 같은 계산) */
 export function handoverDraftOf(s, asOf = PREGEN_ASOF) {
   const v = viewOf(s.view);
-  const similar = similarSentences(similarExperts(v, { works: scopeWorks(v, s.target), asOf, exclude: [s.to] }));
-  return { view: v, draft: buildHandoverDraft(v, { target: s.target, from: s.from, to: s.to, similar }).draft };
+  // 화면(ui/draft.js)과 같게: 받는 사람·보내는 사람 제외(D3-31), 기준일 전달(검토5 I-1·I-8)
+  const similar = similarSentences(similarExperts(v, { works: scopeWorks(v, s.target), asOf, exclude: [s.to, s.from] }));
+  return { view: v, draft: buildHandoverDraft(v, { target: s.target, from: s.from, to: s.to, asOf, similar }).draft };
 }
 
 /** 설명 시나리오의 설명 요청(화면 insight.js와 같은 계산) */
 export function explainRequestOf(s, asOf = PREGEN_ASOF) {
   const v = viewOf(s.view);
   if (s.kind === 'similar') return { view: v, req: similarExplain(similarExperts(v, { works: [s.work], asOf }), s.work) };
-  if (s.kind === 'repeat') return { view: v, req: repeatExplain(repeatInefficiency(v), s.view) };
+  if (s.kind === 'repeat') return { view: v, req: repeatExplain(repeatInefficiency(v, { asOf }), s.view) }; // 화면과 같이 기준일(검토5 I-2)
   if (s.kind === 'density') return { view: v, req: densityExplain(densityGaps(v, { asOf, n: DENSE_DEFAULT_N }), s.view) };
   return { view: v, req: flowExplain(flowChange(v, { unit: 'month', asOf }), s.view) };
 }

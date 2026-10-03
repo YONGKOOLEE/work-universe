@@ -95,12 +95,13 @@ export function draftPanel(o) {
     let similar;
     let similarNone = null;
     if (target.value && to.value) {
-      const found = similarExperts(view, { works: scopeWorks(view, target.value), asOf: o.asOf || todayLocal(), exclude: [to.value] });
+      // 받는 사람(이미 담당)과 보내는 사람(「문의」로 이미 나옴)은 뺀다(검토5 I-4, D3-31)
+      const found = similarExperts(view, { works: scopeWorks(view, target.value), asOf: o.asOf || todayLocal(), exclude: [to.value, from.value].filter(Boolean) });
       similar = similarSentences(found);
       // 비교했지만 해당자가 없으면 "이력 부족"과 구별해 보여 준다(N-5)
       if (found.status === 'none') similarNone = scopeHint(view, target.value, found.reason);
     }
-    const r = buildHandoverDraft(view, { ...base, similar, similarNone });
+    const r = buildHandoverDraft(view, { ...base, asOf: o.asOf || todayLocal(), similar, similarNone });
     if (!r.ok) {
       msg.classList.add('error');
       msg.dataset.code = r.error.code;
@@ -142,6 +143,10 @@ function confirmBox(d, view, o) {
   const date = o.asOf || todayLocal();
   const t = view.getNode(d.target);
   const where = t ? t.universe_name : '';
+  // 꼭지 대상이고 범위 업무가 다른 유니버스(묶은 하위)에 있으면, 이력은 이 화면의 유니버스에만 남는다(D3-30 나, 검토5 I-3)
+  const elsewhere = t && t.core_type === 'root'
+    ? [...new Set(scopeWorks(view, d.target).map((g) => view.getNode(g)).filter((w) => w && w.universe_id !== t.universe_id).map((w) => w.universe_name))]
+    : [];
   const msg = el('p', { class: 'form-message', 'data-testid': 'confirm-message', 'aria-live': 'polite' });
   const btn = el('button', { type: 'button', class: 'primary', 'data-testid': 'draft-confirm', disabled: !!o.readOnly }, '확정해 인수인계서로 저장');
   btn.addEventListener('click', () => {
@@ -155,6 +160,7 @@ function confirmBox(d, view, o) {
   });
   return el('div', { class: 'confirm-box', 'data-testid': 'confirm-box' },
     el('p', { class: 'muted small' }, `내용을 확인했으면 확정하세요. 「${where}」에 인수인계서와 인수인계 이력(${date})이 남고, 다음 인수인계 초안의 「이전 인수인계」 근거가 됩니다.`),
+    elsewhere.length ? el('p', { class: 'muted small', 'data-testid': 'confirm-elsewhere' }, `이 화면(「${where}」)에만 저장됩니다. 업무 유니버스(「${elsewhere.join('」·「')}」)를 단독으로 열면 이 인수인계는 보이지 않습니다. 그 유니버스에서도 보이게 하려면 그 유니버스를 열어 업무를 대상으로 확정하세요.`) : null,
     o.readOnly ? el('p', { class: 'muted small' }, '읽기 전용이라 확정할 수 없습니다.') : null,
     btn, msg);
 }

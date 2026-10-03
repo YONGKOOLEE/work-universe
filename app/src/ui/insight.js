@@ -138,7 +138,7 @@ function renderSimilar(box, view, r, onFocus) {
 // ── 반복 비효율 ──
 function repeatView(view, o) {
   const onFocus = o.onFocus;
-  const r = repeatInefficiency(view, { asOf: o.asOf });
+  const r = repeatInefficiency(view, { asOf: o.asOf || todayLocal() }); // 밀집·흐름과 같이 오늘 기준: 미래 날짜 이력은 세지 않는다(검토5 I-2)
   const parts = [el('p', { class: 'muted small' }, '담당자가 바뀔 때마다 같은 설명을 처음부터 반복하거나, 같은 문제가 여러 업무에서 되풀이되는 패턴입니다.')];
   if (r.status === 'insufficient') {
     parts.push(el('p', { class: 'notice', 'data-testid': 'repeat-insufficient' }, `데이터 부족 — ${r.reason}${r.last_input ? ` (마지막 입력 ${r.last_input})` : ' (입력된 업무 이력 없음)'}.`));

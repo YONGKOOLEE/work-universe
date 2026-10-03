@@ -310,7 +310,7 @@ function start() {
   function repeatNote(gid) {
     const node = view.getNode(gid);
     if (!node || node.hidden || !['work', 'topic'].includes(node.core_type)) return null;
-    const hits = repeatPatternsFor(view, gid, viewDate);
+    const hits = repeatPatternsFor(view, gid, asOf()); // 오늘 보기에서도 오늘 기준(검토5 I-2)
     if (!hits.length) return null;
     const kinds = [...new Set(hits.map((p) => (p.kind === 'handover_chain' ? '인수인계 반복' : '주제 반복')))].join('·');
     return el('p', { class: 'notice', 'data-testid': 'repeat-note' }, `반복 비효율 패턴 ${hits.length}건에 포함(${kinds}) `,

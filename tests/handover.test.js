@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { SAMPLE_A1 } from '../app/data/sample-a1.js';
 import { SAMPLE_CARD } from '../app/data/sample-card.js';
 import { SAMPLE_TEAM } from '../app/data/sample-team.js';
+import { SAMPLE_EDU } from '../app/data/sample-edu.js';
 import { SAMPLES } from '../app/data/index.js';
 import { ANSWERS_V1 } from '../app/data/answers-v1.js';
 import { createUniverse, addNode, addEdge, addEvent, hideNode } from '../app/src/model/commands.js';
@@ -98,7 +99,52 @@ test('산출물·문서 위치와 이전 인수인계(인수인계서 유무)가
     '점검표 양식, 위치: 공용 문서함 > 정산 > 점검표(가상 경로) — 자료 수집에서 만듦',
     '2026-06 인수인계서, 위치: 공용 문서함 > 정산 > 인수인계(가상 경로) — 대사 확인에서 만듦',
   ]);
-  assert.deepEqual(texts(draft(), '이전_인수인계'), ['2026-06-01 한가람 → 윤바다 — 대사 확인 (근거: 2026-06 인수인계서)']);
+  // 검토5 I-1: 같은 두 사람 사이의 과거 인수인계(E-007, 2026-09-30 구두)도 받는 사람이 봐야 할 근거라 뺴지 않는다
+  assert.deepEqual(texts(draft(), '이전_인수인계'), [
+    '2026-06-01 한가람 → 윤바다 — 대사 확인 (근거: 2026-06 인수인계서)',
+    '2026-09-30 윤바다 → 서하늘 — 대사 확인 (인수인계서 없음)',
+  ]);
+});
+
+test('이전 인수인계(검토5 I-1): 오늘(asOf) 같은 사람 사이에 이미 확정한 것만 "지금 만드는 인수인계"로 보고 뺀다', () => {
+  const view = buildView(SAMPLE_A1);
+  const input = { target: answer.target, from: answer.from, to: answer.to };
+  // 거꾸로(한가람 → 윤바다) 만드는 초안에도 과거 한가람 → 윤바다 인수인계(E-002)가 보인다
+  const reverse = buildHandoverDraft(view, { target: answer.target, from: 'U-A1/N-010', to: 'U-A1/N-011' }).draft;
+  assert.ok(texts(reverse, '이전_인수인계').some((t) => t.startsWith('2026-06-01 한가람 → 윤바다')));
+  // asOf가 E-007의 날짜면 그 건만 빠진다
+  const sameDay = buildHandoverDraft(view, { ...input, asOf: '2026-09-30' }).draft;
+  assert.deepEqual(texts(sameDay, '이전_인수인계'), ['2026-06-01 한가람 → 윤바다 — 대사 확인 (근거: 2026-06 인수인계서)']);
+  assert.equal(texts(buildHandoverDraft(view, { ...input, asOf: '2026-10-03' }).draft, '이전_인수인계').length, 2);
+});
+
+test('관계자·연락처(검토5 I-8): asOf가 있으면 시작 예정 담당자는 "시작 예정"으로 표시된다', () => {
+  let doc = JSON.parse(JSON.stringify(SAMPLE_A1));
+  doc = addNode(doc, { core_type: 'person', label: '가상예정', emp_no: 'V-1099' }, ctx).doc;
+  const pid = doc.nodes.at(-1).id;
+  doc = addEdge(doc, { source: pid, target: 'N-002', core_type: 'performs', period: { start: '2026-12-01' } }, ctx).doc;
+  const d = buildHandoverDraft(buildView(doc), { target: answer.target, from: answer.from, to: answer.to, asOf: '2026-10-03' }).draft;
+  const line = texts(d, '관계자_연락처').find((t) => t.startsWith('가상예정'));
+  assert.ok(line && line.includes('시작 예정'), line);
+});
+
+test('진행 중인 일(검토5 I-10): 대상 없는 "진행 중" 메모도 같은 주제 집합의 "해결됨"이 뒤에 오면 닫힌다', () => {
+  let doc = JSON.parse(JSON.stringify(SAMPLE_A1));
+  doc = addEvent(doc, { type: 'memo', occurred_at: '2026-10-01', payload: { topic_ids: ['N-030'], category: 'in_progress' }, note: '대상 없는 진행 중' }, ctx).doc;
+  const open = buildHandoverDraft(buildView(doc), { target: answer.target, from: answer.from, to: answer.to }).draft;
+  assert.ok(texts(open, '진행_중').some((t) => t.includes('대상 없는 진행 중')));
+  doc = addEvent(doc, { type: 'memo', occurred_at: '2026-10-02', payload: { topic_ids: ['N-030'], category: 'resolved' }, note: '닫음' }, ctx).doc;
+  const closed = buildHandoverDraft(buildView(doc), { target: answer.target, from: answer.from, to: answer.to }).draft;
+  assert.ok(!texts(closed, '진행_중').some((t) => t.includes('대상 없는 진행 중')));
+});
+
+test('메모 범위(검토5 I-9): 주제를 공유한 다른 업무의 메모에는 그 업무 이름이 붙는다', () => {
+  // 교육팀 「강의실·강사 섭외」(N-102) 단독 초안: 주제 「강의실 부족」을 공유한 「신입 교육 운영」(N-101)의 이슈가 들어온다
+  const view = buildView(SAMPLE_EDU);
+  const d = buildHandoverDraft(view, { target: 'U-C/N-102', from: 'U-C/N-202', to: 'U-C/N-201' }).draft;
+  const issues = texts(d, '최근_이슈');
+  assert.ok(issues.length > 0);
+  for (const t of issues) assert.ok(t.endsWith('(「신입 교육 운영」 메모)'), t);
 });
 
 test('유사 경험자는 사례 1만으로는 이력 부족이다(정답 표: U-D1 기준은 insight 테스트)', () => {

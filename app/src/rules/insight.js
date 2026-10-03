@@ -3,7 +3,7 @@
 // 그 업무를 수행한 사람을 점수순으로 돌려준다. 현재 담당자는 제외한다. 근거 ID(공유 주제·업무 노드)를 함께 돌려준다.
 
 import { periodStatus, periodText } from '../view/describe.js';
-import { normalizeLabel } from '../model/schema.js';
+import { normalizeLabel, memoCategoryOf } from '../model/schema.js';
 import { lastInput } from './flow.js';
 
 // 점수 가중치(D-08에 수치가 없어 정함): 주제 3, 산출물 유형 2, 라벨 토큰 1
@@ -258,19 +258,37 @@ export function repeatInefficiency(view, { asOf = null } = {}) {
     if (!t.works.has(work.gid)) t.works.set(work.gid, { work, events: new Set() });
     t.works.get(work.gid).events.add(evGid);
   };
+  // 포함(contains)으로 이어진 상위–하위 업무는 한 업무로 묶어 센다(D3-32 a): 하위 업무의 기록은 상위 업무로 올린다
+  const parentOf = new Map();
+  for (const e of view.edges) if (live(e) && e.core_type === 'contains') parentOf.set(e.target, e.source);
+  const topWork = (w) => {
+    let cur = w;
+    const seen = new Set([cur.gid]);
+    while (parentOf.has(cur.gid)) {
+      const p = view.getNode(parentOf.get(cur.gid));
+      if (!p || p.core_type !== 'work' || p.hidden || seen.has(p.gid)) break;
+      seen.add(p.gid);
+      cur = p;
+    }
+    return cur;
+  };
   for (const ev of relevant) {
     if (ev.type === 'memo') {
-      const w = ev.payload.target_id ? workOf(ev, ev.payload.target_id) : null;
+      // 주의사항·해결됨 메모는 "되풀이되는 문제"의 근거가 아니다(D3-32 b)
+      if (['caution', 'resolved'].includes(memoCategoryOf(ev.payload))) continue;
+      const w0 = ev.payload.target_id ? workOf(ev, ev.payload.target_id) : null;
+      const w = w0 ? topWork(w0) : null;
       if (!w) continue;
       for (const id of ev.payload.topic_ids || []) {
         const t = view.getNode(eventGidIn(ev, id));
         if (t && t.core_type === 'topic' && !t.hidden) addTo(t, w, ev.gid);
       }
     } else {
-      const w = workOf(ev, ev.payload.work_id);
+      const w0 = workOf(ev, ev.payload.work_id);
+      const w = w0 ? topWork(w0) : null;
       if (!w) continue;
       for (const e of view.edges) {
-        if (live(e) && e.core_type === 'relates_to' && e.source === w.gid) {
+        if (live(e) && e.core_type === 'relates_to' && e.source === w0.gid) {
           const t = view.getNode(e.target);
           if (t && t.core_type === 'topic' && !t.hidden) addTo(t, w, ev.gid);
         }

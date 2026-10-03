@@ -92,9 +92,12 @@ test('정답 표: 초안 10개 항목(CR-6)이 모두 있고, 확정 대기 항�
   for (const item of Object.values(items)) if (item.status === 'pending') assert.ok(item.decide_in);
 });
 
-test('정답 표: 이전 인수인계에는 이번 인수인계(E-007)가 들어가지 않는다', () => {
+// 검토5 I-1(CR-9-j 후보): 같은 두 사람 사이의 과거 인수인계도 「이전 인수인계」에 들어간다. E-007(2026-09-30 구두)은
+// 초안을 만드는 날(asOf)이 그날이 아니면 과거 기록이므로 근거에 포함된다
+test('정답 표: 이전 인수인계에 과거 구두 인수인계(E-007)와 문서 인수인계(E-002)가 모두 들어간다', () => {
   const item = ANSWERS_V1.handover_drafts[0].items['이전_인수인계'];
-  assert.ok(!item.evidence.includes('U-A1/E-007'));
+  assert.ok(item.evidence.includes('U-A1/E-007'));
+  assert.ok(item.evidence.includes('U-A1/E-002'));
 });
 
 test('R-06 형식 점검: 내장 샘플에 위반이 없다', () => {

@@ -217,8 +217,9 @@ test('인수인계 3회: 바로 앞 인수인계서를 건너뛰고 더 오래�
 
 test('반복 비효율 ②: 같은 주제가 여러 업무에서 반복되면 근거와 함께 나온다(부서 화면)', () => {
   const r = repeatInefficiency(viewOf('U-D1'));
-  // T-13: 교육팀의 「강의실 부족」도 주제 반복으로 잡히므로 대사 불일치 패턴을 이름으로 찾는다
-  assert.ok(r.patterns.some((x) => x.kind === 'topic_repeat' && x.topic.label === '강의실 부족'));
+  // D3-32(검토5 I-5): 교육팀의 「강의실 부족」은 상위 「신입 교육 운영」의 이슈 2건 + 하위 「강의실·강사 섭외」의 주의사항 메모뿐이라
+  // (a) 포함 관계는 한 업무로 묶고 (b) 주의사항·해결됨 메모는 세지 않으므로 주제 반복이 아니다
+  assert.ok(!r.patterns.some((x) => x.kind === 'topic_repeat' && x.topic.label === '강의실 부족'));
   const t = r.patterns.find((x) => x.kind === 'topic_repeat' && x.topic.label === '대사 불일치');
   assert.deepEqual(t.works.map((w) => w.label).sort(), ['2025 행사', '거래 조회', '대사 확인', '망취소']);
   const v = viewOf('U-D1');
@@ -226,6 +227,30 @@ test('반복 비효율 ②: 같은 주제가 여러 업무에서 반복되면 �
   assert.match(t.summary, /4개 업무에서 반복됩니다/);
   // 월말 정산 하나만 보면 한 업무에서만 나오므로 주제 반복은 없다
   assert.ok(!repeatInefficiency(viewOf('U-A1')).patterns.some((x) => x.kind === 'topic_repeat'));
+});
+
+test('반복 비효율 ②(D3-32): 포함 관계 업무는 한 곳으로 묶고, 주의사항·해결됨 메모는 근거로 세지 않는다', () => {
+  // 월말 정산: 「자료 수집」(N-002)에 주제 「대사 불일치」(N-030) 이슈 메모를 달면 「대사 확인」과 2곳 → 반복
+  const base = JSON.parse(JSON.stringify(SAMPLE_A1));
+  const memo = (doc, target, category) => addEvent(doc, { type: 'memo', occurred_at: '2026-10-01', payload: { target_id: target, topic_ids: ['N-030'], category }, note: '불일치' }, T0).doc;
+  const twoWorks = repeatInefficiency(buildView(memo(base, 'N-002', 'issue'))).patterns.find((x) => x.kind === 'topic_repeat');
+  assert.ok(twoWorks, '서로 다른 두 업무면 반복');
+  // (b) 같은 메모가 주의사항·해결됨 범주면 세지 않는다
+  for (const cat of ['caution', 'resolved']) {
+    assert.ok(!repeatInefficiency(buildView(memo(base, 'N-002', cat))).patterns.some((x) => x.kind === 'topic_repeat'), cat);
+  }
+  // (a) 「자료 수집」을 「대사 확인」의 하위 업무로 묶으면 한 곳으로 센다
+  const nested = addEdge(base, { source: 'N-001', target: 'N-002', core_type: 'contains' }, T0).doc;
+  assert.ok(!repeatInefficiency(buildView(memo(nested, 'N-002', 'issue'))).patterns.some((x) => x.kind === 'topic_repeat'));
+});
+
+test('반복 비효율(검토5 I-2): 기준일을 주면 미래 날짜 이력은 세지 않는다', () => {
+  const doc = addEvent(JSON.parse(JSON.stringify(SAMPLE_A1)), { type: 'handover', occurred_at: '2027-01-01', payload: { work_id: 'N-001', from_person_id: 'N-012', to_person_id: 'N-010' } }, T0).doc;
+  const v = buildView(doc);
+  assert.equal(repeatInefficiency(v).patterns.find((x) => x.kind === 'handover_chain').total, 3, '기준일 없음 → 전체');
+  const r = repeatInefficiency(v, { asOf: '2026-10-03' });
+  assert.equal(r.patterns.find((x) => x.kind === 'handover_chain').total, 2);
+  assert.equal(r.last_input, '2026-10-01');
 });
 
 test('데이터 부족: 인수인계·메모 기록이 2건 미만이면 결론 없이 마지막 입력 시점만 보인다(R-05 ②)', () => {

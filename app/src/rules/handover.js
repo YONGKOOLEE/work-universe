@@ -96,11 +96,13 @@ const name = (view, gid) => {
 
 /**
  * @param {object} view buildView 결과
- * @param {{target:string, from:string, to:string, similar?:object[], similarNone?:string}} input 전역 참조. target은 꼭지 또는 업무, from·to는 사람.
+ * @param {{target:string, from:string, to:string, asOf?:string|null, similar?:object[], similarNone?:string}} input 전역 참조. target은 꼭지 또는 업무, from·to는 사람.
+ *   asOf: 초안을 만드는 날(YYYY-MM-DD). 담당 기간의 "시작 예정" 판정과 "오늘 확정한 같은 인수인계"를 빼는 데 쓴다(검토5 I-1·I-8). 없으면 둘 다 하지 않는다
  *   similarNone: 유사 경험자를 비교했지만 해당자가 없을 때 그 이유. 있으면 "이력 부족" 대신 "해당 없음"으로 표시한다(N-5)
  * @returns {{ok:true, draft:object} | {ok:false, error:{code:string, field:string}}}
  */
 export function buildHandoverDraft(view, input) {
+  const asOf = input.asOf || null;
   for (const f of ['target', 'from', 'to']) {
     if (!input[f]) return { ok: false, error: { code: 'E-REQUIRED', field: f } };
   }
@@ -149,7 +151,13 @@ export function buildHandoverDraft(view, input) {
   const universeOf = (g) => g.slice(0, g.indexOf('/'));
   const scopeUniverses = new Set([start, ...works].flatMap((n) => [n.universe_id, ...(n.merged_from || []).map(universeOf)]));
   const memos = view.events.filter((ev) => ev.type === 'memo' && scopeUniverses.has(ev.universe_id) && ev.node_gids.some((g) => related.has(g)));
-  const memoSentence = (ev) => sentence(`${ev.occurred_at} ${ev.note || '메모'}`, [ev.gid]);
+  // 메모의 대상(전역 참조). 대상이 범위 업무가 아니면(주제를 공유한 다른 업무의 메모) 문장에 그 업무 이름을 붙인다(검토5 I-9)
+  const canonTarget = (ev) => (ev.payload.target_id ? view.canonical(ev.payload.target_id.includes('/') ? ev.payload.target_id : `${ev.universe_id}/${ev.payload.target_id}`) : null);
+  const memoSentence = (ev) => {
+    const t = canonTarget(ev);
+    const outside = t && !related.has(t) && view.getNode(t);
+    return sentence(`${ev.occurred_at} ${ev.note || '메모'}${outside ? `(「${outside.label}」 메모)` : ''}`, [ev.gid]);
+  };
   const ofCategory = (cat) => memos.filter((ev) => memoCategoryOf(ev.payload) === cat);
 
   // 4) 주의사항·노하우: 업무 속성 + 범주가 주의사항인 메모
@@ -158,15 +166,16 @@ export function buildHandoverDraft(view, input) {
     ...ofCategory('caution').map(memoSentence),
   ];
 
-  // 5) 진행 중인 일: 범주가 진행 중인 메모 중, 같은 대상에 이후 "해결됨" 메모가 없는 것
-  const canonTarget = (ev) => (ev.payload.target_id ? view.canonical(ev.payload.target_id.includes('/') ? ev.payload.target_id : `${ev.universe_id}/${ev.payload.target_id}`) : null);
+  // 5) 진행 중인 일: 범주가 진행 중인 메모 중, 같은 대상에 이후 "해결됨" 메모가 없는 것.
+  //    대상이 없는 메모는 단 주제 집합이 같은 "해결됨"으로 닫는다(검토5 I-10)
+  const memoKey = (ev) => canonTarget(ev) || `topics:${[...ev.node_gids].sort().join(',')}`;
   const resolved = ofCategory('resolved');
   items.진행_중 = ofCategory('in_progress')
     .filter((ev) => {
-      const t = canonTarget(ev);
+      const k = memoKey(ev);
       // "이후"는 이력 정렬 순서로 본다(같은 날짜면 기록 순서, tech-record 14절)
       const at = view.events.indexOf(ev);
-      return !(t && resolved.some((r) => canonTarget(r) === t && view.events.indexOf(r) > at));
+      return !resolved.some((r) => memoKey(r) === k && view.events.indexOf(r) > at);
     })
     .map(memoSentence);
 
@@ -186,7 +195,7 @@ export function buildHandoverDraft(view, input) {
     const p = view.getNode(e.source);
     if (!p || p.hidden) continue;
     if (!people.has(p.gid)) people.set(p.gid, { person: p, roles: [] });
-    people.get(p.gid).roles.push(`${name(view, e.target)}${e.period ? ` ${periodText(e.period)}` : ''}`);
+    people.get(p.gid).roles.push(`${name(view, e.target)}${e.period ? ` ${periodText(e.period, asOf)}` : ''}`); // asOf가 있으면 "시작 예정"도 구분(검토5 I-8)
   }
   const sender = view.getNode(from);
   const inquiry = sender && attr(sender, '연락처')
@@ -199,11 +208,13 @@ export function buildHandoverDraft(view, input) {
   // 8) 최근 이슈: 범주가 이슈(없으면 이슈)인 메모의 최근 N건
   items.최근_이슈 = ofCategory('issue').slice(-RECENT_MEMO_COUNT).reverse().map(memoSentence);
 
-  // 9) 이전 인수인계: 범위 업무의 인수인계 이벤트. 지금 만드는 인수인계(같은 보내는 사람 → 받는 사람)는 뺀다
+  // 9) 이전 인수인계: 범위 업무의 인수인계 이벤트 전부. 같은 두 사람 사이의 과거 인수인계도 받는 사람이 봐야 할 근거다(검토5 I-1).
+  //    오늘(asOf) 같은 사람 사이에 이미 확정한 것만 "지금 만드는 인수인계"로 보고 뺀다
   const canonOf = (ev, id) => view.canonical(id.includes('/') ? id : `${ev.universe_id}/${id}`);
+  const samePair = (ev) => canonOf(ev, ev.payload.from_person_id) === from && canonOf(ev, ev.payload.to_person_id) === to;
   items.이전_인수인계 = view.events
     .filter((ev) => ev.type === 'handover' && workIds.has(canonOf(ev, ev.payload.work_id)))
-    .filter((ev) => !(canonOf(ev, ev.payload.from_person_id) === from && canonOf(ev, ev.payload.to_person_id) === to))
+    .filter((ev) => !(asOf && ev.occurred_at === asOf && samePair(ev)))
     .map((ev) => {
       const art = ev.payload.artifact_id ? canonOf(ev, ev.payload.artifact_id) : null;
       const who = `${name(view, canonOf(ev, ev.payload.from_person_id))} → ${name(view, canonOf(ev, ev.payload.to_person_id))}`;

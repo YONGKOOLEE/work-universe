@@ -173,3 +173,17 @@ test('T-10 역할 (c): 통합 화면의 업무 후보 이유가 모두 사전 �
     }
   }
 });
+
+test('흐름 변화 설명(검토5 I-6): 사전 생성 문장을 써도 기준일에 따라 바뀌는 "기록 없는 기간" 경고(keep)는 그대로 덧붙는다', async () => {
+  const { flowChange } = await import('../app/src/rules/flow.js');
+  const { flowExplain } = await import('../app/src/rules/explain.js');
+  const view = viewOf('U-O');
+  for (const asOf of ['2026-10-02', '2027-06-01']) {
+    const req = flowExplain(flowChange(view, { unit: 'month', asOf }), 'U-O');
+    const r = explainInsight(req, { provider: pregen, exists: existsIn(view) });
+    assert.equal(r.method, 'pregen', asOf + ': 조회 키는 기준일과 무관');
+    const warn = r.sentences.filter((s) => s.text.includes('기간은 기록이 없어 판단하지 않습니다'));
+    assert.equal(warn.length, 1, asOf);
+    assert.ok(warn[0].text.includes(asOf === '2027-06-01' ? '15개 기간' : '7개 기간'), warn[0].text);
+  }
+});
