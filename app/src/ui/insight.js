@@ -85,7 +85,7 @@ function similarView(o, view) {
   pick.addEventListener('change', () => { if (o.onWork) o.onWork(pick.value); run(); });
   run();
   return el('div', {},
-    el('p', { class: 'muted small' }, '고른 업무와 같은 주제·산출물 유형·낱말을 가진 다른 업무를 수행한 사람입니다. 현재 담당자는 뺍니다. 점수는 겹친 수(주제 3, 산출물 유형 2, 이름 낱말 1)를 더한 것으로, 높을수록 비슷합니다.'),
+    el('p', { class: 'muted small' }, '고른 업무와 같은 주제·산출물 유형·낱말을 가진 다른 업무를 수행한 사람입니다. 현재 담당자는 뺍니다. 주제나 산출물 유형이 하나는 겹쳐야 후보가 됩니다. 점수는 겹친 수(주제 3, 산출물 유형 2, 이름 낱말 1)를 더한 것으로, 높을수록 비슷합니다.'),
     el('label', { class: 'field' }, el('span', {}, '업무'), pick),
     out);
 }

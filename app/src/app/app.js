@@ -7,6 +7,9 @@ import { CODES, DRAFT_TARGET_TYPES, SUBTYPE_HANDOVER_DOC, TEXT_MAX, normalizeLab
 import { validateDocument } from '../model/validate.js';
 import { subtypeRegistered } from '../model/checks.js';
 import { buildView, refGid, toGid } from '../view/view.js';
+
+// 확정한 인수인계서에 남기는 초안 생성 방식의 표시 이름(llm/connector.js METHOD_LABELS의 짧은 꼴)
+const METHOD_NAMES = { rule: '규칙 기반', pregen: '사전 생성', llm: 'LLM' };
 import { scopeWorks } from '../rules/handover.js';
 import { mergePlan } from '../merge/merge.js';
 import { previewImport } from '../model/import.js';
@@ -347,7 +350,7 @@ export function createApp({ store, samples, currentId, now }) {
         const name = (gid) => (v.getNode(gid) || { label: gid }).label;
         const art = step(addNode(d, {
           core_type: 'artifact', subtype: SUBTYPE_HANDOVER_DOC, label, description: body.slice(0, TEXT_MAX),
-          attrs: { 확정자: '사용자(이 브라우저)', '확정 시각': ctx.now, '보내는 사람': name(draft.from), '받는 사람': name(draft.to), ...(draft.method ? { '초안 생성 방식': draft.method } : {}), ...extra },
+          attrs: { 확정자: '사용자(이 브라우저)', '확정 시각': ctx.now, '보내는 사람': name(draft.from), '받는 사람': name(draft.to), ...(draft.method ? { '초안 생성 방식': METHOD_NAMES[draft.method] || draft.method } : {}), ...extra },
         }, ctx)).node;
         let linked = false;
         for (const w of works) {
