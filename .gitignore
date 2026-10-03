@@ -14,3 +14,4 @@ secrets/
 
 # 브라우저 점검 도구 임시 프로필
 .tmp/
+.claude/worktrees/
