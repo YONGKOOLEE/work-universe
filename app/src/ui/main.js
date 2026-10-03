@@ -210,8 +210,12 @@ function start() {
       return box;
     }
     if (node.core_type === 'root') return null;
-    const exp = exposureOf(view, gid);
     const { universe_id: uid, local_id: lid } = parseGid(gid);
+    const own = uid === app.doc.universe.id;
+    // 이 유니버스를 묶은 상위 유니버스가 없으면 "드러내기"는 뜻이 없으므로 보이지 않는다(검토5 U-4)
+    const parents = own ? app.parentsOf(uid) : [];
+    if (own && parents.length === 0) return null;
+    const exp = exposureOf(view, gid);
     const cb = el('input', { type: 'checkbox', checked: exp.exposed, disabled: app.readOnly, 'data-testid': 'exposed' });
     cb.addEventListener('change', () => {
       const r = app.updateNode(uid, lid, { exposed: cb.checked });
@@ -219,12 +223,14 @@ function start() {
       refresh();
     });
     // 다른 유니버스의 노드면 바꾼 값이 그 노드의 원래 유니버스에 저장된다(CR-4, D2-4 가)
-    const owner = uid !== app.doc.universe.id ? (app.universes().find((u) => u.id === uid) || { name: uid }).name : null;
-    box.append(
-      el('label', { class: 'check' }, cb, ' 위층(상위 유니버스)에 드러내기'),
-      el('div', { class: 'muted small' }, `${exp.explicit ? '직접 지정' : '기본 규칙'}: ${exp.reason}`),
+    const owner = own ? null : (view.universes.get(uid) || { name: uid }).name;
+    const where = own ? `「${parents.map((p) => p.name).join('」·「')}」` : '상위 유니버스';
+    // el()은 null 자식을 걸러 내므로 box.append(…, null)처럼 "null" 글자가 들어가지 않는다(검토5 U-1)
+    box.append(el('div', {},
+      el('label', { class: 'check' }, cb, ` ${where} 화면에서도 이 노드 보이기`),
+      el('div', { class: 'muted small' }, `지금 적용: ${exp.explicit ? '직접 지정' : '기본 규칙'}(${exp.reason})`),
       owner ? el('div', { class: 'muted small', 'data-testid': 'exposed-owner' }, `바꾸면 원본 유니버스 「${owner}」에 저장됩니다.`) : null,
-    );
+    ));
     return box;
   }
 
@@ -320,20 +326,19 @@ function start() {
       el('button', { type: 'button', class: 'link', 'data-testid': 'btn-merge', onclick: () => { merging = true; insight = null; drafting = null; editing = null; settingsOpen = false; renderPanel(); } }, '통합 확인 목록'));
   }
 
+  // 어느 노드를 골랐든 전체 인사이트로 갈 수 있게(검토5 U-2: 시작 화면 3단계가 노드 선택 상태에서 끊기지 않도록)
+  const insightAllButton = () => el('button', { type: 'button', 'data-testid': 'btn-insight', onclick: () => openInsight('', 'repeat') }, '인사이트 보기');
+
   function toolbar(gid) {
     const node = view.getNode(gid);
     if (!node || node.hidden) return null;
     if (!isOwn(gid)) {
-      const draft = draftButton(gid);
-      const sim = insightButton(gid);
-      return el('div', {}, draft || sim ? el('div', { class: 'row toolbar' }, draft, sim) : null,
+      return el('div', {}, el('div', { class: 'row toolbar' }, draftButton(gid), insightButton(gid), insightAllButton()),
         el('p', { class: 'muted small' }, '다른 유니버스의 노드입니다. 고치려면 ',
           el('button', { type: 'button', class: 'link', onclick: () => openUniverse(node.universe_id) }, `「${node.universe_name}」 열기`), '.'));
     }
     if (app.readOnly) {
-      const draft = draftButton(gid);
-      const sim = insightButton(gid);
-      return draft || sim ? el('div', { class: 'row toolbar' }, draft, sim) : null;
+      return el('div', { class: 'row toolbar' }, draftButton(gid), insightButton(gid), insightAllButton());
     }
     const btn = (label, kind, testid) => el('button', { type: 'button', 'data-testid': testid, onclick: () => { editing = { kind }; renderPanel(); } }, label);
     return el('div', { class: 'row toolbar' },
@@ -343,6 +348,7 @@ function start() {
       node.core_type === 'root' ? null : el('button', { type: 'button', class: 'danger', 'data-testid': 'btn-hide', onclick: () => hideSelected(node) }, '숨기기'),
       draftButton(gid),
       insightButton(gid),
+      insightAllButton(),
     );
   }
 
@@ -481,6 +487,8 @@ function start() {
     }
     if (!selected) {
       renderUniverseSummary(panel, describeUniverse(view), display.nodes.length);
+      // 꼭지만 있으면 「노드 추가」를 펼쳐 둔다(검토5 U-5). 노드가 있으면 사용자가 접은 상태를 건드리지 않는다
+      if (view.nodes.filter((n) => n.universe_id === currentId()).length <= 1 && !app.readOnly) document.querySelector('details.add').open = true;
       const rootGid = toGid(currentId(), app.doc.universe.root_node_id);
       panel.append(...[el('div', { class: 'row' },
         el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft-universe', onclick: () => openDraft(rootGid) }, '인수인계 초안 만들기'),
@@ -581,13 +589,18 @@ function start() {
       };
       bar.replaceChildren(el('span', {}, '시간 보기'), tb.first, tb.range, tb.last, tb.when, tb.today, tb.note);
     }
+    // 이력 기간이 한 달뿐이면 끌 곳이 없으므로 막대와 양끝 달을 숨기고 글로만 알린다(검토5 U-10)
+    const single = tbMonths.length <= 1;
+    tb.range.hidden = single;
+    tb.first.hidden = single;
+    tb.last.hidden = single;
     const current = viewDate ? tbMonths.indexOf(viewDate.slice(0, 7)) : tbMonths.length - 1;
     tb.range.max = String(tbMonths.length - 1);
     const want = String(current < 0 ? tbMonths.length - 1 : current);
     if (tb.range.value !== want) tb.range.value = want;
     tb.first.textContent = tbMonths[0];
     tb.last.textContent = tbMonths[tbMonths.length - 1];
-    tb.when.textContent = viewDate ? `${viewDate} 기준` : `오늘(${today})`;
+    tb.when.textContent = viewDate ? `${viewDate} 기준` : single ? `이력 기간 1개월(${tbMonths[0]}) · 오늘(${today})` : `오늘(${today})`;
     tb.today.hidden = !viewDate;
     tb.note.hidden = !viewDate;
     bar.classList.toggle('past', !!viewDate);

@@ -84,6 +84,15 @@ test('다른 유니버스 노드의 위로 드러내기를 바꾸면 그 유니�
   assert.equal(open(storage, 'U-K1').doc.nodes.find((n) => n.id === 'N-304').exposed, true);
 });
 
+test('parentsOf(검토5 U-4): 이 유니버스를 묶은 상위 유니버스 이름. 없으면 빈 배열, 참조를 빼면 사라진다', () => {
+  const storage = memoryStorage();
+  const app = open(storage, 'U-A1');
+  assert.deepEqual(app.parentsOf('U-A1').map((u) => u.id), ['U-T1']);
+  assert.deepEqual(app.parentsOf('U-O'), []); // 조직관리는 아무도 묶지 않음
+  assert.equal(open(storage, 'U-T1').removeChild('U-A1').ok, true);
+  assert.deepEqual(open(storage, 'U-A1').parentsOf('U-A1'), []);
+});
+
 test('가상 데이터 초기화: 샘플은 처음 상태로, 사용자가 만든 유니버스는 지워진다', () => {
   const storage = memoryStorage();
   const app = open(storage);

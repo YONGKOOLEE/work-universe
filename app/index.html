@@ -169,6 +169,7 @@
   .card.recommended { border-color: var(--accent); }
   .card-head .chip { white-space: nowrap; flex: none; }
   .card-head { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+  .card-head strong { word-break: keep-all; } /* 검토5 U-11: 제목이 글자 중간에서 끊기지 않게 */
   .card p { margin: 0; }
   .card .try { font-size: 13px; color: var(--text); background: var(--panel-2); border-radius: 6px; padding: 6px 8px; }
   .card button { justify-self: start; margin-top: 4px; }
@@ -222,7 +223,7 @@
 <dialog id="create-dialog" aria-labelledby="create-title">
   <form id="create-form" novalidate>
     <h2 id="create-title">새 유니버스 만들기</h2>
-    <p class="muted small">빈 유니버스를 만듭니다. 만든 뒤 노드를 하나씩 추가해 구성합니다.</p>
+    <p class="muted small">빈 유니버스를 만듭니다. 만든 뒤 오른쪽 아래 「노드 추가」에서 업무를 하나씩 추가해 구성합니다.</p>
     <label>이름 <input id="create-name" maxlength="100" autocomplete="off" placeholder="예: 연말 교육 운영"></label>
     <label>단위 <input id="create-level" list="create-levels" value="업무" autocomplete="off"></label>
     <datalist id="create-levels"><option value="업무"><option value="팀"><option value="부서"><option value="본부"><option value="회사"></datalist>

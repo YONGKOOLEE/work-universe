@@ -102,7 +102,7 @@ function similarView(o, view) {
   pick.addEventListener('change', () => { if (o.onWork) o.onWork(pick.value); run(); });
   run();
   return el('div', {},
-    el('p', { class: 'muted small' }, '고른 업무와 같은 주제·산출물 유형·낱말을 가진 다른 업무를 수행한 사람입니다. 현재 담당자는 뺍니다.'),
+    el('p', { class: 'muted small' }, '고른 업무와 같은 주제·산출물 유형·낱말을 가진 다른 업무를 수행한 사람입니다. 현재 담당자는 뺍니다. 점수는 겹친 수(주제 3, 산출물 유형 2, 이름 낱말 1)를 더한 것으로, 높을수록 비슷합니다.'),
     el('label', { class: 'field' }, el('span', {}, '업무'), pick),
     out);
 }
@@ -273,7 +273,7 @@ function renderFlow(box, view, r, o) {
   parts.push(el('table', { class: 'dg-table flow-table', 'data-testid': 'flow-table' },
     el('thead', {}, el('tr', {},
       el('th', {}, '기간'), el('th', { title: '이 기간에 기록된 이력 전체' }, '이력'), el('th', { title: '담당 시작·종료' }, '담당'),
-      el('th', {}, '인계'), el('th', { title: '소속 변경(조직개편 등)' }, '소속'), el('th', { title: '기간 말에 담당자가 있는 업무 수' }, '업무'), el('th', { title: '기간 말에 업무를 맡은 사람 수' }, '인원'))),
+      el('th', { title: '인수인계 이력 수' }, '인수인계'), el('th', { title: '소속 변경(조직개편 등)' }, '소속'), el('th', { title: '기간 말에 담당자가 있는 업무 수' }, '업무'), el('th', { title: '기간 말에 업무를 맡은 사람 수' }, '인원'))),
     el('tbody', {}, ...r.periods.map(row))));
   if (noPerforms) parts.push(el('p', { class: 'muted small', 'data-testid': 'flow-na' }, '이 유니버스에는 업무 담당(수행) 기록이 없어 업무·인원은 세지 않습니다(—).'));
   box.replaceChildren(...parts);

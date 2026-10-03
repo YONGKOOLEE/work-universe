@@ -241,6 +241,9 @@ async function checkBrowser(browser, port) {
   const history = await text(s.cdp, '[data-testid=history]');
   check('R-14 이력이 시간순 문장으로 보임', history.includes('한가람 → 윤바다 인수인계') && history.includes('윤바다 → 서하늘 인수인계') && history.indexOf('2025-03-01') < history.indexOf('2026-09-30'), history.slice(0, 60));
   check('선택한 노드 밖은 흐리게(이웃 강조)', (await evaluate(s.cdp, "window.__wu.cy.elements('.faded').length")) > 0);
+  // 검토5 U-1: 자기 유니버스 노드를 고른 상세 패널(드러내기 상자 포함)에 "null" 글자가 없다
+  check('노드를 고른 상세 패널에 "null" 글자 없음', (await evaluate(s.cdp, "(() => { const w = document.createTreeWalker(document.getElementById('detail'), NodeFilter.SHOW_TEXT); while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') return false; return true; })()")));
+  check('드러내기 상자는 묶은 상위 유니버스 이름을 말한다(검토5 U-4)', (await text(s.cdp, '[data-testid=layer]')).includes('「가상 결제운영팀」 화면에서도'));
   await shot(s.cdp, `${browser.name}-2-node`);
 
   // 상세 패널의 연결된 노드를 눌러 이동

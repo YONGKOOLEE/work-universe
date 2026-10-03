@@ -62,6 +62,7 @@ export function mergePanel(o) {
     el('h3', {}, `사람 확인 ${plan.persons.length}건`),
     personList,
     el('h3', {}, `업무 후보 ${plan.works.length}건`),
+    plan.works.length ? el('p', { class: 'muted small' }, '서로 다른 유니버스에서 같은 일로 보이는 업무 쌍입니다. 점수는 겹친 수(주제 3, 산출물 유형 2, 이름 낱말 1)를 더한 것으로, 높을수록 비슷합니다.') : null,
     plan.hidden_candidates ? el('p', { class: 'muted small' }, `점수가 낮은 후보 ${plan.hidden_candidates}건은 목록에서 뺐습니다.`) : null,
     workList,
     el('h3', {}, `판정 기록 ${decided.length}건`),

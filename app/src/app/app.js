@@ -147,6 +147,15 @@ export function createApp({ store, samples, currentId, now }) {
         }));
     },
 
+    /** 주어진 유니버스를 묶은(참조하는) 상위 유니버스 목록 [{id, name}]. 「위층에 드러내기」를 보일지 정할 때 쓴다(검토5 U-4) */
+    parentsOf(universeId) {
+      return db
+        .listUniverses()
+        .map((e) => db.loadUniverse(e.id))
+        .filter((d) => d && (d.refs || []).some((r) => r.child_universe_id === universeId && !r.hidden))
+        .map((d) => ({ id: d.universe.id, name: d.universe.name }));
+    },
+
     // 자료 편집(R-02, T-06): 현재 유니버스 문서만 고친다. 다른 유니버스 노드는 그 유니버스를 열어서 고친다
     addNode(input) {
       return guard() || commit(addNode(doc, input, { now: now() }));

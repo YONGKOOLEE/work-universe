@@ -175,7 +175,8 @@ function renderDraft(box, d, view, onFocus, o = {}) {
   box.replaceChildren(...[
     el('div', { class: 'draft-head' },
       el('span', { class: 'badge', 'data-testid': 'draft-status' }, '초안'),
-      el('span', { class: 'method', 'data-testid': 'draft-method' }, `생성 방식: ${METHOD_LABELS[d.method]}`),
+      // 머리줄이 좁아 괄호 설명은 title로 옮긴다(검토5 U-12). 긴 이름은 머리글 「생성 방식」 설정과 실행 안내에 있다
+      el('span', { class: 'method', 'data-testid': 'draft-method', title: METHOD_LABELS[d.method] }, `생성 방식: ${METHOD_LABELS[d.method].replace(/\(.*\)$/, '')}`),
       copyBtn),
     el('h3', { class: 'draft-title' }, d.title),
     d.fallback ? el('p', { class: 'notice', 'data-testid': 'draft-fallback' }, `규칙 기반으로 대체함: ${d.fallback.reason}`) : null,
