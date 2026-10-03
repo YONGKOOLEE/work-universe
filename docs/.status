@@ -238,7 +238,7 @@ implementation:
       date: 2026-10-02
       result: docs/review-2026-10-02.md 6절, docs/tech-record.md 24절. 단위 테스트 209개, Chrome·Edge file:// 점검 통과
     - id: T-09
-      status: 구현·검증 완료, 커밋 001b558. 사용자 확인 표현은 기록 없음(확인 요청 중)
+      status: 구현·검증 완료, 커밋 001b558. 사용자 확인됨(2026-10-03 일괄 확인, decisions-pending 2절)
       date: 2026-10-01
       normal_checks: 통과 (새 유니버스 생성·노드 추가·꼭지 연결, 하위 유형 새로 추가하며 노드 생성)
       error_checks: 통과 (이름·단위·작성 주체 누락 거부(R-12 ②), 새 하위 유형 이름 비움 거부, 저장소 차단 시 만들 수 없음)
@@ -268,4 +268,3 @@ implementation:
       change: T-01 실측 결과와 라이브러리·빌드 확정 반영 (결정 변경 없음, 결과 기록)
       user_expression: "반영"
       date: 2026-09-30
-  next_task: (2026-10-02, 연속 진행) T-15 일부(실행 안내 1쪽·제출 패키징·제출 점검 자동화) → 전체 검토. 확인·결정은 docs/decisions-pending.md에 모아 끝에. 이어서 T-11 흐름 변화·시간 슬라이더(범위 축소 순서 앞쪽이라 마지막). 키 검색 도구(T-15 일부)는 check:secrets로 완료. 조력자 의견 전에는 T-10·T-13·T-17 보류
