@@ -5,8 +5,10 @@ import {
 } from '../model/commands.js';
 import { normalizeLabel } from '../model/schema.js';
 import { validateDocument } from '../model/validate.js';
-import { CODES } from '../model/schema.js';
-import { buildView } from '../view/view.js';
+import { CODES, TEXT_MAX } from '../model/schema.js';
+import { subtypeRegistered } from '../model/checks.js';
+import { buildView, toGid } from '../view/view.js';
+import { scopeWorks } from '../rules/handover.js';
 import { mergePlan } from '../merge/merge.js';
 import { previewImport } from '../model/import.js';
 
@@ -268,6 +270,78 @@ export function createApp({ store, samples, currentId, now }) {
       if (failed) return failed;
       if (copy.universe.id === doc.universe.id) doc = copy;
       return { ok: true, doc: copy };
+    },
+
+    /**
+     * 인수인계 초안 확정(R-03 ③, CR-8 사용자 결정 2026-10-03 "추천하는 걸로 구현").
+     * 초안 대상의 유니버스에 ① 인수인계서(산출물, 확정자·시각·본문) ② 업무 → 인수인계서 산출 연결 ③ 인수인계 이력을 남긴다.
+     * 인수인계할 업무: 대상이 업무면 그 업무, 꼭지면 범위 업무 중 보내는 사람이 맡았던(수행 연결) 업무.
+     * 이전 인수인계가 있으면 바로 앞 것을 가리킨다(반복 비효율 ①의 "이어받음", D2-6).
+     * @param {{draft:{target:string, from:string, to:string, title:string, method?:string}, text:string, date:string}} input
+     * @returns {{ok:true, doc:object, artifact:string, works:string[]} | {ok:false, error:object}}
+     */
+    confirmHandover({ draft, text, date }) {
+      if (guard()) return guard();
+      const v = buildView(doc, resolve);
+      const target = draft && v.getNode(draft.target);
+      if (!target || !['root', 'work'].includes(target.core_type)) return { ok: false, error: { code: CODES.SCHEMA, field: 'target' } };
+      const uid = target.universe_id;
+      let d = uid === doc.universe.id ? doc : db.loadUniverse(uid);
+      if (!d) return { ok: false, error: { code: CODES.SCHEMA, field: 'universe_id' } };
+      const local = (gid) => (gid.startsWith(`${uid}/`) ? gid.slice(uid.length + 1) : gid); // 다른 유니버스는 전역 참조 그대로
+      const canon = (ev, id) => v.canonical(id.includes('/') ? id : `${ev.universe_id}/${id}`);
+      const performed = (w) => v.edges.some((e) => !e.hidden && e.core_type === 'performs' && e.target === w && e.source === draft.from);
+      const works = target.core_type === 'work' ? [target.gid] : scopeWorks(v, target.gid).map((g) => v.canonical(g)).filter(performed);
+      if (!works.length) return { ok: false, error: { code: 'E-CONFIRM', reason: 'no_work' } };
+      const handovers = v.events.filter((ev) => ev.type === 'handover');
+      const dup = handovers.some((ev) => ev.occurred_at === date && works.includes(canon(ev, ev.payload.work_id)) &&
+        canon(ev, ev.payload.from_person_id) === draft.from && canon(ev, ev.payload.to_person_id) === draft.to);
+      if (dup) return { ok: false, error: { code: 'E-CONFIRM', reason: 'duplicate' } };
+
+      const ctx = { now: now() };
+      const step = (r) => {
+        if (!r.ok) throw Object.assign(new Error('confirm'), { result: r });
+        d = r.doc;
+        return r;
+      };
+      try {
+        if (!subtypeRegistered(d, 'artifact', '인수인계서')) step(addSubtype(d, { core_type: 'artifact', name: '인수인계서' }));
+        // 본문: 설명(2000자)에 넣고, 넘치면 "본문(이어서 N)" 속성으로 나눠 잃지 않게 한다
+        const body = String(text || '');
+        const extra = {};
+        for (let i = TEXT_MAX, k = 1; i < body.length; i += TEXT_MAX, k += 1) extra[`본문(이어서 ${k})`] = body.slice(i, i + TEXT_MAX);
+        const base = `${date} ${target.label} 인수인계서`.slice(0, 90);
+        const taken = new Set(d.nodes.filter((n) => n.core_type === 'artifact' && !n.hidden).map((n) => n.label));
+        let label = base;
+        for (let k = 2; taken.has(label); k += 1) label = `${base} (${k})`;
+        const name = (gid) => (v.getNode(gid) || { label: gid }).label;
+        const art = step(addNode(d, {
+          core_type: 'artifact', subtype: '인수인계서', label, description: body.slice(0, TEXT_MAX),
+          attrs: { 확정자: '사용자(이 브라우저)', '확정 시각': ctx.now, '보내는 사람': name(draft.from), '받는 사람': name(draft.to), ...(draft.method ? { '초안 생성 방식': draft.method } : {}), ...extra },
+        }, ctx)).node;
+        let linked = false;
+        for (const w of works) {
+          if (w.startsWith(`${uid}/`)) {
+            step(addEdge(d, { source: local(w), target: art.id, core_type: 'produces', note: '인수인계 초안 확정' }, ctx));
+            linked = true;
+          }
+          // 바로 앞 인수인계(이 업무의 마지막 인수인계)를 가리킨다
+          const prev = handovers.filter((ev) => canon(ev, ev.payload.work_id) === w).pop();
+          step(addEvent(d, {
+            type: 'handover', occurred_at: date,
+            payload: { work_id: local(w), from_person_id: local(draft.from), to_person_id: local(draft.to), artifact_id: art.id, ...(prev ? { previous_handover_id: local(prev.gid) } : {}) },
+            note: '인수인계 초안을 확정함(확정: 사용자(이 브라우저))',
+          }, ctx));
+        }
+        if (!linked) step(addEdge(d, { source: d.universe.root_node_id, target: art.id, core_type: 'contains' }, ctx));
+        const failed = save(d);
+        if (failed) return failed;
+        if (uid === doc.universe.id) doc = d;
+        return { ok: true, doc: d, artifact: toGid(uid, art.id), works };
+      } catch (err) {
+        if (err.result) return err.result;
+        throw err;
+      }
     },
 
     /** 내보내기(D-06): 현재 유니버스 문서를 JSON 글로. 다른 PC로 옮기거나 백업할 때 쓴다 */

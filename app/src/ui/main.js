@@ -469,7 +469,14 @@ function start() {
       return;
     }
     if (drafting) {
-      panel.replaceChildren(draftPanel({ view, provider, target: drafting.target, asOf: todayLocal(), viewDate, onFocus: showInGraph, onClose: () => { drafting = null; renderPanel(); graph.highlight(selected); } }));
+      panel.replaceChildren(draftPanel({ view, provider, target: drafting.target, asOf: todayLocal(), viewDate, readOnly: app.readOnly, onFocus: showInGraph, onClose: () => { drafting = null; renderPanel(); graph.highlight(selected); },
+        // 확정(R-03 ③, CR-8): 저장되면 초안 화면을 닫고 새 인수인계서를 연다
+        onConfirm: (input) => {
+          const r = app.confirmHandover(input);
+          if (!r.ok) return r;
+          drafting = null;
+          return afterSave(r, r.artifact);
+        } }));
       return;
     }
     if (!selected) {

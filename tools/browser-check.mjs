@@ -981,6 +981,39 @@ async function checkBrowser(browser, port) {
   await sleep(600);
   await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
   check('NFR 복구: 가상 데이터 초기화 → 샘플이 처음 상태(추가 노드 없음, 수정 되돌림, 쓰기 가능)', (await nodeCount(s.cdp)) === NODES && !(await hasLabel(s.cdp, newLabel)) && !(await evaluate(s.cdp, "window.__wu.readOnly")) && !(await evaluate(s.cdp, "(window.__wu.doc.nodes.find((n) => n.id === 'N-001').description || '').includes('(수정)')")));
+  // ── R-03 ③ 초안 확정(CR-8): 초기화한 깨끗한 월말 정산에서 확정 → 인수인계서·이력 → 다음 초안의 이전 인수인계 근거 ──
+  await evaluate(s.cdp, "window.confirm = () => true; window.__wu.select(null)");
+  await clickTestId(s.cdp, 'btn-draft-universe');
+  await sleep(150);
+  const makeDraft = (target, from, to) => evaluate(s.cdp, `(() => {
+    const set = (id, v) => { const e = document.querySelector('[data-testid=' + id + ']'); e.value = v; e.dispatchEvent(new Event('change')); };
+    set('draft-target', '${target}'); set('draft-from', '${from}'); set('draft-to', '${to}');
+    document.querySelector('[data-testid=draft-form] button[type=submit]').click();
+  })()`);
+  await makeDraft('U-A1/N-001', 'U-A1/N-012', 'U-A1/N-011');
+  await sleep(250);
+  check('R-03 ③ 초안 아래에 「확정해 인수인계서로 저장」이 보임(크기 있음)', await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=draft-confirm]'); if (!b) return false; const r = b.getBoundingClientRect(); return r.width > 0 && r.height > 0 && !b.disabled; })()"));
+  await shot(s.cdp, `${browser.name}-12a-confirm-box`);
+  await clickTestId(s.cdp, 'draft-confirm');
+  await sleep(400);
+  const confirmedDetail = await text(s.cdp, '#detail');
+  check('R-03 ③ 확정 → 새 인수인계서가 열리고 확정자·확정 시각·보내는/받는 사람이 보임', (await text(s.cdp, '#detail h2')).includes('대사 확인 인수인계서') && confirmedDetail.includes('사용자(이 브라우저)') && confirmedDetail.includes('확정 시각') && confirmedDetail.includes('서하늘') && confirmedDetail.includes('윤바다'), confirmedDetail.slice(0, 120));
+  check('R-03 ③ 확정 → 인수인계 이력이 바로 앞 인수인계를 가리킴(이어받음)', await evaluate(s.cdp, "(() => { const ev = window.__wu.doc.events.filter((e) => e.type === 'handover').pop(); return ev.payload.work_id === 'N-001' && ev.payload.from_person_id === 'N-012' && ev.payload.to_person_id === 'N-011' && ev.payload.previous_handover_id === 'E-007' && !!ev.payload.artifact_id; })()"));
+  await shot(s.cdp, `${browser.name}-12b-confirmed`);
+  // 같은 날 같은 확정은 다시 하지 않는다
+  await evaluate(s.cdp, "window.__wu.select(null)");
+  await clickTestId(s.cdp, 'btn-draft-universe');
+  await sleep(150);
+  await makeDraft('U-A1/N-001', 'U-A1/N-012', 'U-A1/N-011');
+  await sleep(250);
+  await clickTestId(s.cdp, 'draft-confirm');
+  await sleep(250);
+  check('오류: 같은 날 같은 인수인계를 두 번 확정하면 막고 이유 표시', (await text(s.cdp, '[data-testid=confirm-message]')).includes('이미 확정했습니다'));
+  // 다음 초안(윤바다 → 한가람)의 이전 인수인계에 확정한 인수인계서가 근거로
+  await makeDraft('U-A1/N-001', 'U-A1/N-011', 'U-A1/N-010');
+  await sleep(250);
+  const prevItem = await text(s.cdp, '[data-testid=draft-item-이전_인수인계]');
+  check('확정한 인수인계가 다음 초안의 「이전 인수인계」에 인수인계서 근거와 함께 나옴', prevItem.includes('서하늘 → 윤바다') && prevItem.includes('대사 확인 인수인계서'), prevItem.slice(0, 160));
   const errors2 = [...s.log.errors];
   const external2 = [...s.log.external];
   s.cdp.close();

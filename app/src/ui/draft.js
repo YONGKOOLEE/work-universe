@@ -35,20 +35,21 @@ export function scopeHint(view, targetGid, reason) {
   return reason;
 }
 
-// 초안을 글로 옮긴다(복사용)
-function draftText(d) {
-  const lines = [`[초안] ${d.title}`, `생성 방식: ${METHOD_LABELS[d.method]}`, ''];
+// 초안을 글로 옮긴다(복사용). confirmed면 확정본 머리·끝 문장
+function draftText(d, confirmed = false) {
+  const lines = [`[${confirmed ? '확정' : '초안'}] ${d.title}`, `생성 방식: ${METHOD_LABELS[d.method]}`, ''];
   for (const i of d.items) {
     lines.push(`■ ${i.title}`);
     if (i.insufficient) lines.push(i.empty_reason ? `  - 해당 없음: ${i.empty_reason}` : '  - 이력 부족');
     for (const s of i.sentences) lines.push(`  - ${s.text}`);
   }
-  lines.push('', '※ 축적된 이력으로 만든 초안입니다. 담당자가 확인하고 확정하세요.');
+  lines.push('', confirmed ? '※ 축적된 이력으로 만든 초안을 담당자가 확인하고 확정한 인수인계서입니다.' : '※ 축적된 이력으로 만든 초안입니다. 담당자가 확인하고 확정하세요.');
   return lines.join('\n');
 }
 
 /**
- * @param {{view:object, target?:string, provider?:object, onFocus:(gid)=>void, onClose:()=>void}} o
+ * @param {{view:object, target?:string, provider?:object, onFocus:(gid)=>void, onClose:()=>void, onConfirm?:(input:object)=>object, readOnly?:boolean}} o
+ *   onConfirm: 확정(R-03 ③, CR-8). {draft, text, date}를 받아 저장하고 결과({ok, error})를 돌려준다
  */
 export function draftPanel(o) {
   const { view } = o;
@@ -108,7 +109,7 @@ export function draftPanel(o) {
       return;
     }
     const exists = (gid) => view.lookup(gid).found || view.events.some((e) => e.gid === gid);
-    renderDraft(result, refineDraft(r.draft, { provider: o.provider, exists }), view, o.onFocus);
+    renderDraft(result, refineDraft(r.draft, { provider: o.provider, exists }), view, o.onFocus, o);
   });
 
   return el('div', { class: 'draft' }, el('h2', {}, '인수인계 초안'),
@@ -129,7 +130,36 @@ function evidenceChip(view, gid, onFocus) {
   return el('button', { type: 'button', class: 'evidence', title: `근거: ${gid}`, onclick: () => first && onFocus(first) }, label);
 }
 
-function renderDraft(box, d, view, onFocus) {
+function confirmError(err) {
+  if (err.reason === 'no_work') return '보내는 사람이 맡았던(수행 연결) 업무가 이 범위에 없어 인수인계 이력을 남길 수 없습니다. 업무 하나를 대상으로 초안을 만들어 확정하세요.';
+  if (err.reason === 'duplicate') return '같은 날 같은 사람 사이의 인수인계를 이미 확정했습니다. 다시 확정하지 않았습니다.';
+  return messageFor(err);
+}
+
+// 확정 영역: 사람이 내용을 확인한 뒤 누른다. 확정하면 인수인계서와 인수인계 이력이 저장된다(R-03 ③, CR-8)
+function confirmBox(d, view, o) {
+  if (!o.onConfirm) return null;
+  const date = o.asOf || todayLocal();
+  const t = view.getNode(d.target);
+  const where = t ? t.universe_name : '';
+  const msg = el('p', { class: 'form-message', 'data-testid': 'confirm-message', 'aria-live': 'polite' });
+  const btn = el('button', { type: 'button', class: 'primary', 'data-testid': 'draft-confirm', disabled: !!o.readOnly }, '확정해 인수인계서로 저장');
+  btn.addEventListener('click', () => {
+    if (!window.confirm(`이 초안을 확정합니다.\n「${where}」에 인수인계서(산출물)와 ${date} 인수인계 이력이 저장됩니다. 저장한 뒤에는 이력으로 남습니다(숨기기만 가능).`)) return;
+    const r = o.onConfirm({ draft: d, text: draftText(d, true), date });
+    if (r && !r.ok) {
+      msg.className = 'form-message error';
+      msg.dataset.code = r.error.code;
+      msg.textContent = confirmError(r.error);
+    }
+  });
+  return el('div', { class: 'confirm-box', 'data-testid': 'confirm-box' },
+    el('p', { class: 'muted small' }, `내용을 확인했으면 확정하세요. 「${where}」에 인수인계서와 인수인계 이력(${date})이 남고, 다음 인수인계 초안의 「이전 인수인계」 근거가 됩니다.`),
+    o.readOnly ? el('p', { class: 'muted small' }, '읽기 전용이라 확정할 수 없습니다.') : null,
+    btn, msg);
+}
+
+function renderDraft(box, d, view, onFocus, o = {}) {
   const copyBtn = el('button', { type: 'button', class: 'small-btn', 'data-testid': 'draft-copy' }, '글로 복사');
   copyBtn.addEventListener('click', async () => {
     const text = draftText(d);
@@ -161,5 +191,6 @@ function renderDraft(box, d, view, onFocus) {
       ),
     ),
     el('p', { class: 'muted small' }, '축적된 이력으로 만든 초안입니다. 근거를 눌러 확인하고, 담당자가 검토해 확정하세요.'),
+    confirmBox(d, view, o),
   ].filter(Boolean));
 }
