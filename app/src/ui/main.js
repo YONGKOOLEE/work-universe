@@ -476,9 +476,10 @@ function start() {
       return;
     }
     if (!selected) {
-      renderUniverseSummary(panel, describeUniverse(view), display.nodes.length);
-      // 꼭지만 있으면 「노드 추가」를 펼쳐 둔다(검토5 U-5). 노드가 있으면 사용자가 접은 상태를 건드리지 않는다
-      if (view.nodes.filter((n) => n.universe_id === currentId()).length <= 1 && !app.readOnly) document.querySelector('details.add').open = true;
+      const summary = describeUniverse(view);
+      renderUniverseSummary(panel, summary, display.nodes.length);
+      // 꼭지만 있으면 「노드 추가」를 펼쳐 둔다(검토5 U-5). 안내 문구(detail.js)와 같은 기준: 하위 유니버스를 묶은 화면은 노드가 있으므로 건드리지 않는다
+      if (summary.node_total <= 1 && !app.readOnly) document.querySelector('details.add').open = true;
       const rootGid = app.rootGid();
       panel.append(...[el('div', { class: 'row' },
         el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft-universe', onclick: () => openDraft(rootGid) }, '인수인계 초안 만들기'),

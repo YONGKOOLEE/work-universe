@@ -406,6 +406,7 @@ async function checkBrowser(browser, port) {
   await evaluate(s.cdp, "location.hash = 'U-T1'; location.reload()").catch(() => {});
   await sleep(500);
   const teamReady = await waitFor(s.cdp, "window.__wu && window.__wu.doc.universe.id === 'U-T1' && window.__wu.cy.nodes().length > 0", 8000);
+  check('묶은 유니버스(팀)에서는 「노드 추가」를 강제로 펼치지 않는다(최종 검토)', await evaluate(s.cdp, "(() => { const d = document.querySelector('details.add'); d.open = false; window.__wu.select(null); return d.open === false; })()"));
   check('팀 유니버스: 접힌 상태로 19개 노드(꼭지·담당자·최상위 업무·공유 주제)', teamReady && (await nodeCount(s.cdp)) === 19);
   if (teamReady) {
   await shot(s.cdp, `${browser.name}-4-team`);
