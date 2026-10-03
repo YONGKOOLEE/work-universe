@@ -157,7 +157,7 @@ export function buildHandoverDraft(view, input) {
   const memoSentence = (ev) => {
     const t = canonTarget(ev);
     const outside = t && !related.has(t) && view.getNode(t);
-    return sentence(`${ev.occurred_at} ${ev.note || '메모'}${outside ? `(「${outside.label}」 메모)` : ''}`, [ev.gid]);
+    return sentence(`${ev.occurred_at} ${ev.note || '메모'}${outside ? `(「${displayName(outside)}」 메모)` : ''}`, [ev.gid]);
   };
   const ofCategory = (cat) => memos.filter((ev) => memoCategoryOf(ev.payload) === cat);
 
@@ -247,5 +247,7 @@ export function buildHandoverDraft(view, input) {
   };
 }
 
-/** 항목의 근거 ID 합집합(정답 표 비교·근거 ID 검증용). 구현은 llm/providers.js 한 벌만 둔다(검토5 C-6) */
-export { itemEvidence } from '../llm/providers.js';
+/** 항목의 근거 ID 합집합(정답 표 비교·근거 ID 검증용). 구현은 여기 한 벌이고 llm/providers.js가 가져다 쓴다(검토5 C-6, 12.7 의존 방향) */
+export function itemEvidence(item) {
+  return [...new Set(item.sentences.flatMap((s) => s.evidence_ids))].sort();
+}

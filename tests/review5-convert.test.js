@@ -104,3 +104,59 @@ test('D3-33: 하는 일 항목이 업무 이름과 같을 때만 담당으로 �
   assert.deepEqual(perf.map((e) => `${e.source}>${e.target}`), [`${op}>${byLabel(doc, '승인').id}`, `${op}>${byLabel(doc, '승인취소').id}`]);
   assert.ok(report.notes.some((n) => n.code === 'C-PERFORMS-GUESS' && n.count === 2));
 });
+
+// ── 재검증(같은 날, 수정분의 회귀 확인)에서 나온 사례 ──
+const doc1 = (lines) => conv(['# 가상 시험 업무', '- 작성 주체: 가상시험팀', ...lines, ''].join('\n'));
+
+test('재검증 1: 「장비 범위」·「준비 범위」는 범위(업무)이고, 「수수료 제외 기준」·「대상 외부 기관 연계」는 주제다(범위 제외 오탐 없음)', () => {
+  for (const title of ['장비 범위', '준비 범위']) {
+    const { doc, report } = doc1(['## ' + title, '- 서버 점검', '- 망 점검']);
+    assert.deepEqual(works(doc), ['서버 점검', '망 점검'], title);
+    assert.ok(!report.notes.some((n) => n.code === 'C-NO-SCOPE'), title);
+  }
+  for (const title of ['수수료 제외 기준', '대상 외부 기관 연계', '예외 처리']) {
+    const { doc, report } = doc1(['## 범위', '- 정산', '## ' + title, '- 10만원 미만은 다루지 않는다']);
+    assert.ok(doc.nodes.some((n) => n.core_type === 'topic' && n.label === title), title);
+    assert.ok(!report.sections.some((s) => s.kind === 'scope_out'), title);
+  }
+  for (const title of ['범위 외', '범위 제외', '제외 사항', '제외 대상 업무', '비범위', '적용 대상 외', '제외']) {
+    const { doc, report } = doc1(['## 범위', '- 정산', '## ' + title, '- 외화 송금']);
+    assert.deepEqual(works(doc), ['정산'], title);
+    assert.equal(report.sections.filter((s) => s.kind === 'scope_out').length, 1, title);
+  }
+});
+
+test('재검증 2: 3칸 이상 역할 표에서도 「하는 일」 칸으로 담당을 잇고, 괄호·끝 구두점은 떼고 비교한다', () => {
+  const { doc } = doc1([
+    '## 범위', '- 입고 접수', '- 검수', '- 승인',
+    '## 이해관계자', '| 역할 | 하는 일 | 연락처 |', '|---|---|---|',
+    '| 운영 담당 | 입고 접수 | 내선 1234(가상) |', '| 품질 담당 | 검수. | 내선 1235(가상) |', '| 팀장 | 승인(1차), 결과 승인 | 내선 1200(가상) |',
+  ]);
+  const label = (id) => doc.nodes.find((n) => n.id === id).label;
+  assert.deepEqual(doc.edges.filter((e) => e.core_type === 'performs').map((e) => label(e.source) + '→' + label(e.target)), ['운영 담당→입고 접수', '품질 담당→검수', '팀장→승인']);
+  // 소속 칸이 앞에 있는 표
+  const b = doc1(['## 범위', '- 입고 접수', '## 이해관계자', '| 소속 | 역할 | 하는 일 |', '|---|---|---|', '| 가상물류팀 | 운영 담당 | 입고 접수 |']).doc;
+  assert.equal(b.edges.filter((e) => e.core_type === 'performs').length, 1);
+});
+
+test('재검증 3: 버전·금액·전화번호·없는 날짜는 날짜로 읽지 않는다', () => {
+  for (const t of ['v2026.1.2', '2026.5.12만원', '전화 02-2026-1-23', '12026-09-15', '2026-9-150', '2026.2.31', '26.09.15', '2026-09', '1.2.3', '20260915']) {
+    assert.equal(findDate(t), null, t);
+  }
+  assert.equal(findDate('2025.12 ~ 2026.1.15'), '2026-01-15');
+  assert.equal(findDate('작성 2026년 10월 3일(토)'), '2026-10-03');
+  assert.equal(findDate('없는 날 2026.2.31, 실제 작성일 2026.3.2'), '2026-03-02');
+  // 제목에 버전 번호가 있어도 메모 날짜는 변환한 날 + 알림
+  const { doc, report } = conv(['# 가상 시험 업무 v2026.1.2', '- 작성 주체: 가상시험팀', '## 범위', '- 정산', '## 미확정 질문', '- 한도는?', ''].join('\n'));
+  assert.ok(report.notes.some((n) => n.code === 'C-DATE-ASSUMED'));
+  assert.equal(doc.events.find((e) => e.type === 'memo').occurred_at, '2026-10-03');
+  assert.equal(validateDocument(withOwner(doc)).ok, true);
+});
+
+test('재검증 5: 이름 칸이 빈 행은 건너뛰고 알리며(구분 값이 업무가 되지 않음), 번호 칸은 설명에 넣지 않는다', () => {
+  const { doc, report } = doc1(['## 범위', '| 구분 | 업무 | 설명 |', '|---|---|---|', '| 일일 | 입고 접수 | 받는다 |', '| 일일 |  | 이름 없는 행 |']);
+  assert.deepEqual(works(doc), ['입고 접수']);
+  assert.ok(report.notes.some((n) => n.code === 'C-ROW-NO-NAME' && n.row === 2));
+  const b = doc1(['## 범위', '| 번호 | 업무명 | 담당 |', '|---|---|---|', '| 1 | 입고 접수 | 운영 담당 |']).doc;
+  assert.equal(byLabel(b, '입고 접수').description, '운영 담당');
+});

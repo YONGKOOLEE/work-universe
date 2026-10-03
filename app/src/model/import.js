@@ -38,6 +38,9 @@ const markOf = (n) => (n.attrs && typeof n.attrs.상태 === 'string' ? n.attrs.�
  *   same_name:object|null(이름·단위가 같은 기존 유니버스), as_sample:boolean(내장 샘플 ID면 true)}}
  *   ok가 false면 가져오지 않는다(오류가 있거나 버전이 다름)
  */
+// 사람 이름이 이 낱말로 끝나거나 이 낱말이면 역할 이름으로 본다(실명 알림 제외)
+const ROLE_WORD = /(담당|담당자|팀|역할|팀장|부장|과장|차장|대리|사원|직원|고객|강사|수강생|관리자|책임자|운영자|사용자|승인자|결재자)$/;
+
 export function previewImport(doc, { existing = [], resolve = null, sampleIds = [] } = {}) {
   const checked = validateDocument(doc);
   // 다른 유니버스를 거쳐 자기에게 돌아오는 참조(순환)는 저장 때처럼 거부한다(E-CYCLE, 검토 2026-10-03)
@@ -84,9 +87,10 @@ export function previewImport(doc, { existing = [], resolve = null, sampleIds = 
   // 가상 데이터 원칙(R-06, 검토5 V-9): 실명·실제 사번처럼 보이는 값은 막지 않고 알린다.
   // 사람 이름이 한글 2~4자뿐이고 역할 낱말(담당·팀·역할·장)이 없으면 실명일 수 있다. 숫자 6자리 이상은 사번·번호일 수 있다
   // 문서 변환 결과(원문 근거가 있는 문서)만 본다. 내장 샘플의 가상 이름(윤바다 등)을 내보낸 JSON은 대상이 아니다
-  const realNameLike = source ? nodes.filter((n) => n.core_type === 'person' && /^[가-힣]{2,4}$/.test(String(n.label || '').trim()) && !/(담당|팀|역할|장|자)$/.test(n.label)) : [];
+  const realNameLike = source ? nodes.filter((n) => n.core_type === 'person' && /^[가-힣]{2,4}$/.test(String(n.label || '').trim()) && !ROLE_WORD.test(String(n.label).trim())) : [];
   if (realNameLike.length) warnings.push({ code: CODES.REAL_NAME_LIKE, count: realNameLike.length, labels: realNameLike.slice(0, 5).map((n) => n.label) });
-  const numberLike = nodes.filter((n) => [n.description, ...Object.values(n.attrs || {})].some((v) => /(?<!\d)\d{6,}(?!\d)/.test(String(v || ''))));
+  // 설명·속성·이름·사번 칸의 6자리 이상 숫자(가상 사번 V-####는 해당 없음). 금액·날짜 숫자도 걸릴 수 있다(알림일 뿐 막지 않는다)
+  const numberLike = nodes.filter((n) => [n.label, n.emp_no, n.description, ...Object.values(n.attrs || {})].some((v) => /(?<!\d)\d{6,}(?!\d)/.test(String(v || ''))));
   if (numberLike.length) warnings.push({ code: CODES.EMPNO_LIKE, count: numberLike.length, ids: numberLike.map((n) => n.id) });
   return {
     ...base,

@@ -260,14 +260,20 @@ export function repeatInefficiency(view, { asOf = null } = {}) {
     t.works.get(work.gid).events.add(evGid);
   };
   // 포함(contains)으로 이어진 상위–하위 업무는 한 업무로 묶어 센다(D3-32 a): 하위 업무의 기록은 상위 업무로 올린다
+  // 상위가 "업무"인 포함 연결만 본다(꼭지 → 업무 연결은 묶는 근거가 아니다). 상위 업무가 여럿이면 ID순 첫째(연결 순서에 좌우되지 않게, 재검증 7)
   const parentOf = new Map();
-  for (const e of view.edges) if (live(e) && e.core_type === 'contains') parentOf.set(e.target, e.source);
+  for (const e of view.edges) {
+    if (!live(e) || e.core_type !== 'contains') continue;
+    const p = view.getNode(e.source);
+    if (!p || p.core_type !== 'work' || p.hidden) continue;
+    if (!parentOf.has(e.target) || p.gid < parentOf.get(e.target)) parentOf.set(e.target, p.gid);
+  }
   const topWork = (w) => {
     let cur = w;
     const seen = new Set([cur.gid]);
     while (parentOf.has(cur.gid)) {
       const p = view.getNode(parentOf.get(cur.gid));
-      if (!p || p.core_type !== 'work' || p.hidden || seen.has(p.gid)) break;
+      if (seen.has(p.gid)) return w; // 순환(A ⊃ B ⊃ A): 묶지 않고 원래 업무로 센다
       seen.add(p.gid);
       cur = p;
     }

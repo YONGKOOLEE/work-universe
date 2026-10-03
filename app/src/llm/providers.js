@@ -12,6 +12,8 @@ export const PROVIDERS = [
   { name: 'internal', label: '사내 LLM (P2)', help: '사용 방법이 정해지면 이 자리에 연결합니다. 지금은 규칙 기반으로 동작합니다.' },
   { name: 'fail', label: '실패 흉내(점검용)', help: 'LLM 호출이 실패한 상황을 흉내 냅니다. 규칙 기반으로 바뀌고 원인이 표시되는지 확인할 때 씁니다(R-04 ③).' },
 ];
+import { itemEvidence } from '../rules/handover.js';
+
 export const DEFAULT_PROVIDER = 'pregen';
 
 const sortedIds = (ids) => [...new Set(ids)].sort();
@@ -25,7 +27,7 @@ export function pregenKey(task, target, item, evidenceIds, people = '') {
 export const peopleKey = (from, to) => (from && to ? `${from}>${to}` : '');
 
 /** 규칙 기반 초안 항목의 근거 ID 전체 */
-export const itemEvidence = (item) => sortedIds(item.sentences.flatMap((s) => s.evidence_ids));
+export { itemEvidence };
 
 function pregenProvider(file) {
   const index = new Map();

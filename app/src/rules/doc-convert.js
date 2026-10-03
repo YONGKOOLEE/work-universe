@@ -30,7 +30,8 @@ const SECTION_KINDS = [
   ['steps', /흐름|절차|프로세스|처리 ?순서|진행 ?순서/],
   ['people', /이해관계자|관계자|역할|담당자|연락처/],
   ['cautions', /주의사항|유의사항|유의 ?점|주의 ?점/],
-  ['scope_out', /범위 ?(제외|외|밖)|제외|비 ?범위|대상 ?외/], // 「범위 외」·「제외 사항」도 범위 제외(검토5 V-3 가)
+  // 「범위 외」·「제외 사항」도 범위 제외(검토5 V-3 가). 제목 전체가 맞을 때만: 「장비 범위」·「수수료 제외 기준」·「대상 외부 기관 연계」는 아니다(재검증 1)
+  ['scope_out', /^((업무 ?)?범위 ?(제외|외|밖)( ?(사항|항목|업무))?|제외 ?(범위|사항|대상|업무|항목)( ?업무)?|제외|비범위|(적용 ?)?대상 ?외)$/],
   ['scope', /범위|대상 ?업무|업무 ?목록|하위 ?업무/],
   ['overview', /개요|요약|기본 ?정보|업무 ?정보/],
 ];
@@ -231,11 +232,16 @@ const refOf = (s) => (s.num ? `§${s.num}` : `「${s.title}」`);
 const titleCore = (title) => title.replace(/\([^)]*\)/g, '').replace(MARK, '').trim();
 // 글 속 날짜를 YYYY-MM-DD로. "2026-09-15", "2026.09.15", "2026. 9. 15.", "2026년 9월 15일", "2026/9/15"를 읽는다(검토5 V-6). 없으면 null
 export function findDate(text) {
-  const m = /(\d{4})\s*[.\-\/년]\s*(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})\s*일?/.exec(String(text || ''));
-  if (!m) return null;
-  const [, y, mo, d] = m;
-  if (Number(mo) < 1 || Number(mo) > 12 || Number(d) < 1 || Number(d) > 31) return null;
-  return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  // 앞: 숫자·점·하이픈·빗금·v(버전)에 붙어 있으면 날짜가 아니다. 뒤: 숫자나 금액·개수 단위가 붙으면 날짜가 아니다(재검증 3)
+  const re = /(?<![\d.\-\/vV])(\d{4})\s*[.\-\/년]\s*(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})(?!\d)(?!\s*(만|억|천|원|건|개|명|회))\s*일?/g;
+  for (const m of String(text || '').matchAll(re)) {
+    const [, y, mo, d] = m;
+    // 실제 달력 날짜만(2026.2.31 같은 값은 건너뛴다)
+    const t = new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d)));
+    if (t.getUTCFullYear() !== Number(y) || t.getUTCMonth() !== Number(mo) - 1 || t.getUTCDate() !== Number(d)) continue;
+    return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+  return null;
 }
 // 표에서 이름으로 쓸 칸(검토5 V-1): 머리글에 업무·이름 칸이 있으면 그 칸, 첫 머리글이 구분·순서·번호면 그다음 칸, 아니면 첫 칸
 const NAME_HEADER = /^(업무|업무명|업무 ?이름|이름|명칭|항목|작업|내용|역할|담당|담당자|산출물|문서)$/;
@@ -247,11 +253,21 @@ function nameCellIndex(header) {
   return INDEX_HEADER.test(cleanText(header[0])) && header.length > 1 ? 1 : 0;
 }
 // 표 행에서 이름 칸과 나머지(설명)로 나눈다. 구분 칸 같은 앞 칸은 "머리글: 값"으로 설명에 넣는다
+const NUMBER_HEADER = /^(순서|번호|단계|no\.?|#)$/i;
+const DUTY_HEADER = /^(하는 ?일|담당 ?업무|업무|역할 ?내용|책임)$/;
+// 돌려주는 값: name(이름 칸. 비어 있으면 null — 구분 값을 이름으로 쓰지 않는다, 재검증 5), desc(나머지 칸), duty(「하는 일」 칸. 없으면 desc)
 function nameAndRest(cells, header) {
   const i = nameCellIndex(header);
-  const name = cells[i] || cells[0];
-  const rest = cells.map((c, k) => (k === i || !c ? '' : header && header[k] && k < i ? `${cleanText(header[k])}: ${c}` : c)).filter(Boolean);
-  return { name, desc: rest.join(' — ') || null };
+  const name = (cells[i] || '').trim() || (i === 0 ? null : null);
+  const head = (k) => (header && header[k] ? cleanText(header[k]) : '');
+  const rest = cells.map((c, k) => {
+    if (k === i || !c || !c.trim()) return '';
+    if (NUMBER_HEADER.test(head(k)) && /^\d+$/.test(c.trim())) return ''; // 번호 칸은 설명에 넣지 않는다
+    return head(k) && k < i ? `${head(k)}: ${c}` : c;
+  }).filter(Boolean);
+  const dutyAt = header ? header.findIndex((h, k) => k !== i && DUTY_HEADER.test(cleanText(h))) : -1;
+  const desc = rest.join(' — ') || null;
+  return { name, desc, duty: dutyAt >= 0 ? (cells[dutyAt] || '').trim() || null : desc };
 }
 const statusOf = (...texts) => {
   const all = texts.filter(Boolean).join(' ');
@@ -464,6 +480,7 @@ export function convertDocument(text, ctx) {
     for (const l of lines) {
       if (!l.cells) { info.scope.push({ text: l.text, ref: refOf(s), desc: null }); continue; }
       const { name: cellName, desc } = nameAndRest(l.cells, l.header); // 구분 열이 있는 표도 업무 이름 칸을 쓴다(검토5 V-1)
+      if (!cellName) { notes.push({ code: 'C-ROW-NO-NAME', ref: refOf(s), row: l.row }); continue; }
       info.scope.push({ text: cellName, ref: refOf(s), desc });
     }
     if (lines.some((l) => l.cells && nameCellIndex(l.header) > 0)) notes.push({ code: 'C-TABLE-NAME-COL', ref: refOf(s), col: nameCellIndex(lines.find((l) => l.cells).header) + 1 });
@@ -564,7 +581,11 @@ export function convertDocument(text, ctx) {
   for (const s of parsed.sections.filter((x) => x.kind === 'people')) {
     const lines = linesOf(s.blocks);
     for (const l of lines) {
-      if (l.cells) { const { name: cellName, desc } = nameAndRest(l.cells, l.header); roleItems.push({ text: cellName, ref: refOf(s), desc: desc || '' }); }
+      if (l.cells) {
+        const { name: cellName, desc, duty } = nameAndRest(l.cells, l.header);
+        if (!cellName) { notes.push({ code: 'C-ROW-NO-NAME', ref: refOf(s), row: l.row }); continue; }
+        roleItems.push({ text: cellName, ref: refOf(s), desc: desc || '', duty: duty || '' });
+      }
       else {
         const kv = /^([^:：[]{1,30})[:：]\s*(.+)$/.exec(l.text);
         roleItems.push(kv ? { text: kv[1], ref: refOf(s), desc: kv[2] } : { text: l.text, ref: refOf(s) });
@@ -581,7 +602,7 @@ export function convertDocument(text, ctx) {
       if (!roles.includes(r)) roles.push(r);
       if (item.desc) {
         if (!roleDuty.has(r)) roleDuty.set(r, []);
-        roleDuty.get(r).push({ text: item.desc, ref: item.ref });
+        roleDuty.get(r).push({ text: item.duty !== undefined ? item.duty : item.desc, ref: item.ref }); // 표면 「하는 일」 칸만, 아니면 설명 전체
       }
     }
   }
@@ -644,10 +665,11 @@ export function convertDocument(text, ctx) {
     // 담당(수행): 원문이 그 역할의 하는 일로 업무 이름을 적은 경우만. 기간은 원문에 없으므로 두지 않는다(= 지금 담당으로 계산)
     // 하는 일을 쉼표로 나눈 항목이 업무 이름과 같을 때만 잇는다(D3-33). "결과 승인"처럼 업무 이름이 일부만 들어간 항목(결재·수강)은 담당이 아니다
     const duties = roleDuty.get(r) || [];
-    const dutyItems = duties.flatMap((d) => splitList(d.text).map((t) => ({ text: stripMarks(t), ref: d.ref })));
-    const done = works.filter((w) => dutyItems.some((t) => compact(t.text) === compact(w.label)));
+    const bare = (t) => compact(stripMarks(t).replace(/\([^)]*\)|（[^）]*）/g, '').replace(/[.。·\s]+$/, ''));
+    const dutyItems = duties.flatMap((d) => splitList(d.text).map((t) => ({ text: t, ref: d.ref })));
+    const done = works.filter((w) => dutyItems.some((t) => bare(t.text) === compact(w.label)));
     for (const w of done) {
-      const d = dutyItems.find((t) => compact(t.text) === compact(w.label));
+      const d = dutyItems.find((t) => bare(t.text) === compact(w.label));
       pushEdge(r.id, w.id, 'performs', `규칙 기반 추정: 원문 ${d.ref}의 하는 일에 「${w.label}」이(가) 나옴(기간 미기재)`);
       performs += 1;
     }
