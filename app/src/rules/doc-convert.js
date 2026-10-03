@@ -31,7 +31,7 @@ const SECTION_KINDS = [
   ['people', /이해관계자|관계자|역할|담당자|연락처/],
   ['cautions', /주의사항|유의사항|유의 ?점|주의 ?점/],
   // 「범위 외」·「제외 사항」도 범위 제외(검토5 V-3 가). 제목 전체가 맞을 때만: 「장비 범위」·「수수료 제외 기준」·「대상 외부 기관 연계」는 아니다(재검증 1)
-  ['scope_out', /^((업무 ?)?범위 ?(제외|외|밖)( ?(사항|항목|업무))?|제외 ?(범위|사항|대상|업무|항목)( ?업무)?|제외|비범위|(적용 ?)?대상 ?외)$/],
+  ['scope_out', /^((업무 ?)?범위 ?(제외|외|밖)( ?(사항|항목|업무))?|제외 ?(범위|사항|대상|업무|항목)( ?업무)?|제외|비 ?범위|(적용 ?)?대상 ?외)$/],
   ['scope', /범위|대상 ?업무|업무 ?목록|하위 ?업무/],
   ['overview', /개요|요약|기본 ?정보|업무 ?정보/],
 ];
@@ -232,8 +232,8 @@ const refOf = (s) => (s.num ? `§${s.num}` : `「${s.title}」`);
 const titleCore = (title) => title.replace(/\([^)]*\)/g, '').replace(MARK, '').trim();
 // 글 속 날짜를 YYYY-MM-DD로. "2026-09-15", "2026.09.15", "2026. 9. 15.", "2026년 9월 15일", "2026/9/15"를 읽는다(검토5 V-6). 없으면 null
 export function findDate(text) {
-  // 앞: 숫자·점·하이픈·빗금·v(버전)에 붙어 있으면 날짜가 아니다. 뒤: 숫자나 금액·개수 단위가 붙으면 날짜가 아니다(재검증 3)
-  const re = /(?<![\d.\-\/vV])(\d{4})\s*[.\-\/년]\s*(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})(?!\d)(?!\s*(만|억|천|원|건|개|명|회))\s*일?/g;
+  // 앞: 숫자·점·하이픈·빗금·v(버전)에 붙어 있으면 날짜가 아니다. 뒤: 숫자나 금액·개수 단위(만원·건·개…)로 끝나면 날짜가 아니다. "15 회의록"처럼 그 글자로 시작하는 다른 낱말은 날짜로 읽는다(재검증 3·2차 A)
+  const re = /(?<![\d.\-\/vV])(\d{4})\s*[.\-\/년]\s*(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})(?!\d)(?!\s*(만|억|천)?\s*(원|건|개|명|회)(?![가-힣]))(?!\s*(만|억|천)(?![가-힣]))\s*일?/g;
   for (const m of String(text || '').matchAll(re)) {
     const [, y, mo, d] = m;
     // 실제 달력 날짜만(2026.2.31 같은 값은 건너뛴다)
@@ -667,9 +667,12 @@ export function convertDocument(text, ctx) {
     const duties = roleDuty.get(r) || [];
     const bare = (t) => compact(stripMarks(t).replace(/\([^)]*\)|（[^）]*）/g, '').replace(/[.。·\s]+$/, ''));
     const dutyItems = duties.flatMap((d) => splitList(d.text).map((t) => ({ text: t, ref: d.ref })));
-    const done = works.filter((w) => dutyItems.some((t) => bare(t.text) === compact(w.label)));
+    // 글자 그대로 같은 업무가 먼저다. 그런 업무가 없을 때만 괄호를 뗀 값으로 비교한다(「승인(재처리)」 업무가 있으면 「승인」에 붙이지 않는다, 2차 B)
+    const exact = (t) => compact(stripMarks(t).replace(/[.。·\s]+$/, ''));
+    const dutyHit = (t, w) => exact(t.text) === compact(w.label) || (!works.some((x) => exact(t.text) === compact(x.label)) && bare(t.text) === compact(w.label));
+    const done = works.filter((w) => dutyItems.some((t) => dutyHit(t, w)));
     for (const w of done) {
-      const d = dutyItems.find((t) => bare(t.text) === compact(w.label));
+      const d = dutyItems.find((t) => dutyHit(t, w));
       pushEdge(r.id, w.id, 'performs', `규칙 기반 추정: 원문 ${d.ref}의 하는 일에 「${w.label}」이(가) 나옴(기간 미기재)`);
       performs += 1;
     }

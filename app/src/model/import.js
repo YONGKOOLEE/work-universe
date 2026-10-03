@@ -39,7 +39,8 @@ const markOf = (n) => (n.attrs && typeof n.attrs.상태 === 'string' ? n.attrs.�
  *   ok가 false면 가져오지 않는다(오류가 있거나 버전이 다름)
  */
 // 사람 이름이 이 낱말로 끝나거나 이 낱말이면 역할 이름으로 본다(실명 알림 제외)
-const ROLE_WORD = /(담당|담당자|팀|역할|팀장|부장|과장|차장|대리|사원|직원|고객|강사|수강생|관리자|책임자|운영자|사용자|승인자|결재자)$/;
+// "…장"(팀장·실장·센터장)·"…자"(개발자·신청자)·"…사"(협력사·강사)로 끝나면 역할로 본다. 그렇게 끝나는 실제 이름은 놓치지만 알림일 뿐이다(2차 C)
+const ROLE_WORD = /(담당|담당자|팀|역할|대리|사원|직원|고객|수강생|총무|대표|임원|이사|감사|매니저|장|자|사)$/;
 
 export function previewImport(doc, { existing = [], resolve = null, sampleIds = [] } = {}) {
   const checked = validateDocument(doc);

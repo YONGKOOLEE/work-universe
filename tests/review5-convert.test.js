@@ -160,3 +160,40 @@ test('재검증 5: 이름 칸이 빈 행은 건너뛰고 알리며(구분 값이
   const b = doc1(['## 범위', '| 번호 | 업무명 | 담당 |', '|---|---|---|', '| 1 | 입고 접수 | 운영 담당 |']).doc;
   assert.equal(byLabel(b, '입고 접수').description, '운영 담당');
 });
+
+// ── 2차 재검증(커밋 bd64521 검증)에서 나온 사례 ──
+test('2차 A: 날짜 뒤에 회의록·개정·원본·명세서 같은 낱말이 와도 날짜를 읽고, 금액·개수 단위로 끝나면 읽지 않는다', () => {
+  for (const t of ['2026.09.15 회의록', '2026-09-15 개정', '2026.9.15 원본', '2026.09.15 건의 사항', '2026.09.15 명세서', '2026.09.15 개요', '2026.09.15 천안 교육장', '2026.09.15(화)', '2026-09-15T10:00']) {
+    assert.equal(findDate(t), '2026-09-15', t);
+  }
+  for (const t of ['2026.5.12만원', '2026.5.12 만 원', '2026-1-5개', '2026.3.4 건', '2026.5.12억']) assert.equal(findDate(t), null, t);
+  const { report } = conv(['# 가상 시험 업무', '- 작성 주체: 가상시험팀', '- 작성일: 2026-09-15 원본 기준', '## 범위', '- 정산', ''].join('\n'));
+  assert.ok(!report.notes.some((n) => n.code === 'C-DATE-ASSUMED'));
+});
+
+test('2차 B: 괄호가 든 업무 이름은 글자 그대로 같은 업무에 먼저 붙는다', () => {
+  const perf = (scope, duty) => {
+    const { doc } = doc1(['## 범위', ...scope.map((x) => '- ' + x), '## 이해관계자', '| 역할 | 하는 일 |', '|---|---|', '| 운영 담당 | ' + duty + ' |']);
+    const label = (id) => doc.nodes.find((n) => n.id === id).label;
+    return doc.edges.filter((e) => e.core_type === 'performs').map((e) => label(e.target));
+  };
+  assert.deepEqual(perf(['승인', '승인(재처리)', '정산'], '승인(재처리)'), ['승인(재처리)']);
+  assert.deepEqual(perf(['승인(재처리)'], '승인(재처리)'), ['승인(재처리)']);
+  assert.deepEqual(perf(['승인', '정산'], '승인(1차), 정산.'), ['승인', '정산']);
+  // 글머리표 "역할: 하는 일"
+  const { doc } = doc1(['## 범위', '- 승인(재처리)', '- 정산', '## 이해관계자', '- 운영 담당: 승인(재처리), 정산']);
+  assert.equal(doc.edges.filter((e) => e.core_type === 'performs').length, 2);
+});
+
+test('2차 C: 실장·개발자·협력사·신청자 같은 역할 낱말에는 실명 알림이 뜨지 않는다', () => {
+  const { doc } = doc1(['## 범위', '- 정산', '## 이해관계자', '- 실장: 결재', '- 개발자: 화면 수정', '- 협력사: 납품', '- 신청자: 요청', '- 센터장: 보고 받음', '- 총무: 비품']);
+  assert.ok(!previewImport(withOwner(doc), { existing: [] }).warnings.some((w) => w.code === 'W-REAL-NAME-LIKE'));
+  const named = doc1(['## 범위', '- 정산', '## 이해관계자', '- 홍길동: 결재', '- 김철수: 요청']).doc;
+  assert.deepEqual(previewImport(withOwner(named), { existing: [] }).warnings.find((w) => w.code === 'W-REAL-NAME-LIKE').labels, ['홍길동', '김철수']);
+});
+
+test('2차 D: 「비 범위」(띄어 쓴 제목)도 범위 제외다', () => {
+  const { doc, report } = doc1(['## 범위', '- 정산', '## 비 범위', '- 외화 송금']);
+  assert.deepEqual(works(doc), ['정산']);
+  assert.equal(report.sections.filter((s) => s.kind === 'scope_out').length, 1);
+});

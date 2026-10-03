@@ -60,7 +60,7 @@ test('재검증 6: 실명 알림은 문서 변환 결과만, 번호 알림은 �
   // 샘플의 다른 사람(가상 이름)도 함께 걸리므로, 알림에 실린 이름 목록으로 확인한다
   const named = (d) => (previewImport(d, { existing: [] }).warnings.find((w) => w.code === 'W-REAL-NAME-LIKE') || { labels: [] }).labels;
   assert.ok(named(converted('홍길동')).includes('홍길동'));
-  for (const role of ['수강생', '강사', '고객', '정산 담당', '팀장']) assert.ok(!named(converted(role)).includes(role), role);
+  for (const role of ['수강생', '강사', '고객', '정산 담당', '팀장', '실장', '개발자', '협력사']) assert.ok(!named(converted(role)).includes(role), role);
   assert.ok(codes(converted('정산 담당', { emp_no: '20190123' })).includes('W-EMPNO-LIKE'), '사번 칸');
   assert.ok(codes(converted('홍길동 20190123')).includes('W-EMPNO-LIKE'), '이름 안의 번호');
   assert.ok(!codes(converted('정산 담당', { emp_no: 'V-1001' })).includes('W-EMPNO-LIKE'), '가상 사번');
