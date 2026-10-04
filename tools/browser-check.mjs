@@ -1016,6 +1016,17 @@ async function checkBrowser(browser, port) {
     // ② 없는 이름, Enter 바로 누르기
     await typeFind('없는이름xyz');
     check('R-17 ② 없는 이름 → 「찾는 노드 없음」', (await text(s.cdp, '[data-testid=find-none]')).includes('찾는 노드 없음'));
+    // 검토 B-5·6: 결과 목록에서 Esc → 목록이 닫힌 채 찾기 칸으로(다시 열리지 않음), 찾기 칸 Esc는 글자를 지우지 않음
+    await typeFind('대사');
+    await key('ArrowDown', 'ArrowDown', 40);
+    await key('Escape', 'Escape', 27);
+    const escList = await evaluate(s.cdp, "({ hidden: document.querySelector('[data-testid=find-results]').hidden, focus: document.activeElement && document.activeElement.dataset.testid, value: document.querySelector('[data-testid=find-input]').value })");
+    await key('ArrowDown', 'ArrowDown', 40); // 목록이 닫혀 있으면 아무 일 없음
+    await typeFind('대사');
+    await key('Escape', 'Escape', 27);
+    const escInput = await evaluate(s.cdp, "({ hidden: document.querySelector('[data-testid=find-results]').hidden, value: document.querySelector('[data-testid=find-input]').value })");
+    check('R-17 ⑧ 결과 목록 Esc → 목록 닫히고 찾기 칸으로, 찾기 칸 Esc → 목록만 닫고 글자는 남김', escList.hidden && escList.focus === 'find-input' && escList.value === '대사' && escInput.hidden && escInput.value === '대사', JSON.stringify([escList, escInput]));
+    await evaluate(s.cdp, "document.querySelector('[data-testid=find-input]').blur()");
     await typeFind('정산 담당');
     await key('Enter', 'Enter', 13);
     await sleep(300);
@@ -1027,7 +1038,7 @@ async function checkBrowser(browser, port) {
     await sleep(150);
     await clickTestId(s.cdp, 'filter-type-work');
     await sleep(400);
-    const fw = await evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const out = cy.nodes('.filtered-out'); const wrong = cy.nodes().filter((n) => { const t = n.data('core_type'); return (t === 'work' || t === 'root') === n.hasClass('filtered-out'); }); return { out: out.length, wrong: wrong.length, op: out.length ? out[0].renderedStyle('opacity') : null }; })()");
+    const fw = await evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const out = cy.nodes('.filtered-out'); const wrong = cy.nodes().filter((n) => { const t = n.data('core_type'); return (t === 'work' || t === 'root') === n.hasClass('filtered-out'); }); return { out: out.length, wrong: wrong.length, op: out.length ? out[0].pstyle('opacity').value : null }; })()");
     check('R-17 ③ 유형 거르기(업무) → 업무·꼭지만 또렷, 나머지 흐림(유형이 맞지 않는 노드 0)', fw.out > 0 && fw.wrong === 0 && Number(fw.op) < 0.2, JSON.stringify(fw));
     check('R-17 ③ 거르기 중 표시(n/전체 또렷)와 「거르기 풀기」', /거르기 중: 업무 — \d+\/\d+개 또렷/.test(await text(s.cdp, '[data-testid=filter-on]')) && !!(await evaluate(s.cdp, "!!document.querySelector('[data-testid=filter-clear]')")));
     await shot(s.cdp, `${browser.name}-13-filter-work`);
@@ -1110,7 +1121,13 @@ async function checkBrowser(browser, port) {
     await sleep(300);
     const lonelyGid = await evaluate(s.cdp, `(window.__wu.view.nodes.find((n) => n.label === ${JSON.stringify(lonely)}) || {}).gid || ''`);
     const outAfter = await evaluate(s.cdp, "window.__wu.cy.nodes('.filtered-out').length");
-    check('R-17 ③ 거르기 중 저장(노드 추가) → 새 주제 노드도 흐림, 표시 유지', addR.code === 'OK' && !!lonelyGid && outAfter === outBefore + 1 && (await text(s.cdp, '[data-testid=filter-on]')).includes('거르기 중'), `${outBefore} → ${outAfter}`);
+    check('R-17 ③ 거르기 중 저장(노드 추가) → 새 주제 노드는 거르기에서 빠지지만(표시 유지), 고른 노드라 또렷하게 보임(R-02 ①)', addR.code === 'OK' && !!lonelyGid && outAfter === outBefore + 1 && (await text(s.cdp, '[data-testid=filter-on]')).includes('거르기 중') && Number(await evaluate(s.cdp, `window.__wu.cy.getElementById(${JSON.stringify(lonelyGid)}).pstyle('opacity').value`)) === 1, `${outBefore} → ${outAfter}`);
+    // 검토 A·B 중간-1: 거르기(업무) 중 찾기로 업무가 아닌 노드를 고르면 그 노드는 또렷하고 이름이 보인다
+    await typeFind('정산 담당');
+    await key('Enter', 'Enter', 13);
+    await sleep(400);
+    const pickedIn = await evaluate(s.cdp, "(() => { const n = window.__wu.cy.getElementById(window.__wu.selected || 'x'); return n.empty() ? null : { out: n.hasClass('filtered-out'), op: Number(n.pstyle('opacity').value), to: Number(n.pstyle('text-opacity').value), px: n.pstyle('font-size').pfValue * window.__wu.cy.zoom() }; })()");
+    check('R-17 ①③⑦ 거르기 중 찾기로 고른(거르기에서 빠진) 노드도 또렷하고 이름이 15px 이상', !!pickedIn && pickedIn.out && pickedIn.op === 1 && pickedIn.to === 1 && pickedIn.px >= 15, JSON.stringify(pickedIn));
     await clickTestId(s.cdp, 'filter-clear');
     await evaluate(s.cdp, `window.__wu.select(${JSON.stringify(lonelyGid)})`);
     await sleep(150);
@@ -1125,6 +1142,28 @@ async function checkBrowser(browser, port) {
     await typeFind('T18 외톨이');
     check('R-17 ② 숨긴 노드는 찾기에 나오지 않음', !!(await evaluate(s.cdp, "!!document.querySelector('[data-testid=find-none]')")));
     await key('Escape', 'Escape', 27);
+    // 검토 A·B 중간-2: 주변만 보기 중 노드 추가(주변 밖) → 전체로 돌아가 새 노드가 그래프에 보이고 선택됨
+    await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+    await sleep(150);
+    await clickTestId(s.cdp, 'btn-nbhd');
+    await sleep(400);
+    await evaluate(s.cdp, "window.__wu.select(null)");
+    await evaluate(s.cdp, "document.querySelector('details.add').open = true");
+    const addNb = await submitAdd(s.cdp, 'work', 'T18 주변 밖 새 업무');
+    await sleep(400);
+    const nbAdd = await evaluate(s.cdp, "(() => { const g = window.__wu.selected; return { nbhd: window.__wu.nbhd, inGraph: !!g && !window.__wu.cy.getElementById(g).empty(), label: (window.__wu.view.getNode(g || '') || {}).label }; })()");
+    check('R-17 ④·R-02 ① 주변만 보기 중 노드 추가 → 전체로 돌아가 새 노드가 그래프에 보이고 선택됨', addNb.code === 'OK' && nbAdd.nbhd === null && nbAdd.inGraph && nbAdd.label === 'T18 주변 밖 새 업무', JSON.stringify(nbAdd));
+    // 검토 B-3: 주변만 보기 중 하위 유니버스 꼭지 펼치기(더블클릭과 같은 toggle) → 주변만 보기를 끝내고 전체에서 펼침
+    await evaluate(s.cdp, "window.__wu.select('U-D1/N-000')");
+    await sleep(150);
+    await clickTestId(s.cdp, 'btn-nbhd');
+    await sleep(400);
+    await evaluate(s.cdp, "window.__wu.toggle('U-B')");
+    await sleep(400);
+    check('R-17 ④ 주변만 보기 중 펼치기·접기 → 주변만 보기를 끝내고 전체 그래프에서 바뀜', (await evaluate(s.cdp, 'window.__wu.nbhd')) === null && (await shownCount()) > 5, `${await shownCount()}`);
+    // 꼭지 이름은 화면이 작아도 숨기지 않음(검토 B-4, C10-6)
+    const rootsShown = await evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const z = cy.zoom(); return cy.nodes('[core_type = \"root\"]').map((n) => !n.hasClass('tiny-label') && n.pstyle('font-size').pfValue * z >= 11); })()");
+    check('C10-6 꼭지 이름은 늘 보임(화면 11px 이상)', rootsShown.length > 0 && rootsShown.every(Boolean), JSON.stringify(rootsShown));
   }
   {
     check('부서 화면에서도 화면에 "null" 글자 없음', (await evaluate(s.cdp, "(() => { const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') return false; return true; })()")));

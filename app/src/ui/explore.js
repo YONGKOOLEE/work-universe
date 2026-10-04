@@ -8,6 +8,7 @@ export const EXPLORE = {
   FILTER_MODE: 'dim', // 거르기에서 빠진 노드: 'dim'(흐리게, 추천대로 2026-10-04) | 'hide'(숨기기)
   LABEL_MIN_PX: 6, // 화면에서 이 크기(px)보다 작아지는 이름은 숨긴다(R-17 ⑦)
   LABEL_READ_PX: 15, // 마우스를 올리거나 고른 노드의 이름은 화면에서 이 크기 이상으로(R-17 ⑦)
+  ROOT_MIN_PX: 11, // 꼭지(유니버스) 이름은 숨기지 않고 화면에서 이 크기 이상으로(검토: 125% 노트북 첫 화면에 이름이 하나도 없음, decisions-pending C10-6). 0이면 꼭지도 숨김
   RESULT_LIMIT: 30, // 찾기 결과 목록에 보이는 수(더 있으면 "더 길게 입력" 안내)
 };
 
@@ -37,7 +38,10 @@ export function exploreBar(o) {
   const buttons = () => [...results.querySelectorAll('button')];
   function showResults() {
     const q = input.value.trim();
-    if (!q) return close();
+    if (!q) {
+      hits = []; // 칸을 비운 뒤 Enter가 이전 결과로 가지 않게
+      return close();
+    }
     hits = o.search(q);
     const shown = hits.slice(0, EXPLORE.RESULT_LIMIT);
     results.replaceChildren(...(hits.length
@@ -49,8 +53,12 @@ export function exploreBar(o) {
       : [el('li', { class: 'none', 'data-testid': 'find-none', role: 'status' }, `찾는 노드 없음: 「${q}」`)]));
     results.hidden = false;
   }
+  let quietFocus = false; // 결과 목록에서 Esc로 돌아올 때는 목록을 다시 열지 않는다
   input.addEventListener('input', showResults);
-  input.addEventListener('focus', showResults);
+  input.addEventListener('focus', () => {
+    details.open = false; // 거르기 창이 열린 채 키보드로 오면 결과 목록을 덮는다(같은 높이)
+    if (!quietFocus) showResults();
+  });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.isComposing) {
       e.preventDefault();
@@ -61,8 +69,10 @@ export function exploreBar(o) {
       buttons()[0].focus();
     } else if (e.key === 'Escape') {
       e.stopPropagation(); // 화면 전체의 Esc(선택 해제)와 겹치지 않게: 찾기 칸에서는 목록만 닫는다
-      if (!results.hidden) close();
-      else input.blur();
+      if (!results.hidden) {
+        e.preventDefault(); // type=search의 기본 동작(입력 글자 지우기)을 막는다: 목록만 닫고 글자는 남긴다
+        close();
+      } else input.blur();
     }
   });
   // 결과 목록 안: ↑↓로 이동, Enter·Space는 버튼 기본 동작(누르기), Esc는 찾기 칸으로
@@ -71,13 +81,20 @@ export function exploreBar(o) {
     const i = list.indexOf(document.activeElement);
     if (e.key === 'ArrowDown' && i >= 0) { e.preventDefault(); list[Math.min(i + 1, list.length - 1)].focus(); }
     if (e.key === 'ArrowUp' && i >= 0) { e.preventDefault(); if (i === 0) input.focus(); else list[i - 1].focus(); }
-    if (e.key === 'Escape') { e.stopPropagation(); close(); input.focus(); }
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      close();
+      quietFocus = true;
+      input.focus();
+      quietFocus = false;
+    }
   });
   const findBox = el('div', { class: 'find-box' }, input, results);
   document.addEventListener('click', (e) => { if (!findBox.contains(e.target)) close(); });
   findBox.addEventListener('focusout', (e) => { if (!findBox.contains(e.relatedTarget)) close(); });
 
   // ── 거르기(R-17 ③) ──
+  // details는 아래에서 만든다(찾기 칸 focus 처리기가 쓰는 시점에는 이미 있다)
   const typeBox = el('div', { class: 'types' });
   const personSel = el('select', { 'data-testid': 'filter-person', 'aria-label': '사람 하나 고르기' });
   // 사람은 하나만 고르므로 고르면 창을 닫아 그래프를 가리지 않는다(유형은 여러 개를 고를 수 있어 열어 둔다)
@@ -91,7 +108,7 @@ export function exploreBar(o) {
     el('summary', { 'data-testid': 'filter-open' }, '거르기'),
     el('div', { class: 'filter-panel' },
       el('div', { class: 'muted small' }, `노드 유형 — 고른 유형만 또렷하게, ${dimText}(꼭지는 늘 보임)`), typeBox,
-      el('div', { class: 'muted small' }, '사람 하나 — 그 사람과 맡은 업무만 또렷하게'), personSel,
+      el('div', { class: 'muted small' }, '사람 하나 — 그 사람과 맡은 업무(지난 담당 포함)만 또렷하게'), personSel,
       el('button', { type: 'button', class: 'small-btn', 'data-testid': 'filter-clear-panel', onclick: () => clear() }, '거르기 모두 풀기')));
   details.addEventListener('toggle', () => { if (details.open) renderFilterInputs(); });
   document.addEventListener('click', (e) => { if (details.open && !details.contains(e.target)) details.open = false; });
@@ -104,7 +121,8 @@ export function exploreBar(o) {
   });
 
   function renderFilterInputs() {
-    typeBox.replaceChildren(...o.types().map((t) => {
+    // o.types(selected): 지금 화면의 유형 + 고른 유형(화면에 없어도 — 주변만 보기·접기 뒤에도 하나씩 풀 수 있게)
+    typeBox.replaceChildren(...o.types(filter.types).map((t) => {
       const cb = el('input', { type: 'checkbox', value: t.key, checked: filter.types.includes(t.key), 'data-testid': `filter-type-${t.key}` });
       cb.addEventListener('change', () => {
         filter.types = cb.checked ? [...new Set([...filter.types, t.key])] : filter.types.filter((k) => k !== t.key);

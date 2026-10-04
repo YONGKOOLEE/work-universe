@@ -33,6 +33,20 @@ test('R-17 ① 찾기: 합쳐진 노드는 원래 이름(합쳐지기 전 이름
   assert.ok(searchNodes(v, other).some((h) => h.gid === merged.gid));
 });
 
+test('R-17 ② 찾기: 합쳐진 원본 중 숨긴 것의 이름으로는 찾지 않는다(보이는 원본 이름으로는 찾음)', () => {
+  const a = mkDoc('U-P', [mkNode('N-1', 'person', '가람')], []);
+  const b = mkDoc('U-Q', [mkNode('N-1', 'person', '비밀옛이름', { hidden: true })], []);
+  const c = mkDoc('U-R', [mkNode('N-1', 'person', '가람별칭')], []);
+  a.refs = [{ child_universe_id: 'U-Q' }, { child_universe_id: 'U-R' }];
+  a.identity_links = [
+    { id: 'I-1', a: 'U-P/N-1', b: 'U-Q/N-1', kind: 'person', status: 'confirmed', method: 'manual' },
+    { id: 'I-2', a: 'U-P/N-1', b: 'U-R/N-1', kind: 'person', status: 'confirmed', method: 'manual' },
+  ];
+  const v = buildView(a, (id) => ({ 'U-Q': b, 'U-R': c })[id] || null);
+  assert.deepEqual(searchNodes(v, '비밀옛이름'), []);
+  assert.deepEqual(searchNodes(v, '별칭').map((h) => h.gid), [v.canonical('U-P/N-1')]);
+});
+
 test('R-17 ② 찾기 오류: 맞는 노드가 없거나 빈 검색어면 빈 목록. 이름이 아닌 설명·사번만 맞으면 찾지 않는다', () => {
   const v = viewOf('U-D1');
   assert.deepEqual(searchNodes(v, '없는이름xyz'), []);

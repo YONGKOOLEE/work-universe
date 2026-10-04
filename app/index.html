@@ -50,6 +50,10 @@
   .explore-status:empty { display: none; }
   .explore-status .on { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px; padding: 2px 10px; font-weight: bold; }
   .explore-status .ok { color: var(--ok); }
+  .explore-status .grp { display: inline-flex; align-items: center; gap: 6px; flex-wrap: nowrap; max-width: 100%; }
+  .explore-status .grp .on { min-width: 0; } /* 좁은 화면에서는 표시 글이 줄바꿈되고 버튼은 그 옆에 붙는다 */
+  .explore-status .grp button { flex: none; }
+  .find-results .chip { white-space: nowrap; }
   .nbhd-tools { margin-top: 6px; }
   #legend { margin: 0; padding: 8px 14px; list-style: none; border-top: 1px solid var(--line); background: var(--panel); font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 16px; }
   #legend li { display: flex; align-items: center; gap: 6px; }

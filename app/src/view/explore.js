@@ -19,7 +19,8 @@ export function searchNodes(view, query) {
   const hits = [];
   for (const n of view.nodes) {
     if (n.hidden) continue;
-    const names = [n.label, ...(n.merged_from || []).map((g) => (view.rawNode(g) || {}).label)].filter(Boolean);
+    // 합쳐진 원본 중 숨긴 것의 이름으로는 찾지 않는다(숨긴 노드는 찾기에 나오지 않음, T-18 오류 검증)
+    const names = [n.label, ...(n.merged_from || []).map((g) => view.rawNode(g)).filter((r) => r && !r.hidden).map((r) => r.label)].filter(Boolean);
     const keys = names.map(norm);
     if (!keys.some((k) => k.includes(q))) continue;
     hits.push({ gid: n.gid, label: n.label, core_type: n.core_type, type_label: n.type_label, universe_name: n.universe_name, prefix: keys.some((k) => k.startsWith(q)) });

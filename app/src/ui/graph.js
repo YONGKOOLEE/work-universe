@@ -112,8 +112,9 @@ function toElements(display) {
 }
 
 // 범례에 보여 줄 유형(현재 그래프에 있는 것만). 모르는 유형은 "기타" 하나로 묶는다
-export function legendItems(display) {
-  const present = new Set(display.nodes.map((n) => n.core_type));
+// also: 화면에 없어도 넣을 유형(거르기에서 고른 유형, T-18)
+export function legendItems(display, also = []) {
+  const present = new Set([...display.nodes.map((n) => n.core_type), ...also]);
   const items = Object.entries(NODE_TYPES)
     .filter(([key]) => present.has(key))
     .map(([key, label]) => ({ key, label, color: TYPE_COLORS[key] }));
@@ -198,6 +199,8 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
       { selector: '.tiny-label', style: { 'text-opacity': 0 } },
       // 찾기로 고른 노드: 노란 테두리(잠시)
       { selector: 'node.found', style: { 'border-color': '#ffd84d', 'border-width': 6 } },
+      // 거르기에서 빠졌어도 고른·찾은·마우스를 올린 노드는 보인다(R-17 ①⑦: 거르기 중 찾기로 고르거나 새로 추가한 노드). 'hide'여도 같다
+      { selector: 'node.filtered-out:selected, node.filtered-out.found, node.filtered-out.hover', style: { display: 'element', opacity: 1, 'text-opacity': 1 } },
     ],
   });
 
@@ -225,7 +228,14 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
   // 라이브러리의 min-zoomed-font-size는 확대 배율을 2의 거듭제곱으로 올려 비교해(0.39 → 0.5) 6px보다 작은 이름도 그린다.
   // 그래서 실제 화면 크기(글자 크기 × 배율)로 직접 판정한다. 확대가 바뀔 때와 다시 그릴 때마다 계산한다
   function tinyLabel(ele, z) {
-    ele.toggleClass('tiny-label', !bigLabels.has(ele.id()) && ele.pstyle('font-size').pfValue * z < EXPLORE.LABEL_MIN_PX);
+    if (bigLabels.has(ele.id())) return ele.removeClass('tiny-label');
+    // 꼭지 이름은 화면이 아무리 작아도 길잡이로 남긴다: 숨기지 않고 ROOT_MIN_PX 이상으로 키운다
+    if (EXPLORE.ROOT_MIN_PX && ele.isNode() && ele.data('core_type') === 'root') {
+      const px = Math.max(16, EXPLORE.ROOT_MIN_PX / z);
+      ele.style({ 'font-size': px, 'text-max-width': 120 * (px / 16), 'text-outline-width': 2.5 * (px / 16) });
+      return ele.removeClass('tiny-label');
+    }
+    ele.toggleClass('tiny-label', ele.pstyle('font-size').pfValue * z < EXPLORE.LABEL_MIN_PX);
   }
   function applyTinyLabels() {
     const z = cy.zoom();

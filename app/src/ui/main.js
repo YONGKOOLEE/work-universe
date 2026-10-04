@@ -192,9 +192,11 @@ function start() {
     const box = el('div', { class: 'layer', 'data-testid': 'layer' });
     const isChildRoot = node.core_type === 'root' && node.universe_id !== app.doc.universe.id;
     if (isChildRoot) {
-      const info = display.collapsed.get(node.universe_id);
+      // 주변만 보기 화면(display)에는 접힘 정보가 없으므로 펼침 목록으로 판정한다. 누르면 주변만 보기를 끝내고 펼치거나 접는다(toggle)
+      const info = nbhd ? (expanded.has(node.universe_id) ? null : { hidden_count: null }) : display.collapsed.get(node.universe_id);
+      const infoText = !info ? '펼쳐져 있음' : info.hidden_count == null ? '접혀 있음(펼치면 주변만 보기를 끝내고 전체 그래프에서 펼칩니다)' : `접혀 있음: 세부 노드 ${info.hidden_count}개가 가려져 있습니다.`;
       box.append(
-        el('p', { class: 'muted small' }, info ? `접혀 있음: 세부 노드 ${info.hidden_count}개가 가려져 있습니다.` : '펼쳐져 있음'),
+        el('p', { class: 'muted small' }, infoText),
         el('div', { class: 'row' },
           el('button', { type: 'button', 'data-testid': 'toggle', onclick: () => toggle(node.universe_id) }, info ? '펼치기' : '접기'),
           el('button', { type: 'button', onclick: () => openUniverse(node.universe_id) }, '이 유니버스 열기'),
@@ -418,6 +420,7 @@ function start() {
     graph.render(display, selected);
     renderLegend();
     applyTime();
+    renderExploreStatus(); // 거르기 「n/전체 또렷」 숫자를 펼친 화면에 맞춘다
     graph.relayout();
     return true;
   }
@@ -617,7 +620,7 @@ function start() {
     container: $('explore-bar'),
     search: (q) => searchNodes(view, q),
     onPick: goTo,
-    types: () => legendItems(display).filter((t) => t.key !== 'root' && t.key !== 'unknown'),
+    types: (chosen) => legendItems(display, chosen).filter((t) => t.key !== 'root' && t.key !== 'unknown'),
     persons: () => personsIn(display),
     onFilter: (f) => {
       filterState = f;
@@ -681,15 +684,15 @@ function start() {
     const parts = [];
     const f = filterDisplay(display, filterState);
     if (f) {
-      const names = filterState.types.map((t) => (legendItems(display).find((i) => i.key === t) || { label: t }).label);
+      const names = filterState.types.map((t) => (legendItems(display, filterState.types).find((i) => i.key === t) || { label: t }).label);
       const who = filterState.person ? (view.getNode(filterState.person) || { label: '?' }).label : null;
-      parts.push(el('span', { class: 'on', 'data-testid': 'filter-on' }, `거르기 중: ${[names.length ? names.join('·') : null, who ? `${who} 담당` : null].filter(Boolean).join(' / ')} — ${f.shown}/${f.total}개 또렷`),
-        el('button', { type: 'button', class: 'small-btn', 'data-testid': 'filter-clear', onclick: () => bar.clear() }, '거르기 풀기'));
+      parts.push(el('span', { class: 'grp' }, el('span', { class: 'on', 'data-testid': 'filter-on' }, `거르기 중: ${[names.length ? names.join('·') : null, who ? `${who}의 담당 업무(지난 담당 포함)` : null].filter(Boolean).join(' / ')} — ${f.shown}/${f.total}개 또렷`),
+        el('button', { type: 'button', class: 'small-btn', 'data-testid': 'filter-clear', onclick: () => bar.clear() }, '거르기 풀기')));
     }
     if (nbhd) {
-      parts.push(el('span', { class: 'on', 'data-testid': 'nbhd-on' }, `주변만 보기: 「${(view.getNode(nbhd.center) || { label: '?' }).label}」 ${nbhd.depth}단계 — 노드 ${display.nodes.length}개`),
+      parts.push(el('span', { class: 'grp' }, el('span', { class: 'on', 'data-testid': 'nbhd-on' }, `주변만 보기: 「${(view.getNode(nbhd.center) || { label: '?' }).label}」 ${nbhd.depth}단계 — 노드 ${display.nodes.length}개`),
         el('button', { type: 'button', class: 'small-btn', 'data-testid': 'nbhd-depth', onclick: () => enterNbhd(nbhd.center, nbhd.depth === 1 ? 2 : 1) }, nbhd.depth === 1 ? '2단계로' : '1단계로'),
-        el('button', { type: 'button', class: 'small-btn', 'data-testid': 'nbhd-exit', onclick: leaveNbhd }, '전체 보기로'));
+        el('button', { type: 'button', class: 'small-btn', 'data-testid': 'nbhd-exit', onclick: leaveNbhd }, '전체 보기로')));
     }
     if (exploreNote) parts.push(el('span', { class: exploreNote.warn ? 'on' : 'ok', 'data-testid': 'explore-note' }, exploreNote.text));
     bar.setStatus(...parts);
@@ -698,9 +701,16 @@ function start() {
 
   function refresh() {
     view = app.view;
-    // 주변만 보기 중이면 그 노드와 이웃만. 노드가 사라졌으면(숨김 등) 전체로
-    const nd = nbhd ? neighborhoodDisplay(view, nbhd.center, nbhd.depth) : null;
-    if (nbhd && !nd) nbhd = null;
+    // 주변만 보기 중이면 그 노드와 이웃만. 가운데 노드가 사라졌거나(숨김) 고른 노드가 주변 밖이면(주변 밖에 노드 추가 등) 전체로 돌아가 다시 배치한다
+    let nd = nbhd ? neighborhoodDisplay(view, nbhd.center, nbhd.depth) : null;
+    if (nd && selected && !nd.nodes.some((n) => n.gid === view.canonical(selected))) nd = null;
+    if (nd && nd.neighbor_count === 0) { // 이웃을 숨겨 혼자 남으면 들어갈 때(이어진 노드 없음)와 같은 규칙으로 전체로
+      nd = null;
+      exploreNote = { text: '이어진 노드가 없어져 전체 그래프로 돌아갔습니다.', warn: true };
+    }
+    const left = !!nbhd && !nd;
+    if (left) nbhd = null;
+    if (nbhd) nbhd.center = nd.center; // 통합 확인으로 가운데 노드가 다른 노드에 합쳐지면 대표 ID로
     display = nd || projectView(view, { expanded });
     // 시간 막대를 먼저 그려 그래프 영역 높이가 정해진 뒤 배치·맞춤을 한다(아래쪽 노드가 잘리지 않게)
     renderTimebar();
@@ -709,10 +719,12 @@ function start() {
     renderLegend();
     graph.setTimeOff(timeOffIds());
     renderPanel();
+    if (left) graph.relayout(); // 주변만 보기의 고리 배치를 그대로 두면 나머지 노드가 한 줄로 쌓인다
   }
 
   function toggle(universeId) {
     if (universeId === app.doc.universe.id) return;
+    nbhd = null; // 주변만 보기 중 펼치기·접기(더블클릭 포함)는 전체 그래프에서 한다
     if (expanded.has(universeId)) expanded.delete(universeId);
     else expanded.add(universeId);
     refresh();
@@ -737,8 +749,9 @@ function start() {
     if (e.key !== 'Escape' || e.defaultPrevented) return;
     const t = e.target;
     if (t && (t.closest('dialog[open]') || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
-    // 편집 양식·초안은 입력이 사라질 수 있으므로 Esc로 닫지 않는다(각 화면의 「취소」·「닫기」를 쓴다)
-    if (!selected || editing || drafting) return;
+    // Esc는 노드 상세에서만 선택을 푼다. 편집 양식·초안은 입력이, 통합 확인·인사이트·설정은 고른 탭·작업이 사라지므로
+    // Esc로 닫지 않는다(각 화면의 「취소」·「닫기」를 쓴다. 검토: 선택 여부에 따라 같은 패널이 닫히기도 하던 불일치)
+    if (!selected || editing || drafting || insight || merging || settingsOpen) return;
     select(null);
   });
   $('relayout').addEventListener('click', () => graph.relayout());
