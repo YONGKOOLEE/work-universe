@@ -97,6 +97,25 @@ approvals:   # 형식: gate / 대상 문서 / 사용자 승인 표현(원문) / 
     user_expression: "둘 다 진행해"
     date: 2026-10-01
     conditions: 데이터 틀은 바꾸지 않음(속성·메모 약속). 가상 데이터 보강은 월말 정산(U-A1)만 먼저(원래 T-13 범위의 일부)
+  - change: 일괄 답 (확인-종합 7가지, 2026-10-04)
+    user_expression: "우선 전부 권장대로"
+    date: 2026-10-04
+    time: 미기록
+    conditions: 2번 D3-30~D3-33 추천대로 확정. 5번 샘플 손질(V-5·V-8). 6번 요청글은 사용자가 직접 보냄. 1번 화면 확인은 추천안이 없는 사용자 직접 확인이라 미확인으로 남김. 7번 기능 동결은 "마감 1주 전쯤"(추천), 정확한 날은 사용자가 정함(문서에 날짜 없음)
+  - change: CR-9 (승인 문서 문구 수정 12건 a~l)
+    documents: 01 R-15 AC ②, 02 1.3·5.5·5.6·12.1·12.4·12.5·12.7·12.9, 03 1.2·2절 공통 완료 기준·M1·T-15
+    status: 승인
+    user_expression: "우선 전부 권장대로"
+    date: 2026-10-04
+    time: 미기록
+    conditions: 전부 승인(a~l). 동작 변경 없음
+  - change: CR-10 (1차 제출 범위 추가: A 표준 양식 R-16, B 찾기·거르기·주변만 보기 R-17, C 표 입력 R-18, D 변환 규칙 v2, E 전환 경로 문서 R-09 P1)
+    documents: 01 1·2·5·8·9절·머리말, 02 5.3·5.6.2(새)·8절 D-16~D-20·9절·12.5·12.7·12.9.2(새)·머리말, 03 2절 T-18~T-22·3절 범위 축소·기능 동결·4절 K-10~K-13·6절 PL-5·머리말, limits L-26~L-31
+    status: 승인
+    user_expression: "우선 전부 권장대로"
+    date: 2026-10-04
+    time: 미기록
+    conditions: 초안 6절 추천대로(A~E 모두, 순서 B → C → (조력자 의견 뒤) A → D, 동결 마감 1주 전쯤 사용자가 정함, 실문서 3건 이상 — 확보 전 D 보류, 카드승인 샘플 재작성은 A 뒤 판단). 부록 D-1(D-P1 ③, P2 추가, P3 ②, P4 ③(A와 함께), P5 ②, P6 ①, P7 조력자 의견 뒤)·B-1(B-P1 ①+④, B-P2 넣기, B-P3 조력자 의견 뒤, B-P4 C와 함께) 추천대로. 새 설계 결정 번호 D-16부터(반영안 D-11~D-15 → D-16~D-20). 반영 문서는 사용자가 내용을 직접 읽지 않고 추천대로 승인했으므로 T-18 착수 전에 반영 요약을 한 번 보여 준다(.tmp/guide/진행-정리-20261004.md)
 input_basis: inputs/업무정의서_업무유니버스_v0.2.md (사용자 승인본, 참고 근거)
 blocking_questions: []
 final_check:
@@ -105,11 +124,18 @@ final_check:
   notes: R-09는 P2로 1차 제외되어 T-ID 없음(사용자 결정). 차단 조건 없음
 remaining_nonblocking_assumptions: [A-1, A-2, RA-1, DA-1, 기본안 가상 데이터(T-15 전까지 교체 가능), P-1~P-3(T-01·T-02 실측), 주최 측 공지 미확인 항목]
 first_implementation_task: T-01 (최소 종단 흐름 + P-1·P-3 실측 + 그래프 라이브러리·빌드 방식 확정)
-next_session_first_action: (2026-10-04 세션 종료 인계) 구현 멈춤 상태. docs/HANDOFF.md 1절을 읽고, 코드를 만지기 전에 사용자에게 .tmp/guide/확인-종합.md(7가지) 답을 받는다. 핵심은 3번 CR-10 범위(시제품 스크린샷 .tmp/proto-cr10/ → docs/CR-10-초안.md)와 4번 CR-9 승인(docs/CR-9-문구안.md). 승인 전에는 01~03을 고치지 않는다. 시제품 브랜치 proto-cr10-btable은 병합하지 않는다. 답은 한국어로만
+next_session_first_action: (2026-10-04) CR-9·CR-10 승인·반영 완료. docs/HANDOFF.md 1절을 읽고, 사용자가 반영 요약(.tmp/guide/진행-정리-20261004.md)과 1번 화면 확인을 마쳤는지 묻는다. 그다음 T-18(찾기·거르기·주변만 보기)부터 연속 진행. 시제품 브랜치 proto-cr10-btable은 참고만(그대로 병합하지 않음, tech-record 36절 바꿀 점 10개). 답은 한국어로만
 
 implementation:
-  current_task: (2026-10-04) 구현 멈춤 중 자율 작업 완료(변환기 실문서 시험·화면 점검·CR-10 반영안·B·C 시제품 브랜치, 작은 결함 수정·재검증 3회). 단위 테스트 395, Chrome·Edge·실행 안내·제출 점검 통과. 사용자 확인(.tmp/guide/확인-종합.md) 대기
+  current_task: (2026-10-04) CR-9·CR-10 승인·문서 반영 완료. 다음 구현은 T-18(CR-10 B). 착수 전 사용자에게 반영 요약 확인(진행-정리-20261004.md 2절), 조력자 요청 발송은 사용자
   tasks:
+    - id: CONFIRM-2026-10-04
+      status: 사용자 "우선 전부 권장대로"(확인-종합 7가지). CR-9·CR-10 문서 반영, 샘플 손질, 새 제출 압축, 조력자 요청글 갱신 완료
+      date: 2026-10-04
+      result: 커밋 ae4e26d(샘플 V-5·V-8), 문서 반영 커밋(이 기록과 같은 커밋). release/업무유니버스-제출본-20261004b.zip(이전 판 20261004.zip 보관). .tmp/guide/조력자-요청글.md 갱신, .tmp/guide/진행-정리-20261004.md(앞으로 할 일)
+      normal_checks: 통과 (단위 테스트 395, Chrome·Edge 전체 점검, 실행 안내 따라가기, 제출 점검 9/9, R-06·비밀값 0건, 사전 생성 근거 덤프 변경 전후 동일)
+      error_checks: 통과 (STAMP 변경으로 실패한 이력 순서 테스트 1건 — 지금 시각을 고정값 대신 STAMP+1시간으로 고침(테스트 의도 유지). 문서 반영은 별도 재검증 에이전트가 반영안·문구안과 대조)
+      unverified: [1번 화면 확인(사용자), 반영 문서 사용자 열람, 조력자 의견, 실문서 3건 확보, 기능 동결 날짜]
     - id: AUTO-2026-10-04
       status: 사용자 "1·2·3·4 전부, 작은 결함은 고침"(2026-10-04). 완료, 사용자 확인 대기
       date: 2026-10-04
@@ -279,6 +305,10 @@ implementation:
     build: esbuild 0.28.2, ES 모듈 소스 → IIFE 단일 스크립트 dist/app.js + dist/index.html
     toolchain: Node.js 24.19.0 LTS, npm 11.17.0, Git 2.55.0
   doc_changes:
+    - document: docs/01-requirements.md, 02-design.md, 03-plan.md, limits.md
+      change: CR-9 a~l 반영 후 CR-10 반영안 [공통]·[A]~[E] 반영(D-ID는 D-16~D-20). 02 4절 샘플 이름(V-5·V-8), 02 6절·limits L-4의 R-09 문구를 CR-10 E에 맞춤
+      user_expression: "우선 전부 권장대로"
+      date: 2026-10-04
     - document: docs/02-design.md 5.1(P-1)·5.2(P-3)·5.7(D-10)
       change: T-01 실측 결과와 라이브러리·빌드 확정 반영 (결정 변경 없음, 결과 기록)
       user_expression: "반영"
