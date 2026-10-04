@@ -770,6 +770,18 @@ function start() {
   });
   $('relayout').addEventListener('click', () => graph.relayout());
 
+  // 패널 넓게 보기(U-5): 눌러서 바꾸고, 그래프 영역이 줄거나 늘면 화면에 다시 맞춘다. 저장하지 않는다
+  const wideBtn = $('wide-toggle');
+  wideBtn.addEventListener('click', () => {
+    const main = document.querySelector('main');
+    const on = !main.classList.contains('wide');
+    main.classList.toggle('wide', on);
+    wideBtn.setAttribute('aria-pressed', String(on));
+    wideBtn.textContent = on ? '패널 좁게 보기' : '패널 넓게 보기';
+    graph.cy.resize();
+    graph.fit();
+  });
+
   // 유니버스 묶기(R-11 ①, CR-4 시제품): 사용자가 하위 유니버스와 이름·단위를 고른다
   const dialog = $('group-dialog');
   // 생성 방식 버튼: 지금 방식을 이름에 보인다(R-15 "생성 방식 표시")

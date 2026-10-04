@@ -49,7 +49,7 @@ test('꼭지 대상 확정: 범위 업무 중 보내는 사람이 맡았던 업�
   const app = open(memoryStorage(), 'U-A1');
   const r = app.confirmHandover({ draft: draftOf(app, 'U-A1/N-000', 'U-A1/N-011', 'U-A1/N-012'), text: TEXT, date: '2026-10-03' });
   assert.equal(r.ok, true);
-  assert.deepEqual(r.works, ['U-A1/N-001']); // 윤바다는 대사 확인만 맡았다
+  assert.deepEqual(r.works, ['U-A1/N-001', 'U-A1/N-002', 'U-A1/N-003']); // 윤바다가 맡았던 세 업무(검토6 P-2: 자료 수집·보고 추가)
   assert.equal(app.doc.nodes.find((n) => `U-A1/${n.id}` === r.artifact).label, '2026-10-03 월말 정산 점검 인수인계서');
   // 아무 업무도 맡지 않은 사람(V-1001 한가람은 대사 확인을 맡았으므로, 새 사람을 만든다)
   const p = app.addNode({ core_type: 'person', label: '가상 신입', emp_no: 'V-1099' });

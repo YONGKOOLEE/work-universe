@@ -8,7 +8,7 @@
 // 이 파일을 고쳐 내장 샘플이 바뀌면 universe.created_at을 새 값으로 바꾼다.
 // 앱은 그 값이 저장된 것과 다르면 샘플을 새로 넣는다(app/src/app/app.js).
 
-const STAMP = '2026-10-04T00:10:00+09:00'; // 검토5 V-5: 작성 주체를 조직관리(U-O)의 현재 팀으로
+const STAMP = '2026-10-05T00:50:00+09:00'; // 검토6 P-2: 자료 수집·보고의 담당 이력 추가(앞서 검토5 V-5: 작성 주체를 조직관리(U-O)의 현재 팀으로)
 
 const node = (id, core_type, label, rest = {}) => ({
   id, core_type, label, ...rest, hidden: false, created_at: STAMP, updated_at: STAMP,
@@ -83,6 +83,9 @@ export const SAMPLE_A1 = {
     edge('L-009', 'N-001', 'N-003', 'precedes'),
     edge('L-010', 'N-002', 'N-021', 'produces'),
     edge('L-011', 'N-001', 'N-020', 'produces'),
+    // 윤바다는 대사 확인과 함께 자료 수집·보고도 맡았다. 9월 말 구두 인수인계는 대사 확인만 다뤄 두 업무는 담당이 비었다(공백의 이야기, 검토6 P-2)
+    edge('L-012', 'N-011', 'N-002', 'performs', { period: { start: '2026-06-01', end: '2026-09-30' } }),
+    edge('L-013', 'N-011', 'N-003', 'performs', { period: { start: '2026-06-01', end: '2026-09-30' } }),
   ],
   events: [
     event('E-003', 'assign_start', '2025-03-01', { person_id: 'N-010', work_id: 'N-001' }, '한가람이 대사 확인을 맡기 시작'),
@@ -102,6 +105,10 @@ export const SAMPLE_A1 = {
     event('E-007', 'handover', '2026-09-30', { work_id: 'N-001', from_person_id: 'N-011', to_person_id: 'N-012' },
       '구두로 인수인계. 인수인계서 없음, 이전 인수인계서 참조 안 함'),
     event('E-008', 'assign_end', '2026-09-30', { person_id: 'N-011', work_id: 'N-001' }),
+    event('E-016', 'assign_start', '2026-06-01', { person_id: 'N-011', work_id: 'N-002' }, '윤바다가 자료 수집도 맡기 시작'),
+    event('E-017', 'assign_start', '2026-06-01', { person_id: 'N-011', work_id: 'N-003' }, '윤바다가 보고도 맡기 시작'),
+    event('E-018', 'assign_end', '2026-09-30', { person_id: 'N-011', work_id: 'N-002' }, '윤바다가 떠나면서 종료. 후임은 아직 정해지지 않음(구두 인수인계에 포함되지 않음)'),
+    event('E-019', 'assign_end', '2026-09-30', { person_id: 'N-011', work_id: 'N-003' }, '윤바다가 떠나면서 종료. 후임은 아직 정해지지 않음(구두 인수인계에 포함되지 않음)'),
     event('E-009', 'assign_start', '2026-10-01', { person_id: 'N-012', work_id: 'N-001' }),
   ],
   refs: [],

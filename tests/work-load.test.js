@@ -13,12 +13,13 @@ import { describeNode } from '../app/src/view/describe.js';
 const all = allSamples(); // T-13: 부서(U-D1)는 교육팀(U-C)까지 포함
 const ASOF = '2026-10-02';
 
-test('업무 상세: 대사 확인은 현재 담당 서하늘, 자료 수집은 담당 기록 없음, 2025 행사는 이전 담당자만', () => {
+test('업무 상세: 대사 확인은 현재 담당 서하늘, 자료 수집은 마지막 담당 윤바다가 떠난 공백, 2025 행사는 이전 담당자만', () => {
   const v = viewOf('U-D1');
   const a = workLoad(v, 'U-A1/N-001', { asOf: ASOF });
   assert.equal(a.kind, 'covered');
   assert.deepEqual(a.current.map((p) => p.label), ['서하늘']);
-  assert.equal(workLoad(v, 'U-A1/N-002', { asOf: ASOF }).kind, 'never');
+  const c = workLoad(v, 'U-A1/N-002', { asOf: ASOF });
+  assert.deepEqual([c.kind, c.last_person.label, c.last_end], ['ended', '윤바다', '2026-09-30']);
   const b = workLoad(v, 'U-B/N-101', { asOf: ASOF });
   assert.deepEqual([b.kind, b.last_person.label, b.last_end], ['ended', '윤바다', '2025-12-15']);
   assert.equal(workLoad(v, 'U-B/N-201', { asOf: ASOF }), null); // 사람 노드

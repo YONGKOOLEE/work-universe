@@ -31,9 +31,9 @@ test('월말 정산 월별 흐름: 첫 이력 달부터 이번 달까지, 2026-0
   assert.ok(by['2026-06'].counts.assign_start >= 1);
   // 근거: 그 기간 이력의 ID(R-05 ①)
   assert.ok(by['2026-01'].evidence_ids.includes('U-A1/E-001'));
-  // 기간 말 담당: 2025-06은 한가람, 2026-07은 윤바다 → 둘 다 1명·1업무
+  // 기간 말 담당: 2025-06은 한가람(1명·1업무), 2026-07은 윤바다(1명·대사 확인·자료 수집·보고 3업무, 검토6 P-2)
   assert.deepEqual([by['2025-06'].active_people, by['2025-06'].active_works], [1, 1]);
-  assert.deepEqual([by['2026-07'].active_people, by['2026-07'].active_works], [1, 1]);
+  assert.deepEqual([by['2026-07'].active_people, by['2026-07'].active_works], [1, 3]);
   // 개편(2026-01) 전후로 같은 업무의 담당이 끊기지 않는다(R-14)
   assert.ok(['2025-12', '2026-01', '2026-02'].every((k) => by[k].active_works === 1));
 });

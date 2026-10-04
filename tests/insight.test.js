@@ -107,7 +107,7 @@ test('점수: 주제 3, 산출물 유형 2, 낱말 1. 더 많이 겹치는 업�
   more.nodes.push({ id: 'N-401', core_type: 'artifact', subtype: '정산표', label: '행사 정산표', hidden: false });
   more.edges.push({ id: 'L-050', source: 'N-101', target: 'N-401', core_type: 'produces', hidden: false });
   const boosted = similarExperts(viewOf('U-D1', { 'U-A1': a1, 'U-B': more }), { works: ['U-A1/N-001'], asOf: ASOF }).people;
-  assert.deepEqual(boosted.map((p) => [p.label, p.score]), [['윤바다', 5], ['운영 담당', 3], ['정산 담당', 3]]);
+  assert.deepEqual(boosted.map((p) => [p.label, p.score]), [['윤바다', 7], ['운영 담당', 3], ['정산 담당', 3]]); // 윤바다는 자료 수집(같은 산출물 유형 +2)도 맡았다(검토6 P-2)
   assert.match(boosted[0].works[0].reasons.join(' '), /같은 산출물 유형 「정산표」/);
   // T-13: 「인수인계서」는 어떤 업무든 인계 때 생기므로 같아도 점수를 주지 않는다(GENERIC_ARTIFACT_TYPES)
   const handoverOnly = JSON.parse(JSON.stringify(SAMPLE_EVENT));

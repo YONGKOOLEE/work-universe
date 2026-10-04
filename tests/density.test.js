@@ -24,11 +24,11 @@ test('정답 표 DG-*: 공백·밀집 결과가 일치한다', () => {
   }
 });
 
-test('월말 정산: 서하늘만 현재 담당, 자료 수집·보고는 담당 기록 없음(공백)', () => {
+test('월말 정산: 서하늘만 현재 담당, 자료 수집·보고는 마지막 담당 윤바다(2026-09-30 종료)가 떠난 공백(검토6 P-2)', () => {
   const r = densityGaps(viewOf('U-A1'), { asOf: ASOF });
   assert.equal(r.groups.length, 1);
   assert.deepEqual(r.groups[0], { universe_id: 'U-A1', name: SAMPLE_A1.universe.name, insufficient: false, works: 3, people: 1, gaps: 2, dense: 0 });
-  assert.ok(r.gaps.every((g) => g.kind === 'never' && g.last_person === null));
+  assert.ok(r.gaps.every((g) => g.kind === 'ended' && g.last_person && g.last_person.label === '윤바다' && g.last_end === '2026-09-30'));
 });
 
 test('기준일이 바뀌면 현재 담당 판정이 바뀐다(인수인계 전에는 윤바다)', () => {

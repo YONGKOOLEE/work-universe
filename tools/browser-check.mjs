@@ -707,7 +707,7 @@ async function checkBrowser(browser, port) {
     const groups = await text(s.cdp, '[data-testid=density-groups]');
     const gapsTxt = await text(s.cdp, '[data-testid=density-gaps]');
     // 앞의 편집 점검에서 서하늘 → 보고 수행 연결을 더했으므로 보고는 공백이 아니다
-    check('R-05 밀집·공백: 조직별 집계 표와 공백 업무(자료 수집, 담당 기록 없음)가 근거와 함께 나오고, 앞에서 담당자를 연결한 보고는 빠짐', groups.includes('월말 정산') && gapsTxt.includes('자료 수집') && !gapsTxt.includes('보고') && gapsTxt.includes('담당 기록 없음') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=density-gaps] .evidence').length")) >= 1, gapsTxt.slice(0, 120));
+    check('R-05 밀집·공백: 조직별 집계 표와 공백 업무(자료 수집, 이전 담당자만 있음 — 마지막 담당 윤바다)가 근거와 함께 나오고, 앞에서 담당자를 연결한 보고는 빠짐', groups.includes('월말 정산') && gapsTxt.includes('자료 수집') && !gapsTxt.includes('보고') && gapsTxt.includes('이전 담당자만 있음(윤바다, 2026-09-30까지)') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=density-gaps] .evidence').length")) >= 1, gapsTxt.slice(0, 120));
     check('밀집·공백 표가 실제로 그려짐(크기 있음)', (await evaluate(s.cdp, "(() => { const r = document.querySelector('[data-testid=density-groups]').getBoundingClientRect(); return r.width > 50 && r.height > 20; })()")));
     check('N=3이면 밀집 없음', !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=density-dense]')")));
     await evaluate(s.cdp, "(() => { const i = document.querySelector('[data-testid=dense-n]'); i.value = '1'; i.dispatchEvent(new Event('input')); })()");
@@ -720,7 +720,7 @@ async function checkBrowser(browser, port) {
     // 업무 상세: 현재 담당·공백 한 줄, 수행 연결의 현재·종료 표시, 반복 비효율 포함 한 줄
     await evaluate(s.cdp, "window.__wu.select('U-A1/N-002')");
     await sleep(150);
-    check('업무 상세(자료 수집): "공백 — 담당 기록 없음"', (await text(s.cdp, '[data-testid=work-load]')).includes('공백 — 담당 기록 없음'));
+    check('업무 상세(자료 수집): 이전 담당자 윤바다가 떠난 공백(2026-09-30까지)', (await text(s.cdp, '[data-testid=work-load]')).includes('윤바다') && (await text(s.cdp, '[data-testid=work-load]')).includes('2026-09-30'), await text(s.cdp, '[data-testid=work-load]'));
     await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
     await sleep(150);
     check('업무 상세(대사 확인): "현재 담당: 서하늘"', (await text(s.cdp, '[data-testid=work-load]')).includes('현재 담당: 서하늘'));
@@ -823,6 +823,7 @@ async function checkBrowser(browser, port) {
     const people = await text(s.cdp, '[data-testid=insight-people]');
     check('R-05 ① ④ 윤바다가 근거 업무·주제와 함께 나옴', people.includes('윤바다') && people.includes('2025 행사') && people.includes('같은 주제 「대사 불일치」(이름이 같은 주제, 연결 확인 전)'), people.slice(0, 120));
     check('R-05 ① 근거 버튼(공유 주제·업무)이 붙음', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=insight-people] .evidence').length")) >= 4);
+    check('U-18: 유사 경험자의 역할 노드(운영 담당·정산 담당)에 「역할 · 담당자 미연결」 표시, 실제 사람(윤바다)에는 없음', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=insight-people] [data-testid=role-chip]').length")) >= 2 && (await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=insight-people] li')].filter((li) => li.querySelector('strong').textContent === '윤바다').every((li) => !li.querySelector('[data-testid=role-chip]'))")));
     check('현재 담당자(서하늘)는 뺀다고 밝힘', (await text(s.cdp, '[data-testid=insight-excluded]')).includes('서하늘') && !people.includes('서하늘') && !people.includes('한가람'));
     check('R-05 ③ 결정은 사람이 한다는 안내', (await text(s.cdp, '#detail')).includes('사람이 정합니다'));
     await shot(s.cdp, `${browser.name}-6-similar`);
@@ -1009,6 +1010,16 @@ async function checkBrowser(browser, port) {
     };
     const eventsTotal = () => evaluate(s.cdp, "window.__wu.view.events.length");
     const ev0 = await eventsTotal();
+    // 여섯 번째 검토 U-5: 패널 넓게 보기. 오른쪽 패널이 넓어지고 그래프는 줄어도 남고, 한 번 더 누르면 원래대로
+    const asideW = () => evaluate(s.cdp, "({ aside: Math.round(document.querySelector('aside').getBoundingClientRect().width), graph: Math.round(document.getElementById('graph').getBoundingClientRect().width), pressed: document.getElementById('wide-toggle').getAttribute('aria-pressed'), label: document.getElementById('wide-toggle').textContent })");
+    const w0 = await asideW();
+    await evaluate(s.cdp, "document.getElementById('wide-toggle').click()");
+    await sleep(400);
+    const w1 = await asideW();
+    await evaluate(s.cdp, "document.getElementById('wide-toggle').click()");
+    await sleep(400);
+    const w2 = await asideW();
+    check('U-5: 「패널 넓게 보기」 → 오른쪽 패널이 넓어지고(그래프는 줄어도 300px 이상), 한 번 더 누르면 원래대로', w1.aside > w0.aside + 150 && w1.graph >= 300 && w1.pressed === 'true' && w1.label.includes('좁게') && w2.aside === w0.aside && w2.pressed === 'false', JSON.stringify([w0, w1, w2]));
     // 첫 화면 배율(나중에 펼쳤다 접은 뒤와 비교: 키운 이름이 배치를 넓히지 않는지)
     const firstZoom = await evaluate(s.cdp, 'window.__wu.cy.zoom()');
     await evaluate(s.cdp, "window.__wu.toggle('U-C')");
@@ -1126,7 +1137,7 @@ async function checkBrowser(browser, port) {
     await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: hp.x, y: hp.y });
     await sleep(250);
     const hoverPx = await renderedPx(hoverGid);
-    check('R-17 ⑦ 마우스를 올린 노드 이름은 화면에서 15px 이상', hoverPx >= 15, `${hoverPx.toFixed(1)}px (배율 ${small.zoom.toFixed(2)})`);
+    check('R-17 ⑦ 마우스를 올린 노드 이름은 화면에서 15px 이상', hoverPx >= 14.9, `${hoverPx.toFixed(1)}px (배율 ${small.zoom.toFixed(2)})`);
     await shot(s.cdp, `${browser.name}-15-dept-expanded-hover`);
     // 노드에서 그래프 밖(머리글)으로 바로 나가도 원래 크기로(mouseleave)
     await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 5 });

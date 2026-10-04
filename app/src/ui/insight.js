@@ -8,6 +8,7 @@ import { METHOD_LABELS, explainInsight } from '../llm/connector.js';
 import { el } from './dom.js';
 import { evidenceChips } from './evidence.js';
 import { todayLocal } from './time.js';
+import { SUBTYPE_ROLE } from '../model/schema.js';
 
 // 밀집 기준 N. 화면에서 바꾸면 이 세션 동안 유지되고 사람 상세의 "밀집 기준에 해당" 판정도 같은 값을 쓴다(저장하지 않음)
 let denseN = DENSE_DEFAULT_N;
@@ -103,7 +104,10 @@ function renderSimilar(box, view, r, onFocus) {
       el('ol', { class: 'experts', 'data-testid': 'insight-people' },
         ...r.people.map((p) =>
           el('li', {},
-            el('div', { class: 'who' }, el('strong', {}, p.label), p.emp_no ? el('span', { class: 'muted small' }, ` ${p.emp_no}`) : null, el('span', { class: 'chip' }, `${p.score}점`)),
+            el('div', { class: 'who' }, el('strong', {}, p.label), p.emp_no ? el('span', { class: 'muted small' }, ` ${p.emp_no}`) : null,
+              // 원문에 사람 이름이 없어 역할 이름으로 만든 노드는 실제 사람이 아님을 밝힌다(여섯 번째 검토 U-18)
+              (view.getNode(p.gid) || {}).subtype === SUBTYPE_ROLE ? el('span', { class: 'chip', 'data-testid': 'role-chip', title: '원문에 사람 이름이 없어 역할 이름으로 만든 노드입니다. 실제 담당자는 연결되어 있지 않습니다.' }, '역할 · 담당자 미연결') : null,
+              el('span', { class: 'chip' }, `${p.score}점`)),
             ...p.works.map((w) =>
               el('div', { class: 'why' },
                 el('div', {}, `「${w.label}」`, el('span', { class: 'muted small' }, ` ${w.universe_name}${w.period ? ` · ${w.period}` : ''}${w.current ? ' · 현재도 담당' : ''}`)),
