@@ -16,6 +16,7 @@ import { flowChange, timeMonths } from '../app/src/rules/flow.js';
 import { createProvider } from '../app/src/llm/providers.js';
 import { refineDraft } from '../app/src/llm/connector.js';
 import { PREGEN } from '../app/data/pregen.js';
+import { filterDisplay, neighborhoodDisplay, searchNodes } from '../app/src/view/explore.js';
 
 export function makeUniverse(n) {
   const ctx = { now: '2026-10-01T09:00:00+09:00' };
@@ -87,6 +88,13 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     for (const w of works) workLoad(view, `${doc.universe.id}/${w}`, { asOf: '2026-10-02' });
   });
 
+  // T-18 큰 화면 탐색(R-17, limits L-25 재실측)
+  const shownD = projectView(view);
+  time('찾기(「가상」 일치 전부)', () => searchNodes(view, '가상'));
+  time('거르기(유형: 업무)', () => filterDisplay(shownD, { types: ['work'] }));
+  time('거르기(사람 하나)', () => filterDisplay(shownD, { person: `${doc.universe.id}/${people[0]}` }));
+  time('주변만 보기(2단계)', () => neighborhoodDisplay(view, `${doc.universe.id}/${works[0]}`, 2));
+
   if (process.argv.includes('--browser')) {
     // Chrome에서 이 문서를 저장소에 넣고 열어, 첫 그래프가 그려질 때까지 시간을 잰다
     const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -124,6 +132,14 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     // 시간 보기: 슬라이더를 6칸 옮겨 흐림·상세 다시 계산까지, 흐름 변화 탭 열기
     const slide = await ev("(() => { const r = document.querySelector('[data-testid=time-range]'); const t = performance.now(); r.value = String(Math.max(0, Number(r.max) - 6)); r.dispatchEvent(new Event('input')); return performance.now() - t; })()");
     const flowTab = await ev("(() => { window.__wu.select(null); document.querySelector('[data-testid=btn-insight-universe]').click(); const t = performance.now(); document.querySelector('[data-testid=tab-flow]').click(); return performance.now() - t; })()");
+    // T-18: 찾기 → 고르기(이동·확대), 유형 거르기, 주변만 보기 → 전체 보기
+    await ev('window.__wu.select(null)');
+    const find = await ev("(() => { const i = document.querySelector('[data-testid=find-input]'); i.value = '가상'; const t = performance.now(); i.dispatchEvent(new Event('input')); const n = document.querySelectorAll('[data-testid=find-hit]').length; document.querySelector('[data-testid=find-hit]').click(); return [performance.now() - t, n]; })()");
+    await ev("document.querySelector('[data-testid=filter-open]').click()"); // 거르기 창의 확인란은 창이 열린 뒤(toggle 이벤트) 그려진다
+    await sleep(150);
+    const filt = await ev("(() => { const t = performance.now(); const c = document.querySelector('[data-testid=filter-type-work]'); c.checked = true; c.dispatchEvent(new Event('change')); const ms = performance.now() - t; document.querySelector('[data-testid=filter-clear]').click(); return ms; })()");
+    const nb = await ev(`(() => { window.__wu.select('${doc.universe.id}/${works[0]}'); const t = performance.now(); document.querySelector('[data-testid=btn-nbhd2]').click(); const ms = performance.now() - t; const n = window.__wu.cy.nodes().length; const t2 = performance.now(); document.getElementById('fit').click(); return [ms, n, performance.now() - t2]; })()`);
+    console.log(`[Chrome T-18] 찾기 입력~목록·고르기 ${Math.round(find[0])} ms(결과 ${find[1]}개 표시), 유형 거르기 ${Math.round(filt)} ms, 주변 2단계 ${Math.round(nb[0])} ms(노드 ${nb[1]}개), 전체 보기로 ${Math.round(nb[2])} ms`);
     console.log(`\n[Chrome] 열기~그래프 표시 ${openMs} ms (노드 ${shown}개), 다시 정렬 ${Math.round(relayout)} ms, 노드 선택·상세 ${Math.round(select)} ms, 시간 보기 이동 ${Math.round(slide)} ms, 흐름 변화 탭 ${Math.round(flowTab)} ms`);
     proc.kill();
     await sleep(500);

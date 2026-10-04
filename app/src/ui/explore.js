@@ -1,0 +1,140 @@
+// 그래프 위 막대: 찾기 · 거르기 · 상태 표시(T-18, R-17, D-17). 계산은 view/explore.js(순수 함수)가 하고, 이 파일은 입력·표시만 한다.
+// 키보드(R-17 ⑧, R-08 보강): 찾기 칸 입력 → ↓로 결과 목록 → Enter로 노드 열기. Enter를 바로 누르면 첫 결과를 연다.
+
+import { el } from './dom.js';
+
+// 바꾸기 쉬운 값은 한 곳에(연속 진행 모드 원칙, decisions-pending 6절 C10-5)
+export const EXPLORE = {
+  FILTER_MODE: 'dim', // 거르기에서 빠진 노드: 'dim'(흐리게, 추천대로 2026-10-04) | 'hide'(숨기기)
+  LABEL_MIN_PX: 6, // 화면에서 이 크기(px)보다 작아지는 이름은 숨긴다(R-17 ⑦)
+  LABEL_READ_PX: 15, // 마우스를 올리거나 고른 노드의 이름은 화면에서 이 크기 이상으로(R-17 ⑦)
+  RESULT_LIMIT: 30, // 찾기 결과 목록에 보이는 수(더 있으면 "더 길게 입력" 안내)
+};
+
+/**
+ * @param {{
+ *   container: HTMLElement,
+ *   search: (q:string) => {gid:string,label:string,type_label:string,universe_name:string}[],
+ *   onPick: (gid:string) => void,
+ *   types: () => {key:string,label:string,color:string}[],
+ *   persons: () => {gid:string,label:string}[],
+ *   onFilter: (f:{types:string[], person:string|null}) => void,
+ * }} o
+ */
+export function exploreBar(o) {
+  const filter = { types: [], person: null };
+  let hits = [];
+
+  // ── 찾기(R-17 ①②⑧) ──
+  const input = el('input', { type: 'search', placeholder: '노드 찾기 (이름 일부, 예: 대사)', 'aria-label': '노드 찾기', 'data-testid': 'find-input', autocomplete: 'off', 'aria-controls': 'find-results' });
+  const results = el('ul', { id: 'find-results', class: 'find-results', 'data-testid': 'find-results', hidden: true, 'aria-label': '찾은 노드' });
+  const close = () => { results.hidden = true; };
+  const pick = (gid) => {
+    close();
+    input.blur();
+    o.onPick(gid);
+  };
+  const buttons = () => [...results.querySelectorAll('button')];
+  function showResults() {
+    const q = input.value.trim();
+    if (!q) return close();
+    hits = o.search(q);
+    const shown = hits.slice(0, EXPLORE.RESULT_LIMIT);
+    results.replaceChildren(...(hits.length
+      ? [
+        ...shown.map((h) => el('li', {}, el('button', { type: 'button', 'data-testid': 'find-hit', 'data-gid': h.gid, onclick: () => pick(h.gid) },
+          el('span', { class: 'name' }, h.label), el('span', { class: 'chip' }, h.type_label), el('span', { class: 'uname' }, h.universe_name)))),
+        hits.length > shown.length ? el('li', { class: 'more muted small', 'data-testid': 'find-more' }, `외 ${hits.length - shown.length}개 — 더 길게 입력하면 좁혀집니다`) : null,
+      ].filter(Boolean)
+      : [el('li', { class: 'none', 'data-testid': 'find-none', role: 'status' }, `찾는 노드 없음: 「${q}」`)]));
+    results.hidden = false;
+  }
+  input.addEventListener('input', showResults);
+  input.addEventListener('focus', showResults);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.isComposing) {
+      e.preventDefault();
+      if (!hits.length || results.hidden) showResults();
+      if (hits.length) pick(hits[0].gid);
+    } else if (e.key === 'ArrowDown' && !results.hidden && buttons().length) {
+      e.preventDefault();
+      buttons()[0].focus();
+    } else if (e.key === 'Escape') {
+      e.stopPropagation(); // 화면 전체의 Esc(선택 해제)와 겹치지 않게: 찾기 칸에서는 목록만 닫는다
+      if (!results.hidden) close();
+      else input.blur();
+    }
+  });
+  // 결과 목록 안: ↑↓로 이동, Enter·Space는 버튼 기본 동작(누르기), Esc는 찾기 칸으로
+  results.addEventListener('keydown', (e) => {
+    const list = buttons();
+    const i = list.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown' && i >= 0) { e.preventDefault(); list[Math.min(i + 1, list.length - 1)].focus(); }
+    if (e.key === 'ArrowUp' && i >= 0) { e.preventDefault(); if (i === 0) input.focus(); else list[i - 1].focus(); }
+    if (e.key === 'Escape') { e.stopPropagation(); close(); input.focus(); }
+  });
+  const findBox = el('div', { class: 'find-box' }, input, results);
+  document.addEventListener('click', (e) => { if (!findBox.contains(e.target)) close(); });
+  findBox.addEventListener('focusout', (e) => { if (!findBox.contains(e.relatedTarget)) close(); });
+
+  // ── 거르기(R-17 ③) ──
+  const typeBox = el('div', { class: 'types' });
+  const personSel = el('select', { 'data-testid': 'filter-person', 'aria-label': '사람 하나 고르기' });
+  // 사람은 하나만 고르므로 고르면 창을 닫아 그래프를 가리지 않는다(유형은 여러 개를 고를 수 있어 열어 둔다)
+  personSel.addEventListener('change', () => {
+    filter.person = personSel.value || null;
+    details.open = false;
+    o.onFilter({ ...filter });
+  });
+  const dimText = EXPLORE.FILTER_MODE === 'hide' ? '나머지는 숨김' : '나머지는 흐리게';
+  const details = el('details', { class: 'filter-box', 'data-testid': 'filter-box' },
+    el('summary', { 'data-testid': 'filter-open' }, '거르기'),
+    el('div', { class: 'filter-panel' },
+      el('div', { class: 'muted small' }, `노드 유형 — 고른 유형만 또렷하게, ${dimText}(꼭지는 늘 보임)`), typeBox,
+      el('div', { class: 'muted small' }, '사람 하나 — 그 사람과 맡은 업무만 또렷하게'), personSel,
+      el('button', { type: 'button', class: 'small-btn', 'data-testid': 'filter-clear-panel', onclick: () => clear() }, '거르기 모두 풀기')));
+  details.addEventListener('toggle', () => { if (details.open) renderFilterInputs(); });
+  document.addEventListener('click', (e) => { if (details.open && !details.contains(e.target)) details.open = false; });
+  details.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && details.open) {
+      e.stopPropagation();
+      details.open = false;
+      details.querySelector('summary').focus();
+    }
+  });
+
+  function renderFilterInputs() {
+    typeBox.replaceChildren(...o.types().map((t) => {
+      const cb = el('input', { type: 'checkbox', value: t.key, checked: filter.types.includes(t.key), 'data-testid': `filter-type-${t.key}` });
+      cb.addEventListener('change', () => {
+        filter.types = cb.checked ? [...new Set([...filter.types, t.key])] : filter.types.filter((k) => k !== t.key);
+        o.onFilter({ ...filter });
+      });
+      return el('label', { class: 'check' }, cb, el('span', { class: 'dot', style: `background:${t.color}` }), t.label);
+    }));
+    const people = o.persons();
+    // 고른 사람이 화면에서 사라졌어도(유니버스 접기 등) 목록에 남겨 풀 수 있게 한다
+    personSel.replaceChildren(el('option', { value: '' }, people.length ? '(사람 고르지 않음)' : '(이 화면에 사람 없음)'),
+      ...people.map((p) => el('option', { value: p.gid, selected: p.gid === filter.person }, p.label)));
+    personSel.disabled = !people.length && !filter.person;
+  }
+  function clear() {
+    filter.types = [];
+    filter.person = null;
+    details.open = false;
+    o.onFilter({ ...filter });
+  }
+
+  const status = el('div', { class: 'explore-status', 'data-testid': 'explore-status', role: 'status' });
+  o.container.replaceChildren(findBox, details, status);
+
+  return {
+    filter: () => ({ ...filter }),
+    clear,
+    focusFind: () => input.focus(),
+    /** 상태 줄: parts는 el 요소들(없으면 비움) */
+    setStatus(...parts) {
+      status.replaceChildren(...parts.filter(Boolean));
+    },
+  };
+}

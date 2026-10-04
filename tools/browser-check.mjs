@@ -969,6 +969,163 @@ async function checkBrowser(browser, port) {
     const issueMethod = await text(s.cdp, '[data-testid=draft-item-최근_이슈] [data-testid=item-method]');
     check('K-9: 새 메모를 더하면 최근 이슈만 규칙 기반, 나머지는 사전 생성(개수 안내)', memoOk === 'ok' && issueMethod === '규칙 기반' && (await text(s.cdp, '[data-testid=draft-counts]')).includes('나머지 1개는 규칙 기반'), `${memoOk} ${issueMethod}`);
   }
+  // ── T-18 큰 화면 탐색: 찾기·거르기·주변만 보기(R-17 ①~⑧). 실제 키 입력(CDP)으로 ──
+  await evaluate(s.cdp, "location.hash = 'U-D1'; location.reload()").catch(() => {});
+  await sleep(500);
+  if (await waitFor(s.cdp, "window.__wu && window.__wu.doc.universe.id === 'U-D1' && window.__wu.cy.nodes().length > 0", 8000)) {
+    // Enter는 실제 키보드처럼 글자(\r)를 함께 보내야 버튼의 기본 동작(누르기)이 일어난다
+    const key = async (k, code = k, vk = 0) => {
+      await s.cdp.send('Input.dispatchKeyEvent', k === 'Enter' ? { type: 'keyDown', key: k, code, windowsVirtualKeyCode: vk, text: '\r', unmodifiedText: '\r' } : { type: 'rawKeyDown', key: k, code, windowsVirtualKeyCode: vk });
+      await s.cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk });
+      await sleep(120);
+    };
+    const typeFind = async (q) => {
+      await evaluate(s.cdp, "(() => { const i = document.querySelector('[data-testid=find-input]'); i.value = ''; i.focus(); })()");
+      await s.cdp.send('Input.insertText', { text: q });
+      await sleep(200);
+    };
+    const eventsTotal = () => evaluate(s.cdp, "window.__wu.view.events.length");
+    const ev0 = await eventsTotal();
+    const shownCount = () => evaluate(s.cdp, 'window.__wu.cy.nodes().length');
+    // 렌더된 글자 크기(px) = 글자 크기 × 확대 배율
+    const renderedPx = (gid) => evaluate(s.cdp, `(() => { const n = window.__wu.cy.getElementById(${JSON.stringify(gid)}); return n.empty() ? -1 : n.pstyle('font-size').pfValue * window.__wu.cy.zoom(); })()`);
+    check('T-18: 그래프 위에 찾기 칸·거르기·「다시 정렬」「전체 보기」가 한 줄에 보임(크기 있음)', await evaluate(s.cdp, "(() => { const r = (s) => { const e = document.querySelector(s); if (!e) return null; const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0 ? b : null; }; const f = r('[data-testid=find-input]'), g = r('[data-testid=filter-open]'), t = r('#fit'); return !!(f && g && t) && Math.abs(f.top - t.top) < 20; })()"));
+
+    // ① 찾기 → ⑧ 키보드로 결과 목록 → Enter로 노드 열기(접힌 하위 유니버스 안이면 펼침)
+    const collapsedBefore = await evaluate(s.cdp, "window.__wu.cy.getElementById('U-A1/N-001').empty()");
+    await typeFind('대사');
+    const hits = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=find-hit]')].map((b) => b.dataset.gid + '|' + b.textContent)");
+    check('R-17 ① 찾기 「대사」 → 맞는 노드 목록(유형·유니버스 이름 포함), 접힌 하위 유니버스 안 노드도', hits.length >= 2 && hits.some((h) => h.startsWith('U-A1/N-001|') && h.includes('업무') && h.includes('월말 정산 점검')) && collapsedBefore, hits.slice(0, 3).join(', '));
+    await key('ArrowDown', 'ArrowDown', 40);
+    const focusedHit = await evaluate(s.cdp, "document.activeElement && document.activeElement.dataset.testid === 'find-hit' ? document.activeElement.dataset.gid : ''");
+    await key('ArrowDown', 'ArrowDown', 40);
+    await key('ArrowUp', 'ArrowUp', 38);
+    await key('Enter', 'Enter', 13);
+    await sleep(400);
+    const picked = await evaluate(s.cdp, '({ sel: window.__wu.selected, h2: (document.querySelector(\'#detail h2\') || {}).textContent, focusH2: document.activeElement && document.activeElement.tagName === \'H2\', inGraph: !window.__wu.cy.getElementById(window.__wu.selected || \'x\').empty() })');
+    check('R-17 ⑧ 키보드만: 찾기 칸 입력 → ↓로 목록 → Enter → 그 노드 상세가 열리고 초점이 상세 제목으로', !!focusedHit && picked.sel === focusedHit && !!picked.h2 && picked.focusH2 && picked.inGraph, JSON.stringify(picked));
+    await sleep(300);
+    const pickedPx = await renderedPx(picked.sel);
+    check('R-17 ①⑦ 찾은 노드로 이동·확대: 고른 노드 이름이 화면에서 15px 이상', pickedPx >= 15, pickedPx.toFixed(1));
+    check('R-17 ① 상태 줄에 「찾음」', (await text(s.cdp, '[data-testid=explore-note]')).includes('찾음'));
+    await shot(s.cdp, `${browser.name}-12-find-picked`);
+    await key('Escape', 'Escape', 27);
+    check('R-17 ⑧ Esc(상세 제목에 초점) → 노드 선택 해제', (await evaluate(s.cdp, 'window.__wu.selected')) === null);
+    await key('Escape', 'Escape', 27);
+    check('R-17 ⑧ 선택이 없을 때 Esc → 아무 일 없음(오류 없음, 유니버스 요약 그대로)', (await evaluate(s.cdp, 'window.__wu.selected')) === null && (await text(s.cdp, '#detail')).length > 0);
+    // ② 없는 이름, Enter 바로 누르기
+    await typeFind('없는이름xyz');
+    check('R-17 ② 없는 이름 → 「찾는 노드 없음」', (await text(s.cdp, '[data-testid=find-none]')).includes('찾는 노드 없음'));
+    await typeFind('정산 담당');
+    await key('Enter', 'Enter', 13);
+    await sleep(300);
+    check('R-17 ⑧ 찾기 칸에서 Enter를 바로 누르면 첫 결과를 연다', ((await evaluate(s.cdp, "(window.__wu.view.getNode(window.__wu.selected || '') || {}).label")) || '').includes('정산 담당'));
+    await evaluate(s.cdp, 'window.__wu.select(null)');
+
+    // ③ 거르기: 유형(업무) → 나머지 흐림, 상태 표시, 한 번에 풀기
+    await clickTestId(s.cdp, 'filter-open');
+    await sleep(150);
+    await clickTestId(s.cdp, 'filter-type-work');
+    await sleep(400);
+    const fw = await evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const out = cy.nodes('.filtered-out'); const wrong = cy.nodes().filter((n) => { const t = n.data('core_type'); return (t === 'work' || t === 'root') === n.hasClass('filtered-out'); }); return { out: out.length, wrong: wrong.length, op: out.length ? out[0].renderedStyle('opacity') : null }; })()");
+    check('R-17 ③ 유형 거르기(업무) → 업무·꼭지만 또렷, 나머지 흐림(유형이 맞지 않는 노드 0)', fw.out > 0 && fw.wrong === 0 && Number(fw.op) < 0.2, JSON.stringify(fw));
+    check('R-17 ③ 거르기 중 표시(n/전체 또렷)와 「거르기 풀기」', /거르기 중: 업무 — \d+\/\d+개 또렷/.test(await text(s.cdp, '[data-testid=filter-on]')) && !!(await evaluate(s.cdp, "!!document.querySelector('[data-testid=filter-clear]')")));
+    await shot(s.cdp, `${browser.name}-13-filter-work`);
+    // 시간 막대를 옮겨도 거르기 흐림이 그대로(표시와 실제가 일치)
+    await evaluate(s.cdp, "(() => { const r = document.querySelector('[data-testid=time-range]'); r.value = '0'; r.dispatchEvent(new Event('input')); })()");
+    await sleep(250);
+    const afterTime = await evaluate(s.cdp, "window.__wu.cy.nodes('.filtered-out').length");
+    check('R-17 ③ 거르기 중 시간 막대 이동 → 흐림·표시 그대로', afterTime === fw.out && (await text(s.cdp, '[data-testid=filter-on]')).includes('거르기 중'), `${afterTime}/${fw.out}`);
+    await clickTestId(s.cdp, 'time-today');
+    await clickTestId(s.cdp, 'filter-clear');
+    await sleep(300);
+    check('R-17 ③ 「거르기 풀기」 한 번 → 흐림 0, 표시 사라짐', (await evaluate(s.cdp, "window.__wu.cy.nodes('.filtered-out').length")) === 0 && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=filter-on]')")));
+    // 사람 하나
+    await evaluate(s.cdp, "window.__wu.toggle('U-B')");
+    await sleep(300);
+    await clickTestId(s.cdp, 'filter-open');
+    await sleep(150);
+    await evaluate(s.cdp, "(() => { const sel = document.querySelector('[data-testid=filter-person]'); sel.value = 'U-B/N-201'; sel.dispatchEvent(new Event('change')); })()");
+    await sleep(300);
+    const fp = await evaluate(s.cdp, "window.__wu.cy.nodes().not('.filtered-out').map((n) => n.data('label') + ':' + n.data('core_type'))");
+    check('R-17 ③ 사람 하나(도하람) → 그 사람과 맡은 업무(2026 행사·장소 섭외·참가자 모집)와 꼭지만 또렷', fp.includes('도하람:person') && fp.includes('장소 섭외:work') && fp.includes('참가자 모집:work') && !fp.some((x) => x.endsWith(':topic')) && !fp.includes('윤바다:person'), fp.join(', '));
+    await sleep(300); // 맞춤 애니메이션
+    const fpRead = await evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const z = cy.zoom(); return cy.nodes().not('.filtered-out').filter((n) => n.data('core_type') !== 'root').map((n) => Math.round(n.pstyle('font-size').pfValue * z * 10) / 10 + (n.hasClass('tiny-label') ? '숨김' : '')); })()");
+    check('R-17 ③⑦ 사람 거르기 뒤 남은 노드(꼭지 제외)에 화면을 맞춰 이름이 모두 읽힘(6px 이상, 숨김 없음)', fpRead.length >= 2 && fpRead.every((x) => !String(x).includes('숨김') && Number(x) >= 6), fpRead.join(', '));
+    await shot(s.cdp, `${browser.name}-14-filter-person`);
+    await clickTestId(s.cdp, 'filter-clear');
+    await sleep(200);
+
+    // ⑦ 모두 펼친 부서 화면: 작은 이름은 숨김(6px 미만), 마우스를 올린 노드 이름은 크게
+    // 앞 단계(찾기)에서 이미 펼친 것이 있으므로, 접힌 것만 펼치기를 반복한다(펼치면 그 안의 하위가 새로 접힌 것으로 나타남)
+    await evaluate(s.cdp, "(() => { for (let i = 0; i < 5 && window.__wu.display.collapsed.size; i += 1) for (const u of [...window.__wu.display.collapsed.keys()]) window.__wu.toggle(u); })()");
+    await sleep(600);
+    await evaluate(s.cdp, "document.getElementById('fit').click()");
+    await sleep(400);
+    const small = await evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const z = cy.zoom(); const all = cy.nodes(); const tiny = all.filter((n) => n.pstyle('font-size').pfValue * z < 6); const hidden = all.filter((n) => n.hasClass('tiny-label') && Number(n.pstyle('text-opacity').value) === 0); const mismatch = all.filter((n) => (n.pstyle('font-size').pfValue * z < 6) !== n.hasClass('tiny-label')); return { total: all.length, tiny: tiny.length, hidden: hidden.length, mismatch: mismatch.length, zoom: z }; })()");
+    check('R-17 ⑦ 모두 펼친 부서 화면: 화면에서 6px보다 작은 이름은 모두 숨기고, 6px 이상은 보임(판정 불일치 0)', small.total >= 60 && small.tiny > 0 && small.hidden === small.tiny && small.mismatch === 0, JSON.stringify(small));
+    const hoverGid = await evaluate(s.cdp, "window.__wu.cy.nodes('[core_type = \"work\"]').filter((n) => !n.hasClass('time-off'))[3].id()");
+    const hp = await evaluate(s.cdp, `(() => { const n = window.__wu.cy.getElementById(${JSON.stringify(hoverGid)}); const p = n.renderedPosition(); const r = document.getElementById('graph').getBoundingClientRect(); return { x: r.left + p.x, y: r.top + p.y }; })()`);
+    await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: hp.x, y: hp.y });
+    await sleep(250);
+    const hoverPx = await renderedPx(hoverGid);
+    check('R-17 ⑦ 마우스를 올린 노드 이름은 화면에서 15px 이상', hoverPx >= 15, `${hoverPx.toFixed(1)}px (배율 ${small.zoom.toFixed(2)})`);
+    await shot(s.cdp, `${browser.name}-15-dept-expanded-hover`);
+    // 노드에서 그래프 밖(머리글)으로 바로 나가도 원래 크기로(mouseleave)
+    await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 5 });
+    await sleep(150);
+    check('R-17 ⑦ 마우스를 그래프 밖으로 떼면 그 노드 이름은 원래 크기로', (await renderedPx(hoverGid)) < hoverPx);
+
+    // ④ 주변만 보기 1·2단계 → 「전체 보기」로 돌아가기
+    const before = await shownCount();
+    await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+    await sleep(150);
+    await clickTestId(s.cdp, 'btn-nbhd');
+    await sleep(500);
+    const nb1 = await evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const z = cy.zoom(); return { n: cy.nodes().length, minPx: Math.min(...cy.nodes().map((x) => x.pstyle('font-size').pfValue * z)), nb: window.__wu.nbhd }; })()");
+    check('R-17 ④ 주변만 보기 → 고른 노드와 1단계 이웃만 다시 배치, 모든 이름이 6px 이상(읽힘)', nb1.nb && nb1.nb.depth === 1 && nb1.n < before && nb1.n >= 2 && nb1.minPx >= 6, JSON.stringify(nb1));
+    check('R-17 ④ 주변만 보기 표시와 「전체 보기로」', (await text(s.cdp, '[data-testid=nbhd-on]')).includes('주변만 보기: 「대사 확인」 1단계'));
+    await shot(s.cdp, `${browser.name}-16-nbhd-1`);
+    await clickTestId(s.cdp, 'nbhd-depth');
+    await sleep(500);
+    const nb2 = await shownCount();
+    check('R-17 ④ 2단계 → 더 넓게', nb2 > nb1.n && (await evaluate(s.cdp, 'window.__wu.nbhd.depth')) === 2, `${nb1.n} → ${nb2}`);
+    await evaluate(s.cdp, "document.getElementById('fit').click()");
+    await sleep(500);
+    check('R-17 ④ 「전체 보기」 → 전체 그래프로 돌아감', (await evaluate(s.cdp, 'window.__wu.nbhd')) === null && (await shownCount()) === before, `${await shownCount()}/${before}`);
+
+    // ⑤ 데이터 불변
+    check('R-17 ⑤ 찾기·거르기·주변만 보기 뒤 이력 수 그대로(데이터 불변)', (await eventsTotal()) === ev0, `${ev0} → ${await eventsTotal()}`);
+
+    // ④ 오류: 이웃 없는 노드 → 알림, 화면 그대로. 거르기 중 저장해도 흐림 유지
+    await clickTestId(s.cdp, 'filter-open');
+    await sleep(150);
+    await clickTestId(s.cdp, 'filter-type-work');
+    await sleep(300);
+    const outBefore = await evaluate(s.cdp, "window.__wu.cy.nodes('.filtered-out').length");
+    await evaluate(s.cdp, "window.__wu.select(null)");
+    await evaluate(s.cdp, "document.querySelector('details.add').open = true");
+    const lonely = 'T18 외톨이 메모';
+    const addR = await submitAdd(s.cdp, 'topic', lonely); // 주제는 꼭지에 바로 잇지 않는 것이 기본(연결 없는 노드)
+    await sleep(300);
+    const lonelyGid = await evaluate(s.cdp, `(window.__wu.view.nodes.find((n) => n.label === ${JSON.stringify(lonely)}) || {}).gid || ''`);
+    const outAfter = await evaluate(s.cdp, "window.__wu.cy.nodes('.filtered-out').length");
+    check('R-17 ③ 거르기 중 저장(노드 추가) → 새 주제 노드도 흐림, 표시 유지', addR.code === 'OK' && !!lonelyGid && outAfter === outBefore + 1 && (await text(s.cdp, '[data-testid=filter-on]')).includes('거르기 중'), `${outBefore} → ${outAfter}`);
+    await clickTestId(s.cdp, 'filter-clear');
+    await evaluate(s.cdp, `window.__wu.select(${JSON.stringify(lonelyGid)})`);
+    await sleep(150);
+    const countLonely = await shownCount();
+    await clickTestId(s.cdp, 'btn-nbhd');
+    await sleep(300);
+    check('R-17 ④ 오류: 이웃 없는 노드 → 「이어진 노드 없음」 알림, 화면 그대로', (await text(s.cdp, '[data-testid=explore-note]')).includes('이어진 노드 없음') && (await evaluate(s.cdp, 'window.__wu.nbhd')) === null && (await shownCount()) === countLonely);
+    // 숨긴 노드는 찾기에 나오지 않음
+    await evaluate(s.cdp, "window.confirm = () => true");
+    await evaluate(s.cdp, "(document.querySelector('[data-testid=btn-hide]') || { click() {} }).click()");
+    await sleep(300);
+    await typeFind('T18 외톨이');
+    check('R-17 ② 숨긴 노드는 찾기에 나오지 않음', !!(await evaluate(s.cdp, "!!document.querySelector('[data-testid=find-none]')")));
+    await key('Escape', 'Escape', 27);
+  }
   {
     check('부서 화면에서도 화면에 "null" 글자 없음', (await evaluate(s.cdp, "(() => { const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') return false; return true; })()")));
   }

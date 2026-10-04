@@ -4,6 +4,7 @@
 import cytoscape from 'cytoscape';
 import { NODE_TYPES, UNKNOWN_TYPE_LABEL } from '../model/schema.js';
 import { hasLongWord } from '../view/describe.js';
+import { EXPLORE } from './explore.js';
 
 // 노드 유형별 색(어두운 배경용 파스텔). 범례도 이 표를 쓴다
 export const TYPE_COLORS = {
@@ -120,7 +121,8 @@ export function legendItems(display) {
   return items;
 }
 
-export function createGraph(container, { onSelect, onToggle = () => {} }) {
+// getFilter(display): 거르기 결과 {nodes:Set, edges:Set} 또는 null(T-18, R-17 ③). 그릴 때마다 다시 적용한다
+export function createGraph(container, { onSelect, onToggle = () => {}, getFilter = () => null }) {
   const cy = cytoscape({
     container,
     elements: [],
@@ -188,8 +190,64 @@ export function createGraph(container, { onSelect, onToggle = () => {} }) {
       { selector: 'node.time-off', style: { opacity: 0.25, 'border-style': 'dotted' } },
       { selector: 'edge.time-off', style: { opacity: 0.2, 'line-style': 'dotted' } },
       { selector: 'edge.hood', style: { 'line-color': ACCENT, 'target-arrow-color': ACCENT, width: 2.4, color: TEXT, opacity: 1 } },
+      // 거르기에서 빠진 요소(R-17 ③, D-17): 기본은 아주 흐리게(위치는 그대로 두어 전체 모양을 잃지 않게), 'hide'면 숨김
+      EXPLORE.FILTER_MODE === 'hide'
+        ? { selector: '.filtered-out', style: { display: 'none' } }
+        : { selector: '.filtered-out', style: { opacity: 0.08, 'text-opacity': 0 } },
+      // 화면에서 너무 작아 읽히지 않는 이름은 숨긴다(R-17 ⑦, applyTinyLabels). 고르거나 마우스를 올린 노드는 bigLabel로 크게 보인다
+      { selector: '.tiny-label', style: { 'text-opacity': 0 } },
+      // 찾기로 고른 노드: 노란 테두리(잠시)
+      { selector: 'node.found', style: { 'border-color': '#ffd84d', 'border-width': 6 } },
     ],
   });
+
+  // 고르거나 마우스를 올린 노드의 이름은 지금 확대 정도와 상관없이 화면에서 LABEL_READ_PX 이상으로 보인다(R-17 ⑦).
+  // 글자 크기를 확대 배율로 나눠 덮어쓰고(bypass), 확대가 바뀌면 다시 계산한다
+  const bigLabels = new Set();
+  function sizeLabel(node) {
+    const z = cy.zoom();
+    const base = node.data('core_type') === 'root' ? 16 : 14;
+    const px = Math.max(base, EXPLORE.LABEL_READ_PX / z);
+    node.style({ 'font-size': px, 'text-max-width': 120 * (px / base), 'z-index': 20, 'text-outline-width': 2.5 * (px / base) });
+  }
+  function bigLabel(node, on) {
+    if (!node || node.empty()) return;
+    if (on) {
+      bigLabels.add(node.id());
+      node.removeClass('tiny-label');
+      sizeLabel(node);
+    } else {
+      bigLabels.delete(node.id());
+      node.removeStyle('font-size text-max-width z-index text-outline-width');
+      tinyLabel(node, cy.zoom());
+    }
+  }
+  // 라이브러리의 min-zoomed-font-size는 확대 배율을 2의 거듭제곱으로 올려 비교해(0.39 → 0.5) 6px보다 작은 이름도 그린다.
+  // 그래서 실제 화면 크기(글자 크기 × 배율)로 직접 판정한다. 확대가 바뀔 때와 다시 그릴 때마다 계산한다
+  function tinyLabel(ele, z) {
+    ele.toggleClass('tiny-label', !bigLabels.has(ele.id()) && ele.pstyle('font-size').pfValue * z < EXPLORE.LABEL_MIN_PX);
+  }
+  function applyTinyLabels() {
+    const z = cy.zoom();
+    cy.batch(() => cy.elements().forEach((e) => tinyLabel(e, z)));
+  }
+  cy.on('zoom', () => {
+    applyTinyLabels();
+    for (const id of bigLabels) {
+      const n = cy.getElementById(id);
+      if (n.nonempty()) sizeLabel(n);
+    }
+  });
+
+  let lastDisplay = null;
+  function applyFilter() {
+    cy.elements().removeClass('filtered-out');
+    const f = lastDisplay ? getFilter(lastDisplay) : null;
+    if (!f) return null;
+    cy.nodes().forEach((n) => { if (!f.nodes.has(n.id())) n.addClass('filtered-out'); });
+    cy.edges().forEach((e) => { if (!f.edges.has(e.id())) e.addClass('filtered-out'); });
+    return f;
+  }
 
   // 노드와 이웃만 또렷하게, 나머지는 흐리게. 클릭(선택)과 마우스 올림(미리 보기)이 함께 쓴다
   function focusOn(node) {
@@ -208,10 +266,14 @@ export function createGraph(container, { onSelect, onToggle = () => {} }) {
 
   // 노드를 고르면 그 노드와 이웃만 또렷하게 보인다(클릭 펼침)
   function highlight(gid) {
+    if (selectedGid && selectedGid !== gid) bigLabel(cy.getElementById(selectedGid), false);
     selectedGid = gid || null;
     cy.$(':selected').unselect();
     const node = gid ? cy.getElementById(gid) : null;
-    if (node && node.nonempty()) node.select();
+    if (node && node.nonempty()) {
+      node.select();
+      bigLabel(node, true);
+    }
     focusOn(node);
   }
 
@@ -224,11 +286,22 @@ export function createGraph(container, { onSelect, onToggle = () => {} }) {
   // 마우스를 올리면 그 노드의 이웃을 미리 보여 주고, 떼면 선택 상태로 돌아간다
   cy.on('mouseover', 'node', (evt) => {
     evt.target.addClass('hover');
+    bigLabel(evt.target, true);
     container.style.cursor = 'pointer';
     focusOn(evt.target);
   });
   cy.on('mouseout', 'node', (evt) => {
     evt.target.removeClass('hover');
+    if (evt.target.id() !== selectedGid) bigLabel(evt.target, false);
+    container.style.cursor = '';
+    focusOn(selectedGid ? cy.getElementById(selectedGid) : null);
+  });
+  // 마우스가 노드 위에서 그래프 밖으로 바로 나가면 노드의 mouseout이 오지 않을 수 있다: 키운 이름·강조를 되돌린다
+  container.addEventListener('mouseleave', () => {
+    cy.nodes('.hover').forEach((n) => {
+      n.removeClass('hover');
+      if (n.id() !== selectedGid) bigLabel(n, false);
+    });
     container.style.cursor = '';
     focusOn(selectedGid ? cy.getElementById(selectedGid) : null);
   });
@@ -286,6 +359,7 @@ export function createGraph(container, { onSelect, onToggle = () => {} }) {
     // 새 노드만 이웃 옆이나 그래프 바깥쪽에 놓아, 보던 모양이 흐트러지지 않게 한다
     render(display, selectedGid) {
       const before = new Map(cy.nodes().map((n) => [n.id(), { ...n.position() }]));
+      bigLabels.clear(); // 요소를 새로 만들면 덮어쓴 글자 크기도 사라진다(고른 노드는 아래 highlight가 다시 키운다)
       cy.elements().remove();
       cy.add(toElements(display));
       cy.edges().toggleClass('labeled', cy.edges().length <= LABEL_EDGE_LIMIT);
@@ -309,7 +383,31 @@ export function createGraph(container, { onSelect, onToggle = () => {} }) {
         if (slot > 0) cy.fit(undefined, 40);
       }
       applyTimeOff();
+      lastDisplay = display;
+      applyTinyLabels(); // 새로 만든 요소에는 판정이 없다(확대가 그대로면 zoom 이벤트도 오지 않음)
+      applyFilter();
       highlight(selectedGid);
+    },
+
+    /** 거르기 조건이 바뀌면 다시 적용하고, 또렷한 노드에 맞춰 화면을 맞춘다(노드가 적을수록 이름이 커진다) */
+    applyFilter() {
+      const f = applyFilter();
+      // 꼭지는 위치 기준이라 늘 남지만 여기저기 흩어져 있어, 꼭지까지 맞추면 거른 노드 이름이 작아진다: 꼭지가 아닌 남은 노드에 맞춘다
+      const kept = cy.nodes().not('.filtered-out');
+      const focus = kept.filter((n) => n.data('core_type') !== 'root');
+      const eles = !f ? cy.elements() : focus.nonempty() ? focus : kept;
+      cy.animate({ fit: { eles, padding: 60 } }, { duration: 200, complete: applyTinyLabels });
+    },
+
+    /** 찾은 노드를 가운데로 옮기고 이름이 읽히게 확대한다. 노란 테두리로 잠시 표시(R-17 ①) */
+    zoomTo(gid) {
+      const node = cy.getElementById(gid);
+      if (node.empty()) return false;
+      cy.nodes('.found').removeClass('found');
+      node.addClass('found');
+      cy.animate({ center: { eles: node }, zoom: Math.max(cy.zoom(), 1.2) }, { duration: 250 });
+      setTimeout(() => node.removeClass('found'), 4000);
+      return true;
     },
 
     /** 시간 슬라이더: 기준일에 유효하지 않은 요소 ID들을 흐리게 표시한다(빈 목록이면 해제) */
@@ -321,10 +419,12 @@ export function createGraph(container, { onSelect, onToggle = () => {} }) {
     // 배치를 처음부터 다시 계산한다("정렬" 버튼)
     relayout() {
       layout();
+      applyTinyLabels();
     },
 
     fit() {
       cy.fit(undefined, 40);
+      applyTinyLabels();
     },
   };
 }

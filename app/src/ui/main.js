@@ -26,6 +26,8 @@ import { exportFileName, importDialog } from './import.js';
 import { convertDocument } from '../rules/doc-convert.js';
 import { convertDocumentWith } from '../llm/connector.js';
 import { DOC_EXAMPLE } from '../../data/doc-example.js';
+import { filterDisplay, neighborhoodDisplay, personsIn, searchNodes } from '../view/explore.js';
+import { exploreBar } from './explore.js';
 
 // 점검 도구(tools/*-check.mjs)만 주소에 ?check를 붙여 연다. 그때만 점검용 전역 window.__wu를 만든다(D-4-10, 사용자 결정 2026-10-03)
 const CHECK_MODE = new URLSearchParams(location.search).has('check');
@@ -145,6 +147,10 @@ function start() {
   let merging = false; // 통합 확인 목록(T-10)
   const asOf = () => viewDate || todayLocal();
   const expanded = new Set(); // 펼친 하위 유니버스
+  // 큰 화면 탐색(T-18, R-17): 주변만 보기 {center, depth} | null, 거르기 조건, 막대에 잠깐 보일 알림. 저장하지 않는다(D-17, 새로 열면 풀림)
+  let nbhd = null;
+  let filterState = { types: [], person: null };
+  let exploreNote = null;
   let view = app.view;
   let display = projectView(view, { expanded });
 
@@ -164,7 +170,7 @@ function start() {
   picker.title = picker.selectedOptions[0] ? picker.selectedOptions[0].textContent : ''; // 좁은 화면에서 잘린 이름 전체(재검증)
   picker.addEventListener('change', () => openUniverse(picker.value));
 
-  const graph = createGraph($('graph'), { onSelect: select, onToggle: toggle });
+  const graph = createGraph($('graph'), { onSelect: select, onToggle: toggle, getFilter: (d) => filterDisplay(d, filterState) });
 
   function renderLegend() {
     $('legend').replaceChildren(
@@ -394,6 +400,8 @@ function start() {
   // 그래프에 없는 노드(접힌 하위 유니버스 안)면 그 유니버스와 위쪽 유니버스를 펼친다. 펼쳤으면 true
   function reveal(gid) {
     const g = view.canonical(gid);
+    // 주변만 보기 밖의 노드로 가면 전체 화면으로 돌아간다
+    if (nbhd && graph.cy.getElementById(g).empty()) leaveNbhd();
     if (!graph.cy.getElementById(g).empty()) return false;
     const node = view.getNode(g);
     if (!node || node.hidden) return false;
@@ -495,10 +503,11 @@ function start() {
     }
     const notes = [loadNote(selected), workNote(selected), repeatNote(selected)].filter(Boolean);
     const tools = toolbar(selected);
+    const nbTools = nbhdButtons(selected);
     return renderNodeDetail(panel, describeNode(view, selected, { asOf: asOf(), past: !!viewDate }), {
       onFocus: focus,
       extra: layerControls(selected),
-      toolbar: notes.length || tools ? el('div', {}, ...notes, tools) : null,
+      toolbar: notes.length || tools || nbTools ? el('div', {}, ...[...notes, tools, nbTools].filter(Boolean)) : null,
       linkTools,
     });
   }
@@ -512,6 +521,10 @@ function start() {
     selected = gid;
     graph.highlight(gid);
     renderPanel();
+    if (exploreNote) { // 「찾음」·「이어진 노드 없음」 알림은 다른 노드를 고르면 지운다
+      exploreNote = null;
+      renderExploreStatus();
+    }
   }
 
   // 상세 패널의 연결된 노드를 눌렀을 때: 그래프에서도 그 노드로 이동한다(접혀 있으면 펼친다)
@@ -599,11 +612,99 @@ function start() {
     graph.cy.resize(); // 막대 높이가 바뀌면 그래프 영역도 바뀐다
   }
 
+  // ── 큰 화면 탐색: 찾기·거르기·주변만 보기(T-18, R-17, D-17). 계산은 view/explore.js, 여기서는 화면만 바꾼다 ──
+  const bar = exploreBar({
+    container: $('explore-bar'),
+    search: (q) => searchNodes(view, q),
+    onPick: goTo,
+    types: () => legendItems(display).filter((t) => t.key !== 'root' && t.key !== 'unknown'),
+    persons: () => personsIn(display),
+    onFilter: (f) => {
+      filterState = f;
+      exploreNote = null;
+      graph.applyFilter();
+      graph.highlight(selected);
+      renderExploreStatus();
+    },
+  });
+
+  // 찾은 노드로 이동(R-17 ①②⑧): 주변만 보기 중이면 전체로, 접힌 하위 유니버스 안이면 펼친 뒤 가운데로·확대하고 상세를 연다.
+  // 키보드로 고른 경우 상세 패널 제목으로 초점을 옮겨 Tab으로 이어서 읽을 수 있게 한다
+  function goTo(gid) {
+    const g = view.canonical(gid);
+    reveal(g);
+    select(g);
+    graph.zoomTo(g);
+    exploreNote = { text: `찾음: 「${(view.getNode(g) || { label: g }).label}」` };
+    renderExploreStatus();
+    const h = $('detail').querySelector('h2');
+    if (h) {
+      h.tabIndex = -1;
+      h.focus({ preventScroll: true });
+    }
+  }
+
+  function enterNbhd(gid, depth) {
+    const d = neighborhoodDisplay(view, gid, depth);
+    if (!d) return;
+    if (d.neighbor_count === 0) {
+      // 이웃이 없으면 화면은 그대로 두고 알린다(R-17 ④)
+      exploreNote = { text: `이어진 노드 없음: 「${view.getNode(gid).label}」은(는) 연결된 노드가 없어 주변만 보기를 할 수 없습니다.`, warn: true };
+      return renderExploreStatus();
+    }
+    nbhd = { center: d.center, depth };
+    selected = d.center;
+    exploreNote = null;
+    refresh();
+    graph.relayout();
+  }
+
+  function leaveNbhd() {
+    if (!nbhd) return;
+    nbhd = null;
+    exploreNote = null;
+    refresh();
+    graph.relayout();
+  }
+
+  function nbhdButtons(gid) {
+    const node = view.getNode(gid);
+    if (!node || node.hidden) return null;
+    const on = nbhd && nbhd.center === view.canonical(gid);
+    return el('div', { class: 'row toolbar nbhd-tools' },
+      ...[on && nbhd.depth === 1 ? null : el('button', { type: 'button', 'data-testid': 'btn-nbhd', title: '이 노드와 바로 이어진 노드만 남겨 다시 배치합니다(데이터는 바뀌지 않음)', onclick: () => enterNbhd(gid, 1) }, '주변만 보기'),
+        on && nbhd.depth === 2 ? null : el('button', { type: 'button', 'data-testid': 'btn-nbhd2', title: '두 단계 떨어진 노드까지 남깁니다', onclick: () => enterNbhd(gid, 2) }, '주변 2단계'),
+        nbhd ? el('button', { type: 'button', 'data-testid': 'btn-nbhd-exit', onclick: leaveNbhd }, '전체 보기로') : null].filter(Boolean));
+  }
+
+  function renderExploreStatus() {
+    const parts = [];
+    const f = filterDisplay(display, filterState);
+    if (f) {
+      const names = filterState.types.map((t) => (legendItems(display).find((i) => i.key === t) || { label: t }).label);
+      const who = filterState.person ? (view.getNode(filterState.person) || { label: '?' }).label : null;
+      parts.push(el('span', { class: 'on', 'data-testid': 'filter-on' }, `거르기 중: ${[names.length ? names.join('·') : null, who ? `${who} 담당` : null].filter(Boolean).join(' / ')} — ${f.shown}/${f.total}개 또렷`),
+        el('button', { type: 'button', class: 'small-btn', 'data-testid': 'filter-clear', onclick: () => bar.clear() }, '거르기 풀기'));
+    }
+    if (nbhd) {
+      parts.push(el('span', { class: 'on', 'data-testid': 'nbhd-on' }, `주변만 보기: 「${(view.getNode(nbhd.center) || { label: '?' }).label}」 ${nbhd.depth}단계 — 노드 ${display.nodes.length}개`),
+        el('button', { type: 'button', class: 'small-btn', 'data-testid': 'nbhd-depth', onclick: () => enterNbhd(nbhd.center, nbhd.depth === 1 ? 2 : 1) }, nbhd.depth === 1 ? '2단계로' : '1단계로'),
+        el('button', { type: 'button', class: 'small-btn', 'data-testid': 'nbhd-exit', onclick: leaveNbhd }, '전체 보기로'));
+    }
+    if (exploreNote) parts.push(el('span', { class: exploreNote.warn ? 'on' : 'ok', 'data-testid': 'explore-note' }, exploreNote.text));
+    bar.setStatus(...parts);
+    graph.cy.resize(); // 상태 줄이 두 줄이 되면 그래프 영역 높이가 바뀐다
+  }
+
   function refresh() {
     view = app.view;
-    display = projectView(view, { expanded });
+    // 주변만 보기 중이면 그 노드와 이웃만. 노드가 사라졌으면(숨김 등) 전체로
+    const nd = nbhd ? neighborhoodDisplay(view, nbhd.center, nbhd.depth) : null;
+    if (nbhd && !nd) nbhd = null;
+    display = nd || projectView(view, { expanded });
     // 시간 막대를 먼저 그려 그래프 영역 높이가 정해진 뒤 배치·맞춤을 한다(아래쪽 노드가 잘리지 않게)
     renderTimebar();
+    renderExploreStatus();
     graph.render(display, selected);
     renderLegend();
     graph.setTimeOff(timeOffIds());
@@ -628,7 +729,18 @@ function start() {
     graph.relayout();
   }
 
-  $('fit').addEventListener('click', () => graph.fit());
+  // 「전체 보기」: 주변만 보기 중이면 전체 그래프로 돌아가고(R-17 ④), 아니면 화면에 맞춘다
+  $('fit').addEventListener('click', () => (nbhd ? leaveNbhd() : graph.fit()));
+
+  // Esc: 노드 선택 해제(R-17 ⑧). 입력 칸·대화상자·펼친 메뉴 안에서는 그쪽이 먼저 처리한다(찾기 칸은 stopPropagation)
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
+    const t = e.target;
+    if (t && (t.closest('dialog[open]') || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
+    // 편집 양식·초안은 입력이 사라질 수 있으므로 Esc로 닫지 않는다(각 화면의 「취소」·「닫기」를 쓴다)
+    if (!selected || editing || drafting) return;
+    select(null);
+  });
   $('relayout').addEventListener('click', () => graph.relayout());
 
   // 유니버스 묶기(R-11 ①, CR-4 시제품): 사용자가 하위 유니버스와 이름·단위를 고른다
@@ -729,6 +841,13 @@ function start() {
     },
     get selected() {
       return selected;
+    },
+    // T-18 점검용: 주변만 보기·거르기 상태
+    get nbhd() {
+      return nbhd;
+    },
+    get filter() {
+      return filterState;
     },
     readOnly: app.readOnly,
   };
