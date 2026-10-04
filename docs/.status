@@ -105,7 +105,7 @@ final_check:
   notes: R-09는 P2로 1차 제외되어 T-ID 없음(사용자 결정). 차단 조건 없음
 remaining_nonblocking_assumptions: [A-1, A-2, RA-1, DA-1, 기본안 가상 데이터(T-15 전까지 교체 가능), P-1~P-3(T-01·T-02 실측), 주최 측 공지 미확인 항목]
 first_implementation_task: T-01 (최소 종단 흐름 + P-1·P-3 실측 + 그래프 라이브러리·빌드 방식 확정)
-next_session_first_action: (2026-10-03 저녁 인계) 구현 멈춤 상태. docs/HANDOFF.md 1절을 읽고, 사용자에게 .tmp/guide/확인-종합.md(7가지) 답을 받는다. 순서: 화면 확인(확인-가이드-검토5) → 결정 4건 → CR-10 범위(docs/CR-10-초안.md 6절) → CR-9 승인(docs/CR-9-문구안.md) → 샘플 손질 여부 → 조력자 발송 → 기능 동결 시점. CR 승인 전에는 01~03을 고치지 않는다. 답은 한국어로만
+next_session_first_action: (2026-10-04 세션 종료 인계) 구현 멈춤 상태. docs/HANDOFF.md 1절을 읽고, 코드를 만지기 전에 사용자에게 .tmp/guide/확인-종합.md(7가지) 답을 받는다. 핵심은 3번 CR-10 범위(시제품 스크린샷 .tmp/proto-cr10/ → docs/CR-10-초안.md)와 4번 CR-9 승인(docs/CR-9-문구안.md). 승인 전에는 01~03을 고치지 않는다. 시제품 브랜치 proto-cr10-btable은 병합하지 않는다. 답은 한국어로만
 
 implementation:
   current_task: (2026-10-04) 구현 멈춤 중 자율 작업 완료(변환기 실문서 시험·화면 점검·CR-10 반영안·B·C 시제품 브랜치, 작은 결함 수정·재검증 3회). 단위 테스트 395, Chrome·Edge·실행 안내·제출 점검 통과. 사용자 확인(.tmp/guide/확인-종합.md) 대기
