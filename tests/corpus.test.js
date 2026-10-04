@@ -222,3 +222,97 @@ test('corpus 10건: 업무·사람·산출물·담당 연결·날짜 점수가 �
     [1, 4].forEach((i) => assert.ok(got[i] <= f[i], `doc-${nn} 칸 ${i}(잘못 생김): ${got[i]} > ${f[i]}`));
   }
 });
+
+// ── 재검증(2026-10-04): 3f24cc5 수정의 반대편 회귀 R1~R5. 지난 수정(F4·F5·F8·F9·F11)이 고친 것은 부정 표본으로 함께 둔다 ──
+test('R1 긍정: 범위 절의 표가 모든 행 첫 칸이 개요 키면 「키: 값」 표로 읽는다(대상 업무·범위 제외·범위·주기)', () => {
+  const pipe = mini(['## 2. 업무 범위', '| 항목 | 내용 |', '|---|---|', '| 대상 업무 | 가상 승인, 가상 취소 |', '| 범위 제외 | 가상 정산 |']).doc;
+  assert.deepEqual(of(pipe, 'work'), ['가상 승인', '가상 취소']);
+  assert.match(pipe.universe.description, /범위 제외: 가상 정산/);
+  const noHead = mini(['## 2. 업무 범위', '| 범위 | 가상 승인, 가상 취소 |', '| 주기 | 매일 |']).doc;
+  assert.deepEqual(of(noHead, 'work'), ['가상 승인', '가상 취소']);
+  assert.equal(byLabel(noHead, '가상 승인').attrs.주기, '매일');
+  const tab = conv(['가상 일반 업무정의서', '', '1. 개요', ' □ 작성일: 2026-09-01', '', '2. 업무 범위', '항목\t내용', '대상 업무\t가상 승인, 가상 취소', '범위 제외\t가상 정산', ''].join('\n')).doc;
+  assert.deepEqual(of(tab, 'work'), ['가상 승인', '가상 취소']);
+  assert.match(tab.universe.description, /범위 제외: 가상 정산/);
+});
+
+test('R1 부정: 개요 키가 아닌 행이 하나라도 있는 범위 표는 업무 표다(F8 doc-01 「마감」 행, P1-c 「수시」 행)', () => {
+  const { text, exp } = corpus('01');
+  assert.deepEqual(of(conv(text).doc, 'work'), exp.works);
+  const c = mini(['## 업무 범위', '| 구분 | 업무 |', '|---|---|', '| 주기 | 가상 점검 |', '| 수시 | 가상 조치 |']).doc;
+  assert.deepEqual(of(c, 'work'), ['가상 점검', '가상 조치']);
+  const mixed = mini(['## 업무 범위', '| 항목 | 내용 |', '|---|---|', '| 주기 | 매일 |', '| 가상 접수 | 접수한다 |']).doc;
+  assert.deepEqual(of(mixed, 'work'), ['주기', '가상 접수']);
+  assert.equal(byLabel(mixed, '주기').attrs.주기, undefined, '업무 표의 행은 속성으로 읽지 않는다');
+});
+
+test('R2 긍정: 산출물 표는 이름 칸 머리글이 없으면 첫 칸, 첫 칸 값이 숫자일 때만 다음 칸을 이름으로 쓴다', () => {
+  const kind = mini(['## 범위', '- 가상 접수', '## 산출물', '| 구분 | 형식 |', '|---|---|', '| 가상 보고서 | 엑셀 |', '| 가상 점검표 | PDF |']).doc;
+  assert.deepEqual(of(kind, 'artifact'), ['가상 보고서', '가상 점검표']);
+  assert.equal(byLabel(kind, '가상 보고서').description, '엑셀');
+  const num = mini(['## 범위', '- 가상 접수', '## 산출물', '1\t가상 보고서\t엑셀', '2\t가상 점검표\tPDF']);
+  assert.deepEqual(of(num.doc, 'artifact'), ['가상 보고서', '가상 점검표']);
+  assert.equal(byLabel(num.doc, '가상 보고서').description, '엑셀');
+  assert.ok(!codes(num.report).includes('C-NO-NAME'));
+});
+
+test('R2 부정: 이름 칸 머리글(산출물·이름)이 있으면 그 칸, 숫자뿐인 이름 칸은 지금처럼 C-NO-NAME', () => {
+  assert.deepEqual(of(conv(corpus('08').text).doc, 'artifact'), corpus('08').exp.artifacts);
+  assert.deepEqual(of(mini(['## 범위', '- 가상 접수', '## 산출물', '| 구분 | 산출물 | 형식 |', '|---|---|---|', '| 월간 | 가상 보고서 | 엑셀 |']).doc, 'artifact'), ['가상 보고서']);
+  assert.deepEqual(of(mini(['## 범위', '- 가상 접수', '## 산출물', '| 유형 | 이름 |', '|---|---|', '| 보고 | 가상 보고서 |']).doc, 'artifact'), ['가상 보고서']);
+  const r = conv('# 가상 문서\n\n## 산출물\n| 산출물 | 형식 |\n|---|---|\n| 1 | 엑셀 |\n| 가상 보고서 | 한글 |\n');
+  assert.deepEqual(of(r.doc, 'artifact'), ['가상 보고서']);
+  assert.ok(r.report.notes.some((n) => n.code === 'C-NO-NAME' && n.text === '1'));
+  // 첫 칸이 「1차 점검표」처럼 숫자로 시작하는 이름이면 그대로 첫 칸
+  assert.deepEqual(of(mini(['## 범위', '- 가상 접수', '## 산출물', '| 1차 점검표 | 엑셀 |']).doc, 'artifact'), ['1차 점검표']);
+});
+
+test('R3 긍정: 괄호뿐인 절 제목은 괄호 안 글자를 주제 이름으로 쓴다', () => {
+  const { doc, report } = mini(['## 범위', '- 가상 접수', '## 7. (참고)', '- 가상 참고 내용']);
+  assert.deepEqual(of(doc, 'topic'), ['참고']);
+  assert.match(byLabel(doc, '참고').description, /가상 참고 내용/);
+  assert.ok(!codes(report).includes('C-NO-NAME'));
+  assert.deepEqual(of(mini(['## 범위', '- 가상 접수', '## （참고）', '- 가상 참고 내용']).doc, 'topic'), ['참고']);
+});
+
+test('R3 부정: 괄호 안도 비거나 번호·표시뿐이면 지금처럼 C-NO-NAME, 괄호가 붙은 보통 제목은 괄호를 뗀 이름', () => {
+  for (const head of ['## 7. ()', '## 3.', '## [미확인]']) {
+    const { doc, report } = mini(['## 범위', '- 가상 접수', head, '- 가상 참고 내용']);
+    assert.deepEqual(of(doc, 'topic'), [], head);
+    assert.ok(codes(report).includes('C-NO-NAME'), head);
+  }
+  assert.deepEqual(of(mini(['## 범위', '- 가상 접수', '## 4. 운영 기준 (협의 중)', '- 가상 기준']).doc, 'topic'), ['운영 기준']);
+});
+
+test('R4 긍정: 절차 절에서 번호 항목과 같은 깊이의 글머리표는 따로 센다', () => {
+  const r = conv(['가상 일반 업무정의서', '', '1. 개요', ' □ 작성일: 2026-09-01', ' □ 범위: 가상 접수', '', '2. 업무 절차', '  1) 가상 하나', '  ○ 가상 별도 단계', '  ○ 가상 또 다른 단계', ''].join('\n'));
+  assert.equal(r.report.steps, 3);
+  assert.equal(byLabel(r.doc, '가상 접수').attrs.절차, '① 가상 하나 ② 가상 별도 단계 ③ 가상 또 다른 단계');
+});
+
+test('R4 부정: 번호 항목보다 더 들여쓴 글머리표는 하위로 붙는다(doc-06, 일반 글, 이어진 줄과 두 번째 하위)', () => {
+  const { text, exp } = corpus('06');
+  assert.equal(conv(text).report.steps, exp.steps);
+  const p = conv(['가상 일반 업무정의서', '', '1. 개요', ' □ 작성일: 2026-09-01', ' □ 범위: 가상 접수', '', '2. 업무 절차', '  1) 가상 하나', '    ○ 가상 하위', '  2) 가상 둘', ''].join('\n'));
+  assert.equal(byLabel(p.doc, '가상 접수').attrs.절차, '① 가상 하나 — 가상 하위 ② 가상 둘');
+  const m = mini(['## 범위', '- 가상 접수', '## 업무 절차', '1. 가상 하나', '   - 가상 하위 A', '     이어지는 줄', '   - 가상 하위 B', '2. 가상 둘']).doc;
+  assert.equal(byLabel(m, '가상 접수').attrs.절차, '① 가상 하나 — 가상 하위 A 이어지는 줄 — 가상 하위 B ② 가상 둘');
+});
+
+test('R5 긍정: 머리말 작성일은 키워드 순위(작성일 → 작성 → 기준일·일자)로 고르고, 「작성」은 날짜 앞뒤 어느 쪽이어도 된다', () => {
+  const pick = (line) => memoDates(conv(['# 가상 날짜 업무', line, '## 범위', '- 가상 접수', '## 확인할 질문', '1. 가상 질문?', ''].join('\n')).doc);
+  assert.deepEqual(pick('2026.09.18 작성. 데이터 기준일 2026.06.30'), ['2026-09-18']);
+  assert.deepEqual(pick('기준일 2026.06.30 데이터, 작성일 2026.09.18'), ['2026-09-18']);
+  assert.deepEqual(pick('일자 2026.06.30 / 작성 2026.09.18'), ['2026-09-18']);
+  assert.deepEqual(pick('작성 2026.09.18 / 작성일자 2026.09.20'), ['2026-09-20']);
+  assert.deepEqual(pick('시행일 2026.12.01 / 작성 2026.09.02'), ['2026-09-02']);
+});
+
+test('R5 부정: 같은 순위면 먼저 나온 날짜, 「작성자 2026년 입사」는 작성 날짜가 아니고, 문서 번호는 빠진다', () => {
+  const pick = (line) => memoDates(conv(['# 가상 날짜 업무', line, '## 범위', '- 가상 접수', '## 확인할 질문', '1. 가상 질문?', ''].join('\n')).doc);
+  assert.deepEqual(pick('기준일 2026.06.30, 일자 2026.07.01'), ['2026-06-30']);
+  assert.deepEqual(pick('작성자 2026년 입사 신입, 2026.09.10 배포'), ['2026-09-10']);
+  assert.deepEqual(pick('문서번호 제2026-3-12호 / 작성일 2026.09.18'), ['2026-09-18']);
+  assert.deepEqual(pick('승인번호 2026-09-01-001 기준, 작성 2026.09.20'), ['2026-09-20']);
+  assert.deepEqual(pick('가상 회의 2026.09.15 정리'), ['2026-09-15']);
+});

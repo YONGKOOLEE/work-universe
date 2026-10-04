@@ -161,6 +161,7 @@ function start() {
   for (const u of app.universes()) {
     picker.append(el('option', { value: u.id, selected: u.id === app.doc.universe.id }, `${u.name} (${u.level})`));
   }
+  picker.title = picker.selectedOptions[0] ? picker.selectedOptions[0].textContent : ''; // 좁은 화면에서 잘린 이름 전체(재검증)
   picker.addEventListener('change', () => openUniverse(picker.value));
 
   const graph = createGraph($('graph'), { onSelect: select, onToggle: toggle });

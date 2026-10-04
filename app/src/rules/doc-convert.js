@@ -167,8 +167,13 @@ export function parseDocument(text) {
     }
     const item = listItem(line, plain);
     const quote = /^\s*>\s?(.*)$/.exec(line);
-    // 번호 항목 바로 뒤(빈 줄 없이)의 들여쓴 글머리표는 그 항목의 하위 글머리표다. 절차 절에서는 그 단계 글에 붙인다(corpus F9)
-    if (item && item.kind === 'bullet' && /^\s{2,}/.test(line) && lastItem && (lastItem.kind === 'num' || lastItem.sub)) item.sub = true;
+    // 번호 항목 바로 뒤(빈 줄 없이)의 들여쓴 글머리표는 그 항목의 하위 글머리표다. 절차 절에서는 그 단계 글에 붙인다(corpus F9).
+    // 번호 항목보다 더 깊게 들여쓴 것만(재검증 R4: 「  1) …」 아래 같은 깊이의 「  ○ …」는 별도 단계). 들여쓰기 칸 수를 항목마다 둔다
+    if (item) item.indent = /^\s*/.exec(line)[0].length;
+    if (item && item.kind === 'bullet' && /^\s{2,}/.test(line) && lastItem) {
+      const anchor = lastItem.kind === 'num' ? lastItem.indent : lastItem.sub ? lastItem.anchor : undefined;
+      if (anchor !== undefined && item.indent > anchor) Object.assign(item, { sub: true, anchor });
+    }
     if (item) target().push((lastItem = item));
     else if (quote) target().push((lastItem = { kind: 'quote', text: cleanText(quote[1]) }));
     else if (lastItem && /^\s{2,}\S/.test(line)) lastItem.text = cleanText(`${lastItem.text} ${line}`); // 목록 항목의 이어지는 줄
@@ -248,17 +253,26 @@ export function findDate(text) {
   return null;
 }
 // 제목·머리말(「키: 값」이 아닌 글)의 작성일(corpus F4: 「문서번호 제2026-3-12호 / 작성일 2026.09.18」이 알림 없이 3월 12일이 되던 문제).
-// 작성일·기준일 같은 낱말 바로 뒤의 날짜를 먼저 쓰고, 없을 때만 첫 날짜를 쓴다. 이때 문서 번호(제…호, 문서번호 …) 자리는 뺀다.
-// findDate의 정규식은 건드리지 않는다(35.2: 세 번 흔들린 규칙)
-const DATE_KEYWORD = /(작성 ?일자|작성일|기준일|일자|작성)\s*[:：]?\s*/g;
+// 키워드가 붙은 날짜를 키워드 순위로 고른다(재검증 R5: 위치 순서로 고르면 「2026.09.18 작성. 데이터 기준일 2026.06.30」이 기준일이 됨):
+// 작성일·작성 일자 → 작성 → 기준일·일자. 같은 순위면 먼저 나온 것. 「작성」은 날짜 앞(「작성 2026.09.18」)·뒤(「2026.09.18 작성」) 모두.
+// 키워드 붙은 날짜가 없을 때만 첫 날짜를 쓴다. 이때 문서 번호(제…호, 문서번호 …) 자리는 뺀다.
+// findDate의 정규식은 건드리지 않는다(35.2: 세 번 흔들린 규칙). DATE_SPAN은 후보 자리를 찾을 뿐이고 날짜인지는 findDate가 정한다
+const DATE_SPAN = /\d{4}\s*[.\-\/년]\s*\d{1,2}\s*[.\-\/월]\s*\d{1,2}/g;
+const DATE_BEFORE = [[0, /(작성 ?일자|작성일)\s*[:：]?\s*$/], [1, /작성\s*[:：]?\s*$/], [2, /(기준일|일자)\s*[:：]?\s*$/]];
+const DATE_AFTER = /^\s*[.일]?\s*작성/; // 「2026.09.18 작성」 「2026년 9월 18일 작성」
 const DOC_NUMBER = /제\s*\d[\d\s.\-\/]*호|(문서 ?번호|번호)\s*[:：]?\s*\S+/g;
 function headDate(text) {
-  for (const m of text.matchAll(DATE_KEYWORD)) {
-    const after = text.slice(m.index + m[0].length, m.index + m[0].length + 16); // 날짜 하나만 들어가는 길이
-    const d = /^\d{4}/.test(after) ? findDate(after) : null;
-    if (d) return d;
+  let best = null;
+  for (const m of text.matchAll(DATE_SPAN)) {
+    const end = m.index + m[0].length;
+    const d = findDate(text.slice(Math.max(0, m.index - 1), end + 1)); // 앞뒤 한 글자를 함께 줘서 findDate의 경계 확인을 그대로 쓴다
+    if (!d) continue;
+    const before = text.slice(Math.max(0, m.index - 12), m.index);
+    const hit = DATE_BEFORE.find(([, re]) => re.test(before));
+    const rank = hit ? hit[0] : DATE_AFTER.test(text.slice(end)) ? 1 : null;
+    if (rank !== null && (!best || rank < best.rank)) best = { rank, d };
   }
-  return findDate(text.replace(DOC_NUMBER, ' '));
+  return best ? best.d : findDate(text.replace(DOC_NUMBER, ' '));
 }
 // 이름에 글자(한글·영문 등)가 하나도 없으면 — [가정]·[미확인] 표시, 번호(「3.」「1」), 괄호(「(양식)」)뿐이면 — 이름 없는 것으로 본다(corpus F11)
 const hasName = (s) => /\p{L}/u.test(stripMarks(String(s)).replace(/\([^)]*\)|（[^）]*）/g, ''));
@@ -271,10 +285,14 @@ const NAME_HEADER = {
   artifacts: /^(산출물|산출물명|문서|문서명|이름|명칭)$/,
 };
 const INDEX_HEADER = /^(구분|분류|유형|순서|번호|단계|no\.?|#)$/i;
-function nameCellIndex(header, kind) {
-  if (!header || !header.length) return 0;
-  const named = header.findIndex((h) => NAME_HEADER[kind].test(cleanText(h)));
+// 산출물 표는 구분·유형 대체 규칙을 쓰지 않는다(재검증 R2: 「구분 | 형식」의 형식 칸이 이름이 되던 문제).
+// 이름 칸 머리글이 없으면 첫 칸, 첫 칸 값이 숫자일 때만 다음 칸(머리글 없는 「1 ⇥ 가상 보고서 ⇥ 엑셀」)
+const isNumberCell = (c) => /^\d+$/.test(String(c || '').trim());
+function nameCellIndex(header, kind, cells) {
+  const named = header && header.length ? header.findIndex((h) => NAME_HEADER[kind].test(cleanText(h))) : -1;
   if (named >= 0) return named;
+  if (kind === 'artifacts') return cells && cells.length > 1 && isNumberCell(cells[0]) ? 1 : 0;
+  if (!header || !header.length) return 0;
   return INDEX_HEADER.test(cleanText(header[0])) && header.length > 1 ? 1 : 0;
 }
 // 표 행에서 이름 칸과 나머지(설명)로 나눈다. 구분 칸 같은 앞 칸은 "머리글: 값"으로 설명에 넣는다
@@ -282,12 +300,12 @@ const NUMBER_HEADER = /^(순서|번호|단계|no\.?|#)$/i;
 const DUTY_HEADER = /^(하는 ?일|담당 ?업무|업무|역할 ?내용|책임)$/;
 // 돌려주는 값: name(이름 칸. 비어 있으면 null — 구분 값을 이름으로 쓰지 않는다, 재검증 5), desc(나머지 칸), duty(「하는 일」 칸. 없으면 desc)
 function nameAndRest(cells, header, kind) {
-  const i = nameCellIndex(header, kind);
+  const i = nameCellIndex(header, kind, cells);
   const name = (cells[i] || '').trim() || (i === 0 ? null : null);
   const head = (k) => (header && header[k] ? cleanText(header[k]) : '');
   const rest = cells.map((c, k) => {
     if (k === i || !c || !c.trim()) return '';
-    if (NUMBER_HEADER.test(head(k)) && /^\d+$/.test(c.trim())) return ''; // 번호 칸은 설명에 넣지 않는다
+    if ((NUMBER_HEADER.test(head(k)) || (!head(k) && k < i)) && isNumberCell(c)) return ''; // 번호 칸(머리글 없는 앞 번호 칸 포함)은 설명에 넣지 않는다
     return head(k) && k < i ? `${head(k)}: ${c}` : c;
   }).filter(Boolean);
   const dutyAt = header ? header.findIndex((h, k) => k !== i && DUTY_HEADER.test(cleanText(h))) : -1;
@@ -352,11 +370,14 @@ function linesOf(blocks) {
 }
 
 // "키: 값" 꼴(개요 표의 2칸 행, 글머리표·문단의 "키: 값")을 [키, 값]으로
+// tables=false(범위 절): 모든 행이 개요 키인 표만 읽는다
 function keyValues(blocks, tables = true) {
   const out = [];
   for (const b of blocks) {
     if (b.kind === 'table') {
-      if (!tables) continue; // 범위 절의 표 행은 개요 「키: 값」으로 읽지 않는다(corpus F8: 구분 칸 「마감」「주기」로 표가 통째로 사라지던 문제)
+      // 범위 절의 표는 모든 행의 첫 칸이 개요 키일 때만 「키: 값」 표로 읽는다(재검증 R1: 「대상 업무 | …」「범위 제외 | …」 표).
+      // 하나라도 아니면 업무 표다(corpus F8: 구분 칸 「마감」「주기」로 표가 통째로 사라지던 문제)
+      if (!tables && !b.rows.every((row) => row.length >= 2 && overviewKey(row[0]))) continue;
       for (const row of b.rows) if (row.length >= 2 && row[0]) out.push([row[0], row.slice(1).filter(Boolean).join(' — '), b]);
     } else {
       const m = /^([^:：[]{1,20})[:：]\s*(.+)$/.exec(b.text); // 키에 "["가 들면 표시([미확인: …]) 안의 콜론이다
@@ -583,7 +604,10 @@ export function convertDocument(text, ctx) {
   for (const s of parsed.sections.filter((x) => x.kind === 'topic')) {
     const lines = linesOf(s.blocks);
     if (!lines.length) continue; // 하위 절만 있는 절
-    const label = titleCore(s.title) || s.title;
+    // 괄호뿐인 제목(「7. (참고)」)은 괄호 안 글자를 이름으로(재검증 R3). 괄호 안도 비면 아래에서 C-NO-NAME
+    const inner = stripMarks(s.title).replace(/[()（）]/g, ' ').replace(/\s+/g, ' ').trim();
+    const core = titleCore(s.title) || s.title;
+    const label = hasName(core) ? core : inner || core;
     if (!hasName(label)) { notes.push({ code: 'C-NO-NAME', ref: refOf(s), text: s.title }); continue; } // 「## 3.」처럼 번호뿐인 제목
     const headNote = (s.title.match(new RegExp(`\\([^)]*\\)|${MARK.source}`, 'g')) || []).join(' ');
     const description = [headNote, ...lines.map((l) => (l.kind === 'bullet' || l.n !== undefined || l.row ? `- ${l.text}` : l.text))].filter(Boolean).join('\n');

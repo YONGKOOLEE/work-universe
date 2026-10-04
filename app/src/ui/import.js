@@ -111,7 +111,7 @@ export function importDialog(o) {
     }
     render();
     // 작은 화면에서는 미리 보기가 창 아래에 생겨 아무 일도 없는 것처럼 보인다(화면 점검 S-8)
-    if (st.result && typeof slot.scrollIntoView === 'function') slot.scrollIntoView({ block: 'start' });
+    if (st.result && typeof head.scrollIntoView === 'function') head.scrollIntoView({ block: 'start' }); // 작성 주체(필수) 칸이 보이도록 head부터(재검증)
   }
 
   function runJson() {

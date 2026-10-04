@@ -84,6 +84,8 @@ function toElements(display) {
           label: hiddenCount ? `${n.label}
 ＋${hiddenCount}` : n.label,
           collapsed: !!hiddenCount,
+          // 띄어쓰기 없이 긴 낱말(약 9자 넘게)이 있으면 글자 단위 줄바꿈을 허용한다(화면 점검 S-3). 보통 이름은 띄어쓰기에서만 끊는다(재검증)
+          longword: String(n.label).split(/s+/).some((w) => w.length > 9),
           core_type: n.core_type,
           origin: n.origin,
           merged: n.merged_from.length > 0,
@@ -142,7 +144,6 @@ export function createGraph(container, { onSelect, onToggle = () => {} }) {
           'text-margin-y': 6,
           'text-wrap': 'wrap',
           'text-max-width': 120,
-          'text-overflow-wrap': 'anywhere', // 화면 점검 S-3: 띄어쓰기 없는 긴 라벨도 줄바꿈
           'text-outline-color': BG,
           'text-outline-width': 2.5,
         },
@@ -180,6 +181,7 @@ export function createGraph(container, { onSelect, onToggle = () => {} }) {
       { selector: 'edge[?synthetic]', style: { 'line-style': 'dashed' } },
       // 요약 연결: 접힌 세부를 거쳐 올라온 연결
       { selector: 'edge[?summarized]', style: { 'line-style': 'dotted', width: 1.8 } },
+      { selector: 'node[?longword]', style: { 'text-overflow-wrap': 'anywhere' } },
       { selector: 'node[?collapsed]', style: { 'border-width': 5, 'border-style': 'double', 'text-wrap': 'wrap' } },
       { selector: '.faded', style: { opacity: 0.15 } },
       { selector: 'node.time-off', style: { opacity: 0.25, 'border-style': 'dotted' } },
