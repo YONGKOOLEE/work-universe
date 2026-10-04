@@ -167,6 +167,8 @@ export function parseDocument(text) {
     }
     const item = listItem(line, plain);
     const quote = /^\s*>\s?(.*)$/.exec(line);
+    // 번호 항목 바로 뒤(빈 줄 없이)의 들여쓴 글머리표는 그 항목의 하위 글머리표다. 절차 절에서는 그 단계 글에 붙인다(corpus F9)
+    if (item && item.kind === 'bullet' && /^\s{2,}/.test(line) && lastItem && (lastItem.kind === 'num' || lastItem.sub)) item.sub = true;
     if (item) target().push((lastItem = item));
     else if (quote) target().push((lastItem = { kind: 'quote', text: cleanText(quote[1]) }));
     else if (lastItem && /^\s{2,}\S/.test(line)) lastItem.text = cleanText(`${lastItem.text} ${line}`); // 목록 항목의 이어지는 줄
@@ -186,7 +188,7 @@ export function parseDocument(text) {
 }
 
 const HANGUL_ORDER = '가나다라마바사아자차카타파하';
-const TAB_HEADER = /^(구분|항목|역할|이름|리스크|위험|단계|순서|번호|No\.?|산출물|질문)$/i;
+const TAB_HEADER = /^(구분|항목|역할|이름|리스크|위험|단계|순서|번호|No\.?|산출물|질문|ID|작업 ?ID|코드)$/i; // ID·작업ID·코드: corpus F5(probe P2)
 // 문장 끝(…다, …니다)이나 마침표·물음표, "키: 값"이면 제목이 아니다.
 // '개요'·'필요'처럼 '요'로 끝나는 명사가 많아 '요·함·음'은 보지 않는다(번호 차례 확인이 목록과의 구분을 함께 맡는다)
 const looksLikeSentence = (t) => /다\.?$|[.?!]$/.test(t) || /[:：]/.test(t);
@@ -245,12 +247,33 @@ export function findDate(text) {
   }
   return null;
 }
-// 표에서 이름으로 쓸 칸(검토5 V-1): 머리글에 업무·이름 칸이 있으면 그 칸, 첫 머리글이 구분·순서·번호면 그다음 칸, 아니면 첫 칸
-const NAME_HEADER = /^(업무|업무명|업무 ?이름|이름|명칭|항목|작업|내용|역할|담당|담당자|산출물|문서)$/;
+// 제목·머리말(「키: 값」이 아닌 글)의 작성일(corpus F4: 「문서번호 제2026-3-12호 / 작성일 2026.09.18」이 알림 없이 3월 12일이 되던 문제).
+// 작성일·기준일 같은 낱말 바로 뒤의 날짜를 먼저 쓰고, 없을 때만 첫 날짜를 쓴다. 이때 문서 번호(제…호, 문서번호 …) 자리는 뺀다.
+// findDate의 정규식은 건드리지 않는다(35.2: 세 번 흔들린 규칙)
+const DATE_KEYWORD = /(작성 ?일자|작성일|기준일|일자|작성)\s*[:：]?\s*/g;
+const DOC_NUMBER = /제\s*\d[\d\s.\-\/]*호|(문서 ?번호|번호)\s*[:：]?\s*\S+/g;
+function headDate(text) {
+  for (const m of text.matchAll(DATE_KEYWORD)) {
+    const after = text.slice(m.index + m[0].length, m.index + m[0].length + 16); // 날짜 하나만 들어가는 길이
+    const d = /^\d{4}/.test(after) ? findDate(after) : null;
+    if (d) return d;
+  }
+  return findDate(text.replace(DOC_NUMBER, ' '));
+}
+// 이름에 글자(한글·영문 등)가 하나도 없으면 — [가정]·[미확인] 표시, 번호(「3.」「1」), 괄호(「(양식)」)뿐이면 — 이름 없는 것으로 본다(corpus F11)
+const hasName = (s) => /\p{L}/u.test(stripMarks(String(s)).replace(/\([^)]*\)|（[^）]*）/g, ''));
+
+// 표에서 이름으로 쓸 칸(검토5 V-1): 머리글에 이름 칸이 있으면 그 칸, 첫 머리글이 구분·순서·번호면 그다음 칸, 아니면 첫 칸.
+// 이름 칸 후보는 절 종류별로 다르다(corpus F5: 범위 표의 「담당」 열이 업무 이름이 되던 문제). 범위의 이름·내용은 전에도 후보였다
+const NAME_HEADER = {
+  scope: /^(업무|업무명|업무 ?이름|작업|작업명|항목|명칭|이름|내용)$/,
+  people: /^(역할|담당|담당자|이름)$/,
+  artifacts: /^(산출물|산출물명|문서|문서명|이름|명칭)$/,
+};
 const INDEX_HEADER = /^(구분|분류|유형|순서|번호|단계|no\.?|#)$/i;
-function nameCellIndex(header) {
+function nameCellIndex(header, kind) {
   if (!header || !header.length) return 0;
-  const named = header.findIndex((h) => NAME_HEADER.test(cleanText(h)));
+  const named = header.findIndex((h) => NAME_HEADER[kind].test(cleanText(h)));
   if (named >= 0) return named;
   return INDEX_HEADER.test(cleanText(header[0])) && header.length > 1 ? 1 : 0;
 }
@@ -258,8 +281,8 @@ function nameCellIndex(header) {
 const NUMBER_HEADER = /^(순서|번호|단계|no\.?|#)$/i;
 const DUTY_HEADER = /^(하는 ?일|담당 ?업무|업무|역할 ?내용|책임)$/;
 // 돌려주는 값: name(이름 칸. 비어 있으면 null — 구분 값을 이름으로 쓰지 않는다, 재검증 5), desc(나머지 칸), duty(「하는 일」 칸. 없으면 desc)
-function nameAndRest(cells, header) {
-  const i = nameCellIndex(header);
+function nameAndRest(cells, header, kind) {
+  const i = nameCellIndex(header, kind);
   const name = (cells[i] || '').trim() || (i === 0 ? null : null);
   const head = (k) => (header && header[k] ? cleanText(header[k]) : '');
   const rest = cells.map((c, k) => {
@@ -302,14 +325,18 @@ function overviewKey(key) {
 // 표 한 줄을 글로: 머리글이 있으면 "머리글: 값", 없으면 첫 칸 + 나머지
 function rowText(row, header) {
   let cells = row.map((c) => c.trim());
+  let numbered = false;
   // 「단계 | 내용」 표의 번호 칸은 글에 넣지 않는다(검토5 V-11: "① 1: …"처럼 번호가 겹치지 않게)
   if (header && header.length === cells.length && cells.length > 1 && /^(단계|순서|번호|no\.?|#)$/i.test(cleanText(header[0])) && /^\d+$/.test(cells[0])) {
     cells = cells.slice(1);
     header = header.slice(1);
+    numbered = true;
   }
   if (header && header.length === cells.length && cells.length > 2) {
     return `${cells[0]} — ${cells.slice(1).map((c, i) => (c ? `${header[i + 1]}: ${c}` : '')).filter(Boolean).join(' / ')}`;
   }
+  // 번호 칸을 뺀 「내용 | 담당」은 머리글을 남긴다(corpus F10: 「…보낸다: 결산 담당」 → 「…보낸다 — 담당: 결산 담당」)
+  if (numbered && cells.length === 2) return cells[1] ? `${cells[0]} — ${header[1]}: ${cells[1]}` : cells[0];
   const rest = cells.slice(1).filter(Boolean);
   return rest.length ? `${cells[0]}: ${rest.join(' — ')}` : cells[0];
 }
@@ -319,16 +346,17 @@ function linesOf(blocks) {
   const lines = [];
   for (const b of blocks) {
     if (b.kind === 'table') b.rows.forEach((row, i) => lines.push({ text: rowText(row, b.header), row: i + 1, cells: row, header: b.header }));
-    else lines.push({ text: b.text, n: b.kind === 'num' ? b.n : undefined, kind: b.kind });
+    else lines.push({ text: b.text, n: b.kind === 'num' ? b.n : undefined, kind: b.kind, ...(b.sub ? { sub: true } : {}) });
   }
   return lines.filter((l) => l.text);
 }
 
 // "키: 값" 꼴(개요 표의 2칸 행, 글머리표·문단의 "키: 값")을 [키, 값]으로
-function keyValues(blocks) {
+function keyValues(blocks, tables = true) {
   const out = [];
   for (const b of blocks) {
     if (b.kind === 'table') {
+      if (!tables) continue; // 범위 절의 표 행은 개요 「키: 값」으로 읽지 않는다(corpus F8: 구분 칸 「마감」「주기」로 표가 통째로 사라지던 문제)
       for (const row of b.rows) if (row.length >= 2 && row[0]) out.push([row[0], row.slice(1).filter(Boolean).join(' — '), b]);
     } else {
       const m = /^([^:：[]{1,20})[:：]\s*(.+)$/.exec(b.text); // 키에 "["가 들면 표시([미확인: …]) 안의 콜론이다
@@ -403,9 +431,9 @@ export function convertDocument(text, ctx) {
   // 1) 개요(머리말·개요 절의 "키: 값")
   const info = { name: null, purpose: null, background: null, scope: [], scope_out: [], people: [], date: null, owner: null, work_attrs: {}, root_attrs: {}, refs: new Set() };
   const intro = []; // 유니버스 설명에 붙일 머리말 글
-  const readOverview = (blocks, ref) => {
+  const readOverview = (blocks, ref, tables = true) => {
     let used = 0;
-    for (const [key, value, block] of keyValues(blocks)) {
+    for (const [key, value, block] of keyValues(blocks, tables)) {
       const k = overviewKey(key);
       const v = cleanText(value);
       if (!k || !v) continue;
@@ -415,7 +443,10 @@ export function convertDocument(text, ctx) {
       if (k === 'scope') info.scope.push({ text: v, ref: `${ref} 범위` });
       else if (k === 'scope_out') info.scope_out.push(v);
       else if (k === 'people') info.people.push({ text: v, ref: `${ref} ${cleanText(key)}` });
-      else if (k === 'work_attr') info.work_attrs[cleanText(key).replace(/\s/g, ' ')] = v;
+      else if (k === 'work_attr') {
+        const wk = cleanText(key).replace(/\s/g, ' ');
+        if (!(wk in info.work_attrs)) info.work_attrs[wk] = v; // 이미 있는 속성은 덮어쓰지 않는다(corpus F8)
+      }
       else if (k === 'date') info.date = info.date || findDate(v);
       else if (!info[k]) info[k] = v;
     }
@@ -433,7 +464,7 @@ export function convertDocument(text, ctx) {
       if (s.blocks.length) sections.push({ order: parsed.sections.indexOf(s), ref: refOf(s), title: s.heading, kind: 'overview', made: used });
     }
   }
-  if (!info.date) info.date = findDate([parsed.title, ...intro].filter(Boolean).join(' '));
+  if (!info.date) info.date = headDate([parsed.title, ...intro].filter(Boolean).join(' '));
   const docDate = info.date || today;
   if (!info.date) notes.push({ code: 'C-DATE-ASSUMED', date: today });
 
@@ -477,15 +508,15 @@ export function convertDocument(text, ctx) {
 
   // 업무: 개요의 범위 + 범위 절의 목록
   for (const s of parsed.sections.filter((x) => x.kind === 'scope')) {
-    readOverview(s.blocks, refOf(s));
+    readOverview(s.blocks, refOf(s), false);
     const lines = linesOf(s.blocks.filter((b) => !b.used));
     for (const l of lines) {
       if (!l.cells) { info.scope.push({ text: l.text, ref: refOf(s), desc: null }); continue; }
-      const { name: cellName, desc } = nameAndRest(l.cells, l.header); // 구분 열이 있는 표도 업무 이름 칸을 쓴다(검토5 V-1)
+      const { name: cellName, desc } = nameAndRest(l.cells, l.header, 'scope'); // 구분 열이 있는 표도 업무 이름 칸을 쓴다(검토5 V-1)
       if (!cellName) { notes.push({ code: 'C-ROW-NO-NAME', ref: refOf(s), row: l.row }); continue; }
       info.scope.push({ text: cellName, ref: refOf(s), desc });
     }
-    if (lines.some((l) => l.cells && nameCellIndex(l.header) > 0)) notes.push({ code: 'C-TABLE-NAME-COL', ref: refOf(s), col: nameCellIndex(lines.find((l) => l.cells).header) + 1 });
+    if (lines.some((l) => l.cells && nameCellIndex(l.header, 'scope') > 0)) notes.push({ code: 'C-TABLE-NAME-COL', ref: refOf(s), col: nameCellIndex(lines.find((l) => l.cells).header, 'scope') + 1 });
     sections.push({ order: parsed.sections.indexOf(s), ref: refOf(s), title: s.heading, kind: 'scope', made: lines.length });
   }
   for (const s of parsed.sections.filter((x) => x.kind === 'scope_out')) {
@@ -496,6 +527,7 @@ export function convertDocument(text, ctx) {
   const works = [];
   for (const item of info.scope) {
     for (const part of item.desc ? [item.text] : splitList(item.text)) {
+      if (!hasName(part)) { notes.push({ code: 'C-NO-NAME', ref: item.ref, text: part }); continue; }
       const w = pushNode('work', part, { ref: item.ref, status: statusOf(part), description: item.desc || undefined });
       if (!works.includes(w)) works.push(w);
     }
@@ -508,9 +540,13 @@ export function convertDocument(text, ctx) {
     const lines = linesOf(s.blocks);
     const items = lines.filter((l) => l.n !== undefined || l.kind === 'bullet' || l.row);
     const use = items.length ? items : lines;
-    for (const l of use) steps.push(l.text);
+    // 번호 단계 아래 들여쓴 하위 글머리표는 따로 세지 않고 그 단계 글에 붙인다(corpus F9: 단계 번호가 밀리던 문제)
+    for (const l of use) {
+      if (l.sub && steps.length) steps[steps.length - 1] += ` — ${l.text}`;
+      else steps.push(l.text);
+    }
     if (use.length) stepRefs.push(refOf(s));
-    sections.push({ order: parsed.sections.indexOf(s), ref: refOf(s), title: s.heading, kind: 'steps', made: use.length });
+    sections.push({ order: parsed.sections.indexOf(s), ref: refOf(s), title: s.heading, kind: 'steps', made: use.filter((l) => !l.sub).length });
   }
   if (!works.length) {
     // 범위가 없으면 업무 하나(문서 이름)로 만든다
@@ -548,6 +584,7 @@ export function convertDocument(text, ctx) {
     const lines = linesOf(s.blocks);
     if (!lines.length) continue; // 하위 절만 있는 절
     const label = titleCore(s.title) || s.title;
+    if (!hasName(label)) { notes.push({ code: 'C-NO-NAME', ref: refOf(s), text: s.title }); continue; } // 「## 3.」처럼 번호뿐인 제목
     const headNote = (s.title.match(new RegExp(`\\([^)]*\\)|${MARK.source}`, 'g')) || []).join(' ');
     const description = [headNote, ...lines.map((l) => (l.kind === 'bullet' || l.n !== undefined || l.row ? `- ${l.text}` : l.text))].filter(Boolean).join('\n');
     const sub = TOPIC_SUBTYPES.find(([, re]) => re.test(label));
@@ -584,7 +621,7 @@ export function convertDocument(text, ctx) {
     const lines = linesOf(s.blocks);
     for (const l of lines) {
       if (l.cells) {
-        const { name: cellName, desc, duty } = nameAndRest(l.cells, l.header);
+        const { name: cellName, desc, duty } = nameAndRest(l.cells, l.header, 'people');
         if (!cellName) { notes.push({ code: 'C-ROW-NO-NAME', ref: refOf(s), row: l.row }); continue; }
         roleItems.push({ text: cellName, ref: refOf(s), desc: desc || '', duty: duty || '' });
       }
@@ -599,6 +636,7 @@ export function convertDocument(text, ctx) {
   const roleDuty = new Map(); // 역할 노드 → [{text, ref}] 원문에 적힌 하는 일(담당 추정의 근거)
   for (const item of roleItems) {
     for (const label of item.desc ? [item.text] : expandRoles(item.text)) {
+      if (!hasName(label)) { notes.push({ code: 'C-NO-NAME', ref: item.ref, text: label }); continue; }
       const { org } = roleParts(label);
       const r = pushNode('person', label, { ref: item.ref, subtype: SUBTYPE_ROLE, description: item.desc, attrs: org ? { 소속: org } : {}, status: statusOf(label, item.desc) });
       if (!roles.includes(r)) roles.push(r);
@@ -610,18 +648,21 @@ export function convertDocument(text, ctx) {
   }
   if (roles.length) subtypes.set(`person|${SUBTYPE_ROLE}`, { core_type: 'person', name: SUBTYPE_ROLE });
 
-  // 산출물: "가 → 나 → 다", 목록, 표 첫 칸
+  // 산출물: "가 → 나 → 다", 목록, 표의 이름 칸(산출물·문서·이름 칸, 첫 칸이 번호면 다음 칸 — corpus F5)
   const artifacts = [];
   for (const s of parsed.sections.filter((x) => x.kind === 'artifacts')) {
     let order = 0;
     let made = 0;
     for (const l of linesOf(s.blocks)) {
-      const parts = l.cells ? [l.cells[0]] : l.text.includes('→') ? l.text.split(/\s*→\s*/) : l.n !== undefined || l.kind === 'bullet' ? [l.text] : splitList(l.text);
+      const cell = l.cells ? nameAndRest(l.cells, l.header, 'artifacts') : null;
+      if (cell && !cell.name) { notes.push({ code: 'C-ROW-NO-NAME', ref: refOf(s), row: l.row }); continue; }
+      const parts = cell ? [cell.name] : l.text.includes('→') ? l.text.split(/\s*→\s*/) : l.n !== undefined || l.kind === 'bullet' ? [l.text] : splitList(l.text);
       const ordered = l.text.includes('→') || l.n !== undefined;
       for (const p of parts.filter(Boolean)) {
         const m = /^(.+?)\s*\(([^)]*)\)\s*$/.exec(p);
         let label = m ? m[1] : p;
-        let desc = m ? m[2] : l.cells ? l.cells.slice(1).filter(Boolean).join(' — ') : '';
+        let desc = m ? m[2] : cell ? cell.desc || '' : '';
+        if (!hasName(label)) { notes.push({ code: 'C-NO-NAME', ref: refOf(s), text: p }); continue; }
         if (label.length > CONVERT_RULES.artifactLabelMax) {
           desc = [p, desc].filter(Boolean).join(' — ');
           label = `${label.slice(0, CONVERT_RULES.artifactLabelMax - 1)}…`;

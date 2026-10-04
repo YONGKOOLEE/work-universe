@@ -5,7 +5,8 @@ import { displayName } from '../view/describe.js';
 import { eventChipLabel } from './chip-label.js';
 import { el } from './dom.js';
 
-const button = (gid, label, onclick) => el('button', { type: 'button', class: 'evidence', title: `근거: ${gid}`, onclick }, label);
+// 긴 이름은 칩에서 말줄임되므로 전체 이름을 title에 함께 둔다(화면 점검 S-1)
+const button = (gid, label, onclick) => el('button', { type: 'button', class: 'evidence', title: `${label} (근거: ${gid})`, onclick }, label);
 
 /**
  * 근거 하나의 버튼. 노드면 이름, 이력이면 날짜와 내용 앞부분(chip-label).

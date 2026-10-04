@@ -28,6 +28,7 @@ function noteText(n) {
     case 'C-TOO-FEW': return `노드가 ${n.count}개로 적습니다(${n.min}개 이상 목표). 원문에 제목(#)·표·번호 목록이 있는지 확인하세요.`;
     case 'C-PERFORMS-GUESS': return `담당(수행) 연결 ${n.count}건을 추정했습니다 — 원문의 역할 「하는 일」 항목이 업무 이름과 같은 경우만이고(결재·검토처럼 이름이 일부만 들어간 항목은 잇지 않음), 기간이 없어 '지금 담당'으로 계산됩니다. 맞는지 확인하세요.`;
     case 'C-ROW-NO-NAME': return `${n.ref} 표의 ${n.row}번째 행은 이름 칸이 비어 있어 건너뛰었습니다. 원문을 확인하세요.`;
+    case 'C-NO-NAME': return `${n.ref}의 「${n.text}」는 이름이 없어(표시·번호·괄호뿐) 노드로 만들지 않았습니다. 원문을 확인하세요.`;
     case 'C-TABLE-NAME-COL': return `${n.ref} 표에서 ${n.col}번째 칸을 업무 이름으로 썼습니다(첫 칸은 구분·순서로 보임). 이름이 엉뚱하면 표 머리글을 「업무」로 바꿔 다시 변환하세요.`;
     case 'C-NO-SCOPE': return '원문에서 범위(업무 목록)를 찾지 못해 문서 이름으로 업무 하나를 만들었습니다.';
     case 'C-NO-STRUCTURE': return '제목(#)이 없어 구조를 거의 읽지 못했습니다. 마크다운 제목·표·번호 목록이 있으면 더 잘 바뀝니다.';
@@ -109,6 +110,8 @@ export function importDialog(o) {
       st.message = '';
     }
     render();
+    // 작은 화면에서는 미리 보기가 창 아래에 생겨 아무 일도 없는 것처럼 보인다(화면 점검 S-8)
+    if (st.result && typeof slot.scrollIntoView === 'function') slot.scrollIntoView({ block: 'start' });
   }
 
   function runJson() {

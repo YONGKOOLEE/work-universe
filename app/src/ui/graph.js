@@ -142,6 +142,7 @@ export function createGraph(container, { onSelect, onToggle = () => {} }) {
           'text-margin-y': 6,
           'text-wrap': 'wrap',
           'text-max-width': 120,
+          'text-overflow-wrap': 'anywhere', // 화면 점검 S-3: 띄어쓰기 없는 긴 라벨도 줄바꿈
           'text-outline-color': BG,
           'text-outline-width': 2.5,
         },

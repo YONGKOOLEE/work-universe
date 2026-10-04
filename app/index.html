@@ -14,8 +14,9 @@
   header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
   header h1 { font-size: 17px; margin: 0; letter-spacing: .5px; }
   header h1 b { color: var(--accent); }
-  #universe-picker { border-radius: 999px; padding: 6px 12px; max-width: 420px; flex: 1 1 160px; min-width: 160px; }
+  #universe-picker { border-radius: 999px; padding: 6px 12px; max-width: 420px; flex: 1 1 120px; min-width: 120px; }
   header button { white-space: nowrap; }
+  @media (max-width: 1200px) { header button { padding: 6px 10px; } } /* 화면 점검 S-7: 1366 + 125% 확대에서 머리글이 두 줄이 되지 않게 */
   header .spacer { flex: 1; }
   button { font: inherit; padding: 6px 14px; border-radius: 999px; border: 1px solid #3c5a33; background: var(--panel-2); color: var(--text); cursor: pointer; }
   button:hover:not(:disabled) { border-color: var(--accent); }
@@ -50,6 +51,7 @@
   .muted { color: var(--muted); font-size: 14px; }
   .small { font-size: 12px; }
   .hint { color: var(--muted); font-size: 13px; margin-top: 16px; padding: 10px; background: var(--panel-2); border-radius: 8px; }
+  .hint > p:first-child { margin-top: 0; } .hint > p:last-child { margin-bottom: 0; } /* 화면 점검 S-6 */
   .notice { background: var(--warn-bg); color: var(--warn-text); padding: 8px 10px; border-radius: 8px; font-size: 13px; margin: 0 0 10px; }
   button.link { background: none; border: 0; padding: 0; color: var(--link); text-decoration: underline; cursor: pointer; font: inherit; border-radius: 0; }
   details.add { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 12px; }
@@ -58,6 +60,8 @@
   form label { display: grid; gap: 4px; color: var(--muted); }
   input, select { font: inherit; padding: 6px 8px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; }
   input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button.primary:focus-visible, .tab.active:focus-visible, form button[type=submit]:focus-visible { outline-color: var(--text); outline-offset: 2px; } /* 화면 점검 S-10: 연두색 버튼은 테두리가 묻힘 */
+  ::placeholder { color: var(--muted); opacity: 1; } /* 화면 점검 S-9: 안내 글자 명암비 4.02 → 6.47 */
   #add-message.error { color: var(--err); }
   #add-message.ok { color: var(--ok); }
   .dot.collapsed { background: transparent; border: 3px double var(--muted); }
@@ -72,6 +76,7 @@
   legend { color: var(--muted); font-size: 13px; padding: 0 4px; }
   .error-text { color: var(--err); font-size: 13px; min-height: 1em; }
   .editor { display: grid; gap: 8px; font-size: 14px; min-width: 0; }
+  .editor > p:empty { display: none; } /* 화면 점검 S-4: 비어 있는 안내 줄이 40px 빈칸을 만듦 */
   .editor select, .editor input:not([type=checkbox]), .editor textarea { width: 100%; min-width: 0; max-width: 100%; }
   aside { overflow-x: hidden; }
   .editor h3 { margin: 4px 0; border: 0; padding: 0; }
@@ -97,20 +102,22 @@
   .draft-item { border-top: 1px dashed var(--line); padding: 8px 0; }
   .draft-item h4 { margin: 0 0 4px; font-size: 14px; color: var(--accent); }
   .draft-item ul { display: grid; gap: 6px; }
-  .draft-item li { display: grid; gap: 3px; }
+  .draft-item li { display: grid; gap: 3px; overflow-wrap: anywhere; }
+  .draft-item li > * { min-width: 0; } /* 화면 점검 S-1: 띄어쓰기 없는 긴 글자가 항목 전체를 패널 밖으로 밀어냄 */
   .draft-item.insufficient h4 { color: var(--muted); }
   .evidence-list { display: flex; flex-wrap: wrap; gap: 4px; }
-  .evidence { padding: 0 8px; font-size: 11px; border-radius: 8px; color: var(--muted); }
+  .evidence { padding: 0 8px; font-size: 11px; border-radius: 8px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .copy-box { width: 100%; margin-top: 8px; }
   .confirm-box { margin-top: 12px; padding: 10px; border: 1px solid var(--accent); border-radius: 8px; display: grid; gap: 6px; }
+  .confirm-box p { margin: 0; } .confirm-box p:empty { display: none; } /* 화면 점검 S-6 */
   .insight .field select, .draft .field select { width: 100%; max-width: 100%; min-width: 0; }
   .experts { display: grid; gap: 12px; margin-top: 8px; padding: 0; }
   .experts > li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; gap: 4px; }
   .who { display: flex; align-items: center; gap: 6px; }
   .who .chip { margin-left: auto; white-space: nowrap; flex: none; }
   .why { display: grid; gap: 2px; }
-  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
-  .tab { padding: 4px 12px; font-size: 13px; white-space: nowrap; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 10px; }
+  .tab { padding: 4px 8px; font-size: 12px; white-space: nowrap; } /* 화면 점검 S-5: 탭 4개가 한 줄에 */
   .tab.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: bold; }
   .patterns { display: grid; gap: 12px; margin-top: 8px; padding: 0; }
   .patterns > li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; gap: 6px; }
@@ -126,7 +133,9 @@
   .timebar input[type=range] { flex: 1; min-width: 160px; accent-color: var(--accent); }
   .timebar .when { color: var(--text); font-weight: bold; min-width: 6.5em; }
   .timebar.past { background: var(--warn-bg); color: var(--warn-text); }
-  .history li.after { opacity: 0.45; }
+  .timebar.past .muted { color: inherit; } /* 화면 점검 S-9 ② */
+  .history li.after { color: var(--muted); } /* 화면 점검 S-9 ③: 흐리게(opacity .45)는 명암비 2.3 → 색으로 구분 */
+  .history li.after .chip { opacity: 0.7; }
   .flow-table { table-layout: auto; }
   .flow-table { font-size: 12px; }
   .flow-table th, .flow-table td { padding: 4px 2px; } /* 7열이 좁은 패널에서 잘리지 않게 */
@@ -171,7 +180,7 @@
   .card.recommended { border-color: var(--accent); }
   .card-head .chip { white-space: nowrap; flex: none; }
   .card-head { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
-  .card-head strong { word-break: keep-all; } /* 검토5 U-11: 제목이 글자 중간에서 끊기지 않게 */
+  .card-head strong { word-break: keep-all; overflow-wrap: anywhere; min-width: 0; } /* 검토5 U-11: 낱말 단위로 끊고, 띄어쓰기 없는 긴 이름은 어디서든 끊음(화면 점검 S-2) */
   .card p { margin: 0; }
   .card .try { font-size: 13px; color: var(--text); background: var(--panel-2); border-radius: 6px; padding: 6px 8px; }
   .card button { justify-self: start; margin-top: 4px; }
