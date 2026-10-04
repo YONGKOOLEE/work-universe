@@ -7,21 +7,22 @@ import { todayLocal } from './time.js';
 import { METHOD_LABELS, refineDraft } from '../llm/connector.js';
 import { el } from './dom.js';
 import { evidenceChips } from './evidence.js';
-import { messageFor } from './messages.js';
+import { josa, messageFor } from './messages.js';
 
 const DRAFT_FIELDS = { target: '대상', from: '보내는 사람', to: '받는 사람' };
 
 function draftError(err) {
   if (err.same_person) return '보내는 사람과 받는 사람이 같습니다.';
-  if (err.code === 'E-REQUIRED') return `${DRAFT_FIELDS[err.field]}을(를) 고르세요.`;
+  if (err.code === 'E-REQUIRED') return `${DRAFT_FIELDS[err.field]}${josa(DRAFT_FIELDS[err.field], '을/를')} 고르세요.`;
   if (err.field === 'target') return '대상은 유니버스(꼭지)나 업무만 고를 수 있습니다.';
   return messageFor(err);
 }
 
-function options(nodes, placeholder, selected) {
+// withUniverse: 유니버스가 둘 이상 보일 때만 이름 뒤에 유니버스 이름을 붙인다(하나뿐이면 "월말 정산 점검 (월말 정산 점검)"처럼 겹쳐 보인다, 여섯 번째 검토 U-14)
+function options(nodes, placeholder, selected, withUniverse = true) {
   const s = el('select', {});
   s.append(el('option', { value: '' }, placeholder));
-  for (const n of nodes) s.append(el('option', { value: n.gid, selected: n.gid === selected }, `${n.label} (${n.universe_name})`));
+  for (const n of nodes) s.append(el('option', { value: n.gid, selected: n.gid === selected }, withUniverse ? `${n.label} (${n.universe_name})` : n.label));
   return s;
 }
 
@@ -56,11 +57,12 @@ export function draftPanel(o) {
   const visible = view.nodes.filter((n) => !n.hidden);
   const targets = visible.filter((n) => n.core_type === 'root' || n.core_type === 'work');
   const people = visible.filter((n) => n.core_type === 'person');
-  const target = options(targets, '대상을 고르세요', o.target);
+  const multi = new Set(visible.map((n) => n.universe_id)).size > 1;
+  const target = options(targets, '대상을 고르세요', o.target, multi);
   target.dataset.testid = 'draft-target';
-  const from = options(people, '보내는 사람', '');
+  const from = options(people, '보내는 사람', '', multi);
   from.dataset.testid = 'draft-from';
-  const to = options(people, '받는 사람', '');
+  const to = options(people, '받는 사람', '', multi);
   to.dataset.testid = 'draft-to';
   // 대상이 업무면 현재 담당자를 알려 주고, 한 명이면 보내는 사람으로 미리 고른다(사람이 바꿀 수 있음)
   const holder = el('p', { class: 'muted small', 'data-testid': 'draft-holder' });

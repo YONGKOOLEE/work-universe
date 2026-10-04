@@ -70,7 +70,8 @@ function similarView(o, view) {
   const works = view.nodes.filter((n) => n.core_type === 'work' && !n.hidden);
   const pick = el('select', { 'data-testid': 'insight-work' });
   pick.append(el('option', { value: '' }, '업무를 고르세요'));
-  for (const w of works) pick.append(el('option', { value: w.gid, selected: w.gid === o.work }, `${w.label} (${w.universe_name})`));
+  const multi = new Set(works.map((w) => w.universe_id)).size > 1; // 유니버스가 하나면 이름 접미사를 붙이지 않는다(U-14)
+  for (const w of works) pick.append(el('option', { value: w.gid, selected: w.gid === o.work }, multi ? `${w.label} (${w.universe_name})` : w.label));
   const out = el('div', { 'data-testid': 'insight-result' });
   const run = () => {
     if (!pick.value) {

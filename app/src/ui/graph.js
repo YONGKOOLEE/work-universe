@@ -260,9 +260,15 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
   }
 
   // 노드와 이웃만 또렷하게, 나머지는 흐리게. 클릭(선택)과 마우스 올림(미리 보기)이 함께 쓴다
+  let nbhdCenter = null; // 주변만 보기의 가운데 노드(없으면 null)
   function focusOn(node) {
     cy.elements().removeClass('faded hood');
     if (!node || node.empty()) return;
+    // 주변만 보기에서 가운데 노드를 골랐을 때는 화면의 노드가 모두 "주변"이므로 2단계 노드까지 흐리게 하지 않는다(여섯 번째 검토 U-16)
+    if (nbhdCenter && node.id() === nbhdCenter) {
+      node.connectedEdges().addClass('hood');
+      return;
+    }
     cy.elements().not(node.closedNeighborhood()).addClass('faded');
     node.connectedEdges().addClass('hood');
   }
@@ -414,6 +420,7 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
       }
       applyTimeOff();
       lastDisplay = display;
+      nbhdCenter = display.center || null;
       applyTinyLabels(); // 새로 만든 요소에는 판정이 없다(확대가 그대로면 zoom 이벤트도 오지 않음)
       applyFilter();
       highlight(selectedGid);

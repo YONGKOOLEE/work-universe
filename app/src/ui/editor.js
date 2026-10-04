@@ -121,8 +121,8 @@ function attrsEditor(attrs = {}) {
 }
 
 function periodEditor(period = {}) {
-  const start = el('input', { type: 'date', value: period.start || '', class: 'period-start' });
-  const end = el('input', { type: 'date', value: period.end || '', class: 'period-end' });
+  const start = el('input', { type: 'date', value: period.start || '', class: 'period-start', min: '1900-01-01', max: '2200-12-31' });
+  const end = el('input', { type: 'date', value: period.end || '', class: 'period-end', min: '1900-01-01', max: '2200-12-31' });
   return {
     el: el('div', { class: 'row period' }, start, el('span', { class: 'muted' }, '~'), end),
     value() {
@@ -171,7 +171,7 @@ export function nodeForm(o) {
     o.mode === 'edit' ? el('h3', {}, '노드 수정') : null,
     o.mode === 'add' ? field('유형', type) : null,
     subtypeField,
-    field('라벨', label),
+    field('이름', label),
     isRoot ? el('p', { class: 'muted small' }, '꼭지 이름은 유니버스 이름과 같아서 바꿀 수 없습니다.') : null,
     field('설명', description),
     empField,
@@ -291,7 +291,7 @@ export function eventForm(o) {
   const byType = (t) => o.nodes.filter((n) => n.core_type === t);
   const pre = (t) => (o.node.core_type === t ? o.node.id : '');
   const type = select(EVENT_CHOICES, 'memo', { 'data-testid': 'event-type' });
-  const date = el('input', { type: 'date', value: todayLocal(), 'data-testid': 'event-date' });
+  const date = el('input', { type: 'date', value: todayLocal(), 'data-testid': 'event-date', min: '1900-01-01', max: '2200-12-31' });
   const note = el('textarea', { rows: 2, 'data-testid': 'event-note', placeholder: '예: 대사 불일치 3건 재발' });
   const person = select(nodeOptions(byType('person'), { empty: '사람을 고르세요' }), pre('person'));
   const work = select(nodeOptions(byType('work'), { empty: '업무를 고르세요' }), pre('work'));
@@ -340,6 +340,8 @@ export function eventForm(o) {
       assign_end: () => ({ person_id: v(person), work_id: v(work) }),
       affiliation_change: () => ({ person_id: v(person), from_org_id: v(fromOrg) || null, to_org_id: v(toOrg) || null }),
     };
+    // 메모는 내용이 있어야 한다: 이력은 지울 수 없어 빈 메모가 영구히 남고 근거·흐름 표의 건수에 들어간다(여섯 번째 검토 U-2)
+    if (type.value === 'memo' && !note.value.trim()) return msg.show({ ok: false, error: { code: 'E-REQUIRED', field: 'note' } }, { kind: 'event' });
     const payload = Object.fromEntries(Object.entries(payloads[type.value]()).filter(([, x]) => x !== undefined));
     msg.show(o.onSubmit({ type: type.value, occurred_at: date.value, payload, note: note.value }), { kind: 'event' });
   });

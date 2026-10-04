@@ -2,7 +2,7 @@
 // 미리 보기에서 검증 오류가 있으면 가져올 수 없다(AC ①). 원문 근거와 [가정]·[미확인] 표시를 보여 준다(AC ②④).
 
 import { el } from './dom.js';
-import { messageFor } from './messages.js';
+import { josa, messageFor } from './messages.js';
 import { SCHEMA_VERSION, nodeTypeLabel } from '../model/schema.js';
 import { parseImportText } from '../model/import.js';
 import { METHOD_LABELS } from '../llm/connector.js';
@@ -39,7 +39,7 @@ function noteText(n) {
 }
 
 function warningText(w, from) {
-  if (w.code === 'W-SAMPLE-OVERWRITE') return `내장 샘플「${w.name}」을(를) 덮어씁니다. 「가상 데이터 초기화」를 누르면 원래 샘플로 돌아갑니다.`;
+  if (w.code === 'W-SAMPLE-OVERWRITE') return `내장 샘플「${w.name}」${josa(w.name, '을/를')} 덮어씁니다. 「가상 데이터 초기화」를 누르면 원래 샘플로 돌아갑니다.`;
   if (w.code === 'W-SAMPLE-FLAG') return '파일에 샘플 표시가 있지만 내장 샘플이 아니므로 「내 유니버스」로 가져옵니다.';
   if (w.code === 'W-REAL-NAME-LIKE') return `실명처럼 보이는 사람 이름 ${w.count}개가 있습니다(${w.labels.join(', ')}). 이 도구는 가상 데이터용입니다. 실제 이름이면 가져오기 전에 역할 이름(예: 정산 담당)으로 바꾸세요.`;
   if (w.code === 'W-EMPNO-LIKE') return `사번·주민번호처럼 보이는 숫자(6자리 이상)가 ${w.count}곳에 있습니다. 실제 번호면 지우거나 V-0000 형식의 가상 사번으로 바꾸세요.`;
@@ -184,7 +184,10 @@ export function importDialog(o) {
       summary.append(el('dt', {}, '표시 보존'), el('dd', { 'data-testid': 'import-marks' }, `[미확인] 노드 ${p.marks.미확인}개, [가정] 노드 ${p.marks.가정}개`));
       blocks.push(summary);
 
-      if (p.errors.length) {
+      // 작성 주체만 비어 있는 것은 실패가 아니라 "입력할 차례"다: 빨간 오류 대신 안내로 둔다(여섯 번째 검토 U-6). 가져오기 버튼은 그대로 막힌다
+      if (st.result.from === 'doc' && p.errors.length && p.errors.every((e) => e.path === 'universe.owner')) {
+        blocks.push(el('p', { class: 'notice', 'data-testid': 'import-errors' }, '변환은 끝났습니다. 위의 「작성 주체」 칸에 이 유니버스를 책임질 팀·부서 이름을 넣으면 「가져오기」를 누를 수 있습니다.'));
+      } else if (p.errors.length) {
         blocks.push(el('div', { class: 'error-text', 'data-testid': 'import-errors' },
           el('strong', {}, `가져올 수 없습니다 — 고칠 것 ${p.errors.length}건`),
           el('ul', {}, ...p.errors.slice(0, 8).map((e) => el('li', {}, errorText(e)))),
@@ -268,7 +271,7 @@ export function importDialog(o) {
           el('button', { type: 'button', 'data-testid': 'import-example', onclick: () => { st.docText = o.example.text; st.result = null; st.message = ''; render(); } }, `예시 문서 넣기: ${o.example.title}`)),
         el('div', { class: 'row' },
           el('button', { type: 'button', class: 'primary', 'data-testid': 'import-convert', onclick: runConvert }, '초벌 변환'),
-          el('span', { class: 'muted small' }, `생성 방식: ${o.methodLabel()}`)))
+          el('span', { class: 'muted small', 'data-testid': 'import-method-note' }, '문서 변환은 규칙으로 읽습니다. 결과는 미리 보기에서 사람이 확인합니다.')))
       : el('div', { class: 'editor' },
         el('p', { class: 'muted small' }, '「내보내기」로 저장한 유니버스 파일(.json)이나, 개발 중 변환해 둔 유니버스 파일을 엽니다.'),
         el('label', { class: 'file-pick' }, 'JSON 파일 열기 ', el('input', { type: 'file', accept: '.json,application/json', 'data-testid': 'import-json-file', onchange: (e) => readFile(e.target, 'jsonText') })),

@@ -301,7 +301,7 @@ const DUTY_HEADER = /^(하는 ?일|담당 ?업무|업무|역할 ?내용|책임)$
 // 돌려주는 값: name(이름 칸. 비어 있으면 null — 구분 값을 이름으로 쓰지 않는다, 재검증 5), desc(나머지 칸), duty(「하는 일」 칸. 없으면 desc)
 function nameAndRest(cells, header, kind) {
   const i = nameCellIndex(header, kind, cells);
-  const name = (cells[i] || '').trim() || (i === 0 ? null : null);
+  const name = (cells[i] || '').trim() || null;
   const head = (k) => (header && header[k] ? cleanText(header[k]) : '');
   const rest = cells.map((c, k) => {
     if (k === i || !c || !c.trim()) return '';
@@ -467,8 +467,10 @@ export function convertDocument(text, ctx) {
       else if (k === 'scope_out') info.scope_out.push(v);
       else if (k === 'people') info.people.push({ text: v, ref: `${ref} ${cleanText(key)}` });
       else if (k === 'work_attr') {
-        const wk = cleanText(key).replace(/\s/g, ' ');
-        if (!(wk in info.work_attrs)) info.work_attrs[wk] = v; // 이미 있는 속성은 덮어쓰지 않는다(corpus F8)
+        // 속성 이름은 02-design 5.6 약속의 표기로 맞춘다: 「사용시스템」(띄어쓰기 없음)도 「사용 시스템」으로 저장해야 초안이 읽는다(여섯 번째 검토 C-8)
+        const wk0 = cleanText(key).replace(/\s/g, '');
+        const wk = wk0 === '사용시스템' ? '사용 시스템' : wk0;
+        if (!(wk in info.work_attrs)) info.work_attrs[wk] = truncate(v, TEXT_MAX, notes, wk); // 이미 있는 속성은 덮어쓰지 않는다(corpus F8). 긴 값은 잘라 알린다(검증 상한 2000자, C-6)
       }
       else if (k === 'date') info.date = info.date || findDate(v);
       else if (!info[k]) info[k] = v;
@@ -500,7 +502,11 @@ export function convertDocument(text, ctx) {
   const byKey = new Map();
   let seq = 0;
   const pushNode = (core_type, label, { ref, description, subtype, attrs = {}, status } = {}) => {
-    const clean = stripMarks(label).slice(0, LABEL_MAX) || label.slice(0, LABEL_MAX);
+    // 이름이 100자를 넘으면 …로 자르고 알리며, 설명이 없으면 전체 이름을 설명에 남긴다(여섯 번째 검토 C-7)
+    const full = stripMarks(label) || label;
+    const longName = full.length > LABEL_MAX;
+    const clean = longName ? truncate(full, LABEL_MAX, notes, '이름') : full;
+    if (longName && !description) description = full;
     const key = `${core_type}|${normalizeLabel(clean)}`;
     const found = byKey.get(key);
     const marks = marksOf(label).join(' ');
@@ -777,7 +783,7 @@ export function convertDocument(text, ctx) {
   if (info.purpose) descParts.push(info.purpose);
   if (info.scope_out.length) descParts.push(`범위 제외: ${info.scope_out.join(', ')}`);
   if (intro.length) descParts.push(`머리말: ${intro.join(' ')}`);
-  descParts.push('문서에서 규칙 기반으로 초벌 변환한 유니버스(CR-5).');
+  descParts.push('문서에서 규칙 기반으로 초벌 변환한 유니버스.');
   const universe = {
     id: newId(ID_PREFIX.universe, random),
     name,

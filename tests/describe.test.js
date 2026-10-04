@@ -73,7 +73,7 @@ test('수정 이벤트는 바뀐 필드와 변경 전 값을 보인다', () => {
   const d = describeNode(buildView(doc), 'U-A1/N-020');
   const last = d.history.at(-1);
   assert.equal(last.type_label, '수정');
-  assert.equal(last.text, '수정 — 라벨: 2026-06 인수인계서 → 2026-06 인수인계서(수정)');
+  assert.equal(last.text, '수정 — 이름: 2026-06 인수인계서 → 2026-06 인수인계서(수정)');
 });
 
 test('숨긴 노드도 상세는 나오고 hidden으로 알린다. 이력 문장에는 "숨김 처리된 노드"가 붙는다', () => {

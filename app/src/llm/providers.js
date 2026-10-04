@@ -8,9 +8,9 @@
 export const PROVIDERS = [
   { name: 'pregen', label: '사전 생성(개발 시 Claude로 작성)', help: '기본값. 개발 중 Claude로 미리 작성한 문장을 씁니다. 결과가 없거나 데이터가 바뀐 항목은 규칙 기반 문장으로 보입니다.' },
   { name: 'none', label: '규칙 기반만', help: '기록을 규칙으로 옮겨 적은 문장만 씁니다(LLM 없음).' },
-  { name: 'claude_api', label: 'Claude API (P2, 1차 제출 범위 밖)', help: '1차 제출물에는 연결하지 않았습니다. 고르면 규칙 기반으로 동작하고 이유를 표시합니다.' },
-  { name: 'internal', label: '사내 LLM (P2)', help: '사용 방법이 정해지면 이 자리에 연결합니다. 지금은 규칙 기반으로 동작합니다.' },
-  { name: 'fail', label: '실패 흉내(점검용)', help: 'LLM 호출이 실패한 상황을 흉내 냅니다. 규칙 기반으로 바뀌고 원인이 표시되는지 확인할 때 씁니다(R-04 ③).' },
+  { name: 'claude_api', label: 'Claude API (다음 단계에서 연결)', help: '이번 제출물에는 연결하지 않았습니다. 고르면 규칙 기반으로 동작하고 이유를 표시합니다.' },
+  { name: 'internal', label: '사내 LLM (다음 단계에서 연결)', help: '사용 방법이 정해지면 이 자리에 연결합니다. 지금은 규칙 기반으로 동작합니다.' },
+  { name: 'fail', label: '실패 흉내(점검용)', help: 'LLM 호출이 실패한 상황을 흉내 냅니다. 규칙 기반으로 바뀌고 원인이 표시되는지 확인할 때 씁니다(개발 점검용).' },
 ];
 import { itemEvidence } from '../rules/handover.js';
 
@@ -73,9 +73,9 @@ export function createProvider(name, { pregen } = {}) {
     case 'none':
       return null;
     case 'claude_api':
-      return unavailable(name, 'Claude API 연결은 1차 제출 범위 밖(P2)이라 연결하지 않았습니다');
+      return unavailable(name, 'Claude API는 이번 제출물에 연결하지 않았습니다(다음 단계)');
     case 'internal':
-      return unavailable(name, '사내 LLM은 사용 방법이 정해지지 않아 연결하지 않았습니다(P2)');
+      return unavailable(name, '사내 LLM은 사용 방법이 정해지지 않아 연결하지 않았습니다(다음 단계)');
     case 'fail':
       return unavailable(name, '호출 실패(점검용 흉내)');
     case 'pregen':

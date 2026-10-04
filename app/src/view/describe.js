@@ -5,7 +5,7 @@ import { EDGE_TYPES, MEMO_CATEGORIES, eventTypeLabel, memoCategoryOf } from '../
 import { refGid } from './view.js';
 
 const FIELD_NAMES = {
-  label: '라벨', description: '설명', attrs: '속성', tags: '태그', period: '기간', subtype: '하위 유형', emp_no: '사번', note: '메모', exposed: '상위 화면에서 보이기',
+  label: '이름', description: '설명', attrs: '속성', tags: '태그', period: '기간', subtype: '하위 유형', emp_no: '사번', note: '메모', exposed: '상위 화면에서 보이기',
 };
 const EDGE_ORDER = Object.keys(EDGE_TYPES);
 

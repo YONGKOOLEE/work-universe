@@ -321,7 +321,13 @@ export function createApp({ store, samples, currentId, now }) {
       const uid = target.universe_id;
       let d = uid === doc.universe.id ? doc : db.loadUniverse(uid);
       if (!d) return { ok: false, error: { code: CODES.SCHEMA, field: 'universe_id' } };
-      const local = (gid) => (gid.startsWith(`${uid}/`) ? gid.slice(uid.length + 1) : gid); // 다른 유니버스는 전역 참조 그대로
+      // 대상 유니버스 안의 ID로. 묶은 화면에서 합쳐진 노드의 대표가 다른 유니버스에 있어도, 대상 유니버스에 원본이 있으면 그 원본의 ID를 쓴다
+      // (전역 참조를 그대로 저장하면 그 유니버스를 단독으로 열 때 사람을 찾지 못한다, 여섯 번째 검토 C-2). 원본이 없으면 전역 참조 그대로
+      const local = (gid) => {
+        if (gid.startsWith(`${uid}/`)) return gid.slice(uid.length + 1);
+        const own = ((v.getNode(gid) || {}).merged_from || []).find((g) => g.startsWith(`${uid}/`));
+        return own ? own.slice(uid.length + 1) : gid;
+      };
       const canon = (ev, id) => v.canonical(refGid(ev.universe_id, id));
       const performed = (w) => v.edges.some((e) => !e.hidden && e.core_type === 'performs' && e.target === w && e.source === draft.from);
       const works = target.core_type === 'work' ? [target.gid] : scopeWorks(v, target.gid).map((g) => v.canonical(g)).filter(performed);
@@ -344,9 +350,10 @@ export function createApp({ store, samples, currentId, now }) {
         const extra = {};
         for (let i = TEXT_MAX, k = 1; i < body.length; i += TEXT_MAX, k += 1) extra[`본문(이어서 ${k})`] = body.slice(i, i + TEXT_MAX);
         const base = `${date} ${target.label} 인수인계서`.slice(0, 90);
-        const taken = new Set(d.nodes.filter((n) => n.core_type === 'artifact' && !n.hidden).map((n) => n.label));
+        // addNode는 공백·대소문자·한글 정규화로 이름을 비교하므로 같은 기준으로 겹침을 피한다(여섯 번째 검토 C-12)
+        const taken = new Set(d.nodes.filter((n) => n.core_type === 'artifact' && !n.hidden).map((n) => normalizeLabel(n.label)));
         let label = base;
-        for (let k = 2; taken.has(label); k += 1) label = `${base} (${k})`;
+        for (let k = 2; taken.has(normalizeLabel(label)); k += 1) label = `${base} (${k})`;
         const name = (gid) => (v.getNode(gid) || { label: gid }).label;
         const art = step(addNode(d, {
           core_type: 'artifact', subtype: SUBTYPE_HANDOVER_DOC, label, description: body.slice(0, TEXT_MAX),

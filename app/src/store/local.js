@@ -33,7 +33,9 @@ export function createStore(storage) {
   }
   // 목록이 깨졌거나 비었으면 저장소의 유니버스 키를 훑어 다시 만든다(localStorage의 key·length가 있을 때)
   function readIndex() {
-    const list = parse(storage.getItem(INDEX_KEY), null);
+    const parsed = parse(storage.getItem(INDEX_KEY), null);
+    // 항목이 null이거나 id가 없으면 버린다(직접 고친 저장소가 "저장소를 쓸 수 없음"으로 잘못 읽히지 않게, 여섯 번째 검토 C-13)
+    const list = Array.isArray(parsed) ? parsed.filter((e) => e && typeof e.id === 'string') : parsed;
     if (Array.isArray(list) && list.length) return list;
     if (typeof storage.key !== 'function' || typeof storage.length !== 'number') return Array.isArray(list) ? list : [];
     const rebuilt = [];
@@ -49,7 +51,8 @@ export function createStore(storage) {
   return {
     loadUniverse(id) {
       const doc = parse(storage.getItem(universeKey(id)), null);
-      const ok = doc && doc.universe && DOC_COLLECTIONS.every((k) => Array.isArray(doc[k]));
+      // 컬렉션이 배열이고 요소가 모두 객체여야 한다(null 요소가 있으면 화면 전체가 멈추므로 없는 것으로 본다, C-13)
+      const ok = doc && doc.universe && typeof doc.universe === 'object' && DOC_COLLECTIONS.every((k) => Array.isArray(doc[k]) && doc[k].every((x) => x && typeof x === 'object'));
       return ok ? doc : null;
     },
 

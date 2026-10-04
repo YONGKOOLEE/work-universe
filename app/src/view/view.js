@@ -244,6 +244,8 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
       .filter(([, list]) => list.some((x, i) => list.slice(i + 1).some((y) => normalizeLabel(x.label) !== normalizeLabel(y.label) && !decidedPairs.has([x.gid, y.gid].sort().join('|')))))
       .map(([emp_no, list]) => ({ code: 'W-EMPNO-CONFLICT', emp_no, nodes: list.map((n) => ({ gid: n.gid, label: n.label, universe_name: n.universe_name })) })),
     index: { byEmpNo, byTypeLabel, eventsByNode, nodesByTopic },
+    // 묶인 모든 문서의 판정 기록(확정·거부). 아래층(팀)에서 한 판정을 위층(부서) 확인 목록이 다시 묻지 않게 한다(여섯 번째 검토 C-4)
+    decided_links: docs.flatMap((d) => (d.identity_links || []).filter((l) => l.status !== 'pending')),
 
     canonical,
     getNode: (gid) => nodeByGid.get(canonical(gid)),

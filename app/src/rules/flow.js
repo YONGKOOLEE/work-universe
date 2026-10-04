@@ -4,6 +4,7 @@
 // 마지막 입력 이후 기간은 0건으로 단정하지 않고 "입력 없음"으로 표시한다.
 
 import { periodStatus } from '../view/describe.js';
+import { YEAR_MIN } from '../model/checks.js';
 
 const pad = (n) => String(n).padStart(2, '0');
 const COUNTED = ['assign_start', 'assign_end', 'handover', 'affiliation_change', 'memo'];
@@ -26,7 +27,8 @@ export function lastInput(view, asOf) {
 export function periodKey(date, unit) {
   const y = Number(date.slice(0, 4));
   const m = Number(date.slice(5, 7));
-  return unit === 'quarter' ? `${y}-Q${Math.ceil(m / 3)}` : `${y}-${pad(m)}`;
+  const yy = String(y).padStart(4, '0'); // 연도가 네 자리가 아니어도 키 모양이 깨지지 않게
+  return unit === 'quarter' ? `${yy}-Q${Math.ceil(m / 3)}` : `${yy}-${pad(m)}`;
 }
 
 /** 기간 키의 첫날·마지막 날 */
@@ -118,7 +120,7 @@ export function timeMonths(view, today) {
   const dates = [
     ...view.events.map((e) => e.occurred_at),
     ...view.edges.filter((e) => !e.hidden && e.period?.start).map((e) => e.period.start),
-  ].filter((d) => d && d <= today);
+  ].filter((d) => d && d <= today && d.slice(0, 4) >= String(YEAR_MIN)); // 이미 저장된 연도 오타 날짜(0202-…)는 범위에서 뺀다(여섯 번째 검토 C-1)
   if (!dates.length) return [periodKey(today, 'month')];
   const months = [];
   const end = periodKey(today, 'month');

@@ -21,7 +21,7 @@ import { currentDenseN, insightPanel } from './insight.js';
 import { nowIso, todayLocal } from './time.js';
 import { personLoad, repeatPatternsFor, workLoad } from '../rules/insight.js';
 import { monthAsOf, timeMonths } from '../rules/flow.js';
-import { messageFor } from './messages.js';
+import { josa, messageFor } from './messages.js';
 import { exportFileName, importDialog } from './import.js';
 import { convertDocument } from '../rules/doc-convert.js';
 import { convertDocumentWith } from '../llm/connector.js';
@@ -120,10 +120,10 @@ function start() {
   const settings = loadSettings(storage, { provider: DEFAULT_PROVIDER }, PROVIDERS.map((p) => p.name));
   let provider = createProvider(settings.provider, { pregen: PREGEN });
   const providerLabel = () => (PROVIDERS.find((p) => p.name === settings.provider) || PROVIDERS[0]).label;
-  const openImport = wireImportDialog(app, $, () => provider, providerLabel, location.hash.slice(1) ? () => exportCurrent(app) : null);
+  const openImport = wireImportDialog(app, $, () => provider, providerLabel, hashId() ? () => exportCurrent(app) : null);
 
   // 주소에 유니버스가 없으면(더블클릭으로 처음 열었을 때) 시작 화면을 보여 준다(R-08)
-  if (!location.hash.slice(1)) {
+  if (!hashId()) { // 깨진 인코딩(#%E0)도 시작 화면(hashId의 주석대로, 여섯 번째 검토 C-16)
     document.body.classList.add('start-mode');
     const openCreate = wireCreateDialog(app, $);
     $('start-screen').replaceChildren(startScreen({
@@ -227,7 +227,7 @@ function start() {
     box.append(el('div', {},
       el('label', { class: 'check' }, cb, ` ${where} 화면에서도 이 노드 보이기`),
       el('div', { class: 'muted small' }, `지금 적용: ${exp.explicit ? '직접 지정' : '기본 규칙'}(${exp.reason})`),
-      own ? el('div', { class: 'muted small' }, `${where}은(는) 이 유니버스를 묶은 상위 유니버스입니다.`) : null,
+      own ? el('div', { class: 'muted small' }, `${where}${josa(where, '은/는')} 이 유니버스를 묶은 상위 유니버스입니다.`) : null,
       owner ? el('div', { class: 'muted small', 'data-testid': 'exposed-owner' }, `바꾸면 원본 유니버스 「${owner}」에 저장됩니다.`) : null,
     ));
     return box;
@@ -352,7 +352,7 @@ function start() {
   }
 
   function hideSelected(node) {
-    if (!window.confirm(`「${node.label}」을(를) 숨깁니다. 그래프에서 사라지지만 이력과 근거로서의 내용은 남습니다.`)) return;
+    if (!window.confirm(`「${node.label}」${josa(node.label, '을/를')} 숨깁니다. 그래프에서 사라지지만 이력과 근거로서의 내용은 남습니다. 화면에서 다시 보이게 하는 기능은 아직 없습니다(「가상 데이터 초기화」로만 처음 상태로 돌아갑니다).`)) return;
     const r = app.hideNode(node.id);
     if (!r.ok) return window.alert(messageFor(r.error));
     afterSave(r, null);
@@ -365,7 +365,7 @@ function start() {
     return el('div', { class: 'row link-tools' },
       el('button', { type: 'button', class: 'small-btn', onclick: () => { editing = { kind: 'edge-edit', edgeId, title }; renderPanel(); } }, '수정'),
       el('button', { type: 'button', class: 'small-btn danger', onclick: () => {
-        if (!window.confirm(`연결 「${title}」을(를) 숨깁니다. 기록은 남습니다.`)) return;
+        if (!window.confirm(`연결 「${title}」${josa(title, '을/를')} 숨깁니다. 기록은 남습니다.`)) return;
         const r = app.hideEdge(edgeId);
         if (!r.ok) return window.alert(messageFor(r.error, { kind: 'edge' }));
         afterSave(r);
@@ -440,6 +440,7 @@ function start() {
       panel.replaceChildren(settingsPanel({
         current: settings.provider,
         persisted: !!storage,
+        showCheckTools: CHECK_MODE,
         onChange: (name) => {
           settings.provider = name;
           provider = createProvider(name, { pregen: PREGEN });
@@ -483,7 +484,15 @@ function start() {
           const r = app.confirmHandover(input);
           if (!r.ok) return r;
           drafting = null;
-          return afterSave(r, r.artifact);
+          const saved = afterSave(r, r.artifact);
+          // 확정 직후(여섯 번째 검토 U-3): 초안 화면의 스크롤이 남지 않게 패널 맨 위로 올리고, 무엇이 생겼는지 한 줄로 알리며, 새 인수인계서를 그래프 가운데로 옮긴다
+          const node = view.getNode(r.artifact);
+          const wlabel = r.works.map((w) => (view.getNode(w) || { label: w }).label).join('·');
+          const alabel = node ? node.label : '인수인계서';
+          $('detail').prepend(el('p', { class: 'ok-notice', role: 'status', 'data-testid': 'confirm-done' }, `인수인계서로 저장했습니다 — 「${alabel}」${josa(alabel, '이/가')} 「${wlabel}」의 산출물과 이력에 남았습니다.`));
+          $('detail').parentElement.scrollTop = 0;
+          graph.zoomTo(view.canonical(r.artifact));
+          return saved;
         } }));
       return;
     }
@@ -621,7 +630,12 @@ function start() {
     search: (q) => searchNodes(view, q),
     onPick: goTo,
     types: (chosen) => legendItems(display, chosen).filter((t) => t.key !== 'root' && t.key !== 'unknown'),
-    persons: () => personsIn(display),
+    // 고른 사람이 지금 화면에 없어도(접기·주변만 보기·숨김 뒤) 목록에 남겨 풀 수 있게 한다(C-11)
+    persons: (chosen) => {
+      const list = personsIn(display);
+      if (chosen && !list.some((p) => p.gid === chosen)) list.push({ gid: chosen, label: `${(view.getNode(chosen) || { label: chosen }).label} (지금 화면에 없음)` });
+      return list;
+    },
     onFilter: (f) => {
       filterState = f;
       exploreNote = null;
@@ -652,7 +666,7 @@ function start() {
     if (!d) return;
     if (d.neighbor_count === 0) {
       // 이웃이 없으면 화면은 그대로 두고 알린다(R-17 ④)
-      exploreNote = { text: `이어진 노드 없음: 「${view.getNode(gid).label}」은(는) 연결된 노드가 없어 주변만 보기를 할 수 없습니다.`, warn: true };
+      exploreNote = { text: `이어진 노드 없음: 「${view.getNode(gid).label}」${josa(view.getNode(gid).label, '은/는')} 연결된 노드가 없어 주변만 보기를 할 수 없습니다.`, warn: true };
       return renderExploreStatus();
     }
     nbhd = { center: d.center, depth };
@@ -732,7 +746,7 @@ function start() {
   }
 
   function removeChild(childId, label) {
-    if (!window.confirm(`「${label}」을(를) 이 묶음에서 뺍니다. 원래 유니버스는 그대로 남습니다.`)) return;
+    if (!window.confirm(`「${label}」${josa(label, '을/를')} 이 묶음에서 뺍니다. 원래 유니버스는 그대로 남습니다.`)) return;
     const r = app.removeChild(childId);
     if (!r.ok) return window.alert(messageFor(r.error));
     expanded.delete(childId);
@@ -830,7 +844,12 @@ function start() {
   renderAddForm();
 
   $('reset').addEventListener('click', () => {
-    if (!window.confirm('모든 가상 데이터를 초기 샘플로 되돌립니다. 추가한 노드와 직접 묶은 유니버스는 사라집니다.')) return;
+    // 직접 만들거나 가져온 유니버스도 지워지므로 몇 개인지 알리고 먼저 내보내라고 안내한다(여섯 번째 검토 U-9)
+    const mine = app.universes().filter((u) => !SAMPLES.some((s) => s.universe.id === u.id));
+    const mineText = mine.length ? `
+
+직접 만들거나 가져온 유니버스 ${mine.length}개(${mine.map((u) => `「${u.name}」`).join(', ')})도 지워집니다. 남기려면 먼저 「가져오기·내보내기」에서 내보내세요.` : '';
+    if (!window.confirm(`모든 가상 데이터를 초기 샘플로 되돌립니다. 샘플에 추가한 노드와 직접 묶은 유니버스는 사라집니다.${mineText}`)) return;
     const r = app.resetAll();
     if (r && !r.ok) return window.alert(messageFor(r.error));
     openUniverse(app.doc.universe.id);

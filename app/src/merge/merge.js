@@ -5,12 +5,13 @@
 //   ③ 업무 후보: 다른 유니버스의 업무 쌍을 규칙으로 점수 매긴 목록(R-11 ②). 이유 문장은 역할 (c)의 규칙 기반 문장
 // 을 만든다. 사람이 이미 판정한 쌍(확정·거부)과 이미 합쳐진 쌍은 다시 내지 않는다(12.2 "거부한 쌍은 다시 제안하지 않는다").
 
-import { SUBTYPE_ROLE, normalizeLabel, pairKey } from '../model/schema.js';
+import { SUBTYPE_ROLE, normalizeEmpNo, normalizeLabel, pairKey } from '../model/schema.js';
 // 업무 후보 점수(주제 3, 산출물 유형 2, 라벨 낱말 1)·라벨 토큰·일반 산출물 유형은 유사 경험자(D-08)와 같은 것을 쓴다(검토5 C-6)
 import { GENERIC_ARTIFACT_TYPES, WEIGHTS, tokensOf } from '../rules/insight.js';
 
 export const WORK_CANDIDATE_LIMIT = 12;
-const normEmp = (v) => String(v || '').trim().toUpperCase();
+// 사번 비교는 뷰·중복 검사와 같은 정규화(공백 제거·대문자)를 쓴다(여섯 번째 검토 C-10)
+const normEmp = (v) => normalizeEmpNo(v);
 
 /**
  * @param {object} view 통합 유니버스의 buildView 결과
@@ -20,7 +21,9 @@ const normEmp = (v) => String(v || '').trim().toUpperCase();
 export function mergePlan(view, links = []) {
   // 판정·중복은 대표 노드(합쳐진 노드) 기준으로 본다 — 같은 사람이 여러 유니버스에 있어도 한 번만 묻는다
   const canon = (g) => view.canonical(g);
-  const decided = new Map(links.filter((l) => l.status !== 'pending').map((l) => [pairKey(canon(l.a), canon(l.b)), l.status]));
+  // 지금 문서의 판정 + 묶인 아래층 문서의 판정(위층이 다시 묻지 않는다, 여섯 번째 검토 C-4)
+  const allLinks = [...links, ...(view.decided_links || [])];
+  const decided = new Map(allLinks.filter((l) => l.status !== 'pending').map((l) => [pairKey(canon(l.a), canon(l.b)), l.status]));
   const isDecided = (a, b) => decided.has(pairKey(canon(a), canon(b)));
   const asked = new Set();
   const once = (a, b) => { const k = pairKey(canon(a), canon(b)); if (asked.has(k)) return false; asked.add(k); return true; };
@@ -58,13 +61,15 @@ export function mergePlan(view, links = []) {
       }
     }
   }
+  const paired = new Set(); // 이미 쌍 항목에 든 사람은 "혼자" 항목을 또 만들지 않는다(여섯 번째 검토 C-9)
   for (const p of persons.filter((x) => !x.emp_no)) {
     const same = persons.filter((q) => q !== p && q.universe_id !== p.universe_id && normalizeLabel(q.label) === normalizeLabel(p.label) && !sameNow(p.gid, q.gid) && !isDecided(p.gid, q.gid) && once(p.gid, q.gid));
     if (same.length) {
       for (const q of same) {
+        paired.add(p.gid).add(q.gid);
         personItems.push({ type: 'no_empno', kind: 'person', a: p.gid, b: q.gid, title: `사번 없음: ${p.label}`, reason: `${p.label}(${uname(p)})은 사번이 없습니다. 이름이 같은 ${q.label}(${uname(q)}${q.emp_no ? `, ${q.emp_no}` : ''})과 같은 사람인지 확인이 필요합니다.`, evidence_ids: [p.gid, q.gid] });
       }
-    } else if (!links.some((l) => l.a === p.gid || l.b === p.gid)) {
+    } else if (!paired.has(p.gid) && !allLinks.some((l) => l.a === p.gid || l.b === p.gid)) {
       personItems.push({ type: 'no_empno', kind: 'person', a: p.gid, b: null, title: `사번 없음: ${p.label}`, reason: `${p.label}(${uname(p)})은 사번이 없어 다른 유니버스의 사람과 자동으로 잇지 않았습니다. 같은 사람이 있다면 사번을 넣거나 직접 연결해 주세요.`, evidence_ids: [p.gid] });
     }
   }

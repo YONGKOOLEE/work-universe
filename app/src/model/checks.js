@@ -2,9 +2,15 @@
 
 import { normalizeEmpNo, normalizeLabel } from './schema.js';
 
-// YYYY-MM-DD이고 달력에 있는 날짜인지
+// 연도 범위: 오타(0202, 1026)로 시간 막대가 달 수천 개가 되거나 계산이 멈추는 것을 막는다(여섯 번째 검토 C-1)
+export const YEAR_MIN = 1900;
+export const YEAR_MAX = 2200;
+
+// YYYY-MM-DD이고 달력에 있는 날짜이며 연도가 YEAR_MIN~YEAR_MAX인지
 export function isDate(v) {
   if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const year = Number(v.slice(0, 4));
+  if (year < YEAR_MIN || year > YEAR_MAX) return false;
   const d = new Date(`${v}T00:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
 }
@@ -53,5 +59,7 @@ export function findDuplicateEdge(edges, cand, excludeId) {
 }
 
 export function subtypeRegistered(doc, coreType, name) {
-  return (doc.universe.subtypes || []).some((s) => s.core_type === coreType && s.name === name);
+  // 가져온 JSON의 subtypes가 배열이 아니거나 null이 섞여 있어도 예외 없이 "없음"으로(검증이 오류로 알린다, 여섯 번째 검토 C-3)
+  const list = Array.isArray(doc.universe && doc.universe.subtypes) ? doc.universe.subtypes : [];
+  return list.some((s) => s && s.core_type === coreType && s.name === name);
 }

@@ -130,7 +130,7 @@ export function exploreBar(o) {
       });
       return el('label', { class: 'check' }, cb, el('span', { class: 'dot', style: `background:${t.color}` }), t.label);
     }));
-    const people = o.persons();
+    const people = o.persons(filter.person);
     // 고른 사람이 화면에서 사라졌어도(유니버스 접기 등) 목록에 남겨 풀 수 있게 한다
     personSel.replaceChildren(el('option', { value: '' }, people.length ? '(사람 고르지 않음)' : '(이 화면에 사람 없음)'),
       ...people.map((p) => el('option', { value: p.gid, selected: p.gid === filter.person }, p.label)));
@@ -147,9 +147,7 @@ export function exploreBar(o) {
   o.container.replaceChildren(findBox, details, status);
 
   return {
-    filter: () => ({ ...filter }),
     clear,
-    focusFind: () => input.focus(),
     /** 상태 줄: parts는 el 요소들(없으면 비움) */
     setStatus(...parts) {
       status.replaceChildren(...parts.filter(Boolean));

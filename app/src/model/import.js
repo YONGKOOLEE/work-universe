@@ -54,7 +54,9 @@ export function previewImport(doc, { existing = [], resolve = null, sampleIds = 
     });
   }
   const base = { ok: false, errors: checked.errors, warnings: checked.warnings, version_mismatch: checked.readOnly, conflict: null, counts: [], node_total: 0, edge_total: 0, memo_total: 0, source: null, marks: { 가정: 0, 미확인: 0 }, missing_children: [] };
-  if (checked.readOnly || !doc || !Array.isArray(doc.nodes)) return base;
+  // 구조가 깨진 문서(universe·컬렉션이 없음)는 오류 목록만 돌려준다. 아래 계산은 12.2 모양을 전제한다(여섯 번째 검토 C-3)
+  const shaped = !!doc && typeof doc.universe === 'object' && doc.universe !== null && ['nodes', 'edges', 'events'].every((k) => Array.isArray(doc[k]));
+  if (checked.readOnly || !shaped) return base;
 
   const nodes = doc.nodes.filter((n) => n && !n.hidden);
   const byType = new Map();

@@ -24,6 +24,8 @@ export function mergePanel(o) {
       el('div', { class: 'who' }, el('strong', {}, p.title), el('span', { class: 'chip' }, p.type === 'conflict' ? '사번 충돌' : '사번 없음')),
       el('div', { class: 'muted small' }, p.reason),
       chips(view, p.evidence_ids, o.onFocus),
+      // 같은 사람이 있는지 비교할 상대가 없는 "사번 없음" 카드는 누를 것이 없으므로 고치는 길을 적는다(여섯 번째 검토 U-12)
+      p.b ? null : el('div', { class: 'muted small', 'data-testid': 'merge-howto' }, `고치는 방법: 「${(view.rawNode(p.a) || {}).universe_name || '그 사람이 있는'}」 유니버스를 열어 그 사람을 고르고 「수정」에서 사번을 넣으세요. 다음에 이 목록을 열 때 같은 사번이면 자동으로 잇습니다.`),
       decideButtons(p, '같은 사람', '다른 사람'))))
     : el('p', { class: 'muted small' }, '확인할 사람이 없습니다.');
 

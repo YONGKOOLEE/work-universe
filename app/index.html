@@ -109,6 +109,7 @@
   aside { overflow-x: hidden; }
   .editor h3 { margin: 4px 0; border: 0; padding: 0; }
   .field { display: grid; gap: 4px; }
+  [hidden] { display: none !important; } /* .field 같은 display 규칙이 hidden 속성을 이기지 않게(업무 양식에 사번 칸이 보이던 결함, 여섯 번째 검토 U-1) */
   .field > span { color: var(--muted); font-size: 13px; }
   textarea { font: inherit; padding: 6px 8px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; resize: vertical; }
   .attr-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; margin-bottom: 6px; }
@@ -123,6 +124,7 @@
   .links li:hover .link-tools, .links li:focus-within .link-tools { display: flex; }
   .form-message.error { color: var(--err); font-size: 13px; }
   .ok-text { color: var(--ok); font-size: 13px; margin: 0 0 8px; }
+  .ok-notice { background: #1d3a22; color: var(--ok); border: 1px solid #2f6a38; padding: 8px 10px; border-radius: 8px; font-size: 13px; margin: 0 0 10px; }
   .draft-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 12px 0 4px; }
   .badge { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px; padding: 1px 10px; font-size: 12px; font-weight: bold; }
   .method { color: var(--muted); font-size: 13px; flex: 1; }
@@ -279,7 +281,7 @@
 <dialog id="group-dialog" aria-labelledby="group-title">
   <form id="group-form" novalidate>
     <h2 id="group-title">유니버스 묶기</h2>
-    <p class="muted small">고른 유니버스를 꼭지 참조로 묶어 상위 유니버스를 만듭니다. 원래 유니버스는 바뀌지 않습니다.</p>
+    <p class="muted small">고른 유니버스를 하위 유니버스로 묶어 상위 유니버스를 만듭니다. 원래 유니버스는 바뀌지 않습니다.</p>
     <label>이름 <input id="group-name" maxlength="100" autocomplete="off" placeholder="예: 가상 신규팀"></label>
     <label>단위 <input id="group-level" list="group-levels" value="팀" autocomplete="off"></label>
     <datalist id="group-levels"><option value="팀"><option value="부서"><option value="본부"><option value="회사"><option value="프로젝트"></datalist>

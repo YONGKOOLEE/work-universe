@@ -129,7 +129,7 @@ export function similarExperts(view, { works, asOf, exclude = [] }) {
       reasons.push(`같은 산출물 유형 「${k}」`);
       evidence.push(...cp.artifactTypes.get(k));
     }
-    if (sharedTokens.length) reasons.push(`라벨에 같은 낱말 「${sharedTokens.join('·')}」`);
+    if (sharedTokens.length) reasons.push(`이름에 같은 낱말 「${sharedTokens.join('·')}」`);
 
     for (const e of view.edges) {
       if (!live(e) || e.core_type !== 'performs' || e.target !== cand.gid || excludedGids.has(e.source)) continue;
@@ -348,8 +348,10 @@ export function workLoad(view, workGid, { asOf }) {
     const p = view.getNode(e.source);
     if (!current.some((x) => x.gid === p.gid)) current.push({ gid: p.gid, label: p.label });
   }
-  const past = pick('ended').sort((a, b) => (a.period.end < b.period.end ? 1 : -1));
-  const next = pick('scheduled').sort((a, b) => (a.period.start > b.period.start ? 1 : -1));
+  // 같은 날 끝나거나 시작하면 저장 순서가 아니라 이름 순으로 정해 결과가 늘 같게 한다(여섯 번째 검토 C-15)
+  const byName = (a, b) => String(view.getNode(a.source).label).localeCompare(String(view.getNode(b.source).label), 'ko') || String(a.source).localeCompare(String(b.source));
+  const past = pick('ended').sort((a, b) => (a.period.end < b.period.end ? 1 : a.period.end > b.period.end ? -1 : byName(a, b)));
+  const next = pick('scheduled').sort((a, b) => (a.period.start > b.period.start ? 1 : a.period.start < b.period.start ? -1 : byName(a, b)));
   const person = (e) => (e ? { gid: view.getNode(e.source).gid, label: view.getNode(e.source).label } : null);
   return {
     kind: current.length ? 'covered' : next.length ? 'scheduled' : past.length ? 'ended' : 'never',

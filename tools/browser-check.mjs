@@ -258,8 +258,17 @@ async function checkBrowser(browser, port) {
   await sleep(200);
   check('빈 곳 클릭 → 선택 해제, 개요로 복귀', (await evaluate(s.cdp, 'window.__wu.selected')) === null && (await text(s.cdp, '#detail')).includes('노드를 클릭하면'));
 
+  // 여섯 번째 검토 U-1: 업무 유형이면 사번 칸이 보이지 않는다(hidden 속성이 CSS에 지던 결함). 사람이면 보인다
+  const empH = () => evaluate(s.cdp, "(() => { const e = document.querySelector('#add-slot [data-testid=node-empno]'); const f = e && e.closest('label, .field'); return f ? Math.round(f.getBoundingClientRect().height) : -1; })()");
+  await evaluate(s.cdp, "(() => { const t = document.querySelector('#add-slot [data-testid=node-type]'); t.value = 'work'; t.dispatchEvent(new Event('change')); })()");
+  const hWork = await empH();
+  await evaluate(s.cdp, "(() => { const t = document.querySelector('#add-slot [data-testid=node-type]'); t.value = 'person'; t.dispatchEvent(new Event('change')); })()");
+  const hPerson = await empH();
+  await evaluate(s.cdp, "(() => { const t = document.querySelector('#add-slot [data-testid=node-type]'); t.value = 'work'; t.dispatchEvent(new Event('change')); })()");
+  check('U-1: 노드 추가 양식 — 업무 유형이면 사번 칸 높이 0, 사람이면 보임', hWork === 0 && hPerson > 0, hWork + '/' + hPerson);
+  check('U-14: 양식 칸 이름이 「이름」(「라벨」 아님)', (await text(s.cdp, '#add-slot')).includes('이름') && !(await text(s.cdp, '#add-slot')).includes('라벨'));
   const empty = await submitAdd(s.cdp, 'work', '   ');
-  check('오류: 라벨 누락 → E-REQUIRED', empty.code === 'E-REQUIRED', empty.text);
+  check('오류: 이름 누락 → E-REQUIRED, 받침에 맞는 조사(「이름을」)', empty.code === 'E-REQUIRED' && empty.text.includes('이름을 입력하세요'), empty.text);
   const dup = await submitAdd(s.cdp, 'work', '대사 확인');
   check('오류: 중복 → E-DUP + 기존 노드 링크', dup.code === 'E-DUP' && dup.text.includes('기존 노드 보기'), dup.text);
 
@@ -301,7 +310,7 @@ async function checkBrowser(browser, port) {
   await sleep(150);
   const pairErr = await panelMessage(s.cdp);
   check('오류: 허용되지 않는 연결 → E-PAIR와 가능한 조합 안내', pairErr && pairErr.code === 'E-PAIR' && pairErr.text.includes('사람 → 업무'), pairErr && pairErr.text);
-  check('N-4 연결 오류에 고른 두 노드의 유형과 쓸 수 있는 관계(관련: 대사 확인 → 대사 불일치)', !!pairErr && pairErr.text.includes('「대사 불일치」은(는) 주제') && pairErr.text.includes('「대사 확인」은(는) 업무') && pairErr.text.includes('「관련」(대사 확인 → 대사 불일치)'), pairErr && pairErr.text);
+  check('N-4 연결 오류에 고른 두 노드의 유형과 쓸 수 있는 관계(관련: 대사 확인 → 대사 불일치)', !!pairErr && pairErr.text.includes('「대사 불일치」는 주제') && pairErr.text.includes('「대사 확인」은 업무') && pairErr.text.includes('「관련」(대사 확인 → 대사 불일치)'), pairErr && pairErr.text);
   // 연결 오류: 같은 연결(기간 겹침) → E-DUP
   await fillPanelForm(s.cdp, { 'edge-type': 'relates_to', 'edge-direction': 'in', 'edge-other': 'N-001' });
   await sleep(150);
@@ -310,6 +319,17 @@ async function checkBrowser(browser, port) {
   // 이력 추가: 메모
   await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
   await clickTestId(s.cdp, 'btn-event');
+  // 여섯 번째 검토 U-2: 내용이 빈 메모는 저장하지 않는다(이력은 지울 수 없다)
+  const eventsBefore = await evaluate(s.cdp, 'window.__wu.doc.events.length');
+  await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': '2026-10-02', 'event-note': '   ' });
+  await sleep(150);
+  const emptyMemo = await panelMessage(s.cdp);
+  check('U-2: 내용 없는 메모 → 「메모 내용을 입력하세요」, 이력이 늘지 않음', !!emptyMemo && emptyMemo.code === 'E-REQUIRED' && emptyMemo.text.includes('메모 내용을 입력하세요') && (await evaluate(s.cdp, 'window.__wu.doc.events.length')) === eventsBefore, emptyMemo && emptyMemo.text);
+  // C-1 연도 오타 날짜는 거부
+  await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': '0202-06-01', 'event-note': '연도 오타' });
+  await sleep(150);
+  const badYear = await panelMessage(s.cdp);
+  check('C-1: 연도 오타 날짜(0202-06-01) → 날짜 오류, 이력이 늘지 않음', !!badYear && badYear.text.includes('1900~2200') && (await evaluate(s.cdp, 'window.__wu.doc.events.length')) === eventsBefore, badYear && badYear.text);
   await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': '2026-10-02', 'event-note': '점검 기준 변경 논의' });
   await sleep(250);
   check('이력 추가(메모) → 이력 목록에 날짜와 함께 보임', (await text(s.cdp, '[data-testid=history]')).includes('2026-10-02메모점검 기준 변경 논의'));
@@ -579,6 +599,8 @@ async function checkBrowser(browser, port) {
   const pv = await text(s.cdp, '[data-testid=import-preview]');
   check('T-17 예시 문서 초벌 변환 → 미리 보기(노드 18개, 세분화 맞음, 원문 근거 18/18, 표시 보존)', (await text(s.cdp, '[data-testid=import-summary]')).includes('노드 18개') && (await text(s.cdp, '[data-testid=import-granularity]')).includes('맞음') && (await text(s.cdp, '[data-testid=import-source]')).includes('18/18') && (await text(s.cdp, '[data-testid=import-marks]')).includes('[미확인] 노드 2개'), pv.slice(0, 120));
   check('T-17 원문의 절 → 유니버스 표(업무 흐름은 절차 속성, 질문·리스크는 메모)', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=import-sections] tbody tr').length")) === 9 && pv.includes('절차 속성 5단계') && pv.includes('메모 5건'));
+  check('U-6: 작성 주체만 비었으면 빨간 오류가 아니라 안내(notice)로 보이고 「가져오기」는 막힘', await evaluate(s.cdp, "(() => { const e = document.querySelector('[data-testid=import-errors]'); return !!e && !e.classList.contains('error-text') && e.classList.contains('notice') && !e.textContent.includes('가져올 수 없습니다'); })()") && await evaluate(s.cdp, "document.querySelector('[data-testid=import-confirm]').disabled"));
+  check('U-7: 변환 단추 옆에 「생성 방식: 사전 생성」 대신 규칙으로 읽는다는 안내', (await text(s.cdp, '[data-testid=import-method-note]')).includes('규칙으로 읽습니다') && !(await text(s.cdp, '#import-dialog')).includes('생성 방식: 사전 생성'));
   check('CR-3 AC ③: 작성 주체가 비면 「가져오기」가 막히고 고칠 것 표시', (await evaluate(s.cdp, "document.querySelector('[data-testid=import-confirm]').disabled")) && (await text(s.cdp, '[data-testid=import-errors]')).includes('작성 주체'));
   check('미리 보기의 핵심 요소가 실제로 그려짐(크기 있음)', await evaluate(s.cdp, "['[data-testid=import-summary]', '[data-testid=import-sections]', '[data-testid=import-nodes]', '[data-testid=import-confirm]'].every((q) => { const r = document.querySelector(q).getBoundingClientRect(); return r.width > 0 && r.height > 0; })"));
   await shot(s.cdp, browser.name + '-17a-import-preview');
@@ -881,6 +903,7 @@ async function checkBrowser(browser, port) {
     const worksTxt = await text(s.cdp, '[data-testid=merge-works]');
     check('R-11 ③: 사번 충돌(윤바다/윤바다라)과 사번 없음(임가온)이 확인 목록에', persons.includes('사번 충돌') && persons.includes('윤바다라') && persons.includes('임가온'), persons.slice(0, 80));
     check('R-11 ②: 업무 후보(장소 섭외 ↔ 강의실·강사 섭외)와 이유(사전 생성), 자동으로 합치지 않음', worksTxt.includes('장소 섭외') && worksTxt.includes('강의실·강사 섭외') && worksTxt.includes('사전 생성') && worksTxt.includes('일정에 맞춰 장소를 알아보고'), worksTxt.slice(0, 80));
+    check('U-12: 사번 없음 카드에 고치는 방법(유니버스를 열어 「수정」에서 사번)이 적혀 있음', persons.includes('고치는 방법') && persons.includes('「수정」에서 사번을 넣으세요'));
     await shot(s.cdp, `${browser.name}-9e-merge`);
     const before = await evaluate(s.cdp, "window.__wu.view.canonical('U-C/N-102') === window.__wu.view.canonical('U-B/N-103')");
     // 장소 섭외 후보의 「같은 업무」
@@ -1124,6 +1147,7 @@ async function checkBrowser(browser, port) {
     await sleep(500);
     const nb2 = await shownCount();
     check('R-17 ④ 2단계 → 더 넓게', nb2 > nb1.n && (await evaluate(s.cdp, 'window.__wu.nbhd.depth')) === 2, `${nb1.n} → ${nb2}`);
+    check('U-16: 주변 2단계에서 가운데 노드를 고른 채 2단계째 노드가 흐려지지 않음', (await evaluate(s.cdp, "window.__wu.cy.nodes('.faded').length")) === 0);
     await evaluate(s.cdp, "document.getElementById('fit').click()");
     await sleep(500);
     check('R-17 ④ 「전체 보기」 → 전체 그래프로 돌아감', (await evaluate(s.cdp, 'window.__wu.nbhd')) === null && (await shownCount()) === before, `${await shownCount()}/${before}`);
@@ -1206,9 +1230,12 @@ async function checkBrowser(browser, port) {
   await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1'", 8000);
   check('오류(12.1): 스키마 버전이 다른 문서 → 경고 배너와 읽기 전용(추가 불가)', (await text(s.cdp, '#banner')).includes('읽기 전용으로 엽니다') && (await text(s.cdp, '#add-slot')).includes('읽기 전용'));
   // NFR 가용성·복구: 「가상 데이터 초기화」로 처음 상태로 돌아간다(위 버전 문제도 함께 풀림)
-  await evaluate(s.cdp, "window.confirm = () => true; document.getElementById('reset').click()").catch(() => {});
+  await evaluate(s.cdp, "sessionStorage.setItem('__confirmMsg', ''); window.confirm = (m) => { sessionStorage.setItem('__confirmMsg', m); return true; }; document.getElementById('reset').click()").catch(() => {});
   await sleep(600);
+  await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.cy.nodes().length > 0", 8000);
+  const resetMsg = (await evaluate(s.cdp, "sessionStorage.getItem('__confirmMsg')").catch(() => '')) || '';
   await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
+  check('U-9: 초기화 확인 문구가 직접 만들거나 가져온 유니버스도 지워진다고 알림', resetMsg.includes('초기 샘플로 되돌립니다') && resetMsg.includes('직접 만들거나 가져온 유니버스') && resetMsg.includes('내보내세요'), resetMsg);
   check('NFR 복구: 가상 데이터 초기화 → 샘플이 처음 상태(추가 노드 없음, 수정 되돌림, 쓰기 가능)', (await nodeCount(s.cdp)) === NODES && !(await hasLabel(s.cdp, newLabel)) && !(await evaluate(s.cdp, "window.__wu.readOnly")) && !(await evaluate(s.cdp, "(window.__wu.doc.nodes.find((n) => n.id === 'N-001').description || '').includes('(수정)')")));
   // ── R-03 ③ 초안 확정(CR-8): 초기화한 깨끗한 월말 정산에서 확정 → 인수인계서·이력 → 다음 초안의 이전 인수인계 근거 ──
   await evaluate(s.cdp, "window.confirm = () => true; window.__wu.select(null)");
@@ -1221,6 +1248,7 @@ async function checkBrowser(browser, port) {
   })()`);
   await makeDraft('U-A1/N-001', 'U-A1/N-012', 'U-A1/N-011');
   await sleep(250);
+  check('U-14: 유니버스가 하나인 화면의 초안 선택 목록에는 이름 뒤 유니버스 접미사가 없음', await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=draft-from] option')].every((o) => !o.textContent.includes('(월말 정산 점검)'))"));
   check('R-03 ③ 초안 아래에 「확정해 인수인계서로 저장」이 보임(크기 있음)', await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=draft-confirm]'); if (!b) return false; const r = b.getBoundingClientRect(); return r.width > 0 && r.height > 0 && !b.disabled; })()"));
   await shot(s.cdp, `${browser.name}-12a-confirm-box`);
   await clickTestId(s.cdp, 'draft-confirm');
@@ -1228,6 +1256,10 @@ async function checkBrowser(browser, port) {
   const confirmedDetail = await text(s.cdp, '#detail');
   check('R-03 ③ 확정 → 새 인수인계서가 열리고 확정자·확정 시각·보내는/받는 사람이 보임', (await text(s.cdp, '#detail h2')).includes('대사 확인 인수인계서') && confirmedDetail.includes('사용자(이 브라우저)') && confirmedDetail.includes('확정 시각') && confirmedDetail.includes('서하늘') && confirmedDetail.includes('윤바다'), confirmedDetail.slice(0, 120));
   check('R-03 ③ 확정 → 인수인계 이력이 바로 앞 인수인계를 가리킴(이어받음)', await evaluate(s.cdp, "(() => { const ev = window.__wu.doc.events.filter((e) => e.type === 'handover').pop(); return ev.payload.work_id === 'N-001' && ev.payload.from_person_id === 'N-012' && ev.payload.to_person_id === 'N-011' && ev.payload.previous_handover_id === 'E-007' && !!ev.payload.artifact_id; })()"));
+  const doneNote = await text(s.cdp, '[data-testid=confirm-done]');
+  const detailTop = await evaluate(s.cdp, "(() => { const a = document.querySelector('aside'); const n = document.querySelector('[data-testid=confirm-done]'); const r = n ? n.getBoundingClientRect() : null; const ar = a.getBoundingClientRect(); return { scroll: a.scrollTop, visible: !!r && r.top >= ar.top - 1 && r.bottom <= ar.bottom + 1 }; })()");
+  check('U-3: 확정 직후 패널이 맨 위이고 「인수인계서로 저장했습니다」 안내가 보임', doneNote.includes('인수인계서로 저장했습니다') && doneNote.includes('대사 확인') && detailTop.scroll === 0 && detailTop.visible, JSON.stringify(detailTop) + ' ' + doneNote);
+  check('U-3: 확정한 새 인수인계서 노드가 그래프에서 고른 상태', (await evaluate(s.cdp, "(window.__wu.view.getNode(window.__wu.selected || '') || {}).label || ''")).includes('인수인계서'));
   await shot(s.cdp, `${browser.name}-12b-confirmed`);
   // 같은 날 같은 확정은 다시 하지 않는다
   await evaluate(s.cdp, "window.__wu.select(null)");

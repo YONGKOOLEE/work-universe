@@ -107,8 +107,10 @@ export function projectView(view, { expanded = new Set() } = {}) {
   // 4) 연결: 끝점을 대리 노드로 옮기고, 같은 (출발, 도착, 관계)는 하나로 모은다
   const byKey = new Map();
   const shownU = new Set([...full, ...collapsedU]);
+  // 숨긴 노드의 연결은 요약 연결로도 되살리지 않는다(그래프와 상세·개요 연결 수가 같은 말을 하도록, 여섯 번째 검토 C-5)
+  const hiddenEnd = (g) => { const n = view.getNode(g); return !!n && n.hidden; };
   for (const e of view.edges) {
-    if (e.hidden || !shownU.has(e.universe_id)) continue;
+    if (e.hidden || !shownU.has(e.universe_id) || hiddenEnd(e.source) || hiddenEnd(e.target)) continue;
     const s = repOf(e.source);
     const t = repOf(e.target);
     if (!s || !t || s === t) continue;
