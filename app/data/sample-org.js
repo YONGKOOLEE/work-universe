@@ -4,7 +4,7 @@
 // 2026-03 이후 입력이 없다(입력 중단 예외): 그 뒤 인력 분포는 "데이터 부족(마지막 입력 2026-03)"이어야 한다(R-05 ②).
 // 업무 유니버스의 사람과는 통합할 때 사번으로만 대응한다(1.6). 모든 이름·사번·조직명은 가상이다(R-06). 고치면 STAMP를 바꾼다.
 
-const STAMP = '2026-10-01T10:10:00+09:00';
+const STAMP = '2026-10-04T00:10:00+09:00'; // 검토5 V-5: 부서 유니버스(U-D1)와 같은 이름
 
 const node = (id, core_type, label, rest = {}) => ({ id, core_type, label, ...rest, hidden: false, created_at: STAMP, updated_at: STAMP });
 let seq = 0;
@@ -50,8 +50,8 @@ const dayBefore = (d) => {
 };
 
 const nodes = [
-  node('N-000', 'root', '가상본부 조직관리', { description: '가상본부의 조직과 사람, 소속 이력을 관리한다' }),
-  node('N-001', 'org', '가상본부'),
+  node('N-000', 'root', '가상 운영부 조직관리', { description: '가상 운영부의 조직과 사람, 소속 이력을 관리한다' }),
+  node('N-001', 'org', '가상 운영부'),
   node(OPS, 'org', '가상운영팀', { period: { start: START, end: '2025-12-31' }, description: '2026-01 조직개편으로 폐지(정산·교육 기능 분리)' }),
   node(SETTLE, 'org', '가상정산팀', { period: { start: '2026-01-01' }, description: '2026-01 신설. 정산·대사 업무' }),
   node(EVENT, 'org', '가상행사팀', { period: { start: START } }),
@@ -86,10 +86,10 @@ export const SAMPLE_ORG = {
   schema_version: '1.0',
   universe: {
     id: 'U-O',
-    name: '가상본부 조직관리',
+    name: '가상 운영부 조직관리',
     level: '본부',
     owner: '가상 인사담당',
-    description: '가상본부의 조직·사람·소속 이력. 2026-03 이후 입력이 끊긴 사례(입력 중단).',
+    description: '가상 운영부의 조직·사람·소속 이력. 2026-03 이후 입력이 끊긴 사례(입력 중단).',
     root_node_id: 'N-000',
     subtypes: [],
     is_sample: true,

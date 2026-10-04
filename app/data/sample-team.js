@@ -3,22 +3,22 @@
 // 두 업무의 "대사" 주제를 사람 확인으로 같은 주제로 이었다(주제 동일성 연결은 CR-4 제안).
 // 고치면 STAMP를 바꾼다.
 
-const STAMP = '2026-10-01T09:00:00+09:00';
+const STAMP = '2026-10-04T00:10:00+09:00'; // 검토5 V-5: 팀 이름을 조직관리(U-O)에 맞춤
 
 export const SAMPLE_TEAM = {
   schema_version: '1.0',
   universe: {
     id: 'U-T1',
-    name: '가상 결제운영팀',
+    name: '가상정산팀',
     level: '팀',
-    owner: '가상 결제운영팀',
+    owner: '가상정산팀',
     description: '월말 정산 점검과 카드승인 전문 송수신 업무를 묶은 팀 유니버스(CR-4 시제품). 하위 유니버스를 더블클릭하거나 상세 패널에서 펼치고 접을 수 있다.',
     root_node_id: 'N-000',
     subtypes: [],
     is_sample: true,
     created_at: STAMP,
   },
-  nodes: [{ id: 'N-000', core_type: 'root', label: '가상 결제운영팀', hidden: false, created_at: STAMP, updated_at: STAMP }],
+  nodes: [{ id: 'N-000', core_type: 'root', label: '가상정산팀', hidden: false, created_at: STAMP, updated_at: STAMP }],
   edges: [],
   events: [
     { id: 'E-001', type: 'created', occurred_at: '2026-10-01', recorded_at: STAMP, source: 'sample', payload: { target_kind: 'ref', target_id: 'U-A1' } },

@@ -54,7 +54,7 @@ test('이유: 이름만 같은 주제는 연결 확인 전이라고 밝히고, �
   const noLink = people.find((p) => p.label === '윤바다').works[0];
   assert.deepEqual(noLink.reasons, ['같은 주제 「대사 불일치」(이름이 같은 주제, 연결 확인 전)']);
   assert.equal(noLink.score, 3);
-  // 사람이 확인해 이은 주제(결제운영팀의 카드승인 "대사")는 확인 전 표시가 없다
+  // 사람이 확인해 이은 주제(정산팀의 카드승인 "대사")는 확인 전 표시가 없다
   assert.deepEqual(people.find((p) => p.label === '운영 담당').works[0].reasons, ['같은 주제 「대사 불일치」']);
 
   const linked = JSON.parse(JSON.stringify(SAMPLE_DEPT));

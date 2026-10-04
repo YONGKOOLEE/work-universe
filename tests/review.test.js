@@ -54,8 +54,9 @@ test('저장소 값이 깨져 있어도 멈추지 않고, 샘플은 다시 넣�
 test('같은 날짜의 이력은 기록한 순서대로 쌓이고, 시간대가 달라도 시각 기준으로 정렬한다', async () => {
   const { buildView } = await import('../app/src/view/view.js');
   const { addEvent } = await import('../app/src/model/commands.js');
-  // 샘플 이력(09:00 KST 기록) 뒤에 같은 날 입력한 메모가 와야 한다
-  const doc = addEvent(SAMPLE_A1, { type: 'memo', occurred_at: '2026-10-01', payload: { target_id: 'N-001' }, note: '오늘 메모' }, { now: '2026-10-01T10:30:00+09:00' }).doc;
+  // 샘플 이력(STAMP에 기록) 뒤에 같은 날 입력한 메모가 와야 한다. 지금 시각은 STAMP보다 뒤(샘플을 고쳐 STAMP가 바뀌어도 성립하게)
+  const later = new Date(Date.parse(SAMPLE_A1.universe.created_at) + 3600 * 1000).toISOString();
+  const doc = addEvent(SAMPLE_A1, { type: 'memo', occurred_at: '2026-10-01', payload: { target_id: 'N-001' }, note: '오늘 메모' }, { now: later }).doc;
   const v = buildView(doc);
   const last = v.index.eventsByNode.get('U-A1/N-001').at(-1);
   assert.equal(last.note, '오늘 메모');

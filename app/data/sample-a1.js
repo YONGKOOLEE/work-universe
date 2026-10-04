@@ -8,7 +8,7 @@
 // 이 파일을 고쳐 내장 샘플이 바뀌면 universe.created_at을 새 값으로 바꾼다.
 // 앱은 그 값이 저장된 것과 다르면 샘플을 새로 넣는다(app/src/app/app.js).
 
-const STAMP = '2026-10-01T09:10:00+09:00';
+const STAMP = '2026-10-04T00:10:00+09:00'; // 검토5 V-5: 작성 주체를 조직관리(U-O)의 현재 팀으로
 
 const node = (id, core_type, label, rest = {}) => ({
   id, core_type, label, ...rest, hidden: false, created_at: STAMP, updated_at: STAMP,
@@ -26,7 +26,7 @@ export const SAMPLE_A1 = {
     id: 'U-A1',
     name: '월말 정산 점검',
     level: '업무',
-    owner: '가상운영팀',
+    owner: '가상정산팀',
     description: '매월 말 정산 결과를 모아 대사(대조)하고 보고하는 반복 업무(가상)',
     root_node_id: 'N-000',
     subtypes: [{ core_type: 'artifact', name: '인수인계서' }],

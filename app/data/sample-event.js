@@ -2,7 +2,7 @@
 // 팀이 업무를 직접 노드로 가진다. 윤바다(V-1002)는 A팀 사람과 같은 사번이며, 2025 행사 때 정산 대사를 맡았다(유사 경험자 시연).
 // 모든 이름·사번·조직명은 가상이다(R-06). 기록 시각은 반드시 과거여야 한다(tests/review.test.js). 고치면 STAMP를 바꾼다.
 
-const STAMP = '2026-10-01T10:35:00+09:00';
+const STAMP = '2026-10-04T00:10:00+09:00'; // 검토5 V-8: 업무 「장소 섭외」와 주제 이름이 같지 않게
 
 const node = (id, core_type, label, rest = {}) => ({ id, core_type, label, ...rest, hidden: false, created_at: STAMP, updated_at: STAMP });
 let seq = 0;
@@ -32,7 +32,7 @@ export const SAMPLE_EVENT = {
     node('N-104', 'work', '참가자 모집', { description: '참가자를 모집하고 명단을 관리한다' }),
     node('N-201', 'person', '도하람', { emp_no: 'V-2001' }),
     node('N-202', 'person', '윤바다', { emp_no: 'V-1002' }),
-    node('N-301', 'topic', '장소 섭외'),
+    node('N-301', 'topic', '장소 부족'),
     node('N-302', 'topic', '대사 불일치'),
   ],
   edges: [

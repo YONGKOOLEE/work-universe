@@ -14,7 +14,7 @@ const ASOF = '2026-10-03';
 const ctx = { now: '2026-10-03T09:00:00+09:00' };
 
 test('RULES-1: 설명 오타를 고친 수정 이력은 "입력"이 아니다 — 조직관리의 입력 중단 기간이 그대로 데이터 부족', () => {
-  const edited = updateNode(all['U-O'], 'N-001', { description: '가상본부(오타 수정)' }, ctx).doc;
+  const edited = updateNode(all['U-O'], 'N-001', { description: '가상 운영부(오타 수정)' }, ctx).doc;
   const v = viewOf('U-O', { 'U-O': edited });
   const r = flowChange(v, { asOf: ASOF });
   assert.equal(r.last_input, '2026-03-10');
