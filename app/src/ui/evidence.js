@@ -1,12 +1,13 @@
 // 근거 칩(검토5 C-2): 근거 ID(노드·이력의 전역 참조) → 누르면 그래프에서 그 노드를 보여 주는 버튼.
 // 초안·인사이트·통합 확인 화면이 함께 쓴다. 숨긴 노드는 이름 뒤에 표시가 붙는다(describe.displayName).
 
-import { displayName } from '../view/describe.js';
+import { displayName, eventText } from '../view/describe.js';
 import { eventChipLabel } from './chip-label.js';
 import { el } from './dom.js';
 
 // 긴 이름은 칩에서 말줄임되므로 전체 이름을 title에 함께 둔다(화면 점검 S-1)
-const button = (gid, label, onclick) => el('button', { type: 'button', class: 'evidence', title: `${label} (근거: ${gid})`, onclick }, label);
+// 이력 칩은 글자를 줄여 보이므로 title에는 줄이지 않은 문장을 넣는다(재검증: 「…— 대…」만 보이던 문제)
+const button = (gid, label, onclick, full = label) => el('button', { type: 'button', class: 'evidence', title: `${full} (근거: ${gid})`, onclick }, label);
 
 /**
  * 근거 하나의 버튼. 노드면 이름, 이력이면 날짜와 내용 앞부분(chip-label).
@@ -21,7 +22,7 @@ export function evidenceChip(view, gid, onFocus, { unknown = false } = {}) {
   const ev = view.events.find((e) => e.gid === gid);
   if (!ev && !unknown) return null;
   const first = ev && ev.node_gids[0];
-  return button(gid, ev ? eventChipLabel(view, ev) : gid, () => first && onFocus(first));
+  return button(gid, ev ? eventChipLabel(view, ev) : gid, () => first && onFocus(first), ev ? `${ev.occurred_at} ${eventText(view, ev)}` : gid);
 }
 
 /**
