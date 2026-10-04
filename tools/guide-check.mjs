@@ -139,14 +139,40 @@ async function walk(browser, port) {
     const faded = await ev(cdp, "window.__wu.cy.elements('.time-off').length");
     check(`5단계: 「${labels.find((l) => l.includes('시간'))}」 막대를 마우스로 끌면 과거 기준일과 흐린 담당`, /\d{4}-\d{2}-\d{2} 기준/.test(when) && faded > 0, when.slice(0, 60));
     await shot(cdp, `${browser.name}-g5-time`);
-    // 6단계
-    for (const name of labels.slice(-2)) {
+    // 6단계: 안내에서 고른 유니버스 이름(「가상 운영부 …」)들. 7단계에도 같은 이름이 나올 수 있어 내용으로 고르고 중복을 뺀다
+    for (const name of [...new Set(labels.filter((l) => l.startsWith('가상 운영부')))]) {
       const short = name.replace(/\(.*\)/, '').trim();
       const ok = await pickOption(cdp, '#universe-picker', short);
       await sleep(800);
       check(`6단계: 위쪽 목록에서 「${name}」을 고를 수 있고 열림`, ok && await waitFor(cdp, `window.__wu && window.__wu.doc && window.__wu.doc.universe.name === ${JSON.stringify(short)}`));
     }
     await shot(cdp, `${browser.name}-g6-org`);
+    // 7단계(T-18): 부서 화면 → 「노드 찾기」에 "대사" 입력(실제 입력) → 결과를 마우스로 고름 → 「주변만 보기」 → 「전체 보기」
+    const findLabel = labels.find((l) => l.includes('찾기'));
+    const nbLabel = labels.find((l) => l.includes('주변만 보기'));
+    const allLabel = labels.find((l) => l === '전체 보기');
+    await pickOption(cdp, '#universe-picker', '가상 운영부');
+    await sleep(800);
+    await waitFor(cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-D1' && window.__wu.cy.nodes().length > 0");
+    const findPos = await ev(cdp, `(() => { const i = [...document.querySelectorAll('input')].find((x) => (x.getAttribute('aria-label') || '').includes(${JSON.stringify(findLabel || '')}) && x.offsetParent); if (!i) return null; const r = i.getBoundingClientRect(); return { x: r.left + 20, y: r.top + r.height / 2 }; })()`);
+    if (findPos) {
+      await mouseAt(cdp, findPos.x, findPos.y);
+      await cdp.send('Input.insertText', { text: '대사' });
+      await sleep(300);
+    }
+    const pickedOk = !!findPos && await clickText(cdp, '대사 확인', '[data-testid=find-hit]');
+    await sleep(500);
+    const p7 = await panel(cdp);
+    check(`7단계: 「${findLabel}」 칸에 "대사"를 넣고 결과 「대사 확인」을 누르면 상세가 열림`, pickedOk && p7.includes('대사 확인') && p7.includes('연결된 노드'), p7.slice(0, 40));
+    const before7 = await ev(cdp, 'window.__wu.cy.nodes().length');
+    const nbOk = await clickText(cdp, nbLabel || '주변만 보기');
+    await sleep(600);
+    const after7 = await ev(cdp, 'window.__wu.cy.nodes().length');
+    check(`7단계: 「${nbLabel}」 → 이어진 노드만 남음(${before7} → ${after7}개)`, nbOk && after7 < before7 && !!(await ev(cdp, 'window.__wu.nbhd')));
+    await shot(cdp, `${browser.name}-g7-nbhd`);
+    const backOk = await clickText(cdp, allLabel || '전체 보기', '#fit');
+    await sleep(600);
+    check(`7단계: 「${allLabel}」 → 전체 그래프로 돌아옴`, backOk && (await ev(cdp, 'window.__wu.nbhd')) === null && (await ev(cdp, 'window.__wu.cy.nodes().length')) >= before7);
     // 안내 4절: 초기화 버튼
     check('안내 4절: 「가상 데이터 초기화」 버튼이 있음', await ev(cdp, "[...document.querySelectorAll('header button')].some((b) => b.textContent.includes('가상 데이터 초기화'))"));
   } finally {

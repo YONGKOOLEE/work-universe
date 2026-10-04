@@ -986,6 +986,17 @@ async function checkBrowser(browser, port) {
     };
     const eventsTotal = () => evaluate(s.cdp, "window.__wu.view.events.length");
     const ev0 = await eventsTotal();
+    // 첫 화면 배율(나중에 펼쳤다 접은 뒤와 비교: 키운 이름이 배치를 넓히지 않는지)
+    const firstZoom = await evaluate(s.cdp, 'window.__wu.cy.zoom()');
+    await evaluate(s.cdp, "window.__wu.toggle('U-C')");
+    await sleep(400);
+    await evaluate(s.cdp, "window.__wu.toggle('U-C')");
+    await sleep(400);
+    const backZoom = await evaluate(s.cdp, 'window.__wu.cy.zoom()');
+    const tinyBack = await evaluate(s.cdp, "window.__wu.cy.nodes('.tiny-label').length");
+    // 배율 자체는 「다시 정렬」 결과가 그래프 영역 크기에 따라 달라 첫 화면과 같지 않다(T-18 전부터 그랬음: 첫 화면 0.612 → 다시 정렬 0.668). 판정은 이름이 숨지 않는지와 화면 밖 노드
+    const offBack = await evaluate(s.cdp, "(() => { const cy = window.__wu.cy; return cy.nodes().filter((n) => { const p = n.renderedPosition(); return p.x < 0 || p.y < 0 || p.x > cy.width() || p.y > cy.height(); }).length; })()");
+    check('T-18 재검증 R1: 하위 유니버스를 펼쳤다 접으면 숨은 이름 0, 화면 밖 노드 0(배율이 첫 화면과 비슷)', tinyBack === 0 && offBack === 0 && backZoom > firstZoom * 0.75, `${firstZoom.toFixed(3)} → ${backZoom.toFixed(3)}, 숨김 ${tinyBack}, 밖 ${offBack}`);
     const shownCount = () => evaluate(s.cdp, 'window.__wu.cy.nodes().length');
     // 렌더된 글자 크기(px) = 글자 크기 × 확대 배율
     const renderedPx = (gid) => evaluate(s.cdp, `(() => { const n = window.__wu.cy.getElementById(${JSON.stringify(gid)}); return n.empty() ? -1 : n.pstyle('font-size').pfValue * window.__wu.cy.zoom(); })()`);
@@ -1075,6 +1086,15 @@ async function checkBrowser(browser, port) {
     await sleep(400);
     const small = await evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const z = cy.zoom(); const all = cy.nodes(); const tiny = all.filter((n) => n.pstyle('font-size').pfValue * z < 6); const hidden = all.filter((n) => n.hasClass('tiny-label') && Number(n.pstyle('text-opacity').value) === 0); const mismatch = all.filter((n) => (n.pstyle('font-size').pfValue * z < 6) !== n.hasClass('tiny-label')); return { total: all.length, tiny: tiny.length, hidden: hidden.length, mismatch: mismatch.length, zoom: z }; })()");
     check('R-17 ⑦ 모두 펼친 부서 화면: 화면에서 6px보다 작은 이름은 모두 숨기고, 6px 이상은 보임(판정 불일치 0)', small.total >= 60 && small.tiny > 0 && small.hidden === small.tiny && small.mismatch === 0, JSON.stringify(small));
+    // T-18 재검증 R1~R3: 키운 이름(꼭지 11px 등)이 배치·맞춤 계산에 들어가 화면 밖으로 넘치거나 「다시 정렬」마다 모양이 달라지면 안 된다
+    const geo = () => evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const w = cy.width(), h = cy.height(); const off = cy.nodes().filter((n) => { const p = n.renderedPosition(); return p.x < 0 || p.y < 0 || p.x > w || p.y > h; }).length; const pos = cy.nodes().map((n) => Math.round(n.position('x')) + ',' + Math.round(n.position('y'))).join(';'); return { z: +cy.zoom().toFixed(3), off, pos }; })()");
+    await evaluate(s.cdp, "document.getElementById('relayout').click()");
+    await sleep(300);
+    const g1 = await geo();
+    await evaluate(s.cdp, "document.getElementById('relayout').click()");
+    await sleep(300);
+    const g2 = await geo();
+    check('T-18 재검증: 모두 펼친 부서 화면 「다시 정렬」 두 번 → 같은 모양·배율, 화면 밖 노드 0', g1.z === g2.z && g1.pos === g2.pos && g1.off === 0 && g2.off === 0, `${g1.z}/${g2.z}, 밖 ${g1.off}/${g2.off}`);
     const hoverGid = await evaluate(s.cdp, "window.__wu.cy.nodes('[core_type = \"work\"]').filter((n) => !n.hasClass('time-off'))[3].id()");
     const hp = await evaluate(s.cdp, `(() => { const n = window.__wu.cy.getElementById(${JSON.stringify(hoverGid)}); const p = n.renderedPosition(); const r = document.getElementById('graph').getBoundingClientRect(); return { x: r.left + p.x, y: r.top + p.y }; })()`);
     await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: hp.x, y: hp.y });

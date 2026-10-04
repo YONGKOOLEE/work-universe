@@ -322,14 +322,28 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       cy.resize();
-      cy.fit(undefined, 40);
+      fitTo(undefined, 40);
     }, 150);
   });
+
+  function fitTo(eles, padding) {
+    cy.nodes().removeStyle('font-size text-max-width text-outline-width z-index');
+    cy.fit(eles, padding);
+    applyTinyLabels();
+    for (const id of bigLabels) {
+      const n = cy.getElementById(id);
+      if (n.nonempty()) sizeLabel(n);
+    }
+  }
 
   function layout() {
     // ① 꼭지를 가운데 두고 꼭지에서 가까운 순서대로 고리를 이룬다.
     // ② 그 자리에서 출발해 연결된 노드끼리 당기고 겹친 노드는 밀어낸다(라벨 크기 포함).
     // 무작위를 쓰지 않으므로 열 때마다 같은 모양이다.
+    // 배치는 이름 크기를 계산에 넣는다(nodeDimensionsIncludeLabels). 화면 크기에 맞춰 키운 이름(꼭지·고른·올린 노드)을 그대로 두면
+    // 작게 보일수록 이름이 커져 배치가 넓어지고 → 더 작게 보이는 순환이 생긴다(T-18 재검증 R1~R3). 배치하는 동안만 원래 크기로 둔다
+    const BYPASS = 'font-size text-max-width text-outline-width z-index';
+    cy.nodes().removeStyle(BYPASS);
     const maxDepth = Math.max(0, ...cy.nodes().map((n) => n.data('depth')));
     cy.layout({
       name: 'concentric',
@@ -359,6 +373,12 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
       fit: true,
       padding: 30,
     }).run();
+    // 배치가 끝난 뒤 새 확대 배율로 이름 크기를 다시 정한다(꼭지·작은 이름 숨김, 고른·올린 노드 키우기)
+    applyTinyLabels();
+    for (const id of bigLabels) {
+      const n = cy.getElementById(id);
+      if (n.nonempty()) sizeLabel(n);
+    }
   }
 
   return {
@@ -390,7 +410,7 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
           }
           slot += 1;
         });
-        if (slot > 0) cy.fit(undefined, 40);
+        if (slot > 0) fitTo(undefined, 40);
       }
       applyTimeOff();
       lastDisplay = display;
@@ -406,7 +426,7 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
       const kept = cy.nodes().not('.filtered-out');
       const focus = kept.filter((n) => n.data('core_type') !== 'root');
       const eles = !f ? cy.elements() : focus.nonempty() ? focus : kept;
-      cy.animate({ fit: { eles, padding: 60 } }, { duration: 200, complete: applyTinyLabels });
+      fitTo(eles, 60);
     },
 
     /** 찾은 노드를 가운데로 옮기고 이름이 읽히게 확대한다. 노란 테두리로 잠시 표시(R-17 ①) */
@@ -433,8 +453,7 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
     },
 
     fit() {
-      cy.fit(undefined, 40);
-      applyTinyLabels();
+      fitTo(undefined, 40);
     },
   };
 }
