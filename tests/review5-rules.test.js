@@ -10,6 +10,16 @@ import { buildView } from '../app/src/view/view.js';
 import { buildHandoverDraft } from '../app/src/rules/handover.js';
 import { repeatInefficiency } from '../app/src/rules/insight.js';
 import { clone } from './helpers.js';
+import { hasLongWord } from '../app/src/view/describe.js';
+
+test('그래프 글자 단위 줄바꿈 판정: 띄어쓰기 없이 10자 이상인 낱말이 있을 때만(띄어쓰기 있는 긴 이름은 낱말 경계에서 끊김)', () => {
+  assert.equal(hasLongWord('대형가맹점 A 카드승인 전문 송수신'), false);
+  assert.equal(hasLongWord('가상 업무 처리 확인 점검 사항'), false);
+  assert.equal(hasLongWord('Samsung Business Process'), false);
+  assert.equal(hasLongWord('가'.repeat(100)), true);
+  assert.equal(hasLongWord('가상 ' + '나'.repeat(10)), true);
+  assert.equal(hasLongWord(''), false);
+});
 
 const T0 = { now: '2026-10-03T10:00:00+09:00' };
 const topicRepeat = (doc) => repeatInefficiency(buildView(doc)).patterns.find((p) => p.kind === 'topic_repeat');

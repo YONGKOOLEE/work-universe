@@ -419,6 +419,8 @@ async function checkBrowser(browser, port) {
   await sleep(400);
   const expandedCount = await nodeCount(s.cdp);
   check('더블클릭 → 카드승인 유니버스 펼침(세부 노드가 나타남)', expandedCount > 40, String(expandedCount));
+  // 재검증: 띄어쓰기 있는 긴 이름은 글자 단위로 끊지 않는다(text-overflow-wrap anywhere는 긴 낱말 노드에만)
+  check('띄어쓰기 있는 긴 노드 이름은 낱말 가운데서 끊지 않음', await evaluate(s.cdp, "(() => { const n = window.__wu.cy.$id('U-K1/N-000'); return !!n && n.style('text-overflow-wrap') === 'whitespace'; })()"));
   await shot(s.cdp, `${browser.name}-5-team-expanded`);
   await evaluate(s.cdp, "window.__wu.toggle('U-K1')");
   await sleep(300);

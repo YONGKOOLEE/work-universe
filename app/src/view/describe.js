@@ -33,6 +33,9 @@ const STATUS_LABEL = { current: '현재', ended: '종료', scheduled: '예정' }
 /** 문장·근거 칩에 쓰는 노드 이름. 숨긴 노드는 표시를 붙인다(4절 "숨김 후 참조"). 초안·이력 문장·근거 칩이 모두 이것을 쓴다(검토5 C-2) */
 export const displayName = (node) => (node.hidden ? `${node.label}(숨김 처리된 노드)` : node.label);
 
+/** 이름에 띄어쓰기 없이 긴 낱말(10자 이상)이 있는가. 그래프가 그런 이름만 글자 단위로 줄바꿈한다(화면 점검 S-3, 재검증) */
+export const hasLongWord = (label, max = 9) => String(label || '').split(/\s+/).some((w) => w.length > max);
+
 function fieldValue(v) {
   if (v === null || v === undefined) return '(없음)';
   if (typeof v === 'boolean') return v ? '예' : '아니요';

@@ -3,6 +3,7 @@
 
 import cytoscape from 'cytoscape';
 import { NODE_TYPES, UNKNOWN_TYPE_LABEL } from '../model/schema.js';
+import { hasLongWord } from '../view/describe.js';
 
 // 노드 유형별 색(어두운 배경용 파스텔). 범례도 이 표를 쓴다
 export const TYPE_COLORS = {
@@ -85,7 +86,7 @@ function toElements(display) {
 ＋${hiddenCount}` : n.label,
           collapsed: !!hiddenCount,
           // 띄어쓰기 없이 긴 낱말(약 9자 넘게)이 있으면 글자 단위 줄바꿈을 허용한다(화면 점검 S-3). 보통 이름은 띄어쓰기에서만 끊는다(재검증)
-          longword: String(n.label).split(/s+/).some((w) => w.length > 9),
+          longword: hasLongWord(n.label),
           core_type: n.core_type,
           origin: n.origin,
           merged: n.merged_from.length > 0,

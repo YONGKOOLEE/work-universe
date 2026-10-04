@@ -377,6 +377,8 @@ function keyValues(blocks, tables = true) {
     if (b.kind === 'table') {
       // 범위 절의 표는 모든 행의 첫 칸이 개요 키일 때만 「키: 값」 표로 읽는다(재검증 R1: 「대상 업무 | …」「범위 제외 | …」 표).
       // 하나라도 아니면 업무 표다(corpus F8: 구분 칸 「마감」「주기」로 표가 통째로 사라지던 문제)
+      // 머리글 첫 칸이 「업무」「업무명」처럼 업무 이름 칸이면 행 값과 상관없이 업무 표다(수렴 검증 R1: 업무 이름이 「설명」「마감」뿐인 표)
+      if (!tables && b.header && /^(업무|업무명|업무 ?이름|작업|작업명)$/.test(cleanText(b.header[0]))) continue;
       if (!tables && !b.rows.every((row) => row.length >= 2 && overviewKey(row[0]))) continue;
       for (const row of b.rows) if (row.length >= 2 && row[0]) out.push([row[0], row.slice(1).filter(Boolean).join(' — '), b]);
     } else {
