@@ -1019,6 +1019,9 @@ async function checkBrowser(browser, port) {
     const pickedPx = await renderedPx(picked.sel);
     check('R-17 ①⑦ 찾은 노드로 이동·확대: 고른 노드 이름이 화면에서 15px 이상', pickedPx >= 15, pickedPx.toFixed(1));
     check('R-17 ① 상태 줄에 「찾음」', (await text(s.cdp, '[data-testid=explore-note]')).includes('찾음'));
+    const mid = await evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const p = cy.getElementById(window.__wu.selected).renderedPosition(); return { dx: Math.round(p.x - cy.width() / 2), dy: Math.round(p.y - cy.height() / 2) }; })()");
+    // cytoscape의 가운데 맞춤은 동그라미와 아래 이름을 합친 상자를 가운데에 둔다: 동그라미는 이름 높이만큼 위에 있다(수렴 재검증 3번: 상태 줄을 먼저 바꿔 55px → 25px)
+    check('R-17 ① 찾은 노드가 그래프 가운데 근처로(가로 10px, 세로 30px 안)', Math.abs(mid.dx) <= 10 && Math.abs(mid.dy) <= 30, JSON.stringify(mid));
     await shot(s.cdp, `${browser.name}-12-find-picked`);
     await key('Escape', 'Escape', 27);
     check('R-17 ⑧ Esc(상세 제목에 초점) → 노드 선택 해제', (await evaluate(s.cdp, 'window.__wu.selected')) === null);

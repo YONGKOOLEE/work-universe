@@ -625,9 +625,9 @@ function start() {
     onFilter: (f) => {
       filterState = f;
       exploreNote = null;
+      renderExploreStatus(); // 상태 줄 높이를 먼저 바꾼 뒤 맞춘다
       graph.applyFilter();
       graph.highlight(selected);
-      renderExploreStatus();
     },
   });
 
@@ -637,9 +637,9 @@ function start() {
     const g = view.canonical(gid);
     reveal(g);
     select(g);
-    graph.zoomTo(g);
     exploreNote = { text: `찾음: 「${(view.getNode(g) || { label: g }).label}」` };
-    renderExploreStatus();
+    renderExploreStatus(); // 상태 줄 높이를 먼저 바꾼 뒤 가운데로 옮긴다
+    graph.zoomTo(g);
     const h = $('detail').querySelector('h2');
     if (h) {
       h.tabIndex = -1;
