@@ -14,6 +14,7 @@ npm run check:submit  # 제출 점검(빌드·테스트·비밀값·R-06·압축
 npm run check:secrets # 비밀값 형식 검색(dist 포함). 0건이어야 함
 npm run check:guide   # 실행 안내 "5분 둘러보기"를 실제 마우스·키보드로 따라가기
 node tools/virtual-data-check.mjs   # 가상 데이터 형식 점검(R-06)
+node tools/convert-snapshot.mjs     # 변환기 경계 사례 108개의 차이 보기(규칙을 일부러 바꿨으면 차이 확인 뒤 --write)
 node tools/pregen-dump.mjs          # 사전 생성 문장 작성용 근거 덤프
 ```
 
