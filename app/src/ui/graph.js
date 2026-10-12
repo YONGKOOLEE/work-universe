@@ -5,6 +5,7 @@ import cytoscape from 'cytoscape';
 import { NODE_TYPES, UNKNOWN_TYPE_LABEL } from '../model/schema.js';
 import { hasLongWord } from '../view/describe.js';
 import { labelBox, placeNewNodes } from '../view/place.js';
+import { flowLayout } from '../view/lanes.js';
 import { EXPLORE } from './explore.js';
 
 // 노드 유형별 색(어두운 배경용 파스텔). 범례도 이 표를 쓴다
@@ -462,6 +463,21 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
     // 배치를 처음부터 다시 계산한다("정렬" 버튼)
     relayout() {
       layout();
+      applyTinyLabels();
+    },
+
+    /** 흐름 정렬(시제품): 가로는 업무의 선후, 세로는 유형 층. 「다시 정렬」로 원래 고리 배치로 돌아간다 */
+    flowLayout() {
+      if (!lastDisplay) return;
+      const nodes = cy.nodes().map((n) => ({ id: n.id(), core_type: n.data('core_type'), label: n.data('label'), size: n.data('size') }));
+      const ids = new Set(nodes.map((n) => n.id));
+      const edges = (lastDisplay.edges || []).filter((e) => ids.has(e.source) && ids.has(e.target)).map((e) => ({ source: e.source, target: e.target, core_type: e.core_type || e.type }));
+      const pos = flowLayout(nodes, edges);
+      cy.nodes().forEach((n) => {
+        const p = pos.get(n.id());
+        if (p) n.position(p);
+      });
+      fitTo(undefined, 40);
       applyTinyLabels();
     },
 

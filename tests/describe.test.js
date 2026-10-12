@@ -94,7 +94,7 @@ test('유니버스 개요: 유형별 개수와 이력 기간', () => {
   const s = describeUniverse(view);
   assert.equal(s.name, '월말 정산 점검');
   assert.equal(s.node_total, 10);
-  assert.equal(s.edge_total, 13); // 윤바다의 자료 수집·보고 수행 연결 2개 추가(검토6 P-2)
+  assert.equal(s.edge_total, 14); // 윤바다의 자료 수집·보고 수행 연결 2개 추가(검토6 P-2)
   assert.deepEqual(s.counts.find((c) => c.type_label === '사람'), { type_label: '사람', count: 3 });
   assert.deepEqual(s.period, { first: '2025-03-01', last: '2026-10-01' });
 });

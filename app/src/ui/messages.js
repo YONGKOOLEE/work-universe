@@ -72,6 +72,7 @@ export function messageFor(err, ctx = {}) {
       if (ctx.kind === 'edge') return '같은 연결이 이미 있습니다(같은 관계, 기간이 겹침). 기존 연결을 확인하세요.';
       if (err.field === 'name') return '같은 이름의 하위 유형이 이미 있습니다.';
       if (err.field === 'child_universe_id') return '이미 묶여 있는 유니버스입니다.';
+      if (err.already_active) return '이 사람은 이미 이 업무를 담당 중입니다(수행 연결이 있고 끝나지 않음). 담당이 바뀌었다면 먼저 「담당 종료」를 기록하세요.';
       if (err.with_row) return `${err.with_row}행과 같은 유형·이름입니다. 둘 중 하나를 고치세요.`;
       return '같은 노드가 이미 있습니다(같은 유형·이름, 또는 같은 사번). 기존 노드를 확인하세요.';
     case 'E-PAIR': {
@@ -106,6 +107,7 @@ export function messageFor(err, ctx = {}) {
       if (err.unknown_type) return `알 수 없는 유형 「${err.unknown_type}」입니다. 업무·사람·산출물·조직·주제 중 하나를 쓰세요.`;
       if (err.cannot_change) return '유형은 바꿀 수 없습니다. 유형을 바꾸려면 새 노드로 추가하세요.';
       if (err.extra_cells) return '머리글보다 칸이 많습니다. 탭이 더 들어갔는지 확인하세요.';
+      if (err.no_active) return '이 사람이 이 업무를 담당 중인 연결이 없어 종료할 수 없습니다. 담당자와 업무를 확인하세요.';
       if (err.locked) return '이 노드의 속성 값에 「;」나 줄바꿈이 있어 표로 고칠 수 없습니다. 상세 패널의 「수정」에서 고치세요.';
       if (err.format) return '속성은 「키=값; 키=값」 형식으로 쓰세요.';
       if (err.too_many) return `한 번에 ${err.too_many}행까지 저장할 수 있습니다. 나누어 저장하세요.`;

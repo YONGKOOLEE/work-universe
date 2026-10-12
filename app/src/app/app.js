@@ -1,7 +1,7 @@
 // 명령 흐름 조립과 현재 상태(12.7 app). 화면은 이 객체만 호출한다.
 
 import {
-  addEdge, addEvent, addNode, applyBatch, addRef, addSubtype, createUniverse, decideIdentity, hideEdge, hideNode, hideRef, updateEdge, updateNode,
+  addAssignment, addEdge, addEvent, addNode, applyBatch, addRef, addSubtype, createUniverse, decideIdentity, hideEdge, hideNode, hideRef, updateEdge, updateNode,
 } from '../model/commands.js';
 import { CODES, DRAFT_TARGET_TYPES, SUBTYPE_HANDOVER_DOC, TEXT_MAX, normalizeLabel } from '../model/schema.js';
 import { validateDocument } from '../model/validate.js';
@@ -13,6 +13,7 @@ const METHOD_NAMES = { rule: '규칙 기반', pregen: '사전 생성', llm: 'LLM
 import { scopeWorks } from '../rules/handover.js';
 import { mergePlan } from '../merge/merge.js';
 import { previewImport } from '../model/import.js';
+import { formReport } from '../rules/form.js';
 
 // 사번 자동 연결(R-11 ①)을 문서에 적용한다. 판정자는 없다(emp_no_auto)
 function applyAuto(doc, resolve, ctx) {
@@ -204,7 +205,9 @@ export function createApp({ store, samples, currentId, now }) {
       return guard() || commit(hideEdge(doc, edgeId, { now: now() }));
     },
     addEvent(input) {
-      return guard() || commit(addEvent(doc, input, { now: now() }));
+      // 담당 시작·종료는 수행 연결과 함께 한 번에 저장한다(담당 이력과 그래프가 따로 놀지 않게)
+      const isAssign = input && (input.type === 'assign_start' || input.type === 'assign_end');
+      return guard() || commit(isAssign ? addAssignment(doc, input, { now: now() }) : addEvent(doc, input, { now: now() }));
     },
 
     // 노드 수정. 다른 유니버스의 노드면 그 유니버스 문서를 고친다(예: 위로 드러내기)
@@ -284,6 +287,15 @@ export function createApp({ store, samples, currentId, now }) {
     /** 사람의 판정(같음 confirmed / 다름 rejected)을 기록한다(R-11 ②③, 12.7 흐름 3 ⑤). 원래 유니버스는 바뀌지 않는다(R-11 ⑤) */
     decideIdentity({ a, b, kind, status, reason, score }) {
       return guard() || commit(decideIdentity(doc, { a, b, kind, method: 'human', status, reason, score, decided_by: '사용자(이 브라우저)' }, { now: now() }));
+    },
+
+    /** 표준 양식 점검(T-20, R-16): 문서 하나의 업무 중 권장 항목이 빈 것. 막지 않고 알리기만 한다 */
+    formReport(d) {
+      try {
+        return formReport(buildView(d, () => null));
+      } catch {
+        return { total: 0, incomplete: 0, works: [] }; // 형식 오류 문서는 검증 오류가 먼저 알린다
+      }
     },
 
     /** 가져오기 미리 보기(T-17): 검증 결과·구성·같은 ID 유니버스 */

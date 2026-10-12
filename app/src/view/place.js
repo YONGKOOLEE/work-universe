@@ -3,11 +3,11 @@
 // 보던 모양이 흐트러지지 않게 기존 노드는 옮기지 않는다(graph.js render).
 
 export const PLACE = {
-  charPx: 14, // 한글 한 글자 폭 추정(글자 크기 14px, 영문·숫자는 절반이지만 넉넉하게 같은 값)
+  charPx: 15, // 한글 한 글자 폭 추정(글자 크기 14px, 영문·숫자는 절반이지만 넉넉하게 같은 값)
   maxText: 120, // 이름 줄바꿈 폭(graph.js text-max-width와 같음)
-  lineH: 17,
+  lineH: 19,
   textGap: 6, // 동그라미와 이름 사이(text-margin-y)
-  gap: 10, // 상자 사이 여유
+  gap: 14, // 상자 사이 여유
   ring: 70, // 첫 고리 반지름
   ringStep: 50,
   rings: 14,

@@ -108,18 +108,20 @@ const handoverC = [
   },
   {
     item: '일정_마감',
-    evidence_ids: g(C, 'N-101', 'N-103'),
+    evidence_ids: g(C, 'N-101', 'N-102', 'N-103'),
     sentences: [
       { text: '교육은 3월과 9월, 반기마다 있으며 교육 시작 2주 전까지 일정과 강의실을 확정해야 합니다.', evidence_ids: g(C, 'N-101') },
+      { text: '강사는 교육 시작 6주 전까지 확정해야 하며, 강의실·강사 섭외는 교육 과정마다 반복됩니다.', evidence_ids: g(C, 'N-102') },
       { text: '만족도 설문은 과정이 끝난 뒤 1주 안에 회수합니다.', evidence_ids: g(C, 'N-103') },
     ],
   },
   {
     item: '주의사항',
-    evidence_ids: g(C, 'E-009', 'N-101', 'N-102'),
+    evidence_ids: g(C, 'E-009', 'N-101', 'N-102', 'N-103'),
     sentences: [
       { text: '강의실 예약은 한 달 전에 마감되니 일정이 나오면 바로 잡으세요.', evidence_ids: g(C, 'N-101') },
       { text: '강사 요청은 최소 6주 전에 보내야 일정이 맞고, 늦으면 외부 강사를 써야 해 비용이 듭니다.', evidence_ids: g(C, 'N-102', 'E-009') },
+      { text: '만족도 조사는 응답률이 70% 아래면 한 번 더 안내합니다.', evidence_ids: g(C, 'N-103') },
     ],
   },
   {

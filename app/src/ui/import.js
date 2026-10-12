@@ -202,6 +202,13 @@ export function importDialog(o) {
         ...p.warnings.filter((w) => w.code !== 'W-NO-EMPNO').map((w) => warningText(w, st.result.from)),
       ];
       if (notes.length) blocks.push(el('ul', { class: 'import-notes', 'data-testid': 'import-notes' }, ...notes.map((t) => el('li', {}, t))));
+      // 표준 양식 점검(R-16): 권장 항목이 빈 업무 수. 가져오기를 막지 않는다
+      const fr = o.app.formReport(doc);
+      if (fr.total) {
+        blocks.push(el('details', { class: 'form-check', 'data-testid': 'import-form', open: false },
+          el('summary', {}, fr.incomplete ? `표준 양식: 업무 ${fr.total}개 중 ${fr.incomplete}개에 권장 항목이 비어 있음(가져오기는 됩니다)` : `표준 양식: 업무 ${fr.total}개 모두 권장 항목을 채웠습니다`),
+          fr.incomplete ? el('ul', {}, ...fr.works.slice(0, 15).map((w) => el('li', { class: 'small' }, `${w.label}: ${w.missing.join(', ')}`)), fr.works.length > 15 ? el('li', { class: 'small' }, `외 ${fr.works.length - 15}개`) : null) : null));
+      }
 
       if (report && report.sections.length) {
         blocks.push(el('h4', {}, '원문의 절 → 유니버스'));

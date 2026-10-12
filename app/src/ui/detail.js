@@ -1,13 +1,33 @@
 // 상세 패널 그리기. 내용은 view/describe.js가 만들고, 여기서는 DOM으로 옮기기만 한다.
 import { el } from './dom.js';
 
+// 이력이 많으면(업무당 1년 30~50건, 조력자 의견 2026-10-12) 최근 것만 먼저 보이고 이전 것은 「모두 보기」로 편다
+export const HISTORY_SHOW = 10; // 접었을 때 보이는 최근 이력 수
+export const HISTORY_COLLAPSE_OVER = 15; // 이 수를 넘을 때만 접는다(조금 넘는 정도는 그냥 보인다)
+
+function historyItem(h) {
+  return el('li', h.after ? { class: 'after', title: '기준일 이후의 이력' } : {}, el('time', {}, h.date), el('span', { class: 'chip' }, h.type_label), el('span', { class: 'text' }, h.text));
+}
+
 function historyList(items) {
   if (!items.length) return el('p', { class: 'muted', 'data-testid': 'no-history' }, '기록된 이력 없음');
-  return el(
-    'ol',
-    { class: 'history', 'data-testid': 'history' },
-    ...items.map((h) => el('li', h.after ? { class: 'after', title: '기준일 이후의 이력' } : {}, el('time', {}, h.date), el('span', { class: 'chip' }, h.type_label), el('span', { class: 'text' }, h.text))),
-  );
+  const collapsible = items.length > HISTORY_COLLAPSE_OVER;
+  const wrap = el('div', {});
+  let expanded = false;
+  const draw = () => {
+    const shown = collapsible && !expanded ? items.slice(-HISTORY_SHOW) : items;
+    const rest = items.length - shown.length;
+    wrap.replaceChildren(
+      ...[collapsible
+        ? el('p', { class: 'muted small', 'data-testid': 'history-count' },
+          expanded ? `이력 ${items.length}건 전체 ` : `이력 ${items.length}건 중 최근 ${shown.length}건 `,
+          el('button', { type: 'button', class: 'link', 'data-testid': 'history-toggle', onclick: () => { expanded = !expanded; draw(); } }, expanded ? '최근 것만 보기' : `모두 보기(이전 ${rest}건)`))
+        : null,
+      el('ol', { class: 'history', 'data-testid': 'history' }, ...shown.map(historyItem))].filter(Boolean),
+    ); // replaceChildren(null)은 「null」 글자를 넣는다
+  };
+  draw();
+  return wrap;
 }
 
 /**

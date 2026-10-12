@@ -309,8 +309,8 @@ export function eventForm(o) {
   const groups = {
     memo: () => [field('분류', category), field('관련 주제(선택)', topics)],
     handover: () => [field('업무', work), field('보내는 사람', from), field('받는 사람', to), field('인수인계서(선택)', artifact), field('이전 인수인계 참조(선택)', previous)],
-    assign_start: () => [field('사람', person), field('업무', work)],
-    assign_end: () => [field('사람', person), field('업무', work)],
+    assign_start: () => [field('사람', person), field('업무', work), el('p', { class: 'muted small', 'data-testid': 'assign-hint' }, '기록하면 사람 → 업무 「수행」 연결도 이 날짜부터 함께 만들어집니다.')],
+    assign_end: () => [field('사람', person), field('업무', work), el('p', { class: 'muted small', 'data-testid': 'assign-hint' }, '기록하면 진행 중인 「수행」 연결의 끝 날짜가 이 날짜로 채워집니다.')],
     affiliation_change: () => [field('사람', person), field('이전 소속(선택)', fromOrg), field('새 소속(선택)', toOrg)],
   };
   const slot = el('div', { class: 'event-fields' });

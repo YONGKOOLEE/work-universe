@@ -21,6 +21,7 @@ import { currentDenseN, insightPanel } from './insight.js';
 import { nowIso, todayLocal } from './time.js';
 import { personLoad, repeatPatternsFor, workLoad } from '../rules/insight.js';
 import { monthAsOf, timeMonths } from '../rules/flow.js';
+import { workFormMissing } from '../rules/form.js';
 import { josa, messageFor } from './messages.js';
 import { exportFileName, importDialog } from './import.js';
 import { tableDialog } from './table.js';
@@ -306,6 +307,14 @@ function start() {
       el('button', { type: 'button', class: 'link', 'data-testid': 'btn-work-density', onclick: () => openInsight('', 'density') }, '밀집·공백 보기'));
   }
 
+  // 표준 양식(R-16): 업무의 권장 항목이 비어 있으면 한 줄(막지 않음). 다 채웠으면 아무것도 보이지 않는다
+  function formNote(gid) {
+    const missing = workFormMissing(view, gid);
+    if (!missing || !missing.length) return null;
+    return el('p', { class: 'muted small', 'data-testid': 'form-missing', title: '업무를 넣는 표준 양식(절차·주기·마감·주의사항·관련 문서·담당·설명)과 비교한 결과입니다. 저장은 막지 않습니다' },
+      `표준 양식: 권장 항목 ${missing.length}개 비어 있음 — ${missing.join(', ')}`);
+  }
+
   // 업무·주제 노드가 반복 비효율 패턴에 들어 있으면 한 줄
   function repeatNote(gid) {
     const node = view.getNode(gid);
@@ -514,7 +523,7 @@ function start() {
       panel.replaceChildren(el('h2', {}, localNode(selected).label), editorFor(selected));
       return;
     }
-    const notes = [loadNote(selected), workNote(selected), repeatNote(selected)].filter(Boolean);
+    const notes = [loadNote(selected), workNote(selected), formNote(selected), repeatNote(selected)].filter(Boolean);
     const tools = toolbar(selected);
     const nbTools = nbhdButtons(selected);
     return renderNodeDetail(panel, describeNode(view, selected, { asOf: asOf(), past: !!viewDate }), {
@@ -770,6 +779,7 @@ function start() {
     select(null);
   });
   $('relayout').addEventListener('click', () => graph.relayout());
+  $('flowlayout').addEventListener('click', () => graph.flowLayout());
 
   // 패널 넓게 보기(U-5): 눌러서 바꾸고, 그래프 영역이 줄거나 늘면 화면에 다시 맞춘다. 저장하지 않는다
   const wideBtn = $('wide-toggle');

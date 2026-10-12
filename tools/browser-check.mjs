@@ -217,6 +217,32 @@ async function checkBrowser(browser, port) {
   let s = await openSession(exe, profile, port);
   const version = s.version;
   check(`P-1 file:// 로드·그래프 표시(노드 ${NODES}, 연결 ${EDGES})`, s.ready && (await nodeCount(s.cdp)) === NODES && (await edgeCount(s.cdp)) === EDGES);
+
+  // ── 흐름 정렬(시제품, 조력자 의견 2026-10-12): 가로 = 선후, 세로 = 유형 층. 기본 배치와 나란히 화면을 남긴다 ──
+  const flowShot = async (id, tag) => {
+    await evaluate(s.cdp, `location.hash = '${id}'; location.reload()`).catch(() => {});
+    await sleep(600);
+    await waitFor(s.cdp, `window.__wu && window.__wu.doc && window.__wu.doc.universe.id === '${id}' && window.__wu.cy.nodes().length > 0`, 8000);
+    await evaluate(s.cdp, "window.__wu.select(null)");
+    await sleep(300);
+    await shot(s.cdp, `${browser.name}-20${tag}-ring-${id}`);
+    await clickTestId(s.cdp, 'flowlayout').catch(() => evaluate(s.cdp, "document.getElementById('flowlayout').click()"));
+    await sleep(500);
+  };
+  await flowShot('U-A1', 'a');
+  const flowPos = await evaluate(s.cdp, `(() => { const cy = window.__wu.cy; const by = (l) => cy.nodes().filter((n) => n.data('label') === l)[0]; const p = (l) => by(l).position(); return { collect: p('자료 수집').x, check: p('대사 확인').x, report: p('보고').x, personY: p('서하늘').y, workY: p('대사 확인').y, docY: p('점검표 양식').y }; })()`);
+  check('흐름 정렬: 자료 수집 → 대사 확인 → 보고가 왼쪽에서 오른쪽, 사람은 업무 위, 산출물은 아래', flowPos.collect < flowPos.check && flowPos.check < flowPos.report && flowPos.personY < flowPos.workY && flowPos.docY > flowPos.workY, JSON.stringify(flowPos));
+  check('흐름 정렬: 화면 밖으로 나간 노드 없음, 이름이 읽히는 크기', await evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const r = document.getElementById('graph').getBoundingClientRect(); return cy.nodes().every((n) => { const b = n.renderedBoundingBox({ includeLabels: false }); return b.x2 > 0 && b.y2 > 0 && b.x1 < r.width && b.y1 < r.height; }); })()"));
+  await shot(s.cdp, `${browser.name}-20b-flow-U-A1`);
+  await evaluate(s.cdp, "document.getElementById('relayout').click()");
+  await sleep(500);
+  check('흐름 정렬 뒤 「다시 정렬」 → 원래 고리 배치로 돌아감(업무 y가 한 줄에 모이지 않음)', await evaluate(s.cdp, "(() => { const ys = window.__wu.cy.nodes().filter((n) => n.data('core_type') === 'work').map((n) => Math.round(n.position().y)); return new Set(ys).size > 1; })()"));
+  await flowShot('U-D1', 'c');
+  await shot(s.cdp, `${browser.name}-20d-flow-U-D1`);
+  check('흐름 정렬(부서 화면): 모든 노드가 화면 안에 있음', await evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const r = document.getElementById('graph').getBoundingClientRect(); return cy.nodes().every((n) => { const b = n.renderedBoundingBox({ includeLabels: false }); return b.x2 > 0 && b.y2 > 0 && b.x1 < r.width && b.y1 < r.height; }); })()"));
+  await evaluate(s.cdp, "location.hash = 'U-A1'; location.reload()").catch(() => {});
+  await sleep(600);
+  await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
   check('저장소 경고 배너 없음(정상 환경)', await evaluate(s.cdp, "document.getElementById('banner').hidden"));
 
   // 처음 화면: 유니버스 개요와 범례
@@ -608,6 +634,7 @@ async function checkBrowser(browser, port) {
   check('U-7: 변환 단추 옆에 「생성 방식: 사전 생성」 대신 규칙으로 읽는다는 안내', (await text(s.cdp, '[data-testid=import-method-note]')).includes('규칙으로 읽습니다') && !(await text(s.cdp, '#import-dialog')).includes('생성 방식: 사전 생성'));
   check('CR-3 AC ③: 작성 주체가 비면 「가져오기」가 막히고 고칠 것 표시', (await evaluate(s.cdp, "document.querySelector('[data-testid=import-confirm]').disabled")) && (await text(s.cdp, '[data-testid=import-errors]')).includes('작성 주체'));
   check('미리 보기의 핵심 요소가 실제로 그려짐(크기 있음)', await evaluate(s.cdp, "['[data-testid=import-summary]', '[data-testid=import-sections]', '[data-testid=import-nodes]', '[data-testid=import-confirm]'].every((q) => { const r = document.querySelector(q).getBoundingClientRect(); return r.width > 0 && r.height > 0; })"));
+  check('R-16 ① 가져오기 미리 보기에 표준 양식 요약(업무 n개 중 m개에 권장 항목 비어 있음)이 보이고 가져오기를 막지 않음', (await text(s.cdp, '[data-testid=import-form] summary')).includes('표준 양식: 업무') && (await text(s.cdp, '[data-testid=import-form] summary')).includes('권장 항목'));
   await shot(s.cdp, browser.name + '-17a-import-preview');
   await evaluate(s.cdp, "(() => { const i = document.getElementById('import-owner'); i.focus(); i.value = '가상 시스템분석팀'; i.dispatchEvent(new Event('input', { bubbles: true })); })()");
   await sleep(150);
@@ -1354,6 +1381,9 @@ async function checkBrowser(browser, port) {
   await t19Paste(longNames.map((n) => `업무\t${n}`).join('\n'));
   await clickTestId(s.cdp, 'table-save');
   await sleep(500);
+  // 고른 노드는 이름이 크게 보이므로(R-17 ⑦) 겹침은 고르지 않은 상태의 이름 크기로 잰다
+  await evaluate(s.cdp, 'window.__wu.select(null)');
+  await sleep(300);
   const overlap = await evaluate(s.cdp, `(() => {
     const cy = window.__wu.cy;
     const names = ${JSON.stringify(longNames)};
@@ -1368,6 +1398,60 @@ async function checkBrowser(browser, port) {
   })()`);
   check('B-P4: 긴 이름 노드 8개를 한 번에 넣어도 서로 이름이 겹치지 않고 기존 노드 위에도 놓이지 않음', overlap.n === 8 && overlap.pairs === 0 && overlap.withOthers === 0, JSON.stringify(overlap));
   await shot(s.cdp, `${browser.name}-19c-long-names`);
+  // ── 담당 이력 ↔ 수행 연결(조력자 의견 2026-10-12) + 이력 많을 때 접기 ──
+  await evaluate(s.cdp, "window.__wu.select(null)");
+  const a19Node = (label) => evaluate(s.cdp, `(window.__wu.view.nodes.find((n) => n.label === ${JSON.stringify(label)}) || {}).gid || ''`);
+  const a19Edges = () => evaluate(s.cdp, "window.__wu.doc.edges.filter((e) => e.core_type === 'performs').length");
+  const a19Person = await a19Node('T19 가상 인물');
+  const a19Work = await a19Node('T19 표 업무 2');
+  await evaluate(s.cdp, `window.__wu.select(${JSON.stringify(a19Work)})`);
+  await sleep(150);
+  await clickTestId(s.cdp, 'btn-event');
+  const a19e0 = await a19Edges();
+  const a19pid = a19Person.split('/')[1];
+  await fillPanelForm(s.cdp, { 'event-type': 'assign_start', 'event-date': '2026-10-03' });
+  await sleep(150);
+  // 사람 칸을 채워야 하므로 먼저 필수값 오류가 나고 연결은 늘지 않는다
+  const a19Missing = await panelMessage(s.cdp);
+  check('담당 시작: 사람을 비우면 거부되고 수행 연결이 늘지 않음', !!a19Missing && a19Missing.code === 'E-REQUIRED' && (await a19Edges()) === a19e0, JSON.stringify(a19Missing));
+  check('담당 시작·종료 양식에 「수행 연결도 함께」 안내가 보임', (await text(s.cdp, '[data-testid=assign-hint]')).includes('수행'));
+  await evaluate(s.cdp, `(() => { const f = document.querySelector('[data-testid=event-form]'); const sel = [...f.querySelectorAll('select')]; const p = sel.find((x) => [...x.options].some((o) => o.value === ${JSON.stringify(a19pid)})); p.value = ${JSON.stringify(a19pid)}; f.querySelector('button[type=submit]').click(); })()`);
+  await sleep(300);
+  check('담당 시작 → 수행 연결이 시작일과 함께 생기고 업무 상세에 현재 담당으로 보임', (await a19Edges()) === a19e0 + 1 && (await evaluate(s.cdp, `window.__wu.doc.edges.some((e) => e.core_type === 'performs' && e.target === ${JSON.stringify(a19Work.split('/')[1])} && e.period && e.period.start === '2026-10-03' && !e.period.end)`)) && (await text(s.cdp, '[data-testid=work-load]')).includes('T19 가상 인물'), await text(s.cdp, '[data-testid=work-load]'));
+  await clickTestId(s.cdp, 'btn-event');
+  await sleep(100);
+  await evaluate(s.cdp, `(() => { const f = document.querySelector('[data-testid=event-form]'); const t = f.querySelector('[data-testid=event-type]'); t.value = 'assign_start'; t.dispatchEvent(new Event('change')); f.querySelector('[data-testid=event-date]').value = '2026-10-04'; const p = [...f.querySelectorAll('select')].find((x) => [...x.options].some((o) => o.value === ${JSON.stringify(a19pid)})); p.value = ${JSON.stringify(a19pid)}; f.querySelector('button[type=submit]').click(); })()`);
+  await sleep(250);
+  const a19dup = await panelMessage(s.cdp);
+  check('담당 시작: 이미 담당 중이면 E-DUP(이미 담당 중), 연결이 늘지 않음', !!a19dup && a19dup.code === 'E-DUP' && a19dup.text.includes('이미') && (await a19Edges()) === a19e0 + 1, JSON.stringify(a19dup));
+  await evaluate(s.cdp, `(() => { const f = document.querySelector('[data-testid=event-form]'); const t = f.querySelector('[data-testid=event-type]'); t.value = 'assign_end'; t.dispatchEvent(new Event('change')); f.querySelector('[data-testid=event-date]').value = '2026-10-09'; const p = [...f.querySelectorAll('select')].find((x) => [...x.options].some((o) => o.value === ${JSON.stringify(a19pid)})); p.value = ${JSON.stringify(a19pid)}; f.querySelector('button[type=submit]').click(); })()`);
+  await sleep(300);
+  check('담당 종료 → 수행 연결에 끝 날짜가 채워지고 공백으로 바뀜', await evaluate(s.cdp, `window.__wu.doc.edges.some((e) => e.core_type === 'performs' && e.target === ${JSON.stringify(a19Work.split('/')[1])} && e.period && e.period.end === '2026-10-09')`));
+
+  // 이력이 15건을 넘으면 최근 10건만 먼저 보이고 「모두 보기」로 폅니다
+  await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+  await sleep(150);
+  for (let i = 0; i < 12; i += 1) {
+    await clickTestId(s.cdp, 'btn-event');
+    await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': `2026-10-0${(i % 9) + 1}`, 'event-note': `T19 이력 접기 시험 ${i + 1}` });
+    await sleep(120);
+  }
+  const hist = await evaluate(s.cdp, "({ li: document.querySelectorAll('[data-testid=history] li').length, count: (document.querySelector('[data-testid=history-count]') || {}).textContent || '' })");
+  check('이력 15건 초과 → 최근 10건만 보이고 「모두 보기(이전 N건)」 안내', hist.li === 10 && hist.count.includes('최근 10건') && hist.count.includes('모두 보기'), JSON.stringify(hist));
+  await clickTestId(s.cdp, 'history-toggle');
+  await sleep(100);
+  const histAll = await evaluate(s.cdp, "document.querySelectorAll('[data-testid=history] li').length");
+  check('「모두 보기」 → 전체 이력(10건보다 많음)이 보임', histAll > 15, String(histAll));
+
+  // R-16 ①②: 상세 패널의 표준 양식 한 줄
+  await evaluate(s.cdp, 'window.__wu.select(' + JSON.stringify('U-A1/N-003') + ')');
+  await sleep(150);
+  check('R-16 ② 권장 항목을 모두 채운 업무(보고)에는 표준 양식 알림이 없음', !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=form-missing]')")));
+  await evaluate(s.cdp, 'window.__wu.select(' + JSON.stringify(a19Work) + ')');
+  await sleep(150);
+  const formLine = await text(s.cdp, '[data-testid=form-missing]');
+  check('R-16 ① 권장 항목이 빈 업무(표로 넣은 T19 표 업무 2)에는 「권장 항목 n개 비어 있음」과 빈 항목 이름이 보이고, 저장은 막지 않음', formLine.includes('권장 항목') && formLine.includes('절차') && formLine.includes('관련 문서'), formLine);
+
   const errors2 = [...s.log.errors];
   const external2 = [...s.log.external];
   s.cdp.close();

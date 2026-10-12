@@ -547,3 +547,40 @@ export function applyBatch(doc, ops, ctx) {
   if (errors.length) return { ok: false, doc, errors, error: errors[0].error };
   return { ok: true, doc: work, events, created, updated, warnings, rows };
 }
+
+// ── 담당 이력과 수행 연결(02-design 3절: 담당 시작·종료는 수행 연결이 생기거나 끝날 때 남는다) ──
+
+/**
+ * 담당 시작·종료를 이력과 수행(performs) 연결에 함께 반영한다(한 묶음).
+ *  - assign_start: 사람 → 업무 수행 연결을 시작일로 만들고 이력을 남긴다. 이미 계속 담당 중이면 E-DUP.
+ *  - assign_end: 그 사람의 진행 중(끝 없음) 수행 연결에 끝 날짜를 채우고 이력을 남긴다. 진행 중인 연결이 없으면 거부.
+ * 이 묶음의 이벤트 순서: 연결 생성(또는 연결 수정) → 담당 이력.
+ * @param {{type:'assign_start'|'assign_end', occurred_at:string, payload:{person_id:string, work_id:string}, note?:string}} input
+ */
+export function addAssignment(doc, input, ctx) {
+  const pl = input.payload || {};
+  // 이력 검증(날짜·대상 유형·숨김)을 먼저 한다: 통과하지 못하면 연결도 만들지 않는다
+  const probe = addEvent(doc, input, ctx);
+  if (!probe.ok) return probe;
+  const active = doc.edges.find(
+    (e) => !e.hidden && e.core_type === 'performs' && e.source === pl.person_id && e.target === pl.work_id && !(e.period && e.period.end),
+  );
+  let work = doc;
+  let edge;
+  if (input.type === 'assign_start') {
+    if (active) return fail(CODES.DUP, { existing_id: active.id, already_active: true });
+    const r = addEdge(work, { source: pl.person_id, target: pl.work_id, core_type: 'performs', period: { start: input.occurred_at } }, ctx);
+    if (!r.ok) return r;
+    work = r.doc;
+    edge = r.edge;
+  } else {
+    if (!active) return fail(CODES.SCHEMA, { field: 'work_id', no_active: true });
+    const r = updateEdge(work, active.id, { period: { ...(active.period || {}), end: input.occurred_at } }, ctx);
+    if (!r.ok) return r;
+    work = r.doc;
+    edge = r.edge;
+  }
+  const ev = addEvent(work, input, ctx);
+  if (!ev.ok) return ev;
+  return { ok: true, doc: ev.doc, event: ev.event, edge };
+}
