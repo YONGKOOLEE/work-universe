@@ -139,8 +139,18 @@ first_implementation_task: T-01 (최소 종단 흐름 + P-1·P-3 실측 + 그래
 next_session_first_action: (2026-10-05) docs/HANDOFF.md 1절을 읽는다. 순서는 T-22(문서 3개 초안 있음: 사용자 검토 → 필요하면 고침) → T-19(표 입력, 01 R-18·02 D-18·D-19·03 T-19, 시제품 브랜치 proto-cr10-btable의 C 부분은 참고만) → (조력자 의견 뒤) T-20 최소판. 답은 한국어로만. sed -i에 백틱을 넣지 말 것(tech-record 38절)
 
 implementation:
-  current_task: (2026-10-05) 여섯 번째 검토 처리 완료. 다음은 T-22 문서 사용자 검토 후 T-19(표 입력). T-21은 1차 제출에서 제외(CR-11)
+  current_task: (2026-10-12) T-19 표 입력 구현·검증 완료. 다음은 (조력자 의견 뒤) T-20 최소판, 그 전에 사용자 화면 확인·T-22 문서 검토. T-21은 1차 제출에서 제외(CR-11)
   tasks:
+    - id: T-19
+      status: 구현·검증 완료(CR-10 C, R-18, D-18·D-19). 사용자 화면 확인은 끝에 묶어서(미확인)
+      date: 2026-10-12
+      result: model/commands.js applyBatch, model/table.js, view/place.js, ui/table.js, app.applyBatch, 「노드 추가」 한 묶음 저장. tech-record 39절, decisions-pending 8절 T19-1~21, limits L-32~L-37
+      normal_checks: 통과 (단위 테스트 423 → 449. Chrome·Edge 브라우저 점검: 5행 붙여 넣기 → 한 번 저장(쓰기 2회 이하), 오류 행 사유 표시 후 고쳐 저장, 표로 고치기(수정 이력 전·후, 표에 없는 속성 유지), 긴 이름 8개 겹침 0. 스크린샷 Chrome-19a~c)
+      error_checks: 통과 (오류 행 3개 → 아무것도 저장 안 함, 101행 거부, 저장소 실패 흉내 → W-STORAGE·문서 그대로, 읽기 전용 거부, 이름 중복(표 안·기존), 모르는 유형, 칸 수 초과)
+      unverified: [사용자 화면 확인(표 대화상자), 실제 엑셀·구글 시트에서 복사한 글(합성 TSV로만 시험), 한글 IME 입력, 노드 300개 이상 유니버스에서 붙여 넣기 체감 속도]
+      decisions: T19-1~21(답이 없으면 값으로 구현). 승인 문서 문구 변경 후보: 02 D-19 "변환기" → "탭 구분 표 읽기"(tech-record 39절)
+      review: 하위 에이전트 코드 검토 1회(결함 6건 수정, 2건 한계로 남김 L-36·L-37)
+      package: release/업무유니버스-제출본-20261012.zip(제출 점검 9/9, 단위 테스트 449, 비밀값 0건). 점검 도구: Edge 재시작 연결 재시도·대기 추가, CHECK_LIVE=1 즉시 출력
     - id: REVIEW6-2026-10-05
       status: 여섯 번째 전체 검토(4범주: 화면·코드·문서·목적 적합성)와 "가"(바로 고칠 것) 전부, "나" 추천대로 처리. 사용자 확인 대기
       date: 2026-10-05

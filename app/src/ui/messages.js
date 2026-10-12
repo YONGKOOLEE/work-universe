@@ -65,11 +65,14 @@ export function messageFor(err, ctx = {}) {
     case 'E-REQUIRED':
       if (err.field === 'label' || err.field === 'name') return `${name(err.field)}${josa(name(err.field), '을/를')} 입력하세요(1~100자).`;
       if (err.field === 'note') return '메모 내용을 입력하세요.';
+      if (err.field === 'rows') return '저장할 행이 없습니다. 이름을 입력한 행이 하나 이상 있어야 합니다.';
+      if (err.field === 'core_type') return '유형을 고르세요.';
       return `${name(err.field)}${josa(name(err.field), '을/를')} 입력하거나 고르세요.`;
     case 'E-DUP':
       if (ctx.kind === 'edge') return '같은 연결이 이미 있습니다(같은 관계, 기간이 겹침). 기존 연결을 확인하세요.';
       if (err.field === 'name') return '같은 이름의 하위 유형이 이미 있습니다.';
       if (err.field === 'child_universe_id') return '이미 묶여 있는 유니버스입니다.';
+      if (err.with_row) return `${err.with_row}행과 같은 유형·이름입니다. 둘 중 하나를 고치세요.`;
       return '같은 노드가 이미 있습니다(같은 유형·이름, 또는 같은 사번). 기존 노드를 확인하세요.';
     case 'E-PAIR': {
       const base = ctx.relation && PAIR_TEXT[ctx.relation]
@@ -100,6 +103,12 @@ export function messageFor(err, ctx = {}) {
       if (err.field === 'period') return '기간을 확인하세요. 날짜는 YYYY-MM-DD(1900~2200년)이고, 끝은 시작보다 앞일 수 없습니다.';
       if (err.field === 'occurred_at') return '날짜를 확인하세요(YYYY-MM-DD, 1900~2200년의 실제 있는 날짜).';
       if (err.field === 'label') return '꼭지 이름은 유니버스 이름과 같아서 여기서 바꿀 수 없습니다.';
+      if (err.unknown_type) return `알 수 없는 유형 「${err.unknown_type}」입니다. 업무·사람·산출물·조직·주제 중 하나를 쓰세요.`;
+      if (err.cannot_change) return '유형은 바꿀 수 없습니다. 유형을 바꾸려면 새 노드로 추가하세요.';
+      if (err.extra_cells) return '머리글보다 칸이 많습니다. 탭이 더 들어갔는지 확인하세요.';
+      if (err.locked) return '이 노드의 속성 값에 「;」나 줄바꿈이 있어 표로 고칠 수 없습니다. 상세 패널의 「수정」에서 고치세요.';
+      if (err.format) return '속성은 「키=값; 키=값」 형식으로 쓰세요.';
+      if (err.too_many) return `한 번에 ${err.too_many}행까지 저장할 수 있습니다. 나누어 저장하세요.`;
       if (err.field === 'core_type') return ctx.kind === 'edge' ? '알 수 없는 관계입니다.' : '추가하거나 바꿀 수 없는 유형입니다.';
       if (err.field === 'emp_no') return '사번은 사람 노드에만 넣을 수 있습니다.';
       if (err.field === 'attrs') return '속성 값은 글자나 숫자만 넣을 수 있습니다.';

@@ -156,10 +156,25 @@
   .patterns > li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; gap: 6px; }
   .steps { display: grid; gap: 3px; font-size: 13px; color: var(--muted); padding-left: 0; }
   .steps .missed { color: var(--err); }
+  /* 표로 추가·고치기(T-19): 칸이 많아 가로로 스크롤 */
+  .batch-wrap { overflow-x: auto; margin: 6px 0; }
+  .batch-grid { min-width: 900px; }
+  .batch-grid [data-col=type] { min-width: 70px; } .batch-grid [data-col=label] { min-width: 170px; } .batch-grid [data-col=subtype] { min-width: 90px; } .batch-grid [data-col=description] { min-width: 200px; } .batch-grid [data-col=emp_no] { min-width: 80px; } .batch-grid [data-col=attrs] { min-width: 170px; }
+  .batch-grid th, .batch-grid td { text-align: left; vertical-align: top; }
+  .batch-grid input, .batch-grid textarea { width: 100%; box-sizing: border-box; font: inherit; }
+  .batch-grid textarea { resize: vertical; }
+  .batch-grid input.ro { opacity: .7; }
+  .batch-grid tr.row-error { background: rgba(255, 120, 120, .12); }
+  .batch-grid .row-msg-line td { color: var(--err); font-size: 13px; padding-bottom: 8px; }
   .dg-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 4px 0 10px; }
   .dg-table th, .dg-table td { border-bottom: 1px solid var(--line); padding: 4px 6px; text-align: right; }
   .dg-table th:first-child, .dg-table td:first-child { text-align: left; }
   .dg-table th:not(:first-child), .dg-table td:not(:first-child) { white-space: nowrap; width: 1%; }
+  .batch-grid th:not(:first-child), .batch-grid td:not(:first-child) { width: auto; white-space: normal; } /* 표 입력은 .dg-table의 1% 폭 규칙을 쓰지 않는다 */
+  .batch-grid th:first-child, .batch-grid td:first-child { width: 28px; }
+  .batch-grid .row-msg-line td:first-child { width: auto; }
+  .batch-grid th { text-align: left; }
+  .batch-grid [data-col=type] { min-width: 88px; }
   .chip.status-current { background: var(--accent); color: var(--accent-ink); }
   .chip.status-other { opacity: 0.75; }
   .timebar { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); flex-wrap: wrap; }
@@ -296,6 +311,7 @@
   </form>
 </dialog>
 <dialog id="import-dialog" class="wide" aria-labelledby="import-title"></dialog>
+<dialog id="table-dialog" class="wide" aria-labelledby="table-title"></dialog>
 <script src="app.js"></script>
 </body>
 </html>

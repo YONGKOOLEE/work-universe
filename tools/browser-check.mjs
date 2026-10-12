@@ -23,7 +23,7 @@ const NODES = SAMPLE_A1.nodes.length;
 const EDGES = SAMPLE_A1.edges.length;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function launch(exe, profileDir, port) {
+async function launch(exe, profileDir, port, retry = true) {
   const proc = spawn(exe, [
     '--headless=new',
     `--remote-debugging-port=${port}`,
@@ -37,7 +37,7 @@ async function launch(exe, profileDir, port) {
     '--window-size=1280,800',
     'about:blank',
   ], { stdio: 'ignore' });
-  for (let i = 0; i < 100; i += 1) {
+  for (let i = 0; i < 400; i += 1) { // 40초: Edge는 점검 직후 시작이 느릴 때가 있다
     try {
       const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
       const version = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
@@ -47,6 +47,11 @@ async function launch(exe, profileDir, port) {
     await sleep(100);
   }
   proc.kill();
+  // 같은 프로필을 닫자마자 다시 열면 이전 프로세스가 잠금을 쥔 채일 수 있다: 한 번 더 시도
+  if (retry) {
+    await sleep(4000);
+    return launch(exe, profileDir, port, false);
+  }
   throw new Error('DevTools 연결 실패');
 }
 
@@ -60,7 +65,7 @@ async function close(session) {
   } catch { /* 이미 닫힘 */ }
   const done = await Promise.race([exited.then(() => true), sleep(10000).then(() => false)]);
   if (!done) session.proc.kill();
-  await sleep(500); // 프로필 파일 잠금 해제 대기
+  await sleep(1500); // 프로필 파일 잠금 해제 대기
 }
 
 function connect(wsUrl) {
@@ -205,7 +210,7 @@ async function checkBrowser(browser, port) {
   const profile = join(tmp, browser.name.toLowerCase());
   await rm(profile, { recursive: true, force: true });
   const checks = [];
-  const check = (name, pass, detail = '') => checks.push({ name, pass: !!pass, detail });
+  const check = (name, pass, detail = '') => { checks.push({ name, pass: !!pass, detail }); if (process.env.CHECK_LIVE) console.log((pass ? 'PASS ' : 'FAIL ') + name + (pass ? '' : '  [' + detail + ']')); };
   const newLabel = `점검표 양식 ${Date.now() % 10000}`;
 
   // 1) 첫 실행: 표시 → 클릭 상세 → 추가 → 새로고침
@@ -1286,6 +1291,83 @@ async function checkBrowser(browser, port) {
   await sleep(250);
   const prevItem = await text(s.cdp, '[data-testid=draft-item-이전_인수인계]');
   check('확정한 인수인계가 다음 초안의 「이전 인수인계」에 인수인계서 근거와 함께 나옴', prevItem.includes('서하늘 → 윤바다') && prevItem.includes('대사 확인 인수인계서'), prevItem.slice(0, 160));
+  // ── T-19 표로 추가·고치기(R-18 ①~⑥, D-18): 붙여 넣기 → 한 번에 저장 → 오류 행 → 고치기 → 긴 이름 겹침 없음 ──
+  await evaluate(s.cdp, "window.confirm = () => true; window.__wu.select(null); document.querySelector('details.add').open = true");
+  const t19Paste = async (text) => evaluate(s.cdp, `(() => { const t = document.querySelector('[data-testid=table-paste]'); t.value = ${JSON.stringify(text)}; t.dispatchEvent(new Event('input')); document.querySelector('[data-testid=table-paste-apply]').click(); return document.querySelectorAll('[data-testid=table-grid] tbody tr:not(.row-msg-line)').length; })()`);
+  const t19Count = () => evaluate(s.cdp, 'window.__wu.doc.nodes.length');
+  const t19Events = () => evaluate(s.cdp, 'window.__wu.doc.events.length');
+  const t19n0 = await t19Count();
+  const t19e0 = await t19Events();
+  await clickTestId(s.cdp, 'btn-table-add');
+  await sleep(200);
+  check('R-18: 「표로 추가」 대화상자가 열리고 표(크기 있음)가 보임', await evaluate(s.cdp, "(() => { const d = document.getElementById('table-dialog'); const g = document.querySelector('[data-testid=table-grid]'); const r = g ? g.getBoundingClientRect() : null; return d.open && !!r && r.width > 300 && r.height > 20; })()"));
+  const rows5 = await t19Paste('유형\t이름\t설명\t속성\n업무\tT19 표 업무 1\t표로 넣은 첫 업무\t주기=월; 마감=5일\n업무\tT19 표 업무 2\t\t\n사람\tT19 가상 인물\t\t\n산출물\tT19 보고서\t\t\n조직\tT19 가상 조직\t\t');
+  check('R-18 ④: 스프레드시트 탭 구분 글을 붙여 넣으면 머리글을 인식해 5행으로 들어감', rows5 === 5 && (await text(s.cdp, '[data-testid=table-note]')).includes('머리글'), `${rows5}행`);
+  await shot(s.cdp, `${browser.name}-19a-table-add`);
+  await evaluate(s.cdp, "window.__t19w = 0; window.__t19orig = Storage.prototype.setItem; Storage.prototype.setItem = function (...a) { window.__t19w += 1; return window.__t19orig.apply(this, a); };");
+  await clickTestId(s.cdp, 'table-save');
+  await sleep(400);
+  const t19writes = await evaluate(s.cdp, 'window.__t19w');
+  await evaluate(s.cdp, 'Storage.prototype.setItem = window.__t19orig');
+  check('R-18 ①⑤: 저장 → 대화상자가 닫히고 노드 5개 추가, 이력 7건(생성 5+꼭지 연결 2), 저장소 쓰기 2회 이하(본문+목록)', !(await evaluate(s.cdp, "document.getElementById('table-dialog').open")) && (await t19Count()) === t19n0 + 5 && (await t19Events()) === t19e0 + 7 && t19writes >= 1 && t19writes <= 2, `노드 ${t19n0}→${await t19Count()}, 이력 ${t19e0}→${await t19Events()}, 쓰기 ${t19writes}`);
+  check('R-18 ①: 새 노드가 그래프에 보이고 마지막 새 노드가 선택됨', (await hasLabel(s.cdp, 'T19 가상 조직')) && (await hasLabel(s.cdp, 'T19 표 업무 1')) && (await evaluate(s.cdp, "(window.__wu.view.getNode(window.__wu.selected || '') || {}).label")) === 'T19 가상 조직');
+  check('R-18 ①: 안내 문구(추가·고침 개수)가 보임', (await text(s.cdp, '[data-testid=add-done]')).includes('5개를 추가하고 0개를 고쳤습니다'));
+
+  // ③ 오류 행: 한 행이라도 문제면 아무것도 저장하지 않고 그 행과 사유 표시, 고치면 전부 저장
+  const t19n1 = await t19Count();
+  const t19e1 = await t19Events();
+  await clickTestId(s.cdp, 'btn-table-add');
+  await sleep(150);
+  await t19Paste('업무\tT19 오류시험 가\n업무\t\n업무\tT19 표 업무 1\n없는유형\tT19 오류시험 다');
+  await clickTestId(s.cdp, 'table-save');
+  await sleep(300);
+  const t19err = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid^=table-msg-]')].map((e) => e.textContent)");
+  check('R-18 ③: 오류 행 3개(이름 빔·기존과 중복·모르는 유형)를 사유와 함께 표시하고 아무것도 저장하지 않음', (await t19Count()) === t19n1 && (await t19Events()) === t19e1 && t19err[0] === '' && t19err[1].includes('이름') && t19err[2].includes('같은 노드') && t19err[3].includes('알 수 없는 유형') && (await evaluate(s.cdp, "document.getElementById('table-dialog').open")), JSON.stringify(t19err));
+  check('R-18 ③: 「아무것도 저장하지 않았습니다」 안내', (await text(s.cdp, '[data-testid=table-message]')).includes('아무것도 저장하지 않았습니다'));
+  await shot(s.cdp, `${browser.name}-19b-table-error`);
+  await evaluate(s.cdp, "(() => { const set = (i, k, v) => { document.querySelector('[data-testid=table-' + k + '-' + i + ']').value = v; }; set(1, 'label', 'T19 오류시험 나'); set(2, 'label', 'T19 오류시험 둘'); set(3, 'type', '주제'); set(3, 'label', 'T19 오류시험 다'); })()");
+  await clickTestId(s.cdp, 'table-save');
+  await sleep(400);
+  check('R-18 ③: 고친 뒤 다시 저장하면 전부 저장됨(4개)', (await t19Count()) === t19n1 + 4 && !(await evaluate(s.cdp, "document.getElementById('table-dialog').open")), `${t19n1} → ${await t19Count()}`);
+
+  // ② 표로 고치기: 바꾼 행만 수정 이력(변경 전·후), 표에 없는 속성은 남음
+  const t19e2 = await t19Events();
+  await clickTestId(s.cdp, 'btn-table-edit');
+  await sleep(200);
+  const t19edit = await evaluate(s.cdp, `(() => {
+    const rows = [...document.querySelectorAll('[data-testid=table-grid] tbody tr:not(.row-msg-line)')];
+    const row = rows.find((r) => r.querySelector('[data-col=label]').value === 'T19 표 업무 1');
+    if (!row) return { missing: true, n: rows.length };
+    row.querySelector('[data-col=description]').value = '표에서 고친 설명';
+    row.querySelector('[data-col=attrs]').value = '마감=7일';
+    return { n: rows.length, typeReadonly: row.querySelector('[data-col=type]').readOnly };
+  })()`);
+  await clickTestId(s.cdp, 'table-save');
+  await sleep(400);
+  const t19node = await evaluate(s.cdp, "(() => { const n = window.__wu.doc.nodes.find((x) => x.label === 'T19 표 업무 1'); const ev = window.__wu.doc.events.filter((e) => e.type === 'updated' && e.payload.target_id === n.id).pop(); return { d: n.description, attrs: n.attrs, before: ev && ev.payload.before.description, after: ev && ev.payload.after.description }; })()");
+  check('R-18 ②: 표로 고치기 → 바꾼 행 하나만 수정 이력(전·후 값), 표에 없는 속성(주기)은 남고 유형 칸은 읽기 전용', !t19edit.missing && t19edit.typeReadonly && (await t19Events()) === t19e2 + 1 && t19node.d === '표에서 고친 설명' && t19node.attrs['주기'] === '월' && t19node.attrs['마감'] === '7일' && t19node.before === '표로 넣은 첫 업무' && t19node.after === '표에서 고친 설명', JSON.stringify({ t19edit, t19node }));
+
+  // B-P4 긴 이름 여러 개를 연달아 넣어도 서로·기존 노드와 이름이 겹치지 않는다
+  const longNames = Array.from({ length: 8 }, (_, i) => `T19 긴 이름 시험 카드사 가맹점 정산 대사 및 월말 마감 보고서 ${i + 1}`);
+  await clickTestId(s.cdp, 'btn-table-add');
+  await sleep(150);
+  await t19Paste(longNames.map((n) => `업무\t${n}`).join('\n'));
+  await clickTestId(s.cdp, 'table-save');
+  await sleep(500);
+  const overlap = await evaluate(s.cdp, `(() => {
+    const cy = window.__wu.cy;
+    const names = ${JSON.stringify(longNames)};
+    const boxes = names.map((n) => cy.nodes().filter((x) => x.data('label') === n)).map((c) => c.boundingBox({ includeLabels: true }));
+    const hit = (a, b) => a.x1 < b.x2 && a.x2 > b.x1 && a.y1 < b.y2 && a.y2 > b.y1;
+    let pairs = 0;
+    for (let i = 0; i < boxes.length; i += 1) for (let j = i + 1; j < boxes.length; j += 1) if (hit(boxes[i], boxes[j])) pairs += 1;
+    const others = cy.nodes().filter((x) => !names.includes(x.data('label')));
+    let withOthers = 0;
+    for (const b of boxes) for (const o of others) { const p = o.position(); const r = 12; if (b.x1 < p.x + r && b.x2 > p.x - r && b.y1 < p.y + r && b.y2 > p.y - r) withOthers += 1; }
+    return { pairs, withOthers, n: boxes.length };
+  })()`);
+  check('B-P4: 긴 이름 노드 8개를 한 번에 넣어도 서로 이름이 겹치지 않고 기존 노드 위에도 놓이지 않음', overlap.n === 8 && overlap.pairs === 0 && overlap.withOthers === 0, JSON.stringify(overlap));
+  await shot(s.cdp, `${browser.name}-19c-long-names`);
   const errors2 = [...s.log.errors];
   const external2 = [...s.log.external];
   s.cdp.close();

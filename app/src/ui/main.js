@@ -23,6 +23,7 @@ import { personLoad, repeatPatternsFor, workLoad } from '../rules/insight.js';
 import { monthAsOf, timeMonths } from '../rules/flow.js';
 import { josa, messageFor } from './messages.js';
 import { exportFileName, importDialog } from './import.js';
+import { tableDialog } from './table.js';
 import { convertDocument } from '../rules/doc-convert.js';
 import { convertDocumentWith } from '../llm/connector.js';
 import { DOC_EXAMPLE } from '../../data/doc-example.js';
@@ -824,6 +825,17 @@ function start() {
 
   wireCreateDialog(app, $);
 
+  // 표로 추가·고치기(T-19): 한 번의 묶음 저장. 끝나면 마지막 새 노드를 고른다
+  const openTable = tableDialog({
+    dialog: $('table-dialog'),
+    app,
+    onSaved: (r) => {
+      const last = r.created[r.created.length - 1] || r.updated[r.updated.length - 1];
+      afterSave(r, last ? toGid(currentId(), last.id) : selected);
+      renderAddForm(`표에서 ${r.created.length}개를 추가하고 ${r.updated.length}개를 고쳤습니다.`);
+    },
+  });
+
   // 노드 추가(R-02 ①): 저장하면 바로 그래프에 나타나고 선택된다
   function renderAddForm(doneText) {
     const slot = $('add-slot');
@@ -835,6 +847,9 @@ function start() {
     }
     slot.replaceChildren(
       ...(doneText ? [el('p', { class: 'ok-text', 'data-testid': 'add-done' }, doneText)] : []),
+      el('div', { class: 'row' },
+        el('button', { type: 'button', 'data-testid': 'btn-table-add', title: '스프레드시트에서 복사한 표를 붙여 넣거나 칸에 써서 노드 여러 개를 한 번에 추가합니다', onclick: () => openTable('add') }, '표로 추가'),
+        el('button', { type: 'button', 'data-testid': 'btn-table-edit', title: '지금 유니버스의 노드를 표로 펼쳐 한꺼번에 고칩니다', onclick: () => openTable('edit') }, '표로 고치기')),
       nodeForm({
         mode: 'add',
         subtypes: app.subtypes(),
@@ -842,12 +857,13 @@ function start() {
         onFocusLocal: (id) => focus(toGid(currentId(), id)),
         onSubmit: (values) => {
           const { attach_root: attachRoot, ...input } = values;
-          const r = app.addNode(input);
-          if (!r.ok) return r;
-          // 꼭지에 바로 연결(포함). 꼭지 → 꼭지 외 모든 노드는 항상 허용되는 조합이다
-          if (attachRoot) app.addEdge({ source: app.doc.universe.root_node_id, target: r.node.id, core_type: 'contains' });
-          afterSave(r, toGid(currentId(), r.node.id));
-          renderAddForm(`추가했습니다: ${r.node.label}${r.warnings.map((w) => ` ${messageFor(w)}`).join('')}`);
+          // 노드와 꼭지 연결(포함)을 한 묶음으로 저장한다(D-18): 연결만 실패해 노드만 남는 일이 없다
+          const b = app.applyBatch([{ op: 'addNode', input, attachRoot: !!attachRoot }]);
+          if (!b.ok) return b.errors && b.errors.length ? { ok: false, error: b.errors[0].error } : b;
+          const node = b.created[0];
+          const r = { ...b, node };
+          afterSave(r, toGid(currentId(), node.id));
+          renderAddForm(`추가했습니다: ${node.label}${b.warnings.map((w) => ` ${messageFor(w)}`).join('')}`);
           return r;
         },
       }),

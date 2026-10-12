@@ -4,6 +4,7 @@
 
 import { findDuplicateEdge, findDuplicateNode, isDate, periodError, subtypeRegistered } from './checks.js';
 import {
+  BATCH_MAX_ROWS,
   CODES,
   EDGE_TYPES,
   ID_PREFIX,
@@ -455,4 +456,94 @@ export function decideIdentity(doc, input, ctx) {
   const link = { id: uniqueId(ID_PREFIX.identity, new Set(links.map((l) => l.id)), ctx.random || Math.random), a, b, ...fields };
   const event = makeEvent(doc, 'created', { target_kind: 'identity_link', target_id: link.id }, ctx);
   return { ok: true, doc: { ...doc, identity_links: [...links, link], events: [...doc.events, event] }, event, link };
+}
+
+// ── 일괄 명령(T-19, D-18) ──────────────────────────────────────────────────
+
+/**
+ * 노드 추가·수정 명령 여러 개를 차례로 적용한다. 전부 아니면 전무: 하나라도 실패하면 원래 문서를 그대로 두고
+ * 실패한 행을 모두 돌려준다(고칠 곳을 한꺼번에 보이려고 실패한 행은 건너뛰고 끝까지 검사한다).
+ * 같은 묶음 안의 앞 행은 뒤 행의 중복 검사에 반영된다(표 안 같은 이름 → E-DUP, with_row로 앞 행 번호).
+ * @param {object} doc
+ * @param {Array<
+ *   {op:'addNode', row?:number, input:object, attachRoot?:boolean} |
+ *   {op:'updateNode', row?:number, id:string, changes:object} |
+ *   {op:'invalid', row?:number, error:{code:string}}
+ * >} ops row는 화면의 행 번호(없으면 1부터 순서)
+ * @param {{now:string, random?:()=>number, source?:string, occurred_at?:string}} ctx
+ * @returns {{ok:true, doc:object, events:object[], created:object[], updated:object[], warnings:object[], rows:object[]}
+ *   | {ok:false, doc:object, errors:{row:number, error:object}[], error:object}}
+ */
+export function applyBatch(doc, ops, ctx) {
+  if (!Array.isArray(ops) || ops.length === 0) {
+    const error = { code: CODES.REQUIRED, field: 'rows' };
+    return { ok: false, doc, errors: [], error };
+  }
+  if (ops.length > BATCH_MAX_ROWS) {
+    const error = { code: CODES.SCHEMA, field: 'rows', too_many: BATCH_MAX_ROWS };
+    return { ok: false, doc, errors: [], error };
+  }
+  const rootId = doc.universe.root_node_id;
+  let work = doc;
+  const events = [];
+  const created = [];
+  const updated = [];
+  const warnings = [];
+  const errors = [];
+  const rows = [];
+  const createdRow = new Map(); // 묶음 안에서 만든 노드 id → 행 번호
+
+  ops.forEach((op, i) => {
+    const row = op.row ?? i + 1;
+    if (op.op === 'invalid') {
+      errors.push({ row, error: op.error });
+      return;
+    }
+    if (op.op === 'addNode') {
+      const r = addNode(work, op.input, ctx);
+      if (!r.ok) {
+        const error = { ...r.error };
+        if (error.existing_id && createdRow.has(error.existing_id)) error.with_row = createdRow.get(error.existing_id);
+        errors.push({ row, error });
+        return;
+      }
+      let next = r.doc;
+      const evs = [r.event];
+      if (op.attachRoot) {
+        const e = addEdge(next, { source: rootId, target: r.node.id, core_type: 'contains' }, ctx);
+        if (!e.ok) {
+          errors.push({ row, error: e.error });
+          return;
+        }
+        next = e.doc;
+        evs.push(e.event);
+      }
+      work = next;
+      events.push(...evs);
+      created.push(r.node);
+      warnings.push(...r.warnings);
+      createdRow.set(r.node.id, row);
+      rows.push({ row, kind: 'created', node: r.node });
+      return;
+    }
+    if (op.op === 'updateNode') {
+      const r = updateNode(work, op.id, op.changes, ctx);
+      if (!r.ok) {
+        errors.push({ row, error: r.error });
+        return;
+      }
+      work = r.doc;
+      if (r.event) {
+        events.push(r.event);
+        updated.push(r.node);
+        warnings.push(...r.warnings);
+      }
+      rows.push({ row, kind: r.event ? 'updated' : 'unchanged', node: r.node });
+      return;
+    }
+    errors.push({ row, error: { code: CODES.SCHEMA, field: 'op' } });
+  });
+
+  if (errors.length) return { ok: false, doc, errors, error: errors[0].error };
+  return { ok: true, doc: work, events, created, updated, warnings, rows };
 }

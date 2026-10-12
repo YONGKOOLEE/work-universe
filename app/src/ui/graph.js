@@ -4,6 +4,7 @@
 import cytoscape from 'cytoscape';
 import { NODE_TYPES, UNKNOWN_TYPE_LABEL } from '../model/schema.js';
 import { hasLongWord } from '../view/describe.js';
+import { labelBox, placeNewNodes } from '../view/place.js';
 import { EXPLORE } from './explore.js';
 
 // 노드 유형별 색(어두운 배경용 파스텔). 범례도 이 표를 쓴다
@@ -403,20 +404,25 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
       if (before.size === 0) {
         layout();
       } else {
-        const box = cy.nodes().filter((n) => before.has(n.id())).boundingBox();
-        let slot = 0;
+        // 새 노드는 이웃 둘레의 빈자리에, 이름 크기를 반영해 겹치지 않게 놓는다(T-19 B-P4, view/place.js)
+        const box = (n, pos) => {
+          const b = labelBox(n.data('label'), n.data('size'));
+          return { x1: pos.x - b.w / 2, x2: pos.x + b.w / 2, y1: pos.y - b.size / 2, y2: pos.y - b.size / 2 + b.h };
+        };
+        const existing = [];
+        const fresh = [];
         cy.nodes().forEach((n) => {
-          if (before.has(n.id())) return n.position(before.get(n.id()));
-          const placed = n.neighborhood('node').filter((m) => before.has(m.id()));
-          if (placed.nonempty()) {
-            const p = before.get(placed[0].id());
-            n.position({ x: p.x + 90, y: p.y + 60 + slot * 40 });
-          } else {
-            n.position({ x: box.x2 + 80, y: box.y1 + 40 + slot * 70 });
+          if (before.has(n.id())) {
+            n.position(before.get(n.id()));
+            existing.push(box(n, before.get(n.id())));
+            return;
           }
-          slot += 1;
+          const placed = n.neighborhood('node').filter((m) => before.has(m.id()));
+          fresh.push({ n, item: { id: n.id(), label: n.data('label'), size: n.data('size'), anchor: placed.nonempty() ? before.get(placed[0].id()) : null } });
         });
-        if (slot > 0) fitTo(undefined, 40);
+        const spots = placeNewNodes(existing, fresh.map((f) => f.item));
+        fresh.forEach(({ n }) => n.position(spots.get(n.id())));
+        if (fresh.length > 0) fitTo(undefined, 40);
       }
       applyTimeOff();
       lastDisplay = display;

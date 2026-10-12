@@ -181,3 +181,6 @@ export function allowedRelations(aType, bType) {
 export function eventTypeLabel(type) {
   return EVENT_TYPES[type] || UNKNOWN_TYPE_LABEL;
 }
+
+// 표 입력(T-19, D-18)에서 한 번에 처리하는 행 수 상한(T19-11). 바꾸려면 여기 한 곳만 고친다
+export const BATCH_MAX_ROWS = 100;
