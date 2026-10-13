@@ -127,7 +127,8 @@ export const EVENT_PAYLOAD = {
     eventRefs: ['previous_handover_id'],
   },
   affiliation_change: { required: ['person_id'], nodeRefs: ['person_id', 'from_org_id', 'to_org_id'] },
-  memo: { nodeRefs: ['target_id'], nodeListRefs: ['topic_ids'] },
+  // resolves_id(선택, C12-8): 「해결로 표시」로 만든 해결됨 메모가 닫는 메모 하나. 같은 문서의 메모 이벤트 ID
+  memo: { nodeRefs: ['target_id'], nodeListRefs: ['topic_ids'], eventRefs: ['resolves_id'] },
 };
 
 // topic은 CR-4(제안): 유니버스 사이 공유 주제를 잇는다. 사람 확인만 허용

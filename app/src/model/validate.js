@@ -207,6 +207,12 @@ export function eventPayloadErrors(doc, nodesById, edgeIds, ev) {
   if (ev.type === 'memo' && payload.category !== undefined && !MEMO_CATEGORIES[payload.category]) {
     out.push({ code: CODES.SCHEMA, field: 'category' });
   }
+  // C12-8: 해결한 메모 하나를 가리킨다. 해결됨 메모에만, 같은 문서의 메모 이벤트만(전역 참조는 쓰지 않는다)
+  if (ev.type === 'memo' && payload.resolves_id !== undefined) {
+    const target = typeof payload.resolves_id === 'string' && !isGlobalRef(payload.resolves_id)
+      ? doc.events.find((x) => isObject(x) && x.id === payload.resolves_id) : null;
+    if (payload.category !== 'resolved' || !target || target.type !== 'memo' || target.id === ev.id) out.push({ code: CODES.SCHEMA, field: 'resolves_id' });
+  }
   if (ev.type === 'created' || ev.type === 'hidden' || ev.type === 'updated') {
     // ref: 꼭지 참조의 추가·해제(CR-4). target_id는 하위 유니버스 ID
     // identity_link: 동일성 연결 판정(T-10, 12.7 흐름 3의 "이벤트를 기록한다". 12.2 표에 반영됨(CR-7))

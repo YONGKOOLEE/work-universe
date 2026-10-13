@@ -3,9 +3,10 @@
 //
 // 닫힘 규칙: 메모 범주가 진행 중인 메모는, 같은 대상(대상이 없으면 단 주제 집합이 같은 것)에 이력 순서상 뒤에
 // 범주 「해결됨」 메모가 있으면 닫힌 것이다. 같은 날짜면 기록 순서로 본다(tech-record 14절).
+// 단, 해결됨 메모에 resolves_id(C12-8, 「해결로 표시」가 남김)가 있으면 그 메모 하나만 닫는다 — 한 업무의 미해결 여러 건을 따로 닫기 위해서다.
 // 범주 「이슈」는 초안에서는 「최근 이슈」로 따로 보이고 닫힘 판정을 받지 않지만, 미해결 목록에서는 같은 규칙으로 닫는다(C12-1).
 
-import { refGid } from '../view/view.js';
+import { refGid, toGid } from '../view/view.js';
 import { memoCategoryOf } from '../model/schema.js';
 
 /** 미해결 목록에 오르는 범주(이슈, 진행 중) */
@@ -33,11 +34,20 @@ export function openMemos(view, { memos = null, categories = OPEN_CATEGORIES } =
     .filter((ev) => {
       const k = memoKey(view, ev);
       const at = order.get(ev);
-      return !resolved.some((r) => memoKey(view, r) === k && order.get(r) > at);
+      return !resolved.some((r) => {
+        if (!(order.get(r) > at)) return false;
+        const target = r.payload.resolves_id;
+        // 지정한 해결: 같은 유니버스의 그 메모만
+        if (target) return toGid(r.universe_id, target) === ev.gid;
+        return memoKey(view, r) === k;
+      });
     });
 }
 
 const SUMMARY_MAX = 40;
+
+// 뷰의 이벤트는 전역 참조(gid = 유니버스/ID)를 가진다. 해결 메모는 그 메모가 있는 유니버스 문서에 저장하므로 로컬 ID를 쓴다
+const localId = (ev) => ev.id || String(ev.gid).split('/').pop();
 
 /**
  * 「해결로 표시」로 추가할 새 메모의 입력. 같은 대상·같은 주제, 범주 resolved.
@@ -46,7 +56,7 @@ const SUMMARY_MAX = 40;
 export function resolveMemoInput(ev, today) {
   const note = String(ev.note || '').trim();
   const head = note.length > SUMMARY_MAX ? `${note.slice(0, SUMMARY_MAX)}…` : note;
-  const payload = { category: 'resolved' };
+  const payload = { category: 'resolved', resolves_id: localId(ev) };
   if (ev.payload.target_id) payload.target_id = ev.payload.target_id;
   if (ev.payload.topic_ids && ev.payload.topic_ids.length) payload.topic_ids = [...ev.payload.topic_ids];
   return {

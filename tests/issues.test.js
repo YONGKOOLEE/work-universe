@@ -99,7 +99,10 @@ test('해결로 표시: 새 해결됨 메모가 하나 생기고 목록에서 �
   assert.deepEqual(app.doc.events.find((e) => e.id === 'E-014'), original);
   const rest = ids(openMemos(app.view));
   assert.ok(!rest.includes('E-014'));
-  assert.ok(!rest.includes('E-006')); // 같은 대상(N-001)의 앞선 이슈도 같은 해결됨으로 닫힌다
+  // C12-8(사용자 승인 2026-10-13): 「해결로 표시」는 그 메모 하나만 닫는다(resolves_id). 같은 대상(N-001)의 앞선 이슈 E-006은 열린 채로 남는다
+  // (이전 판의 단언 "E-006도 닫힌다"는 이 요구사항 변경으로 뒤집었다)
+  assert.ok(rest.includes('E-006'));
+  assert.equal(added.payload.resolves_id, 'E-014');
   assert.ok(rest.includes('E-015') && rest.includes('E-012'));
 });
 
@@ -157,4 +160,46 @@ test('저장소 쓰기 실패를 흉내 내면 W-STORAGE이고 문서·목록은
 test('미해결 없음 → 0건', () => {
   const v = buildView({ ...SAMPLE_A1, events: SAMPLE_A1.events.filter((e) => e.type !== 'memo') });
   assert.deepEqual(openMemos(v), []);
+});
+
+// ── C12-8: 해결 메모가 가리킨 메모 하나만 닫는다 ──
+test('C12-8: 같은 업무의 미해결 두 건 중 하나만 해결로 표시하면 다른 하나는 남고, 그다음 나머지도 따로 닫을 수 있다', () => {
+  const app = open('U-A1');
+  assert.equal(app.resolveMemo('U-A1/E-006', '2026-10-02').ok, true);
+  let rest = ids(openMemos(app.view));
+  assert.ok(!rest.includes('E-006'));
+  assert.ok(rest.includes('E-014'));
+  assert.equal(app.resolveMemo('U-A1/E-014', '2026-10-02').ok, true);
+  rest = ids(openMemos(app.view));
+  assert.ok(!rest.includes('E-014'));
+});
+
+test('C12-8: resolves_id가 없는 해결됨 메모(이력 추가로 직접 쓴 것·샘플)는 지금 규칙대로 같은 대상의 앞선 메모를 닫는다', () => {
+  const ctx = { now: '2026-10-02T09:00:00+09:00' };
+  const doc = JSON.parse(JSON.stringify(SAMPLE_A1));
+  const r = addEvent(doc, { type: 'memo', occurred_at: '2026-10-02', payload: { target_id: 'N-001', topic_ids: ['N-030'], category: 'resolved' }, note: '모두 해결' }, ctx);
+  assert.equal(r.ok, true);
+  const view = buildView(r.doc, () => null);
+  const rest = ids(openMemos(view));
+  assert.ok(!rest.includes('E-014') && !rest.includes('E-006'));
+});
+
+test('C12-8: resolves_id 검증 — 없는 이벤트, 메모가 아닌 이벤트, 해결됨이 아닌 범주는 거부', () => {
+  const ctx = { now: '2026-10-02T09:00:00+09:00' };
+  const doc = JSON.parse(JSON.stringify(SAMPLE_A1));
+  const memo = (payload) => addEvent(doc, { type: 'memo', occurred_at: '2026-10-02', payload: { target_id: 'N-001', ...payload }, note: 'x' }, ctx);
+  assert.equal(memo({ category: 'resolved', resolves_id: 'E-999' }).ok, false);
+  assert.equal(memo({ category: 'resolved', resolves_id: 'E-002' }).ok, false); // 인수인계 이벤트
+  assert.equal(memo({ category: 'issue', resolves_id: 'E-014' }).ok, false);
+  assert.equal(memo({ category: 'resolved', resolves_id: 'E-014' }).ok, true);
+});
+
+test('C12-8: 초안의 「진행 중」도 같은 규칙 — E-014만 해결하면 초안의 진행 중에서 E-014만 빠진다', () => {
+  const app = open('U-A1');
+  const before = buildHandoverDraft(app.view, { target: 'U-A1/N-001', from: 'U-A1/N-012', to: 'U-A1/N-010', asOf: '2026-10-02' });
+  assert.equal(app.resolveMemo('U-A1/E-014', '2026-10-02').ok, true);
+  const after = buildHandoverDraft(app.view, { target: 'U-A1/N-001', from: 'U-A1/N-012', to: 'U-A1/N-010', asOf: '2026-10-02' });
+  const evs = (r) => (r.draft.items.find((i) => i.key === '진행_중')?.sentences || []).flatMap((x) => x.evidence_ids);
+  assert.ok(evs(before).includes('U-A1/E-014'));
+  assert.ok(!evs(after).includes('U-A1/E-014'));
 });
