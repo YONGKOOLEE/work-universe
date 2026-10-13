@@ -11,6 +11,7 @@ import { buildView, refGid, toGid } from '../view/view.js';
 // 확정한 인수인계서에 남기는 초안 생성 방식의 표시 이름(llm/connector.js METHOD_LABELS의 짧은 꼴)
 const METHOD_NAMES = { rule: '규칙 기반', pregen: '사전 생성', llm: 'LLM' };
 import { scopeWorks } from '../rules/handover.js';
+import { openMemos, resolveMemoInput } from '../rules/issues.js';
 import { mergePlan } from '../merge/merge.js';
 import { previewImport } from '../model/import.js';
 import { formReport } from '../rules/form.js';
@@ -208,6 +209,29 @@ export function createApp({ store, samples, currentId, now }) {
       // 담당 시작·종료는 수행 연결과 함께 한 번에 저장한다(담당 이력과 그래프가 따로 놀지 않게)
       const isAssign = input && (input.type === 'assign_start' || input.type === 'assign_end');
       return guard() || commit(isAssign ? addAssignment(doc, input, { now: now() }) : addEvent(doc, input, { now: now() }));
+    },
+
+    /**
+     * 「해결로 표시」(R-20, D-22): 미해결 메모와 같은 대상·주제로 범주 resolved인 새 메모를 이력에 추가한다. 원래 메모는 그대로.
+     * 묶음 화면의 하위 유니버스 메모면 그 메모가 있는 유니버스 문서에 저장한다.
+     * 이미 닫힌 메모(또는 없는 메모)면 아무것도 추가하지 않고 {ok:false, error:{code:'E-SCHEMA', field:'event', already_resolved:true}}.
+     */
+    resolveMemo(eventGid, today) {
+      if (guard()) return guard();
+      const v = buildView(doc, resolve);
+      const ev = v.events.find((x) => x.gid === eventGid && x.type === 'memo');
+      if (!ev || !openMemos(v).includes(ev)) return { ok: false, error: { code: CODES.SCHEMA, field: 'event', already_resolved: true } };
+      const input = resolveMemoInput(ev, today);
+      if (ev.universe_id === doc.universe.id) return commit(addEvent(doc, input, { now: now() }));
+      const other = db.loadUniverse(ev.universe_id);
+      if (!other) return { ok: false, error: { code: CODES.SCHEMA, field: 'universe_id' } };
+      if (validateDocument(other).readOnly) return { ok: false, error: { code: CODES.SCHEMA, reason: 'version' } };
+      const result = addEvent(other, input, { now: now() });
+      if (result.ok) {
+        const failed = save(result.doc);
+        if (failed) return failed;
+      }
+      return result;
     },
 
     // 노드 수정. 다른 유니버스의 노드면 그 유니버스 문서를 고친다(예: 위로 드러내기)

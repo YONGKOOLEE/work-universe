@@ -8,6 +8,7 @@
 import { displayName, periodText } from '../view/describe.js';
 import { parseGid, refGid } from '../view/view.js';
 import { CODES, DRAFT_TARGET_TYPES, memoCategoryOf } from '../model/schema.js';
+import { memoTarget, openMemos } from './issues.js';
 
 export const HANDOVER_ITEMS = [
   { key: '업무_개요', title: '업무 개요' },
@@ -53,6 +54,28 @@ function scopeOf(view, targetGid) {
     }
   }
   return { start, works, workIds: new Set(works.map((w) => w.gid)) };
+}
+
+/**
+ * 메모 범위: 범위 업무(또는 대상)를 가리키거나 그 업무와 관련된 주제를 단 메모. 주제는 여러 업무가 함께 쓰므로
+ * 범위 업무가 속한 유니버스의 메모만 쓴다(다른 업무의 이슈가 섞이지 않게). 초안과 미해결 목록이 함께 쓴다.
+ */
+function memoScope(view, { start, works, workIds }) {
+  const edgesFrom = (gid, type) => view.edges.filter((e) => live(e) && e.core_type === type && e.source === gid);
+  const related = new Set([start.gid, ...workIds]);
+  for (const w of works) for (const e of edgesFrom(w.gid, 'relates_to')) related.add(e.target);
+  // 사람이 확인해 합친 노드는 합쳐진 쪽 유니버스의 메모도 범위에 든다(대표 노드의 유니버스만 보면 빠짐)
+  const universeOf = (g) => parseGid(g).universe_id;
+  const scopeUniverses = new Set([start, ...works].flatMap((n) => [n.universe_id, ...(n.merged_from || []).map(universeOf)]));
+  const memos = view.events.filter((ev) => ev.type === 'memo' && scopeUniverses.has(ev.universe_id) && ev.node_gids.some((g) => related.has(g)));
+  return { memos, related };
+}
+
+/** 대상(업무 또는 꼭지) 범위의 미해결 메모 — 초안의 「진행 중」과 같은 판정에 이슈 범주를 더한 목록(R-20) */
+export function openMemosOf(view, targetGid) {
+  const node = view.getNode(targetGid);
+  if (!node) return [];
+  return openMemos(view, { memos: memoScope(view, scopeOf(view, node.gid)).memos });
 }
 
 /** 초안 대상의 범위 업무(전역 참조). 유사 경험자 계산의 기준이 된다 */
@@ -146,14 +169,9 @@ export function buildHandoverDraft(view, input) {
 
   // 메모 범위: 범위 업무(또는 대상)를 가리키거나 그 업무와 관련된 주제를 단 메모. 주제는 여러 업무가 함께 쓰므로
   // 범위 업무가 속한 유니버스의 메모만 쓴다(다른 업무의 이슈가 섞이지 않게)
-  const related = new Set([start.gid, ...workIds]);
-  for (const w of works) for (const e of edgesFrom(w.gid, 'relates_to')) related.add(e.target);
-  // 사람이 확인해 합친 노드는 합쳐진 쪽 유니버스의 메모도 범위에 든다(대표 노드의 유니버스만 보면 빠짐)
-  const universeOf = (g) => parseGid(g).universe_id;
-  const scopeUniverses = new Set([start, ...works].flatMap((n) => [n.universe_id, ...(n.merged_from || []).map(universeOf)]));
-  const memos = view.events.filter((ev) => ev.type === 'memo' && scopeUniverses.has(ev.universe_id) && ev.node_gids.some((g) => related.has(g)));
+  const { memos, related } = memoScope(view, { start, works, workIds });
   // 메모의 대상(전역 참조). 대상이 범위 업무가 아니면(주제를 공유한 다른 업무의 메모) 문장에 그 업무 이름을 붙인다(검토5 I-9)
-  const canonTarget = (ev) => (ev.payload.target_id ? view.canonical(refGid(ev.universe_id, ev.payload.target_id)) : null);
+  const canonTarget = (ev) => memoTarget(view, ev);
   const memoSentence = (ev) => {
     const t = canonTarget(ev);
     const outside = t && !related.has(t) && view.getNode(t);
@@ -169,16 +187,8 @@ export function buildHandoverDraft(view, input) {
 
   // 5) 진행 중인 일: 범주가 진행 중인 메모 중, 같은 대상에 이후 "해결됨" 메모가 없는 것.
   //    대상이 없는 메모는 단 주제 집합이 같은 "해결됨"으로 닫는다(검토5 I-10)
-  const memoKey = (ev) => canonTarget(ev) || `topics:${[...ev.node_gids].sort().join(',')}`;
-  const resolved = ofCategory('resolved');
-  items.진행_중 = ofCategory('in_progress')
-    .filter((ev) => {
-      const k = memoKey(ev);
-      // "이후"는 이력 정렬 순서로 본다(같은 날짜면 기록 순서, tech-record 14절)
-      const at = view.events.indexOf(ev);
-      return !resolved.some((r) => memoKey(r) === k && view.events.indexOf(r) > at);
-    })
-    .map(memoSentence);
+  //    판정은 미해결 이슈 목록(R-20)과 같은 함수를 쓴다(rules/issues.js)
+  items.진행_중 = openMemos(view, { memos, categories: ['in_progress'] }).map(memoSentence);
 
   // 6) 산출물·문서 위치: 범위 업무의 산출 연결. 근거는 산출물 노드. 위치 속성이 있으면 붙인다
   items.산출물_문서 = ordered.flatMap((w) =>

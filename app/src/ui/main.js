@@ -19,6 +19,7 @@ import { renderNodeDetail, renderUniverseSummary } from './detail.js';
 import { edgeEditForm, edgeForm, eventForm, nodeForm } from './editor.js';
 import { draftPanel } from './draft.js';
 import { currentDenseN, insightPanel } from './insight.js';
+import { issueEntry, issuePanel } from './issues.js';
 import { nowIso, todayLocal } from './time.js';
 import { personLoad, repeatPatternsFor, workLoad } from '../rules/insight.js';
 import { monthAsOf, timeMonths } from '../rules/flow.js';
@@ -145,6 +146,7 @@ function start() {
   let editing = null; // 편집 중인 양식: {kind:'node'|'edge'|'event'|'edge-edit', edgeId?}
   let drafting = null; // 인수인계 초안 화면: {target}
   let insight = null; // 인사이트 화면: {work, kind}
+  let issues = null; // 미해결 이슈 목록 화면(R-20): {target}
   let viewDate = null; // 시간 슬라이더로 고른 기준일(YYYY-MM-DD). null이면 오늘
   let settingsOpen = false;
   let merging = false; // 통합 확인 목록(T-10)
@@ -262,8 +264,26 @@ function start() {
     merging = false;
     editing = null;
     insight = null;
+    issues = null;
     drafting = { target: targetGid };
     renderPanel();
+  }
+
+  function openIssues(targetGid) {
+    settingsOpen = false;
+    merging = false;
+    editing = null;
+    drafting = null;
+    insight = null;
+    issues = { target: targetGid };
+    renderPanel();
+  }
+
+  // 미해결 n건(R-20): 업무 상세에서는 그 업무 범위, 유니버스 개요에서는 화면에 모인 모든 메모
+  function issueNote(gid) {
+    const node = view.getNode(gid);
+    if (!node || node.hidden || node.core_type !== 'work') return null;
+    return issueEntry(view, node.gid, { onOpen: () => openIssues(node.gid) });
   }
 
   function openInsight(workGid, kind = 'similar') {
@@ -271,6 +291,7 @@ function start() {
     merging = false;
     editing = null;
     drafting = null;
+    issues = null;
     insight = { work: workGid, kind };
     renderPanel();
   }
@@ -333,7 +354,7 @@ function start() {
     if (!plan) return null;
     return el('p', { class: plan.counts.pending ? 'notice' : 'muted small', 'data-testid': 'merge-hint' },
       plan.counts.pending ? `통합 확인 대기 ${plan.counts.pending}건(사람 ${plan.counts.persons}, 업무 후보 ${plan.counts.works}) ` : '통합 확인할 항목이 없습니다. ',
-      el('button', { type: 'button', class: 'link', 'data-testid': 'btn-merge', onclick: () => { merging = true; insight = null; drafting = null; editing = null; settingsOpen = false; renderPanel(); } }, '통합 확인 목록'));
+      el('button', { type: 'button', class: 'link', 'data-testid': 'btn-merge', onclick: () => { merging = true; insight = null; issues = null; drafting = null; editing = null; settingsOpen = false; renderPanel(); } }, '통합 확인 목록'));
   }
 
   // 어느 노드를 골랐든 전체 인사이트로 갈 수 있게(검토5 U-2: 시작 화면 3단계가 노드 선택 상태에서 끊기지 않도록)
@@ -494,6 +515,20 @@ function start() {
       }
       merging = false;
     }
+    if (issues) {
+      panel.replaceChildren(issuePanel({
+        view, targetGid: issues.target, rootGid: app.rootGid(), universeId: app.doc.universe.id, readOnly: app.readOnly,
+        onFocus: showInGraph,
+        onClose: () => { issues = null; renderPanel(); graph.highlight(selected); },
+        // 해결 표시는 메모가 있는 유니버스 문서에 저장한다(묶음 화면의 하위 유니버스 메모 포함). 이미 닫힌 메모면 아무것도 더하지 않는다
+        onResolve: (gid) => {
+          const r = app.resolveMemo(gid, todayLocal());
+          if (r.ok || (r.error && r.error.already_resolved)) refresh();
+          return r;
+        },
+      }));
+      return;
+    }
     if (insight) {
       panel.replaceChildren(insightPanel({ view, provider, work: insight.work, kind: insight.kind, asOf: asOf(), today: todayLocal(), onTime: setViewDate, onKind: (k) => { insight.kind = k; }, onWork: (w) => { insight.work = w; }, onFocus: showInGraph, onClose: () => { insight = null; renderPanel(); graph.highlight(selected); } }));
       return;
@@ -523,7 +558,7 @@ function start() {
       // 꼭지만 있으면 「노드 추가」를 펼쳐 둔다(검토5 U-5). 안내 문구(detail.js)와 같은 기준: 하위 유니버스를 묶은 화면은 노드가 있으므로 건드리지 않는다
       if (summary.node_total <= 1 && !app.readOnly) document.querySelector('details.add').open = true;
       const rootGid = app.rootGid();
-      panel.append(...[el('div', { class: 'row' },
+      panel.append(...[issueEntry(view, app.rootGid(), { rootGid: app.rootGid(), onOpen: () => openIssues(app.rootGid()) }), el('div', { class: 'row' },
         el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft-universe', onclick: () => openDraft(rootGid) }, '인수인계 초안 만들기'),
         el('button', { type: 'button', 'data-testid': 'btn-insight-universe', onclick: () => openInsight('', 'repeat') }, '인사이트 보기')),
         mergeButton(),
@@ -534,7 +569,7 @@ function start() {
       panel.replaceChildren(el('h2', {}, localNode(selected).label), editorFor(selected));
       return;
     }
-    const notes = [loadNote(selected), workNote(selected), formNote(selected), repeatNote(selected)].filter(Boolean);
+    const notes = [loadNote(selected), workNote(selected), issueNote(selected), formNote(selected), repeatNote(selected)].filter(Boolean);
     const tools = toolbar(selected);
     const nbTools = nbhdButtons(selected);
     return renderNodeDetail(panel, describeNode(view, selected, { asOf: asOf(), past: !!viewDate }), {
@@ -551,6 +586,7 @@ function start() {
     merging = false;
     drafting = null;
     insight = null;
+    issues = null;
     selected = gid;
     graph.highlight(gid);
     renderPanel();
@@ -815,6 +851,7 @@ function start() {
     settingsOpen = true;
     merging = false;
     insight = null;
+    issues = null;
     drafting = null;
     editing = null;
     renderPanel();
