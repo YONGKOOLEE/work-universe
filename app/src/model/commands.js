@@ -188,6 +188,29 @@ export function hideNode(doc, nodeId, ctx) {
   };
 }
 
+/**
+ * 숨긴 노드를 되살린다(R-21, D-23). 새 이벤트 종류 없이 `updated`(hidden true → false)로 남긴다.
+ * 노드에 딸린 연결은 숨길 때 건드리지 않았으므로 그대로 다시 보인다. 꼭지는 숨길 수 없으므로 되살릴 수도 없다.
+ * 이미 보이는 노드면 event는 null이다. 같은 유형·이름(사람은 같은 사번)의 보이는 노드가 이미 있으면 E-DUP(existing_id)로 거부한다.
+ */
+export function restoreNode(doc, nodeId, ctx) {
+  const node = doc.nodes.find((n) => n.id === nodeId);
+  if (!node) return fail(CODES.SCHEMA, { field: 'id' });
+  if (node.core_type === 'root') return fail(CODES.SCHEMA, { field: 'core_type' });
+  if (!node.hidden) return { ok: true, doc, node, event: null };
+  const dup = findDuplicateNode(doc.nodes, node, nodeId);
+  if (dup) return fail(CODES.DUP, { existing_id: dup.id });
+
+  const shown = { ...node, hidden: false, updated_at: ctx.now };
+  const event = makeEvent(doc, 'updated', { target_kind: 'node', target_id: nodeId, before: { hidden: true }, after: { hidden: false } }, ctx);
+  return {
+    ok: true,
+    doc: { ...doc, nodes: doc.nodes.map((n) => (n.id === nodeId ? shown : n)), events: [...doc.events, event] },
+    node: shown,
+    event,
+  };
+}
+
 // ── 연결 ────────────────────────────────────────────────────────────────
 
 /**

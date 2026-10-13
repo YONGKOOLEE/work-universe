@@ -20,6 +20,10 @@ import { edgeEditForm, edgeForm, eventForm, nodeForm } from './editor.js';
 import { draftPanel } from './draft.js';
 import { currentDenseN, insightPanel } from './insight.js';
 import { issueEntry, issuePanel } from './issues.js';
+import { hiddenEntry, hiddenPanel } from './hidden.js';
+import { renderBackupNudge } from './backup.js';
+import { backupAdvice, userChangeTimes } from '../rules/backup.js';
+import { hiddenNodesOf } from '../rules/hidden.js';
 import { nowIso, todayLocal } from './time.js';
 import { personLoad, repeatPatternsFor, workLoad } from '../rules/insight.js';
 import { monthAsOf, timeMonths } from '../rules/flow.js';
@@ -124,7 +128,24 @@ function start() {
   const settings = loadSettings(storage, { provider: DEFAULT_PROVIDER }, PROVIDERS.map((p) => p.name));
   let provider = createProvider(settings.provider, { pregen: PREGEN });
   const providerLabel = () => (PROVIDERS.find((p) => p.name === settings.provider) || PROVIDERS[0]).label;
-  const openImport = wireImportDialog(app, $, () => provider, providerLabel, hashId() ? () => exportCurrent(app) : null);
+  // 내보내기: 파일을 내려받고 마지막 내보내기 시각을 설정에 남긴다(백업 권유 기준, R-21). 저장소가 없으면 시각은 남기지 않는다
+  const backupSlot = $('backup-nudge');
+  const showBackupNudge = () => {
+    const advice = storage && !app.readOnly
+      ? backupAdvice({ lastExportAt: settings.lastExportAt, dismissedAt: settings.backupDismissedAt, changeTimes: userChangeTimes(app.doc), now: nowIso() })
+      : null;
+    renderBackupNudge(backupSlot, advice, {
+      onExport: () => doExport(),
+      onClose: () => { settings.backupDismissedAt = nowIso(); saveSettings(storage, settings); showBackupNudge(); },
+    });
+  };
+  const doExport = () => {
+    exportCurrent(app);
+    settings.lastExportAt = nowIso();
+    saveSettings(storage, settings);
+    if (hashId()) showBackupNudge();
+  };
+  const openImport = wireImportDialog(app, $, () => provider, providerLabel, hashId() ? doExport : null);
 
   // 주소에 유니버스가 없으면(더블클릭으로 처음 열었을 때) 시작 화면을 보여 준다(R-08)
   if (!hashId()) { // 깨진 인코딩(#%E0)도 시작 화면(hashId의 주석대로, 여섯 번째 검토 C-16)
@@ -147,6 +168,7 @@ function start() {
   let drafting = null; // 인수인계 초안 화면: {target}
   let insight = null; // 인사이트 화면: {work, kind}
   let issues = null; // 미해결 이슈 목록 화면(R-20): {target}
+  let hiddenOpen = false; // 숨긴 노드 목록 화면(R-21)
   let viewDate = null; // 시간 슬라이더로 고른 기준일(YYYY-MM-DD). null이면 오늘
   let settingsOpen = false;
   let merging = false; // 통합 확인 목록(T-10)
@@ -394,7 +416,7 @@ function start() {
   }
 
   function hideSelected(node) {
-    if (!window.confirm(`「${node.label}」${josa(node.label, '을/를')} 숨깁니다. 그래프에서 사라지지만 이력과 근거로서의 내용은 남습니다. 화면에서 다시 보이게 하는 기능은 아직 없습니다(「가상 데이터 초기화」로만 처음 상태로 돌아갑니다).`)) return;
+    if (!window.confirm(`「${node.label}」${josa(node.label, '을/를')} 숨깁니다. 그래프에서 사라지지만 이력과 근거로서의 내용은 남습니다. 다시 보이게 하려면 유니버스 개요(아무것도 고르지 않은 화면)의 「숨긴 노드」에서 「되살리기」를 누르세요.`)) return;
     const r = app.hideNode(node.id);
     if (!r.ok) return window.alert(messageFor(r.error));
     afterSave(r, null);
@@ -478,6 +500,25 @@ function start() {
 
   function renderPanel() {
     const panel = $('detail');
+    // 다른 화면(설정·통합 확인·이슈·인사이트·초안)이 열리면 숨긴 노드 목록은 닫는다
+    if (settingsOpen || merging || issues || insight || drafting) hiddenOpen = false;
+    if (hiddenOpen) {
+      const labelOf = (id) => (app.findNode(id) || { label: '' }).label;
+      panel.replaceChildren(hiddenPanel({
+        nodes: hiddenNodesOf(app.doc), readOnly: app.readOnly, labelOf,
+        onClose: () => { hiddenOpen = false; renderPanel(); },
+        // 되살리면 그 노드를 고른 상태로 연다(연결·이력이 바로 보인다). 같은 이름의 노드가 있으면 E-DUP로 거부된다
+        onRestore: (id) => {
+          const r = app.restoreNode(id);
+          if (r.ok) {
+            hiddenOpen = false;
+            afterSave(r, toGid(currentId(), id));
+          }
+          return r;
+        },
+      }));
+      return;
+    }
     if (settingsOpen) {
       panel.replaceChildren(settingsPanel({
         current: settings.provider,
@@ -558,7 +599,9 @@ function start() {
       // 꼭지만 있으면 「노드 추가」를 펼쳐 둔다(검토5 U-5). 안내 문구(detail.js)와 같은 기준: 하위 유니버스를 묶은 화면은 노드가 있으므로 건드리지 않는다
       if (summary.node_total <= 1 && !app.readOnly) document.querySelector('details.add').open = true;
       const rootGid = app.rootGid();
-      panel.append(...[issueEntry(view, app.rootGid(), { rootGid: app.rootGid(), onOpen: () => openIssues(app.rootGid()) }), el('div', { class: 'row' },
+      panel.append(...[issueEntry(view, app.rootGid(), { rootGid: app.rootGid(), onOpen: () => openIssues(app.rootGid()) }),
+        hiddenEntry(hiddenNodesOf(app.doc), { onOpen: () => { hiddenOpen = true; renderPanel(); } }),
+        el('div', { class: 'row' },
         el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft-universe', onclick: () => openDraft(rootGid) }, '인수인계 초안 만들기'),
         el('button', { type: 'button', 'data-testid': 'btn-insight-universe', onclick: () => openInsight('', 'repeat') }, '인사이트 보기')),
         mergeButton(),
@@ -587,6 +630,7 @@ function start() {
     drafting = null;
     insight = null;
     issues = null;
+    hiddenOpen = false;
     selected = gid;
     graph.highlight(gid);
     renderPanel();
@@ -790,6 +834,7 @@ function start() {
     renderLegend();
     graph.setTimeOff(timeOffIds());
     renderPanel();
+    showBackupNudge(); // 변경이 쌓일 때마다 기준을 다시 본다
     if (left) graph.relayout(); // 주변만 보기의 고리 배치를 그대로 두면 나머지 노드가 한 줄로 쌓인다
   }
 

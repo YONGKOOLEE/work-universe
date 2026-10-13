@@ -11,6 +11,12 @@ gates:
   plan:approved: approved
   planning:complete: recorded 2026-09-30 (최종 점검 통과, CR-2 승인 후 재확정)
 approvals:   # 형식: gate / 대상 문서 / 사용자 승인 표현(원문) / 시각·시간대(확인 가능한 경우만) / 조건
+  - change: C12-8 (메모 payload 선택 필드 resolves_id: 해결 메모가 그 메모 하나만 닫음. 필드 없는 해결 메모는 기존 규칙)
+    documents: 02 12.2 memo payload, D-22
+    user_expression: "C12-8 진행하고 잘못눌렀으니까 하고있던 작업 전부 다시 시작해"
+    date: 2026-10-13
+    time: 미기록
+    conditions: 기존 데이터·초안 결과 불변(필드 없는 해결 메모는 지금 규칙)
   - change: CR-12 (1차 제출에서 실사용 수준까지: R-19 인수인계서 내보내기, R-20 미해결 이슈, R-21 되살리기·백업 권유, R-22 찾기 넓히기·작성자 이름, D-21~D-25, T-23~T-28, T-21 조건부)
     document: docs/CR-12-초안.md v0.2 → 01·02·03 반영
     user_expression: "승인 하는데 일정은 폐기 저렇게 일정을 정할 필요 없어보임, 기능동결날짜도 폐기 진행사항에 따라 flexible 하게"
@@ -148,8 +154,23 @@ next_session_first_action: (2026-10-05) docs/HANDOFF.md 1절을 읽는다. 순�
 implementation:
   deadline: 1차 제출 마감 2026-10-30(사용자 제공 2026-10-13). 개발·산출물 제출은 1차까지, 2차는 발표만(사용자 "1차에 모든 프로그램을 완료")
   scope_change: CR-12 승인(docs/CR-12-초안.md v0.2, 2026-10-13). 날짜 일정·동결 날짜는 폐기, 동결은 진행에 따라 사용자가 정함
-  current_task: (2026-10-13) CR-12 진행: T-23·T-24 완료(T-24 해결 단위 C12-8 결정 대기), 다음 T-25(되살리기·백업 권유). 그 전: 조력자 의견 처리(담당 이력 연결·이력 접기·T-20 최소판·흐름 정렬 시제품) 구현·검증 완료. 다음은 사용자 화면 확인과 흐름 정렬 채택 여부, 조력자 업무정의서 샘플 대기. 그 전(2026-10-12): T-19 표 입력 구현·검증 완료. 다음은 (조력자 의견 뒤) T-20 최소판, 그 전에 사용자 화면 확인·T-22 문서 검토. T-21은 1차 제출에서 제외(CR-11)
+  current_task: (2026-10-13) CR-12 진행: T-23·T-24·C12-8·T-25 완료, 다음 T-26(찾기 넓히기·작성자 이름). 그 전: 조력자 의견 처리(담당 이력 연결·이력 접기·T-20 최소판·흐름 정렬 시제품) 구현·검증 완료. 다음은 사용자 화면 확인과 흐름 정렬 채택 여부, 조력자 업무정의서 샘플 대기. 그 전(2026-10-12): T-19 표 입력 구현·검증 완료. 다음은 (조력자 의견 뒤) T-20 최소판, 그 전에 사용자 화면 확인·T-22 문서 검토. T-21은 1차 제출에서 제외(CR-11)
   tasks:
+    - id: T-25
+      status: 구현·검증 완료(CR-12 C, R-21, D-23). 화면 확인은 끝에 묶어서(미확인)
+      date: 2026-10-13
+      model: 구현 Sonnet 하위 에이전트 / 코드 검토·재검증·기록·커밋 Opus 메인
+      result: restoreNode, rules/hidden.js·backup.js, ui/hidden.js·backup.js, 설정 lastExportAt·backupDismissedAt. tech-record 43절, limits L-40·L-41, decisions-pending C12-10·11
+      normal_checks: 통과 (단위 513, Chrome·Edge 전체 점검 R-21 15항목: 숨김 → 목록 → 되살리기, 노드·연결 수 동일, 되살림 이력 1건, 8일 전 내보내기 + 변경 → 권유 → 닫기 → 지금 내보내기)
+      error_checks: 통과 (꼭지·없는 노드 거부, 중복 이름 E-DUP, 저장 실패 W-STORAGE, 읽기 전용, 저장소 차단 시 권유 없음, 결함 주입 7건)
+      unverified: [사용자 화면 확인]
+    - id: C12-8
+      status: 구현·검증 완료(사용자 "C12-8 진행", 2026-10-13)
+      date: 2026-10-13
+      model: 구현·검증·커밋 Opus 메인
+      result: memo payload resolves_id, openMemos 규칙, resolveMemoInput, validate, 02 12.2·D-22. tech-record 43절
+      normal_checks: 통과 (단위: 같은 업무 미해결 2건을 따로 닫음, 초안 「진행 중」 동일 규칙, 기존 규칙 유지; Chrome·Edge 전체 점검)
+      error_checks: 통과 (없는 이벤트·메모 아닌 이벤트·해결됨 아닌 범주의 resolves_id 거부, 규칙을 되돌리면 시험 2개 실패)
     - id: T-24
       status: 구현·검증 완료(CR-12 B, R-20, D-22). 해결 단위 문제(C12-8)는 사용자 결정 대기. 화면 확인은 끝에 묶어서(미확인)
       date: 2026-10-13

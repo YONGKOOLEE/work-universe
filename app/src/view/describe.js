@@ -80,6 +80,8 @@ export function eventText(view, ev) {
         return `통합 확인 — ${raw(ev.link.a)} · ${raw(ev.link.b)}: ${word}${ev.link.method === 'emp_no_auto' ? '(사번 자동)' : ''}`;
       }
       if (ev.type === 'created') return '생성';
+      // 숨긴 노드·연결을 되살림(R-21): updated의 hidden true → false
+      if (p.before && p.before.hidden === true && p.after && p.after.hidden === false && Object.keys(p.after).length === 1) return '되살림(숨김 해제)';
       {
         const keys = Object.keys(p.after || {});
         const changes = keys.map((k) => `${FIELD_NAMES[k] || k}: ${fieldValue(p.before && p.before[k])} → ${fieldValue(p.after[k])}`);

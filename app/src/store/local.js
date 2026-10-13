@@ -104,7 +104,12 @@ export function loadSettings(storage, defaults, allowed = null) {
     if (!v || typeof v !== 'object' || Array.isArray(v)) return { ...defaults };
     // 모르는 공급자 이름은 기본값으로 바로잡는다(표시와 저장값이 어긋나지 않게, 검토3 LLM-3)
     const provider = typeof v.provider === 'string' && (!allowed || allowed.includes(v.provider)) ? v.provider : defaults.provider;
-    return { ...defaults, provider };
+    // 마지막 내보내기·백업 권유를 닫은 시각(12.4, D-23). 날짜로 읽을 수 없으면 없는 것으로 본다
+    const stamp = (s) => (typeof s === 'string' && !Number.isNaN(Date.parse(s)) ? s : undefined);
+    const out = { ...defaults, provider };
+    if (stamp(v.lastExportAt)) out.lastExportAt = v.lastExportAt;
+    if (stamp(v.backupDismissedAt)) out.backupDismissedAt = v.backupDismissedAt;
+    return out;
   } catch {
     return { ...defaults };
   }
@@ -114,7 +119,10 @@ export function loadSettings(storage, defaults, allowed = null) {
 export function saveSettings(storage, settings) {
   if (!storage) return false;
   try {
-    storage.setItem(SETTINGS_KEY, JSON.stringify({ provider: settings.provider }));
+    const out = { provider: settings.provider };
+    if (settings.lastExportAt) out.lastExportAt = settings.lastExportAt;
+    if (settings.backupDismissedAt) out.backupDismissedAt = settings.backupDismissedAt;
+    storage.setItem(SETTINGS_KEY, JSON.stringify(out));
     return true;
   } catch {
     return false;

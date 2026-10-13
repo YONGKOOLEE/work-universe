@@ -1,7 +1,7 @@
 // 명령 흐름 조립과 현재 상태(12.7 app). 화면은 이 객체만 호출한다.
 
 import {
-  addAssignment, addEdge, addEvent, addNode, applyBatch, addRef, addSubtype, createUniverse, decideIdentity, hideEdge, hideNode, hideRef, updateEdge, updateNode,
+  addAssignment, addEdge, addEvent, addNode, applyBatch, addRef, addSubtype, createUniverse, decideIdentity, hideEdge, hideNode, hideRef, restoreNode, updateEdge, updateNode,
 } from '../model/commands.js';
 import { CODES, DRAFT_TARGET_TYPES, SUBTYPE_HANDOVER_DOC, TEXT_MAX, normalizeLabel } from '../model/schema.js';
 import { validateDocument } from '../model/validate.js';
@@ -195,6 +195,10 @@ export function createApp({ store, samples, currentId, now }) {
     },
     hideNode(nodeId) {
       return guard() || commit(hideNode(doc, nodeId, { now: now() }));
+    },
+    /** 숨긴 노드를 되살린다(R-21, D-23). 저장 1회. 같은 이름의 보이는 노드가 있으면 E-DUP(existing_id) */
+    restoreNode(nodeId) {
+      return guard() || commit(restoreNode(doc, nodeId, { now: now() }));
     },
     addEdge(input) {
       return guard() || commit(addEdge(doc, input, { now: now() }));

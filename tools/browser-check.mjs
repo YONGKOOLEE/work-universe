@@ -1550,6 +1550,75 @@ async function checkBrowser(browser, port) {
   const formLine = await text(s.cdp, '[data-testid=form-missing]');
   check('R-16 ① 권장 항목이 빈 업무(표로 넣은 T19 표 업무 2)에는 「권장 항목 n개 비어 있음」과 빈 항목 이름이 보이고, 저장은 막지 않음', formLine.includes('권장 항목') && formLine.includes('절차') && formLine.includes('관련 문서'), formLine);
 
+  // ── T-25 숨긴 노드 되살리기(R-21 ①, D-23): 숨김 → 개요 「숨긴 노드 n개」 → 목록 → 「되살리기」 → 연결·이력이 그대로 ──
+  await evaluate(s.cdp, "window.__wu.select(null)");
+  await sleep(150);
+  check('R-21 숨긴 노드가 없으면 개요에 「숨긴 노드」 표시가 없음', !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=hidden-count]')")));
+  await evaluate(s.cdp, 'window.confirm = () => true');
+  const r21Gid = 'U-A1/N-003';
+  const r21Label = await evaluate(s.cdp, `window.__wu.view.getNode(${JSON.stringify(r21Gid)}).label`);
+  const r21 = { nodes: await nodeCount(s.cdp), edges: await edgeCount(s.cdp) };
+  await evaluate(s.cdp, `window.__wu.select(${JSON.stringify(r21Gid)})`);
+  await sleep(150);
+  const r21Links0 = await evaluate(s.cdp, "document.querySelectorAll('[data-testid=links] li').length");
+  const r21Hist0 = await evaluate(s.cdp, "document.querySelectorAll('[data-testid=history] li').length");
+  await clickTestId(s.cdp, 'btn-hide');
+  await sleep(300);
+  const r21Count = await evaluate(s.cdp, "(() => { const e = document.querySelector('[data-testid=hidden-count]'); if (!e) return null; const r = e.getBoundingClientRect(); return { count: e.dataset.count, text: e.textContent, w: r.width, h: r.height }; })()");
+  check('R-21 ① 숨기면 그래프에서 빠지고 개요에 「숨긴 노드 1개」가 크기를 가지고 보임', !!r21Count && r21Count.count === '1' && r21Count.text.includes('숨긴 노드 1개') && r21Count.w > 0 && r21Count.h > 0 && (await nodeCount(s.cdp)) === r21.nodes - 1 && (await edgeCount(s.cdp)) < r21.edges, JSON.stringify([r21Count, r21]));
+  await clickTestId(s.cdp, 'btn-hidden');
+  await sleep(200);
+  const r21List = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=hidden-item]')].map((li) => ({ id: li.dataset.id, text: li.textContent, btn: !!li.querySelector('[data-testid=btn-restore]') }))");
+  check('R-21 ① 목록에 이름·유형·숨긴 날짜와 「되살리기」가 보임', r21List.length === 1 && r21List[0].id === 'N-003' && r21List[0].text.includes(r21Label) && r21List[0].text.includes('에 숨김') && r21List[0].btn, JSON.stringify(r21List));
+  await shot(s.cdp, `${browser.name}-21a-hidden-list`);
+  await clickTestId(s.cdp, 'btn-restore');
+  await sleep(400);
+  check('R-21 ① 되살리면 그래프에 다시 보이고 노드·연결 수가 숨기기 전과 같음', (await nodeCount(s.cdp)) === r21.nodes && (await edgeCount(s.cdp)) === r21.edges && (await hasLabel(s.cdp, r21Label)), JSON.stringify([await nodeCount(s.cdp), await edgeCount(s.cdp), r21]));
+  const r21After = await evaluate(s.cdp, "({ selected: window.__wu.selected, links: document.querySelectorAll('[data-testid=links] li').length, hist: [...document.querySelectorAll('[data-testid=history] li')].map((li) => li.textContent), note: !!document.querySelector('[data-testid=hidden-note]') })");
+  check('R-21 ① 되살린 노드가 선택되어 연결 수가 그대로이고 숨김 안내가 없으며 이력에 「되살림」이 정확히 1건', r21After.selected === r21Gid && r21After.links === r21Links0 && !r21After.note && r21After.hist.filter((t) => t.includes('되살림')).length === 1 && r21After.hist.length === r21Hist0 + 2, JSON.stringify([r21After, r21Links0, r21Hist0]));
+  check('R-21 문서에 updated(hidden true → false) 이벤트와 hidden false로 남음', await evaluate(s.cdp, "(() => { const d = window.__wu.doc; const e = d.events[d.events.length - 1]; return d.nodes.find((n) => n.id === 'N-003').hidden === false && e.type === 'updated' && e.payload.target_id === 'N-003' && e.payload.before.hidden === true && e.payload.after.hidden === false; })()"));
+  await evaluate(s.cdp, "window.__wu.select(null)");
+  await sleep(150);
+  check('R-21 모두 되살리면 개요의 「숨긴 노드」 표시가 사라짐', !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=hidden-count]')")));
+
+  // ── T-25 백업 권유(R-21 ②): 내보낸 지 8일 + 변경 → 한 줄 → 닫기 → 다시 열어도 숨김 → 「지금 내보내기」 → 사라지고 내보내기 시각 저장 ──
+  const reloadApp = async () => {
+    await s.cdp.send('Page.reload');
+    await sleep(300);
+    return waitFor(s.cdp, 'window.__wu && window.__wu.cy.nodes().length > 0');
+  };
+  const setExportAt = (ms) => evaluate(s.cdp, `localStorage.setItem('wu:v1:settings', JSON.stringify({ provider: 'pregen', lastExportAt: new Date(${ms}).toISOString() }))`);
+  const nudge = () => evaluate(s.cdp, "(() => { const e = document.getElementById('backup-nudge'); const r = e.getBoundingClientRect(); return { hidden: e.hidden, w: r.width, h: r.height, text: e.textContent }; })()");
+  await setExportAt(Date.now());
+  await reloadApp();
+  const n0 = await nudge();
+  check('R-21 ② 방금 내보냈고 바뀐 것이 없으면 권유 줄이 없음', n0.hidden && n0.h === 0, JSON.stringify(n0));
+  await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+  await sleep(150);
+  await clickTestId(s.cdp, 'btn-event');
+  await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': '2026-10-05', 'event-note': 'T25 백업 권유 시험' });
+  await sleep(300);
+  const n1 = await nudge();
+  check('R-21 ② 내보낸 지 얼마 안 됐고 변경이 1건이면 권유 줄이 없음(7일 기준 전)', n1.hidden, JSON.stringify(n1));
+  await setExportAt(Date.now() - 8 * 86400000);
+  await reloadApp();
+  const n2 = await nudge();
+  check('R-21 ② 내보낸 지 8일, 바뀐 것이 있으면 머리글 아래에 「내보내기를 권합니다」 한 줄(크기 있음)과 두 버튼', !n2.hidden && n2.w > 0 && n2.h > 0 && n2.text.includes('내보내기를 권합니다') && (await evaluate(s.cdp, "!!document.querySelector('[data-testid=backup-export]') && !!document.querySelector('[data-testid=backup-close]')")), JSON.stringify(n2));
+  await shot(s.cdp, `${browser.name}-21b-backup-nudge`);
+  await clickTestId(s.cdp, 'backup-close');
+  await sleep(150);
+  check('R-21 ② 「닫기」 → 줄이 사라지고 닫은 시각이 설정에 남음', (await nudge()).hidden && (await evaluate(s.cdp, "!!JSON.parse(localStorage.getItem('wu:v1:settings')).backupDismissedAt")));
+  await reloadApp();
+  check('R-21 ② 닫은 뒤 다시 열어도 다음 기준까지 숨김', (await nudge()).hidden);
+  await setExportAt(Date.now() - 8 * 86400000);
+  await reloadApp();
+  check('R-21 ② 설정을 8일 전으로 되돌려 다시 열면 권유 줄이 다시 보임', !(await nudge()).hidden);
+  await evaluate(s.cdp, "window.__dl = null; HTMLAnchorElement.prototype.click = function () { window.__dl = this.getAttribute('download'); }");
+  await clickTestId(s.cdp, 'backup-export');
+  await sleep(200);
+  const saved = await evaluate(s.cdp, "Date.now() - Date.parse(JSON.parse(localStorage.getItem('wu:v1:settings')).lastExportAt)");
+  check('R-21 ② 「지금 내보내기」 → 파일 이름이 정해지고 줄이 사라지며 내보내기 시각(지금)이 설정에 저장됨', (await nudge()).hidden && typeof (await evaluate(s.cdp, 'window.__dl')) === 'string' && saved >= 0 && saved < 60000, String(saved));
+
   const errors2 = [...s.log.errors];
   const external2 = [...s.log.external];
   s.cdp.close();
@@ -1564,6 +1633,7 @@ async function checkBrowser(browser, port) {
   s = await openSession(exe, blockedProfile, port, { blockStorage: true });
   const banner = await evaluate(s.cdp, "({ hidden: document.getElementById('banner').hidden, code: document.getElementById('banner').dataset.code || '' })");
   check('오류: 저장소 차단 → W-STORAGE 배너', !banner.hidden && banner.code === 'W-STORAGE');
+  check('R-21 저장소 차단(읽기 전용)에서는 백업 권유 줄이 없음', await evaluate(s.cdp, "document.getElementById('backup-nudge').hidden"));
   check(`저장소 차단 시 샘플 읽기 전용 표시(노드 ${NODES}, 추가 비활성)`, s.ready && (await nodeCount(s.cdp)) === NODES && (await text(s.cdp, '#add-slot')).includes('읽기 전용'));
   if (await goBare(s.cdp)) {
     check('오류: 저장소 차단 시 시작 화면에도 경고가 보이고 새 유니버스는 막힘', (await text(s.cdp, '[data-testid=start-warning]')).includes('저장소를 쓸 수 없습니다') && (await evaluate(s.cdp, "document.querySelector('[data-testid=start-create]').disabled")));
