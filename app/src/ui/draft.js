@@ -6,6 +6,7 @@ import { similarExperts, similarSentences, workLoad } from '../rules/insight.js'
 import { todayLocal } from './time.js';
 import { METHOD_LABELS, refineDraft } from '../llm/connector.js';
 import { el } from './dom.js';
+import { downloadHtml, draftDoc, printHtml } from './doc-output.js';
 import { evidenceChips } from './evidence.js';
 import { josa, messageFor } from './messages.js';
 
@@ -165,13 +166,18 @@ function renderDraft(box, d, view, onFocus, o = {}) {
       box.append(el('textarea', { rows: 10, readonly: true, class: 'copy-box' }, text));
     }
   });
+  const docOf = () => draftDoc(view, d, o.asOf || todayLocal());
+  const downBtn = el('button', { type: 'button', class: 'small-btn', 'data-testid': 'draft-download' }, '내려받기');
+  downBtn.addEventListener('click', () => { const x = docOf(); downloadHtml(x.name, x.html); });
+  const printBtn = el('button', { type: 'button', class: 'small-btn', 'data-testid': 'draft-print' }, '인쇄');
+  printBtn.addEventListener('click', () => printHtml(docOf().html));
   // replaceChildren은 null을 "null" 글자로 넣으므로 빈 칸을 걸러 낸다
   box.replaceChildren(...[
     el('div', { class: 'draft-head' },
       el('span', { class: 'badge', 'data-testid': 'draft-status' }, '초안'),
       // 머리줄이 좁아 괄호 설명은 title로 옮긴다(검토5 U-12). 긴 이름은 머리글 「생성 방식」 설정과 실행 안내에 있다
       el('span', { class: 'method', 'data-testid': 'draft-method', title: METHOD_LABELS[d.method] }, `생성 방식: ${METHOD_LABELS[d.method].replace(/\(.*\)$/, '')}`),
-      copyBtn),
+      copyBtn, downBtn, printBtn),
     el('h3', { class: 'draft-title' }, d.title),
     d.fallback ? el('p', { class: 'notice', 'data-testid': 'draft-fallback' }, `규칙 기반으로 대체함: ${d.fallback.reason}`) : null,
     d.method !== 'rule' && d.counts && d.counts.rule ? el('p', { class: 'muted small', 'data-testid': 'draft-counts' }, `${METHOD_LABELS[d.method]} ${d.counts.provider}개 항목, 나머지 ${d.counts.rule}개는 규칙 기반(사전 생성 결과가 없거나 데이터가 바뀐 항목)`) : null,

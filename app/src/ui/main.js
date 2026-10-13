@@ -11,7 +11,8 @@ import { startScreen } from './start.js';
 import { describeNode, describeUniverse, eventText, periodStatus } from '../view/describe.js';
 import { exposureOf, projectView } from '../view/collapse.js';
 import { parseGid, toGid } from '../view/view.js';
-import { DRAFT_TARGET_TYPES } from '../model/schema.js';
+import { DRAFT_TARGET_TYPES, SUBTYPE_HANDOVER_DOC } from '../model/schema.js';
+import { confirmedDoc, downloadHtml, printHtml } from './doc-output.js';
 import { el } from './dom.js';
 import { createGraph, legendItems } from './graph.js';
 import { renderNodeDetail, renderUniverseSummary } from './detail.js';
@@ -338,16 +339,25 @@ function start() {
   // 어느 노드를 골랐든 전체 인사이트로 갈 수 있게(검토5 U-2: 시작 화면 3단계가 노드 선택 상태에서 끊기지 않도록)
   const insightAllButton = () => el('button', { type: 'button', 'data-testid': 'btn-insight', onclick: () => openInsight('', 'repeat') }, '인사이트 보기');
 
+  // 확정한 인수인계서(산출물 「인수인계서」)의 내려받기·인쇄(R-19)
+  function docButtons(node) {
+    if (node.core_type !== 'artifact' || node.subtype !== SUBTYPE_HANDOVER_DOC) return [];
+    return [
+      el('button', { type: 'button', 'data-testid': 'doc-download', onclick: () => { const x = confirmedDoc(node); downloadHtml(x.name, x.html); } }, '내려받기'),
+      el('button', { type: 'button', 'data-testid': 'doc-print', onclick: () => printHtml(confirmedDoc(node).html) }, '인쇄'),
+    ];
+  }
+
   function toolbar(gid) {
     const node = view.getNode(gid);
     if (!node || node.hidden) return null;
     if (!isOwn(gid)) {
-      return el('div', {}, el('div', { class: 'row toolbar' }, draftButton(gid), insightButton(gid), insightAllButton()),
+      return el('div', {}, el('div', { class: 'row toolbar' }, ...docButtons(node), draftButton(gid), insightButton(gid), insightAllButton()),
         el('p', { class: 'muted small' }, '다른 유니버스의 노드입니다. 고치려면 ',
           el('button', { type: 'button', class: 'link', onclick: () => openUniverse(node.universe_id) }, `「${node.universe_name}」 열기`), '.'));
     }
     if (app.readOnly) {
-      return el('div', { class: 'row toolbar' }, draftButton(gid), insightButton(gid), insightAllButton());
+      return el('div', { class: 'row toolbar' }, ...docButtons(node), draftButton(gid), insightButton(gid), insightAllButton());
     }
     const btn = (label, kind, testid) => el('button', { type: 'button', 'data-testid': testid, onclick: () => { editing = { kind }; renderPanel(); } }, label);
     return el('div', { class: 'row toolbar' },
@@ -355,6 +365,7 @@ function start() {
       btn('연결 추가', 'edge', 'btn-edge'),
       btn('이력 추가', 'event', 'btn-event'),
       node.core_type === 'root' ? null : el('button', { type: 'button', class: 'danger', 'data-testid': 'btn-hide', onclick: () => hideSelected(node) }, '숨기기'),
+      ...docButtons(node),
       draftButton(gid),
       insightButton(gid),
       insightAllButton(),

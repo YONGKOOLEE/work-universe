@@ -1318,6 +1318,51 @@ async function checkBrowser(browser, port) {
   await sleep(250);
   const prevItem = await text(s.cdp, '[data-testid=draft-item-이전_인수인계]');
   check('확정한 인수인계가 다음 초안의 「이전 인수인계」에 인수인계서 근거와 함께 나옴', prevItem.includes('서하늘 → 윤바다') && prevItem.includes('대사 확인 인수인계서'), prevItem.slice(0, 160));
+  // ── R-19 ① ② ③ 인수인계서 내려받기·인쇄(CR-12 A, D-21): 초안 화면과 확정 인수인계서 상세 ──
+  await evaluate(s.cdp, `(() => {
+    window.__dl = null; window.__blob = null; window.__prints = [];
+    const orig = URL.createObjectURL; URL.createObjectURL = (b) => { window.__blob = b; return orig.call(URL, b); };
+    window.__origClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function () { window.__dl = this.getAttribute('download'); };
+    const d = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
+    window.__origCW = d;
+    Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', { configurable: true, get() {
+      const w = d.get.call(this);
+      if (!w) return w;
+      return new Proxy(w, { get(t, k) {
+        if (k === 'print') return () => { window.__prints.push({ html: t.document.documentElement.outerHTML, interactive: t.document.querySelectorAll('button,canvas,svg,nav,script,input,select').length }); };
+        const v = t[k];
+        return typeof v === 'function' ? v.bind(t) : v;
+      } });
+    } });
+  })()`);
+  const btnBox = (id) => evaluate(s.cdp, `(() => { const b = document.querySelector('[data-testid=${id}]'); if (!b) return false; const r = b.getBoundingClientRect(); return r.width > 0 && r.height > 0 && !b.disabled; })()`);
+  check('R-19 ① ② 초안 화면에 「내려받기」「인쇄」 버튼이 보임(크기 있음)', (await btnBox('draft-download')) && (await btnBox('draft-print')));
+  const screenEvidence = await evaluate(s.cdp, "(() => { const e = document.querySelector('[data-testid=draft-result] .evidence'); return e ? e.textContent : ''; })()");
+  const screenLack = await evaluate(s.cdp, "(() => { const r = document.querySelector('[data-testid=draft-result]').textContent; return { lack: r.includes('이력 부족'), none: r.includes('해당 없음') }; })()");
+  await clickTestId(s.cdp, 'draft-download');
+  await sleep(200);
+  const r19name = await evaluate(s.cdp, 'window.__dl');
+  const r19html = await evaluate(s.cdp, 'window.__blob ? window.__blob.text() : null');
+  check('R-19 ① 초안 내려받기 → 날짜-대상-인수인계서(초안).html, 스크립트·외부 파일 없는 완전한 HTML', typeof r19name === 'string' && /^\d{4}-\d{2}-\d{2}-.+-인수인계서\(초안\)\.html$/.test(r19name) && !!r19html && r19html.startsWith('<!doctype html>') && !/<script|src=|href=/.test(r19html), String(r19name));
+  check('R-19 ③ 초안 파일에 화면의 근거 이름·이력 부족/해당 없음·생성 방식(항목별·전체)이 남음', !!r19html && (!screenEvidence || r19html.includes(screenEvidence.replace(/&/g, '&amp;'))) && (!screenLack.lack || r19html.includes('이력 부족')) && (!screenLack.none || r19html.includes('해당 없음')) && r19html.includes('생성 방식:') && /class="chip">(규칙 기반|사전 생성|LLM)</.test(r19html), screenEvidence);
+  await clickTestId(s.cdp, 'draft-print');
+  await sleep(500);
+  const r19print = await evaluate(s.cdp, 'window.__prints');
+  check('R-19 ② 초안 인쇄 → 숨긴 iframe의 print() 호출, 문서에 버튼·그래프·스크립트 없음, A4 세로 지정', r19print.length === 1 && r19print[0].interactive === 0 && r19print[0].html.includes('이력') && (await evaluate(s.cdp, "!!document.querySelector('iframe[data-testid=print-frame]')")) && r19html.includes('size: A4 portrait'), JSON.stringify(r19print.map((p) => p.interactive)));
+  await evaluate(s.cdp, "document.querySelectorAll('iframe[data-testid=print-frame]').forEach((f) => f.remove()); window.__prints = []; window.__dl = null; window.__blob = null; window.__confirmedDoc = window.__wu.doc.nodes.filter((n) => n.subtype === '인수인계서' && !n.hidden && n.label.includes('대사 확인 인수인계서')).pop().id; window.__wu.select(window.__wu.doc.universe.id + '/' + window.__confirmedDoc)");
+  await sleep(250);
+  check('R-19 ① ② 확정 인수인계서 상세에 「내려받기」「인쇄」 버튼이 보임(크기 있음)', (await btnBox('doc-download')) && (await btnBox('doc-print')));
+  await clickTestId(s.cdp, 'doc-download');
+  await sleep(200);
+  const r19cname = await evaluate(s.cdp, 'window.__dl');
+  const r19chtml = await evaluate(s.cdp, 'window.__blob ? window.__blob.text() : null');
+  check('R-19 ① 확정본 내려받기 → …-대사_확인-인수인계서(확정).html, 본문·확정자·확정 시각·보내는/받는 사람 포함', typeof r19cname === 'string' && r19cname.endsWith('-대사_확인-인수인계서(확정).html') && !!r19chtml && r19chtml.includes('확정자: 사용자(이 브라우저)') && r19chtml.includes('확정 시각:') && r19chtml.includes('서하늘') && r19chtml.includes('윤바다') && r19chtml.includes('■ 업무 개요'), String(r19cname));
+  await clickTestId(s.cdp, 'doc-print');
+  await sleep(500);
+  const r19cprint = await evaluate(s.cdp, 'window.__prints');
+  check('R-19 ② 확정본 인쇄 → iframe print() 호출, 문서에 버튼·그래프 없음', r19cprint.length === 1 && r19cprint[0].interactive === 0 && r19cprint[0].html.includes('확정'), JSON.stringify(r19cprint.map((p) => p.interactive)));
+  await evaluate(s.cdp, "document.querySelectorAll('iframe[data-testid=print-frame]').forEach((f) => f.remove()); HTMLAnchorElement.prototype.click = window.__origClick; Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', window.__origCW); window.__wu.select(null)");
   // ── T-19 표로 추가·고치기(R-18 ①~⑥, D-18): 붙여 넣기 → 한 번에 저장 → 오류 행 → 고치기 → 긴 이름 겹침 없음 ──
   await evaluate(s.cdp, "window.confirm = () => true; window.__wu.select(null); document.querySelector('details.add').open = true");
   const t19Paste = async (text) => evaluate(s.cdp, `(() => { const t = document.querySelector('[data-testid=table-paste]'); t.value = ${JSON.stringify(text)}; t.dispatchEvent(new Event('input')); document.querySelector('[data-testid=table-paste-apply]').click(); return document.querySelectorAll('[data-testid=table-grid] tbody tr:not(.row-msg-line)').length; })()`);
