@@ -161,7 +161,7 @@ export function nodeForm(o) {
 
   // 추가할 때만: 꼭지에 바로 연결(포함). 업무는 기본으로 켠다 — 연결 없이 떠 있는 노드를 줄이기 위해
   const attach = el('input', { type: 'checkbox', 'data-testid': 'node-attach', checked: type.value === 'work' });
-  const attachField = el('label', { class: 'check' }, attach, ' 꼭지(유니버스)에 바로 연결하기');
+  const attachField = el('label', { class: 'check' }, attach, ' 유니버스의 중심 노드(꼭지)에 바로 연결하기');
   if (o.mode === 'add') type.addEventListener('change', () => { attach.checked = type.value === 'work'; });
 
   const msg = messageBox();
@@ -292,6 +292,7 @@ export function eventForm(o) {
   const pre = (t) => (o.node.core_type === t ? o.node.id : '');
   const type = select(EVENT_CHOICES, 'memo', { 'data-testid': 'event-type' });
   const date = el('input', { type: 'date', value: todayLocal(), 'data-testid': 'event-date', min: '1900-01-01', max: '2200-12-31' });
+  const endDate = el('input', { type: 'date', value: '', 'data-testid': 'event-end-date', min: '1900-01-01', max: todayLocal() });
   const note = el('textarea', { rows: 2, 'data-testid': 'event-note', placeholder: '예: 대사 불일치 3건 재발' });
   const person = select(nodeOptions(byType('person'), { empty: '사람을 고르세요' }), pre('person'));
   const work = select(nodeOptions(byType('work'), { empty: '업무를 고르세요' }), pre('work'));
@@ -309,7 +310,12 @@ export function eventForm(o) {
   const groups = {
     memo: () => [field('분류', category), field('관련 주제(선택)', topics)],
     handover: () => [field('업무', work), field('보내는 사람', from), field('받는 사람', to), field('인수인계서(선택)', artifact), field('이전 인수인계 참조(선택)', previous)],
-    assign_start: () => [field('사람', person), field('업무', work), el('p', { class: 'muted small', 'data-testid': 'assign-hint' }, '기록하면 사람 → 업무 「수행」 연결도 이 날짜부터 함께 만들어집니다.')],
+    assign_start: () => [
+      field('사람', person),
+      field('업무', work),
+      field('끝 날짜(선택)', endDate),
+      el('p', { class: 'muted small', 'data-testid': 'assign-hint' }, '기록하면 사람 → 업무 「수행」 연결도 이 날짜부터 함께 만들어집니다. 끝 날짜를 넣으면 그 날짜까지의 지난 기간으로 담당 시작·종료를 함께 기록합니다.'),
+    ],
     assign_end: () => [field('사람', person), field('업무', work), el('p', { class: 'muted small', 'data-testid': 'assign-hint' }, '기록하면 진행 중인 「수행」 연결의 끝 날짜가 이 날짜로 채워집니다.')],
     affiliation_change: () => [field('사람', person), field('이전 소속(선택)', fromOrg), field('새 소속(선택)', toOrg)],
   };
@@ -343,7 +349,9 @@ export function eventForm(o) {
     // 메모는 내용이 있어야 한다: 이력은 지울 수 없어 빈 메모가 영구히 남고 근거·흐름 표의 건수에 들어간다(여섯 번째 검토 U-2)
     if (type.value === 'memo' && !note.value.trim()) return msg.show({ ok: false, error: { code: 'E-REQUIRED', field: 'note' } }, { kind: 'event' });
     const payload = Object.fromEntries(Object.entries(payloads[type.value]()).filter(([, x]) => x !== undefined));
-    msg.show(o.onSubmit({ type: type.value, occurred_at: date.value, payload, note: note.value }), { kind: 'event' });
+    const input = { type: type.value, occurred_at: date.value, payload, note: note.value };
+    if (type.value === 'assign_start' && endDate.value) input.end_date = endDate.value;
+    msg.show(o.onSubmit(input), { kind: 'event' });
   });
   return form;
 }

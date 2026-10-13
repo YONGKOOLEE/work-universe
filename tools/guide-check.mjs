@@ -165,6 +165,8 @@ async function walk(browser, port) {
     const p7 = await panel(cdp);
     check(`7단계: 「${findLabel}」 칸에 "대사"를 넣고 결과 「대사 확인」을 누르면 상세가 열림`, pickedOk && p7.includes('대사 확인') && p7.includes('연결된 노드'), p7.slice(0, 40));
     const before7 = await ev(cdp, 'window.__wu.cy.nodes().length');
+    const moreOk = await clickText(cdp, labels.find((l) => l === '더 보기') || '더 보기', 'summary'); // 안내: 상세의 「더 보기」를 열고
+    check('7단계: 상세의 「더 보기」를 누르면 「주변만 보기」가 보임', moreOk && (await ev(cdp, "!![...document.querySelectorAll('#detail button')].find((b) => b.offsetParent && b.textContent.includes('주변만 보기'))")));
     const nbOk = await clickText(cdp, nbLabel || '주변만 보기');
     await sleep(600);
     const after7 = await ev(cdp, 'window.__wu.cy.nodes().length');
@@ -174,7 +176,7 @@ async function walk(browser, port) {
     await sleep(600);
     check(`7단계: 「${allLabel}」 → 전체 그래프로 돌아옴`, backOk && (await ev(cdp, 'window.__wu.nbhd')) === null && (await ev(cdp, 'window.__wu.cy.nodes().length')) >= before7);
     // 안내 4절: 초기화 버튼
-    check('안내 4절: 「가상 데이터 초기화」 버튼이 있음', await ev(cdp, "[...document.querySelectorAll('header button')].some((b) => b.textContent.includes('가상 데이터 초기화'))"));
+    check('안내 4절: 「가져오기·내보내기」 창 안에 「가상 데이터 초기화」 버튼이 있고 머리글에는 없음', (await ev(cdp, "document.getElementById('import-open').click(); [...document.querySelectorAll('#import-dialog button')].some((b) => b.textContent.includes('가상 데이터 초기화'))")) && !(await ev(cdp, "[...document.querySelectorAll('header button')].some((b) => b.textContent.includes('가상 데이터 초기화'))")));
   } finally {
     cdp.close();
     proc.kill();

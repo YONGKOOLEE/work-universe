@@ -126,6 +126,16 @@
   .danger { border-color: #6b3434; }
   .danger:hover:not(:disabled) { border-color: var(--err); color: var(--err); }
   .toolbar { margin: -2px 0 10px; }
+  details.more-tools { margin: -4px 0 10px; }
+  details.more-tools summary { cursor: pointer; display: inline-block; font-size: 13px; color: var(--text); padding: 4px 12px; border: 1px solid #3c5a33; border-radius: 999px; background: var(--panel-2); list-style: none; }
+  details.more-tools summary::-webkit-details-marker { display: none; }
+  details.more-tools summary::before { content: "▸ "; }
+  details.more-tools[open] summary::before { content: "▾ "; }
+  details.more-tools summary:hover { border-color: var(--accent); }
+  .event-fields { display: grid; gap: 10px; margin: 6px 0; } /* 이력 추가: 사람·업무·끝 날짜 칸 사이를 띄운다(일곱 번째 검토) */
+  details.more-tools[open] summary { margin-bottom: 6px; }
+  .danger-zone { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 10px; }
+  [data-testid="history-heading"]:focus { outline: none; }
   .links li { position: relative; }
   .link-tools { position: absolute; top: 4px; right: 0; display: none; background: var(--panel); padding-left: 6px; }
   .links li:hover .link-tools, .links li:focus-within .link-tools { display: flex; }
@@ -267,8 +277,7 @@
   <button type="button" id="create-open" class="primary">새 유니버스</button>
   <button type="button" id="group-open">유니버스 묶기</button>
   <button type="button" id="import-open" title="업무정의서 문서를 붙여 넣어 초벌로 바꾸거나, JSON 파일을 열거나, 지금 유니버스를 JSON 파일로 내려받습니다">가져오기·내보내기</button>
-  <button type="button" id="settings-open" title="초안 문장·인사이트 설명을 만드는 방식">생성 방식</button>
-  <button type="button" id="reset">가상 데이터 초기화</button>
+  <button type="button" id="settings-open" title="생성 방식과 작성자 이름을 정합니다">설정</button>
 </header>
 <div id="start-screen"></div>
 <p id="banner" role="alert" hidden></p>

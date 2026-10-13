@@ -191,7 +191,9 @@ test('C12-8: resolves_id 검증 — 없는 이벤트, 메모가 아닌 이벤트
   assert.equal(memo({ category: 'resolved', resolves_id: 'E-999' }).ok, false);
   assert.equal(memo({ category: 'resolved', resolves_id: 'E-002' }).ok, false); // 인수인계 이벤트
   assert.equal(memo({ category: 'issue', resolves_id: 'E-014' }).ok, false);
-  assert.equal(memo({ category: 'resolved', resolves_id: 'E-014' }).ok, true);
+  // V-2(검토7 R7 후속): 닫는 메모와 대상·주제가 같아야 한다. E-014는 대상 N-001, 주제 N-030
+  assert.equal(memo({ category: 'resolved', resolves_id: 'E-014' }).ok, false);
+  assert.equal(memo({ category: 'resolved', resolves_id: 'E-014', topic_ids: ['N-030'] }).ok, true);
 });
 
 test('C12-8: 초안의 「진행 중」도 같은 규칙 — E-014만 해결하면 초안의 진행 중에서 E-014만 빠진다', () => {

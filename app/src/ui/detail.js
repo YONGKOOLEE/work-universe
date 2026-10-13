@@ -74,7 +74,7 @@ export function renderNodeDetail(panel, d, { onFocus, extra = null, toolbar = nu
     panel.append(ul);
   }
 
-  panel.append(el('h3', {}, '이력'), historyList(d.history));
+  panel.append(el('h3', { tabindex: '-1', id: 'history-heading', 'data-testid': 'history-heading' }, '이력'), historyList(d.history));
 }
 
 /** 노드를 고르지 않았을 때: 유니버스 개요와 사용법 한 줄. */
@@ -85,7 +85,7 @@ export function renderUniverseSummary(panel, s, shown = null) {
   dl.append(el('dt', {}, '단위'), el('dd', {}, s.level), el('dt', {}, '작성 주체'), el('dd', {}, s.owner));
   if (s.description) dl.append(el('dt', {}, '설명'), el('dd', {}, s.description));
   dl.append(
-    el('dt', {}, '구성'),
+    el('dt', {}, '규모'),
     el('dd', {}, shown !== null && shown < s.node_total
       ? `지금 화면 ${shown}개 · 접힌 것까지 전체 ${s.node_total}개(${s.counts.map((c) => `${c.type_label} ${c.count}`).join(', ')}), 연결 ${s.edge_total}개`
       : `노드 ${s.node_total}개(${s.counts.map((c) => `${c.type_label} ${c.count}`).join(', ')}), 연결 ${s.edge_total}개`),
@@ -103,5 +103,6 @@ export function renderUniverseSummary(panel, s, shown = null) {
     empty
       ? el('p', {}, '아직 노드가 없습니다. 아래 「노드 추가」에서 첫 업무를 추가하세요. 업무정의서가 있으면 머리글의 「가져오기·내보내기」로 초벌을 만들 수도 있습니다.')
       : el('p', {}, '그래프에서 노드를 클릭하면 속성, 연결된 노드, 이력이 여기에 보입니다.'),
-    empty ? null : el('p', {}, '아래 「인수인계 초안 만들기」와 「인사이트 보기」도 눌러 보세요.')));
+    empty ? null : el('p', {}, '아래 「인수인계 초안 만들기」와 「인사이트 보기」도 눌러 보세요.'),
+    el('p', { class: 'muted small', 'data-testid': 'term-note' }, '유니버스는 업무를 묶은 한 단위, 노드는 그래프의 동그라미 하나, 꼭지는 유니버스의 중심 노드입니다.')));
 }

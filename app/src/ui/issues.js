@@ -3,7 +3,7 @@
 // 저장은 main.js가 넘겨 주는 onResolve가 한다(app.resolveMemo).
 
 import { MEMO_CATEGORIES, memoCategoryOf } from '../model/schema.js';
-import { memoTarget, openMemos } from '../rules/issues.js';
+import { groupIssues, memoTarget, openMemos } from '../rules/issues.js';
 import { openMemosOf } from '../rules/handover.js';
 import { displayName } from '../view/describe.js';
 import { el } from './dom.js';
@@ -50,26 +50,36 @@ export function issuePanel(o) {
     wrap.append(el('p', { class: 'muted', 'data-testid': 'issue-empty' }, '미해결 메모가 없습니다.'));
     return wrap;
   }
-  const ul = el('ul', { class: 'issue-list', 'data-testid': 'issue-list' });
-  for (const ev of [...memos].reverse()) {
-    const t = memoTarget(view, ev);
-    const resolveBtn = o.readOnly ? null : el('button', {
-      type: 'button',
-      'data-testid': 'btn-resolve',
-      onclick: () => {
-        const r = o.onResolve(ev.gid);
-        if (r && !r.ok && !(r.error && r.error.already_resolved)) {
-          msg.textContent = messageFor(r.error);
-          msg.hidden = false;
-        }
-      },
-    }, '해결로 표시');
-    ul.append(el('li', { 'data-testid': 'issue-item', 'data-gid': ev.gid },
-      el('div', {}, el('span', { class: 'muted small' }, ev.occurred_at), ' ', el('span', { class: 'chip' }, MEMO_CATEGORIES[memoCategoryOf(ev.payload)]), ' ',
-        t ? el('button', { type: 'button', class: 'link', onclick: () => o.onFocus(t) }, whereOf(view, ev, o.universeId)) : el('span', {}, whereOf(view, ev, o.universeId))),
-      el('div', {}, ev.note || '(내용 없음)'),
-      resolveBtn));
+  // 대상(업무)별 묶음. 기본은 펼침, ISSUE_GROUP_OPEN_MAX(2)건 넘는 묶음은 접힘(R7-3, C12-13)
+  const list = el('div', { 'data-testid': 'issue-list' });
+  for (const g of groupIssues(view, memos)) {
+    const ul = el('ul', { class: 'issue-list' });
+    for (const ev of g.items) {
+      const resolveBtn = o.readOnly ? null : el('button', {
+        type: 'button',
+        'data-testid': 'btn-resolve',
+        onclick: () => {
+          const r = o.onResolve(ev.gid);
+          if (r && !r.ok && !(r.error && r.error.already_resolved)) {
+            msg.textContent = messageFor(r.error);
+            msg.hidden = false;
+          }
+        },
+      }, '해결로 표시');
+      ul.append(el('li', { 'data-testid': 'issue-item', 'data-gid': ev.gid },
+        el('div', {}, el('span', { class: 'muted small' }, ev.occurred_at), ' ', el('span', { class: 'chip' }, MEMO_CATEGORIES[memoCategoryOf(ev.payload)]),
+          g.target ? null : el('span', {}, ` ${whereOf(view, ev, o.universeId)}`)),
+        el('div', {}, ev.note || '(내용 없음)'),
+        resolveBtn));
+    }
+    const name = g.target ? whereOf(view, g.items[0], o.universeId) : '주제';
+    const head = g.target
+      ? el('button', { type: 'button', class: 'link', onclick: () => o.onFocus(g.target) }, name)
+      : el('span', {}, name);
+    list.append(el('details', { class: 'issue-group', 'data-testid': 'issue-group', 'data-count': String(g.items.length), open: g.collapsed ? null : true },
+      el('summary', {}, head, el('span', { class: 'muted small' }, ` · ${g.items.length}건`)),
+      ul));
   }
-  wrap.append(ul);
+  wrap.append(list);
   return wrap;
 }

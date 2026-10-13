@@ -29,6 +29,23 @@ function applyAuto(doc, resolve, ctx) {
   return { doc: next, count: plan.auto.length };
 }
 
+/**
+ * 시각 문자열 now가 other보다 뒤이도록 한다(초 단위 기록이면 1초 뒤). 이미 그렇다면 now 그대로.
+ * 원래 메모가 미래 시각(다른 PC 시계)이면 해결 메모도 그 미래 시각 바로 뒤로 저장된다(limits L-42).
+ * 아니면 other + 1초를 now와 같은 시간대 표기(YYYY-MM-DDTHH:MM:SS±hh:mm 또는 Z)로 돌려준다. other를 읽을 수 없으면 now 그대로.
+ */
+export function laterThan(nowStr, other) {
+  const a = Date.parse(nowStr);
+  const b = Date.parse(other);
+  if (Number.isNaN(a) || Number.isNaN(b) || a >= b + 1000) return nowStr;
+  const m = /([+-])(\d{2}):(\d{2})$/.exec(String(nowStr));
+  const offMin = m ? (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3])) : 0;
+  const d = new Date(Math.floor(b / 1000) * 1000 + 1000 + offMin * 60000);
+  const p = (n) => String(n).padStart(2, '0');
+  const suffix = m ? `${m[1]}${m[2]}:${m[3]}` : 'Z';
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}${suffix}`;
+}
+
 function clone(doc) {
   return JSON.parse(JSON.stringify(doc));
 }
@@ -230,6 +247,8 @@ export function createApp({ store, samples, currentId, now, authorName }) {
       const ev = v.events.find((x) => x.gid === eventGid && x.type === 'memo');
       if (!ev || !openMemos(v).includes(ev)) return { ok: false, error: { code: CODES.SCHEMA, field: 'event', already_resolved: true } };
       const input = resolveMemoInput(ev, today);
+      // 해결 메모의 기록 시각은 원래 메모보다 확실히 뒤(최소 1초)로 맞춘다: 같은 초면 ID 순이라 앞설 수 있다(검토7 V-1)
+      const stamp = laterThan(now(), ev.recorded_at);
       // 저장 전에 새 해결 메모로 원래 메모가 실제로 닫히는지 본다(시계가 어긋나 이력 순서상 앞서면 닫히지 않는다. 검토7 K-4)
       const closes = (next) => {
         const root = ev.universe_id === doc.universe.id ? next : doc;
@@ -237,14 +256,14 @@ export function createApp({ store, samples, currentId, now, authorName }) {
       };
       const notClosed = { ok: false, error: { code: CODES.SCHEMA, field: 'event', not_closed: true } };
       if (ev.universe_id === doc.universe.id) {
-        const own = addEvent(doc, input, { now: now() });
+        const own = addEvent(doc, input, { now: stamp });
         if (own.ok && !closes(own.doc)) return notClosed;
         return commit(own);
       }
       const other = db.loadUniverse(ev.universe_id);
       if (!other) return { ok: false, error: { code: CODES.SCHEMA, field: 'universe_id' } };
       if (validateDocument(other).readOnly) return { ok: false, error: { code: CODES.SCHEMA, reason: 'version' } };
-      const result = addEvent(other, input, { now: now() });
+      const result = addEvent(other, input, { now: stamp });
       if (result.ok && !closes(result.doc)) return notClosed;
       if (result.ok) {
         const failed = save(result.doc);

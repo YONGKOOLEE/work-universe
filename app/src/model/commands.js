@@ -327,7 +327,18 @@ export function addEvent(doc, input, ctx) {
   }
   // 숨긴 노드를 새 이력의 대상으로 쓰지 않는다(연결과 같은 기준). 전역 참조(다른 유니버스)는 여기서 확인하지 않는다
   // 단, 「해결로 표시」(범주 resolved + resolves_id)는 대상이 숨겨져 있어도 그 메모를 닫을 수 있어야 한다(검토7 K-1)
+  // 이 예외는 해결 메모의 대상·주제가 닫는 메모의 대상·주제와 같을 때만 쓴다(검토7 V-2). 다르면 거부한다
   const isResolution = pl.category === 'resolved' && !!pl.resolves_id;
+  if (isResolution) {
+    const orig = typeof pl.resolves_id === 'string' ? doc.events.find((x) => x && x.id === pl.resolves_id && x.type === 'memo') : null;
+    if (orig) {
+      const op = orig.payload || {};
+      const topics = (p) => JSON.stringify([...(Array.isArray(p.topic_ids) ? p.topic_ids : [])].sort());
+      if ((op.target_id || null) !== (pl.target_id || null) || topics(op) !== topics(pl)) {
+        return fail(CODES.SCHEMA, { field: 'resolves_id', mismatch: true });
+      }
+    }
+  }
   for (const [k, v] of Object.entries(isResolution ? {} : pl)) {
     for (const id of Array.isArray(v) ? v : [v]) {
       if (typeof id !== 'string' || id.includes('/') || !/_id$|_ids$/.test(k) || k === 'previous_handover_id') continue;
@@ -579,11 +590,21 @@ export function applyBatch(doc, ops, ctx) {
  * 담당 시작·종료를 이력과 수행(performs) 연결에 함께 반영한다(한 묶음).
  *  - assign_start: 사람 → 업무 수행 연결을 시작일로 만들고 이력을 남긴다. 이미 계속 담당 중이면 E-DUP.
  *  - assign_end: 그 사람의 진행 중(끝 없음) 수행 연결에 끝 날짜를 채우고 이력을 남긴다. 진행 중인 연결이 없으면 거부.
- * 이 묶음의 이벤트 순서: 연결 생성(또는 연결 수정) → 담당 이력.
+ *  - assign_start + input.end_date(선택): 연결을 {start, end} 기간으로 만들고 담당 시작·종료 이력을 함께 남긴다(과거 소급).
+ * 이 묶음의 이벤트 순서: 연결 생성(또는 연결 수정) → 담당 이력(→ 끝 날짜가 있으면 담당 종료 이력).
  * @param {{type:'assign_start'|'assign_end', occurred_at:string, payload:{person_id:string, work_id:string}, note?:string}} input
  */
 export function addAssignment(doc, input, ctx) {
   const pl = input.payload || {};
+  // 끝 날짜(선택, 담당 시작만): 과거 기간을 소급 입력한다(검토7 R7-6). 연결을 {start, end}로 만들고 시작·종료 이력을 함께 남긴다
+  const endDate = input.type === 'assign_start' && !isEmpty(input.end_date) ? input.end_date : null;
+  if (endDate !== null) {
+    if (!isDate(endDate) || (isDate(input.occurred_at) && endDate < input.occurred_at)) return fail(CODES.SCHEMA, { field: 'end_date' });
+    // 끝 날짜는 지난 기간을 한 번에 넣기 위한 것: 오늘보다 뒤면 거부한다(미래 종료 이력이 남으면 실제 종료를 기록할 수 없게 됨)
+    if (ctx.now && endDate > ctx.now.slice(0, 10)) return fail(CODES.SCHEMA, { field: 'end_date', future: true });
+    const probeEnd = addEvent(doc, { type: 'assign_end', occurred_at: endDate, payload: pl }, ctx);
+    if (!probeEnd.ok) return probeEnd;
+  }
   // 이력 검증(날짜·대상 유형·숨김)을 먼저 한다: 통과하지 못하면 연결도 만들지 않는다
   const probe = addEvent(doc, input, ctx);
   if (!probe.ok) return probe;
@@ -593,8 +614,10 @@ export function addAssignment(doc, input, ctx) {
   let work = doc;
   let edge;
   if (input.type === 'assign_start') {
-    if (active) return fail(CODES.DUP, { existing_id: active.id, already_active: true });
-    const r = addEdge(work, { source: pl.person_id, target: pl.work_id, core_type: 'performs', period: { start: input.occurred_at } }, ctx);
+    // 끝 날짜가 있으면 계속 담당 중인 연결과 기간이 겹치는지는 아래 addEdge가 가린다
+    if (active && endDate === null) return fail(CODES.DUP, { existing_id: active.id, already_active: true });
+    const period = endDate === null ? { start: input.occurred_at } : { start: input.occurred_at, end: endDate };
+    const r = addEdge(work, { source: pl.person_id, target: pl.work_id, core_type: 'performs', period }, ctx);
     // 끝난 담당 기간과 겹쳐서 거부된 것: 화면이 「같은 노드」가 아니라 담당 기간 문구를 고르게 표시한다(검토7 K-3)
     if (!r.ok) return r.error && r.error.code === CODES.DUP ? { ...r, error: { ...r.error, period_overlap: true } } : r;
     work = r.doc;
@@ -608,5 +631,10 @@ export function addAssignment(doc, input, ctx) {
   }
   const ev = addEvent(work, input, ctx);
   if (!ev.ok) return ev;
+  if (endDate !== null) {
+    const endEv = addEvent(ev.doc, { type: 'assign_end', occurred_at: endDate, payload: pl }, ctx);
+    if (!endEv.ok) return endEv;
+    return { ok: true, doc: endEv.doc, event: ev.event, endEvent: endEv.event, edge };
+  }
   return { ok: true, doc: ev.doc, event: ev.event, edge };
 }

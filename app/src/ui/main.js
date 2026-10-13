@@ -74,9 +74,10 @@ function wireCreateDialog(app, $) {
 }
 
 // 가져오기(T-17): 문서 초벌 변환(CR-5 ②)·JSON 파일 → 미리 보기 → 가져오기. 시작 화면과 본 화면이 함께 쓴다
-function wireImportDialog(app, $, getProvider, methodLabel, onExport = null) {
+function wireImportDialog(app, $, getProvider, methodLabel, onExport = null, onReset = null) {
   const open = importDialog({
     onExport,
+    onReset,
     dialog: $('import-dialog'),
     app,
     convert: (text) => convertDocumentWith(text, { provider: getProvider(), ruleConvert: (t) => convertDocument(t, { now: nowIso() }) }),
@@ -147,7 +148,7 @@ function start() {
     saveSettings(storage, settings);
     if (hashId()) showBackupNudge();
   };
-  const openImport = wireImportDialog(app, $, () => provider, providerLabel, hashId() ? doExport : null);
+  const openImport = wireImportDialog(app, $, () => provider, providerLabel, hashId() ? doExport : null, doReset);
 
   // 주소에 유니버스가 없으면(더블클릭으로 처음 열었을 때) 시작 화면을 보여 준다(R-08)
   if (!hashId()) { // 깨진 인코딩(#%E0)도 시작 화면(hashId의 주석대로, 여섯 번째 검토 C-16)
@@ -426,28 +427,53 @@ function start() {
     ];
   }
 
+  // 자주 쓰는 단추만 한 줄에 두고 나머지는 「더 보기」(details)로 접는다(R7-2). details는 키보드(Tab·Enter·Space)로 열린다
+  function historyJumpButton() {
+    return el('button', { type: 'button', 'data-testid': 'btn-history-jump', title: '이 노드의 이력 목록으로 내려갑니다', onclick: () => {
+      const h = document.querySelector('[data-testid="history-heading"]');
+      if (!h) return;
+      h.scrollIntoView({ block: 'start' });
+      h.focus({ preventScroll: true });
+    } }, '이력으로');
+  }
+
+  function moreTools(items) {
+    const list = items.filter(Boolean);
+    if (!list.length) return null;
+    return el('details', { class: 'more-tools', 'data-testid': 'more-tools' },
+      el('summary', { title: '숨기기·유사 경험자·인사이트 보기·주변만 보기 같은 나머지 단추' }, '더 보기'),
+      el('div', { class: 'row toolbar-more' }, ...list));
+  }
+
   function toolbar(gid) {
     const node = view.getNode(gid);
     if (!node || node.hidden) return null;
+    const nb = nbhdButtons(gid) || [];
     if (!isOwn(gid)) {
-      return el('div', {}, el('div', { class: 'row toolbar' }, ...docButtons(node), draftButton(gid), insightButton(gid), insightAllButton()),
+      return el('div', {}, el('div', { class: 'row toolbar' }, draftButton(gid), historyJumpButton()),
+        moreTools([...docButtons(node), insightButton(gid), insightAllButton(), ...nb]),
         el('p', { class: 'muted small' }, '다른 유니버스의 노드입니다. 고치려면 ',
           el('button', { type: 'button', class: 'link', onclick: () => openUniverse(node.universe_id) }, `「${node.universe_name}」 열기`), '.'));
     }
     if (app.readOnly) {
-      return el('div', { class: 'row toolbar' }, ...docButtons(node), draftButton(gid), insightButton(gid), insightAllButton());
+      return el('div', {}, el('div', { class: 'row toolbar' }, draftButton(gid), historyJumpButton()),
+        moreTools([...docButtons(node), insightButton(gid), insightAllButton(), ...nb]));
     }
     const btn = (label, kind, testid) => el('button', { type: 'button', 'data-testid': testid, onclick: () => { editing = { kind }; renderPanel(); } }, label);
-    return el('div', { class: 'row toolbar' },
-      btn('수정', 'node', 'btn-edit'),
-      btn('연결 추가', 'edge', 'btn-edge'),
-      btn('이력 추가', 'event', 'btn-event'),
-      node.core_type === 'root' ? null : el('button', { type: 'button', class: 'danger', 'data-testid': 'btn-hide', onclick: () => hideSelected(node) }, '숨기기'),
-      ...docButtons(node),
-      draftButton(gid),
-      insightButton(gid),
-      insightAllButton(),
-    );
+    return el('div', {},
+      el('div', { class: 'row toolbar' },
+        btn('수정', 'node', 'btn-edit'),
+        btn('연결 추가', 'edge', 'btn-edge'),
+        btn('이력 추가', 'event', 'btn-event'),
+        draftButton(gid),
+        historyJumpButton()),
+      moreTools([
+        node.core_type === 'root' ? null : el('button', { type: 'button', class: 'danger', 'data-testid': 'btn-hide', onclick: () => hideSelected(node) }, '숨기기'),
+        ...docButtons(node),
+        insightButton(gid),
+        insightAllButton(),
+        ...nb,
+      ]));
   }
 
   function hideSelected(node) {
@@ -659,11 +685,10 @@ function start() {
     }
     const notes = [loadNote(selected), workNote(selected), issueNote(selected), formNote(selected), repeatNote(selected)].filter(Boolean);
     const tools = toolbar(selected);
-    const nbTools = nbhdButtons(selected);
     return renderNodeDetail(panel, describeNode(view, selected, { asOf: asOf(), past: !!viewDate }), {
       onFocus: focus,
       extra: layerControls(selected),
-      toolbar: notes.length || tools || nbTools ? el('div', {}, ...[...notes, tools, nbTools].filter(Boolean)) : null,
+      toolbar: notes.length || tools ? el('div', {}, ...[...notes, tools].filter(Boolean)) : null,
       linkTools,
     });
   }
@@ -834,10 +859,9 @@ function start() {
     const node = view.getNode(gid);
     if (!node || node.hidden) return null;
     const on = nbhd && nbhd.center === view.canonical(gid);
-    return el('div', { class: 'row toolbar nbhd-tools' },
-      ...[on && nbhd.depth === 1 ? null : el('button', { type: 'button', 'data-testid': 'btn-nbhd', title: '이 노드와 바로 이어진 노드만 남겨 다시 배치합니다(데이터는 바뀌지 않음)', onclick: () => enterNbhd(gid, 1) }, '주변만 보기'),
+    return [on && nbhd.depth === 1 ? null : el('button', { type: 'button', 'data-testid': 'btn-nbhd', title: '이 노드와 바로 이어진 노드만 남겨 다시 배치합니다(데이터는 바뀌지 않음)', onclick: () => enterNbhd(gid, 1) }, '주변만 보기'),
         on && nbhd.depth === 2 ? null : el('button', { type: 'button', 'data-testid': 'btn-nbhd2', title: '두 단계 떨어진 노드까지 남깁니다', onclick: () => enterNbhd(gid, 2) }, '주변 2단계'),
-        nbhd ? el('button', { type: 'button', 'data-testid': 'btn-nbhd-exit', onclick: leaveNbhd }, '전체 보기로') : null].filter(Boolean));
+        nbhd ? el('button', { type: 'button', 'data-testid': 'btn-nbhd-exit', onclick: leaveNbhd }, '전체 보기로') : null].filter(Boolean);
   }
 
   function renderExploreStatus() {
@@ -936,7 +960,7 @@ function start() {
   const dialog = $('group-dialog');
   // 생성 방식 버튼: 지금 방식을 이름에 보인다(R-15 "생성 방식 표시")
   function renderSettingsButton() {
-    $('settings-open').textContent = `생성 방식: ${providerLabel().replace(/\s*\(.*\)$/, '')}`;
+    $('settings-open').title = `생성 방식(지금: ${providerLabel().replace(/\s*\(.*\)$/, '')})과 작성자 이름을 정합니다`;
   }
   renderSettingsButton();
   $('settings-open').addEventListener('click', () => {
@@ -991,8 +1015,6 @@ function start() {
     const slot = $('add-slot');
     if (app.readOnly) {
       slot.replaceChildren(el('p', { class: 'muted small' }, '읽기 전용이라 추가할 수 없습니다.'));
-      // 문서만 읽기 전용(버전 불일치)이면 초기화로 복구할 수 있게 둔다. 저장소 자체를 못 쓸 때만 막는다
-      $('reset').disabled = !app.canReset;
       return;
     }
     slot.replaceChildren(
@@ -1021,7 +1043,8 @@ function start() {
   }
   renderAddForm();
 
-  $('reset').addEventListener('click', () => {
+  // 가상 데이터 초기화: 「가져오기·내보내기」 창 맨 아래 위험 구역에서 부른다(R7-4). 문서만 읽기 전용이면 초기화로 복구할 수 있게 둔다
+  function doReset() {
     // 직접 만들거나 가져온 유니버스도 지워지므로 몇 개인지 알리고 먼저 내보내라고 안내한다(여섯 번째 검토 U-9)
     const mine = app.universes().filter((u) => !SAMPLES.some((s) => s.universe.id === u.id));
     const mineText = mine.length ? `
@@ -1030,8 +1053,9 @@ function start() {
     if (!window.confirm(`모든 가상 데이터를 초기 샘플로 되돌립니다. 샘플에 추가한 노드와 직접 묶은 유니버스는 사라집니다.${mineText}`)) return;
     const r = app.resetAll();
     if (r && !r.ok) return window.alert(messageFor(r.error));
+    $('import-dialog').close();
     openUniverse(app.doc.universe.id);
-  });
+  }
 
   refresh();
 

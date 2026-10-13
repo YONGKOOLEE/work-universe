@@ -15,7 +15,7 @@ const DRAFT_FIELDS = { target: '대상', from: '보내는 사람', to: '받는 �
 function draftError(err) {
   if (err.same_person) return '보내는 사람과 받는 사람이 같습니다.';
   if (err.code === 'E-REQUIRED') return `${DRAFT_FIELDS[err.field]}${josa(DRAFT_FIELDS[err.field], '을/를')} 고르세요.`;
-  if (err.field === 'target') return '대상은 유니버스(꼭지)나 업무만 고를 수 있습니다.';
+  if (err.field === 'target') return '대상은 꼭지(유니버스의 중심 노드)나 업무만 고를 수 있습니다.';
   return messageFor(err);
 }
 
@@ -175,7 +175,7 @@ function renderDraft(box, d, view, onFocus, o = {}) {
   box.replaceChildren(...[
     el('div', { class: 'draft-head' },
       el('span', { class: 'badge', 'data-testid': 'draft-status' }, '초안'),
-      // 머리줄이 좁아 괄호 설명은 title로 옮긴다(검토5 U-12). 긴 이름은 머리글 「생성 방식」 설정과 실행 안내에 있다
+      // 머리줄이 좁아 괄호 설명은 title로 옮긴다(검토5 U-12). 긴 이름은 머리글 「설정」과 실행 안내에 있다
       el('span', { class: 'method', 'data-testid': 'draft-method', title: METHOD_LABELS[d.method] }, `생성 방식: ${METHOD_LABELS[d.method].replace(/\(.*\)$/, '')}`),
       copyBtn, downBtn, printBtn),
     el('h3', { class: 'draft-title' }, d.title),

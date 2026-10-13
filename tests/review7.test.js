@@ -110,7 +110,9 @@ test('K-3 담당 시작이 이미 있는 기간과 겹쳐 거부되면 period_ov
 });
 
 // ── K-4 ──
-test('K-4 기록 시각이 원래 메모보다 앞서 닫히지 않는 해결 표시는 저장하지 않고 거부한다', () => {
+// V-1(일곱 번째 검토 뒤 결정)로 바뀜: 해결 메모의 기록 시각을 원래 메모보다 뒤로 맞추므로, 원래 메모가 미래 시각(다른 PC 시계)이어도 닫힌다.
+// (이전 판의 기대 "not_closed로 거부"는 이 요구사항 변경으로 뒤집었다)
+test('K-4 → V-1: 원래 메모의 기록 시각이 지금보다 뒤여도 해결 표시가 닫히고, 두 번 눌러도 해결 메모는 하나', () => {
   let d = createUniverse({ name: 'K4', level: '팀', owner: '가상팀' }, ctx).doc;
   const w = addNode(d, { core_type: 'work', label: '가상 대사' }, ctx);
   d = w.doc;
@@ -121,16 +123,14 @@ test('K-4 기록 시각이 원래 메모보다 앞서 닫히지 않는 해결 �
   const target = openMemos(app.view)[0];
   const before = app.doc.events.length;
   const r = app.resolveMemo(target.gid, '2026-10-13');
-  assert.equal(r.ok, false);
-  assert.equal(r.error.code, 'E-SCHEMA');
-  assert.equal(r.error.not_closed, true);
-  assert.ok(messageFor(r.error).includes('닫지 못했습니다'));
-  assert.equal(app.doc.events.length, before, '아무것도 더하지 않는다');
-  assert.equal(open(d.universe.id, storage).doc.events.length, before, '저장소도 그대로');
-  assert.ok(openMemos(app.view).some((x) => x.gid === target.gid));
-  // 두 번 눌러도 쌓이지 않는다
-  assert.equal(app.resolveMemo(target.gid, '2026-10-13').ok, false);
-  assert.equal(app.doc.events.length, before);
+  assert.equal(r.ok, true);
+  assert.equal(app.doc.events.length, before + 1);
+  assert.ok(!openMemos(app.view).some((x) => x.gid === target.gid), '닫힘');
+  const added = app.doc.events.at(-1);
+  assert.ok(Date.parse(added.recorded_at) > Date.parse('2026-10-13T18:00:00+09:00'), '기록 시각이 원래 메모보다 뒤');
+  assert.equal(app.resolveMemo(target.gid, '2026-10-13').ok, false, '이미 닫혔으면 거부');
+  assert.equal(app.doc.events.length, before + 1);
+  assert.equal(open(d.universe.id, storage).doc.events.length, before + 1, '저장소에도 1건만');
 });
 
 test('K-4 정상: 닫히는 해결 표시는 지금처럼 저장된다(샘플 미해결 메모)', () => {

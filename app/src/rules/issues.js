@@ -66,3 +66,30 @@ export function resolveMemoInput(ev, today) {
     note: head ? `해결: ${head}` : '해결',
   };
 }
+
+/** 한 묶음이 이 건수를 넘으면 목록에서 접어 둔다(R7-3) */
+export const ISSUE_GROUP_OPEN_MAX = 2; // 이보다 많은 묶음은 접는다(부서 화면이 짧아지게, decisions-pending C12-13. 처음 값 5)
+
+/**
+ * 미해결 메모를 대상(업무)별로 묶는다(R7-3). 대상이 없는 메모는 target이 null인 「주제」 묶음 하나로 모은다.
+ * 묶음 순서: 건수 많은 묶음 먼저, 같으면 가장 최근 날짜가 있는 묶음 먼저, 그래도 같으면 대상 참조 순(결정적).
+ * 이유: 부서 화면처럼 한 업무에 메모가 몰릴 때 그 업무가 맨 위에 접힌 채 보여 목록이 짧아지고, 작은 묶음은 바로 펼쳐 읽을 수 있다.
+ * 묶음 안은 입력의 역순(최근 기록이 위, 목록의 기존 순서)이다.
+ * @param view 합성 뷰
+ * @param memos openMemos 결과(이력 순서)
+ * @returns {{key:string, target:string|null, items:object[], latest:string, collapsed:boolean}[]}
+ */
+export function groupIssues(view, memos) {
+  const groups = new Map();
+  for (const ev of [...memos].reverse()) {
+    const target = memoTarget(view, ev);
+    const key = target || 'topics';
+    if (!groups.has(key)) groups.set(key, { key, target, items: [], latest: '' });
+    const g = groups.get(key);
+    g.items.push(ev);
+    if (String(ev.occurred_at) > g.latest) g.latest = String(ev.occurred_at);
+  }
+  return [...groups.values()]
+    .sort((a, b) => b.items.length - a.items.length || (a.latest < b.latest ? 1 : a.latest > b.latest ? -1 : 0) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
+    .map((g) => ({ ...g, collapsed: g.items.length > ISSUE_GROUP_OPEN_MAX }));
+}

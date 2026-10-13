@@ -242,6 +242,10 @@ async function checkBrowser(browser, port) {
   await flowShot('U-D1', 'c');
   await shot(s.cdp, `${browser.name}-20d-flow-U-D1`);
   check('흐름 정렬(부서 화면): 모든 노드가 화면 안에 있음', await evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const r = document.getElementById('graph').getBoundingClientRect(); return cy.nodes().every((n) => { const b = n.renderedBoundingBox({ includeLabels: false }); return b.x2 > 0 && b.y2 > 0 && b.x1 < r.width && b.y1 < r.height; }); })()"));
+  await flowShot('U-K1', 'k');
+  const flowK1 = await evaluate(s.cdp, `(() => { const cy = window.__wu.cy; const ts = cy.nodes().filter((n) => n.data('core_type') === 'topic'); let dx = 0; let k = 0; ts.forEach((t) => { t.neighborhood('node').filter((m) => m.data('core_type') === 'work').forEach((w) => { dx += Math.abs(w.position().x - t.position().x); k += 1; }); }); return { k, dx }; })()`);
+  check('흐름 정렬 U-K1(R7-1): 주제-업무 연결의 가로 거리 합이 개선 전(10800)의 절반 아래', flowK1.k > 0 && flowK1.dx < 5400, JSON.stringify(flowK1));
+  await shot(s.cdp, `${browser.name}-20e-flow-U-K1`);
   await evaluate(s.cdp, "location.hash = 'U-A1'; location.reload()").catch(() => {});
   await sleep(600);
   await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
@@ -429,7 +433,7 @@ async function checkBrowser(browser, port) {
   await shot(s.cdp, `${browser.name}-3b-edited`);
 
   // ── T-12 생성 방식 설정: 기본은 사전 생성. 이 단계는 앞에서 데이터를 고친 상태라 규칙 기반 문장을 점검하려고 「규칙 기반만」으로 바꾼다 ──
-  check('R-15: 머리글에 지금 생성 방식(사전 생성) 표시', (await text(s.cdp, '#settings-open')).includes('사전 생성'));
+  check('R-15: 머리글 「설정」 단추에 지금 생성 방식(사전 생성)이 설명으로 붙음', (await text(s.cdp, '#settings-open')) === '설정' && (await evaluate(s.cdp, "document.getElementById('settings-open').getAttribute('title') || ''")).includes('사전 생성'));
   const pickProvider = async (name) => {
     await evaluate(s.cdp, "document.getElementById('settings-open').click()");
     await sleep(150);
@@ -439,7 +443,7 @@ async function checkBrowser(browser, port) {
     await sleep(100);
   };
   await pickProvider('none');
-  check('설정에서 「규칙 기반만」을 고르면 머리글 표시가 바뀌고 저장된다(12.4)', (await text(s.cdp, '#settings-open')).includes('규칙 기반만') && (await evaluate(s.cdp, "JSON.parse(localStorage.getItem('wu:v1:settings')).provider")) === 'none');
+  check('설정에서 「규칙 기반만」을 고르면 머리글 표시가 바뀌고 저장된다(12.4)', (await evaluate(s.cdp, "document.getElementById('settings-open').getAttribute('title') || ''")).includes('규칙 기반만') && (await evaluate(s.cdp, "JSON.parse(localStorage.getItem('wu:v1:settings')).provider")) === 'none');
 
   // ── T-07 인수인계 초안 ──
   await evaluate(s.cdp, "window.__wu.select(null)");
@@ -1345,13 +1349,50 @@ async function checkBrowser(browser, port) {
   await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1'", 8000);
   check('오류(12.1): 스키마 버전이 다른 문서 → 경고 배너와 읽기 전용(추가 불가)', (await text(s.cdp, '#banner')).includes('읽기 전용으로 엽니다') && (await text(s.cdp, '#add-slot')).includes('읽기 전용'));
   // NFR 가용성·복구: 「가상 데이터 초기화」로 처음 상태로 돌아간다(위 버전 문제도 함께 풀림)
-  await evaluate(s.cdp, "sessionStorage.setItem('__confirmMsg', ''); window.confirm = (m) => { sessionStorage.setItem('__confirmMsg', m); return true; }; document.getElementById('reset').click()").catch(() => {});
+  await evaluate(s.cdp, "sessionStorage.setItem('__confirmMsg', ''); window.confirm = (m) => { sessionStorage.setItem('__confirmMsg', m); return true; }; document.getElementById('import-open').click()").catch(() => {});
+  await sleep(300);
+  const roReset = await evaluate(s.cdp, "(() => { const d = document.getElementById('import-dialog'); const b = d && d.querySelector('[data-testid=reset-all]'); if (!d || !d.open || !b) return { open: !!(d && d.open), btn: false }; const r = b.getBoundingClientRect(); return { open: true, btn: true, disabled: b.disabled, size: r.width > 0 && r.height > 0 }; })()");
+  check('오류(12.1) 복구 경로: 읽기 전용 문서에서도 「가져오기·내보내기」 창이 열리고 안의 「가상 데이터 초기화」가 눌릴 수 있음', roReset && roReset.open && roReset.btn && !roReset.disabled && roReset.size, JSON.stringify(roReset));
+  await evaluate(s.cdp, "document.getElementById('reset').click()").catch(() => {});
   await sleep(600);
   await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.cy.nodes().length > 0", 8000);
   const resetMsg = (await evaluate(s.cdp, "sessionStorage.getItem('__confirmMsg')").catch(() => '')) || '';
   await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
   check('U-9: 초기화 확인 문구가 직접 만들거나 가져온 유니버스도 지워진다고 알림', resetMsg.includes('초기 샘플로 되돌립니다') && resetMsg.includes('직접 만들거나 가져온 유니버스') && resetMsg.includes('내보내세요'), resetMsg);
   check('NFR 복구: 가상 데이터 초기화 → 샘플이 처음 상태(추가 노드 없음, 수정 되돌림, 쓰기 가능)', (await nodeCount(s.cdp)) === NODES && !(await hasLabel(s.cdp, newLabel)) && !(await evaluate(s.cdp, "window.__wu.readOnly")) && !(await evaluate(s.cdp, "(window.__wu.doc.nodes.find((n) => n.id === 'N-001').description || '').includes('(수정)')")));
+
+  // ── 일곱 번째 검토 「나」 묶음(R7-2·R7-4·R7-5): 업무 상세 단추 정리, 머리글 정리, 용어 풀이. 데이터를 바꾸지 않는다 ──
+  await evaluate(s.cdp, "window.__wu.select(window.__wu.view.nodes.find((n) => n.core_type === 'work' && !n.hidden).gid)");
+  await sleep(200);
+  const topBtns = await evaluate(s.cdp, "[...document.querySelectorAll('#detail .toolbar > button')].map((b) => b.textContent).join('|')");
+  check('R7-2: 업무 상세에는 수정·연결 추가·이력 추가·인수인계 초안 만들기·이력으로만 한 줄에 보임', topBtns === '수정|연결 추가|이력 추가|인수인계 초안 만들기|이력으로', topBtns);
+  const moreInfo = await evaluate(s.cdp, "(() => { const d = document.querySelector('details.more-tools'); return d && { open: d.open, btns: [...d.querySelectorAll('button')].map((b) => b.dataset.testid) }; })()");
+  check('R7-2: 「더 보기」는 닫혀 있고 숨기기·유사 경험자·인사이트 보기·주변만 보기·주변 2단계가 들어 있음', !!moreInfo && !moreInfo.open && ['btn-hide', 'btn-similar', 'btn-insight', 'btn-nbhd', 'btn-nbhd2'].every((t) => moreInfo.btns.includes(t)), JSON.stringify(moreInfo));
+  await shot(s.cdp, `${browser.name}-27a-detail-more-closed`);
+  await evaluate(s.cdp, "document.querySelector('details.more-tools summary').focus()");
+  check('R7-2: 「더 보기」 summary가 포커스를 받음(키보드 접근)', (await evaluate(s.cdp, 'document.activeElement.tagName')) === 'SUMMARY');
+  await evaluate(s.cdp, "document.querySelector('details.more-tools summary').click()");
+  await sleep(100);
+  check('R7-2: 「더 보기」를 열면 단추가 보임(크기 있음)', await evaluate(s.cdp, "document.querySelector('[data-testid=btn-hide]').getBoundingClientRect().height > 0"));
+  await shot(s.cdp, `${browser.name}-27b-detail-more-open`);
+  await clickTestId(s.cdp, 'btn-history-jump');
+  await sleep(200);
+  check('R7-2: 「이력으로」를 누르면 「이력」 제목에 포커스가 가고 보이는 영역 안에 옴', await evaluate(s.cdp, "(() => { const h = document.querySelector('[data-testid=history-heading]'); if (!h) return false; const r = h.getBoundingClientRect(); return document.activeElement === h && r.top >= 0 && r.top < innerHeight; })()"));
+  await evaluate(s.cdp, "window.__wu.select(window.__wu.view.nodes.find((n) => n.core_type === 'person' && !n.hidden).gid)");
+  await sleep(200);
+  check('R7-2: 사람 노드도 수정·연결 추가·이력 추가·이력으로 + 접힌 「더 보기」', (await evaluate(s.cdp, "[...document.querySelectorAll('#detail .toolbar > button')].map((b) => b.textContent).join('|')")) === '수정|연결 추가|이력 추가|이력으로' && !!(await evaluate(s.cdp, "document.querySelector('details.more-tools')")));
+  check('R7-4: 머리글에 「설정」은 있고 「가상 데이터 초기화」는 없음', (await text(s.cdp, '#settings-open')) === '설정' && !(await evaluate(s.cdp, "[...document.querySelectorAll('header button')].some((b) => b.textContent.includes('가상 데이터 초기화'))")));
+  await evaluate(s.cdp, "document.getElementById('import-open').click()");
+  await sleep(300);
+  check('R7-4: 「가져오기·내보내기」 창 맨 아래 위험 구역에 「가상 데이터 초기화」', await evaluate(s.cdp, "(() => { const d = document.querySelector('#import-dialog'); const z = d.querySelector('.danger-zone'); return !!z && !!z.querySelector('[data-testid=reset-all]') && z === d.lastElementChild; })()"));
+  await evaluate(s.cdp, "document.querySelector('#import-dialog .danger-zone').scrollIntoView({ block: 'center' })");
+  await sleep(150);
+  await shot(s.cdp, `${browser.name}-27c-import-danger-zone`);
+  await clickTestId(s.cdp, 'import-close');
+  await sleep(150);
+  await evaluate(s.cdp, 'window.__wu.select(null)');
+  await sleep(150);
+  check('R7-5: 개요에 용어 한 줄(유니버스·노드·꼭지)', (await text(s.cdp, '[data-testid=term-note]')).includes('꼭지'));
   // ── R-03 ③ 초안 확정(CR-8): 초기화한 깨끗한 월말 정산에서 확정 → 인수인계서·이력 → 다음 초안의 이전 인수인계 근거 ──
   await evaluate(s.cdp, "window.confirm = () => true; window.__wu.select(null)");
   await clickTestId(s.cdp, 'btn-draft-universe');
@@ -1424,7 +1465,8 @@ async function checkBrowser(browser, port) {
   check('R-19 ② 초안 인쇄 → 숨긴 iframe의 print() 호출, 문서에 버튼·그래프·스크립트 없음, A4 세로 지정', r19print.length === 1 && r19print[0].interactive === 0 && r19print[0].html.includes('이력') && (await evaluate(s.cdp, "!!document.querySelector('iframe[data-testid=print-frame]')")) && r19html.includes('size: A4 portrait'), JSON.stringify(r19print.map((p) => p.interactive)));
   await evaluate(s.cdp, "document.querySelectorAll('iframe[data-testid=print-frame]').forEach((f) => f.remove()); window.__prints = []; window.__dl = null; window.__blob = null; window.__confirmedDoc = window.__wu.doc.nodes.filter((n) => n.subtype === '인수인계서' && !n.hidden && n.label.includes('대사 확인 인수인계서')).pop().id; window.__wu.select(window.__wu.doc.universe.id + '/' + window.__confirmedDoc)");
   await sleep(250);
-  check('R-19 ① ② 확정 인수인계서 상세에 「내려받기」「인쇄」 버튼이 보임(크기 있음)', (await btnBox('doc-download')) && (await btnBox('doc-print')));
+  await evaluate(s.cdp, "document.querySelectorAll('#detail details.more-tools').forEach((d) => { d.open = true; })");
+  check('R-19 ① ② 확정 인수인계서 상세에 「내려받기」「인쇄」 버튼이 보임(「더 보기」를 연 뒤 크기 있음)', (await btnBox('doc-download')) && (await btnBox('doc-print')));
   await clickTestId(s.cdp, 'doc-download');
   await sleep(200);
   const r19cname = await evaluate(s.cdp, 'window.__dl');
@@ -1464,6 +1506,13 @@ async function checkBrowser(browser, port) {
   await clickTestId(s.cdp, 'btn-issues');
   await sleep(200);
   const r20Items0 = await r20Items();
+  const issueGroups = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=issue-group]')].map((d) => ({ n: Number(d.dataset.count), open: d.open, items: d.querySelectorAll('[data-testid=issue-item]').length }))");
+  check('미해결 목록(R7-3): 업무별 묶음 머리에 건수가 있고 항목 수와 같음', issueGroups.length > 0 && issueGroups.every((g) => g.n === g.items), JSON.stringify(issueGroups));
+  check('미해결 목록(R7-3): 2건 이하 묶음은 펼침, 2건 넘는 묶음은 접힘(C12-13)', issueGroups.every((g) => g.open === (g.n <= 2)), JSON.stringify(issueGroups));
+  check('미해결 목록(R7-3): 묶음 건수 순서가 내림차순', issueGroups.every((g, i) => i === 0 || issueGroups[i - 1].n >= g.n), JSON.stringify(issueGroups));
+  await shot(s.cdp, `${browser.name}-13d-issues-grouped`);
+  // 접힌 묶음 안의 「해결로 표시」는 크기가 0이므로 모든 묶음을 펼친 뒤 크기를 잰다
+  await evaluate(s.cdp, "document.querySelectorAll('[data-testid=issue-group]').forEach((d) => { d.open = true; })");
   check('R-20 ① 누르면 목록(날짜·업무·내용·해결로 표시)이 뜨고 건수가 같음', r20Items0.length === r20c0.n && (await text(s.cdp, '#detail h2')).includes(`미해결 ${r20c0.n}건`) && (await btnBox('btn-resolve')) && r20Items0.every((x) => x.hasBtn), JSON.stringify(r20Items0.map((x) => x.gid)));
   const r20Prog0 = r20Items0.filter((x) => x.chip === '진행 중');
   check('R-20 ③ 목록의 「진행 중」 항목이 같은 업무 인수인계 초안의 「진행 중」과 같은 메모', r20Prog0.length === r20Draft0.length && r20Draft0.length > 0 && r20Draft0.every((d) => r20Prog0.some((x) => d.includes(x.text))), JSON.stringify([r20Prog0.length, r20Draft0.length]));
@@ -1739,6 +1788,59 @@ async function checkBrowser(browser, port) {
   await sleep(250);
   const authorHtml = await evaluate(s.cdp, 'window.__blob ? window.__blob.text() : null');
   check('R-22 ② 확정본 내려받기 파일의 확정자 줄이 그 이름', typeof (await evaluate(s.cdp, 'window.__dl')) === 'string' && !!authorHtml && authorHtml.includes('확정자: 가상 작성자') && !authorHtml.includes('확정자: 사용자(이 브라우저)'), (authorHtml || '').slice(0, 120));
+
+  // ── R7-6 담당 시작의 끝 날짜(선택), V-1 같은 초 해결. 데이터를 바꾸므로 끝부분. 사람 N-012(서하늘)는 2026-10-01부터 N-001 담당 중이라 2019년 소급 기간은 겹치지 않는다 ──
+  await reloadApp();
+  await evaluate(s.cdp, "window.confirm = () => true; window.__wu.select('U-A1/N-001')");
+  await sleep(200);
+  const setSel = (idx, id) => evaluate(s.cdp, `(() => { const e = [...document.querySelectorAll('#detail .event-fields select')][${idx}]; if (!e) return false; e.value = ${JSON.stringify(id)}; e.dispatchEvent(new Event('change')); return e.value === ${JSON.stringify(id)}; })()`);
+  const openAssign = async () => {
+    await clickTestId(s.cdp, 'btn-event');
+    await sleep(100);
+    await evaluate(s.cdp, "(() => { const t = document.querySelector('#detail [data-testid=event-type]'); t.value = 'assign_start'; t.dispatchEvent(new Event('change')); })()");
+    await setSel(0, 'N-012');
+    await setSel(1, 'N-001');
+  };
+  const counts = () => evaluate(s.cdp, 'JSON.stringify([window.__wu.doc.events.length, window.__wu.doc.edges.length])');
+  await clickTestId(s.cdp, 'btn-event');
+  await sleep(100);
+  await evaluate(s.cdp, "(() => { const t = document.querySelector('#detail [data-testid=event-type]'); t.value = 'assign_start'; t.dispatchEvent(new Event('change')); })()");
+  await sleep(100);
+  check('R7-6: 담당 시작 양식에 「끝 날짜(선택)」 칸이 있고 비어 있다', (await evaluate(s.cdp, "(() => { const e = document.querySelector('#detail [data-testid=event-end-date]'); return !!e && e.value === ''; })()")) === true);
+  await shot(s.cdp, `${browser.name}-28a-assign-end-date`);
+  await evaluate(s.cdp, "[...document.querySelectorAll('#detail button')].find((b) => b.textContent === '취소').click()");
+  await openAssign();
+  const asgBefore = await counts();
+  await fillPanelForm(s.cdp, { 'event-date': '2019-06-30', 'event-end-date': '2019-03-01' });
+  await sleep(200);
+  const endBad = await panelMessage(s.cdp);
+  check('R7-6: 끝 날짜가 시작보다 앞 → 「끝 날짜」 안내, 이력·연결이 늘지 않음', !!endBad && endBad.text.includes('끝 날짜') && (await counts()) === asgBefore, endBad && endBad.text);
+  await fillPanelForm(s.cdp, { 'event-date': '2019-01-01', 'event-end-date': '2019-06-30' });
+  await sleep(300);
+  const asgAfter = JSON.parse(await evaluate(s.cdp, "(() => { const d = window.__wu.doc; const e = d.edges.filter((x) => x.core_type === 'performs' && x.source === 'N-012' && x.target === 'N-001' && x.period && x.period.start === '2019-01-01'); return JSON.stringify({ n: e.length, end: e[0] && e[0].period.end, evs: d.events.filter((x) => (x.occurred_at === '2019-01-01' || x.occurred_at === '2019-06-30') && x.payload.person_id === 'N-012').map((x) => x.type).sort() }); })()"));
+  check('R7-6: 끝 날짜 있는 담당 시작 → 연결 {start,end} 1개 + 담당 시작·종료 이력 2건', asgAfter.n === 1 && asgAfter.end === '2019-06-30' && asgAfter.evs.join() === 'assign_end,assign_start', JSON.stringify(asgAfter));
+  await openAssign();
+  const asgBefore2 = await counts();
+  await fillPanelForm(s.cdp, { 'event-date': '2019-03-01', 'event-end-date': '2019-04-01' });
+  await sleep(200);
+  const overlapMsg = await panelMessage(s.cdp);
+  check('R7-6: 기간이 겹치면 「담당 기간…겹칩니다」로 거부(저장 안 됨)', !!overlapMsg && overlapMsg.text.includes('담당 기간') && overlapMsg.text.includes('겹칩니다') && (await counts()) === asgBefore2, overlapMsg && overlapMsg.text);
+  await evaluate(s.cdp, "[...document.querySelectorAll('#detail button')].find((b) => b.textContent === '취소').click()");
+  // V-1: 방금 쓴 메모를 바로 미해결 목록에서 「해결로 표시」해도 닫힌다(not_closed 안내가 뜨지 않음)
+  await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+  await sleep(150);
+  await clickTestId(s.cdp, 'btn-event');
+  await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': '2026-10-13', 'event-category': 'issue', 'event-note': '같은 초 해결 점검' });
+  await sleep(250);
+  await clickTestId(s.cdp, 'btn-issues');
+  await sleep(200);
+  const v1gid = await evaluate(s.cdp, "(() => { const li = [...document.querySelectorAll('[data-testid=issue-item]')].find((x) => x.textContent.includes('같은 초 해결 점검')); return li ? li.dataset.gid : ''; })()");
+  await evaluate(s.cdp, `(() => { const li = document.querySelector('[data-gid="${v1gid}"]'); li.closest('details').open = true; li.querySelector('[data-testid=btn-resolve]').click(); })()`);
+  await sleep(250);
+  const v1 = await evaluate(s.cdp, `({ err: (() => { const m = document.querySelector('[data-testid=issue-error]'); return m && !m.hidden ? m.textContent : ''; })(), still: !!document.querySelector('[data-gid="${v1gid}"]') })`);
+  check('V-1: 방금 쓴 메모를 바로 해결로 표시 → 안내 없이 목록에서 빠짐', !!v1gid && v1.err === '' && v1.still === false, JSON.stringify(v1));
+  await clickTestId(s.cdp, 'issue-close');
+  await sleep(100);
 
   const errors2 = [...s.log.errors];
   const external2 = [...s.log.external];

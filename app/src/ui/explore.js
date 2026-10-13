@@ -111,7 +111,7 @@ export function exploreBar(o) {
   const details = el('details', { class: 'filter-box', 'data-testid': 'filter-box' },
     el('summary', { 'data-testid': 'filter-open' }, '거르기'),
     el('div', { class: 'filter-panel' },
-      el('div', { class: 'muted small' }, `노드 유형 — 고른 유형만 또렷하게, ${dimText}(꼭지는 늘 보임)`), typeBox,
+      el('div', { class: 'muted small' }, `노드 유형 — 고른 유형만 또렷하게, ${dimText}(유니버스의 중심 노드인 꼭지는 늘 보임)`), typeBox,
       el('div', { class: 'muted small' }, '사람 하나 — 그 사람과 맡은 업무(지난 담당 포함)만 또렷하게'), personSel,
       el('button', { type: 'button', class: 'small-btn', 'data-testid': 'filter-clear-panel', onclick: () => clear() }, '거르기 모두 풀기')));
   details.addEventListener('toggle', () => { if (details.open) renderFilterInputs(); });

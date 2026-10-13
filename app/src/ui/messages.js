@@ -69,7 +69,7 @@ export function messageFor(err, ctx = {}) {
       if (err.field === 'core_type') return '유형을 고르세요.';
       return `${name(err.field)}${josa(name(err.field), '을/를')} 입력하거나 고르세요.`;
     case 'E-DUP':
-      if (err.period_overlap) return '이 사람의 담당 기간이 이미 있는 기간과 겹칩니다. 과거 기간은 지금 넣을 수 없습니다(끝 날짜 입력은 결정 대기).';
+      if (err.period_overlap) return '이 사람의 담당 기간이 이미 있는 기간과 겹칩니다. 기간이 겹치지 않게 시작·끝 날짜를 확인하세요.';
       if (ctx.kind === 'edge') return '같은 연결이 이미 있습니다(같은 관계, 기간이 겹침). 기존 연결을 확인하세요.';
       if (err.field === 'name') return '같은 이름의 하위 유형이 이미 있습니다.';
       if (err.field === 'child_universe_id') return '이미 묶여 있는 유니버스입니다.';
@@ -103,6 +103,9 @@ export function messageFor(err, ctx = {}) {
       if (err.reason === 'version') return `이 유니버스는 다른 버전(${err.found ?? '알 수 없음'})의 형식이라 읽기 전용으로 엽니다. 고칠 수 없습니다.`;
       if (err.reason === 'invalid') return `이 유니버스에 형식 오류 ${err.count}건이 있습니다. 보이는 내용이 일부 맞지 않을 수 있습니다.`;
       if (err.field === 'period') return '기간을 확인하세요. 날짜는 YYYY-MM-DD(1900~2200년)이고, 끝은 시작보다 앞일 수 없습니다.';
+      if (err.field === 'end_date' && err.future) return '끝 날짜는 오늘보다 뒤일 수 없습니다. 지금 담당 중이면 끝 날짜를 비우고, 끝날 때 「담당 종료」를 기록하세요.';
+      if (err.field === 'end_date') return '끝 날짜를 확인하세요(YYYY-MM-DD). 끝 날짜는 담당 시작 날짜보다 앞일 수 없습니다.';
+      if (err.mismatch) return '해결 표시의 대상·주제가 닫으려는 메모와 다릅니다. 아무것도 저장하지 않았습니다.';
       if (err.field === 'occurred_at') return '날짜를 확인하세요(YYYY-MM-DD, 1900~2200년의 실제 있는 날짜).';
       if (err.field === 'label') return '꼭지 이름은 유니버스 이름과 같아서 여기서 바꿀 수 없습니다.';
       if (err.unknown_type) return `알 수 없는 유형 「${err.unknown_type}」입니다. 업무·사람·산출물·조직·주제 중 하나를 쓰세요.`;
@@ -110,7 +113,7 @@ export function messageFor(err, ctx = {}) {
       if (err.extra_cells) return '머리글보다 칸이 많습니다. 탭이 더 들어갔는지 확인하세요.';
       if (err.no_active) return '이 사람이 이 업무를 담당 중인 연결이 없어 종료할 수 없습니다. 담당자와 업무를 확인하세요.';
       if (err.locked) return '이 노드의 속성 값에 「;」나 줄바꿈이 있어 표로 고칠 수 없습니다. 상세 패널의 「수정」에서 고치세요.';
-      if (err.not_closed) return '이 메모를 닫지 못했습니다. 메모와 해결 표시의 기록 시각 순서가 맞지 않습니다(다른 PC의 시계가 어긋났을 수 있습니다). 아무것도 저장하지 않았습니다.';
+      if (err.not_closed) return '이 메모를 닫지 못했습니다. 메모와 해결 표시의 기록 순서를 맞추지 못했습니다(다른 PC에서 만든 문서의 기록 시각이 어긋났거나, 이 메모가 다른 이력에 가려졌을 수 있습니다). 아무것도 저장하지 않았습니다.';
       if (err.format) return '속성은 「키=값; 키=값」 형식으로 쓰세요.';
       if (err.too_many) return `한 번에 ${err.too_many}행까지 저장할 수 있습니다. 나누어 저장하세요.`;
       if (err.field === 'core_type') return ctx.kind === 'edge' ? '알 수 없는 관계입니다.' : '추가하거나 바꿀 수 없는 유형입니다.';

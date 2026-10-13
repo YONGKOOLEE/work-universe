@@ -13,6 +13,7 @@ export const LANES = {
   stackGap: 64, // 같은 열에 업무가 여럿일 때 세로 간격
 };
 
+const TOPIC_SUB_COST = 120; // 주제 띠에서 한 칸 아래로 내리는 벌점(가로 이동 120과 같은 값)
 const LAYER = { root: 0, org: 0, person: 1, work: 2, artifact: 3, topic: 4 }; // root: 묶음 화면에서 하위 유니버스의 꼭지
 
 /**
@@ -64,26 +65,14 @@ export function flowLayout(nodes, edges) {
     const r = Math.floor(s2.c / LANES.cols);
     stackOf[r] = Math.max(stackOf[r], s2.k);
   }
-  const blockTop = [];
-  let acc = 0;
-  for (let r = 0; r < rows; r += 1) {
-    blockTop.push(acc);
-    acc += 5 * LANES.rowGap + stackOf[r] * LANES.stackGap + LANES.blockGap;
-  }
-  const layerY = (r, layer) => blockTop[r] + layer * LANES.rowGap + (layer > LAYER.work ? stackOf[r] * LANES.stackGap : 0);
   const widthOf = (n) => labelBox(n.label, n.size || 24).w;
   const colW = LANES.colGap + 130; // 한 칸 폭: 이름 최대 폭 + 여유
-
-  // 업무 좌표와 업무 줄별 가로 위치 기억
   const rowOfWork = new Map();
-  const x0 = 0;
+  const xOfWork = new Map();
   for (const w of works) {
     const s = slot.get(w.id);
-    const r = Math.floor(s.c / LANES.cols);
-    const c = s.c % LANES.cols;
-    rowOfWork.set(w.id, r);
-    // 같은 열에 업무가 여럿이면 세로로 조금씩 어긋나게(겹침 방지)
-    out.set(w.id, { x: x0 + c * colW, y: layerY(r, LAYER.work) + s.k * LANES.stackGap });
+    rowOfWork.set(w.id, Math.floor(s.c / LANES.cols));
+    xOfWork.set(w.id, (s.c % LANES.cols) * colW);
   }
 
   // 3) 다른 유형: 이웃 업무의 가로 평균, 층 높이, 업무 줄에 맞춰 놓는다
@@ -96,36 +85,110 @@ export function flowLayout(nodes, edges) {
     return set;
   };
   const layerNodes = new Map();
+  const topicRows = Array.from({ length: rows }, () => []); // 줄별: 업무가 직접 있는 주제
   for (const n of nodes) {
     if (n.core_type === 'work' || n === root) continue;
+    const direct = neighbors(n.id).filter((m) => rowOfWork.has(m));
+    // 주제는 관련 업무가 직접 있으면 업무 바로 아래 「주제 띠」에 둔다. 업무가 없는 주제만 맨 아래 줄(R7-1)
+    const inBand = n.core_type === 'topic' && direct.length > 0;
     const layer = LAYER[n.core_type] ?? 4;
-    const ws = neighbors(n.id).filter((m) => rowOfWork.has(m));
-    const via = ws.length ? ws : neighbors(n.id).flatMap((m) => neighbors(m).filter((k) => rowOfWork.has(k)));
+    const via = direct.length ? direct : neighbors(n.id).flatMap((m) => neighbors(m).filter((k) => rowOfWork.has(k)));
     const r = via.length ? Math.min(...via.map((m) => rowOfWork.get(m))) : 0;
-    const xs = via.filter((m) => rowOfWork.get(m) === r).map((m) => out.get(m).x);
+    const xs = via.filter((m) => rowOfWork.get(m) === r).map((m) => xOfWork.get(m));
     const x = xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : (maxCol / 2) * colW;
+    if (inBand) {
+      topicRows[r].push({ n, x, r });
+      continue;
+    }
     const key = `${r}:${layer}`;
     if (!layerNodes.has(key)) layerNodes.set(key, []);
     layerNodes.get(key).push({ n, x, r, layer });
   }
-  // 같은 줄·같은 층에서 이름 상자가 겹치지 않게 가로로 밀어낸다
-  for (const items of layerNodes.values()) {
+  // 주제 띠: 가로 위치는 관련 업무의 평균 그대로 두고, 이름이 겹치면 아래 칸으로 엇갈려 쌓는다(가로로 밀어 선이 길어지지 않게)
+  const bandOf = new Map(); // 주제 id → {x, r, sub}
+  const bandRows = Array.from({ length: rows }, () => 0); // 줄별 띠 칸 수
+  let topicStep = 0;
+  for (const t of topicRows.flat()) topicStep = Math.max(topicStep, labelBox(t.n.label, t.n.size || 24).h);
+  topicStep += 14;
+  topicRows.forEach((items, r) => {
+    items.sort((a, b) => a.x - b.x || a.n.label.localeCompare(b.n.label, 'ko'));
+    const taken = []; // 칸별로 이미 놓은 이름 상자의 가로 구간
+    const fits = (sub, x, w) => !(taken[sub] || []).some((t) => x - w / 2 < t.r + LANES.colGap / 2 && x + w / 2 > t.l - LANES.colGap / 2);
+    for (const it of items) {
+      // 같은 업무에 주제가 많으면 아래로만 쌓지 않고, 가로 이동량 + 칸 수 벌점이 가장 작은 자리를 고른다
+      const w = widthOf(it.n);
+      let best = null;
+      for (let sub = 0; sub < 6; sub += 1) {
+        for (let d = 0; d <= 1200; d += 20) {
+          for (const x of d ? [it.x + d, it.x - d] : [it.x]) {
+            const cost = d + sub * TOPIC_SUB_COST;
+            if (fits(sub, x, w) && (!best || cost < best.cost)) best = { x, sub, cost };
+          }
+        }
+      }
+      if (!best) best = { x: it.x, sub: taken.length, cost: 0 };
+      (taken[best.sub] = taken[best.sub] || []).push({ l: best.x - w / 2, r: best.x + w / 2 });
+      bandOf.set(it.n.id, { x: best.x, r, sub: best.sub });
+    }
+    bandRows[r] = taken.length;
+  });
+  // 줄 높이: 주제 띠가 있으면 산출물·맨 아래 줄을 띠 높이만큼 내린다
+  const bandH = (r) => (bandRows[r] ? LANES.rowGap * 0.6 + bandRows[r] * topicStep : 0);
+  const blockTop = [];
+  let acc = 0;
+  for (let r = 0; r < rows; r += 1) {
+    blockTop.push(acc);
+    acc += 5 * LANES.rowGap + stackOf[r] * LANES.stackGap + bandH(r) + LANES.blockGap;
+  }
+  const layerY = (r, layer) => blockTop[r] + layer * LANES.rowGap + (layer > LAYER.work ? stackOf[r] * LANES.stackGap + bandH(r) : 0);
+  // 업무 좌표(같은 열에 업무가 여럿이면 세로로 조금씩 어긋나게)
+  for (const w of works) {
+    const sl = slot.get(w.id);
+    out.set(w.id, { x: xOfWork.get(w.id), y: layerY(rowOfWork.get(w.id), LAYER.work) + sl.k * LANES.stackGap });
+  }
+  // 주제 띠 좌표: 업무 줄 바로 아래(산출물 층보다 위)
+  for (const [id, b] of bandOf) {
+    out.set(id, { x: b.x, y: blockTop[b.r] + LAYER.work * LANES.rowGap + stackOf[b.r] * LANES.stackGap + LANES.rowGap * 0.8 + b.sub * topicStep });
+  }
+  // 같은 줄·같은 층에서 이름 상자가 겹치지 않게 가로로 밀어낸다. avoid가 있으면 그 가로 위치의 세로선(꼭지 → 업무 「포함」 선)도 피한다
+  const placeRow = (items, avoid) => {
     items.sort((a, b) => a.x - b.x || a.n.label.localeCompare(b.n.label, 'ko'));
     let prevRight = -Infinity;
     for (const it of items) {
       const w = widthOf(it.n);
-      let x = it.x;
-      if (x - w / 2 < prevRight + LANES.colGap / 2) x = prevRight + LANES.colGap / 2 + w / 2;
+      const minX = prevRight + LANES.colGap / 2 + w / 2;
+      let x = Math.max(it.x, minX);
+      if (avoid) {
+        const blocked = (cx) => avoid.some((lx) => lx > cx - w / 2 - 10 && lx < cx + w / 2 + 10);
+        let best = null;
+        for (let d = 0; d <= 480 && best === null; d += 20) {
+          for (const cand of [it.x + d, it.x - d]) if (cand >= minX && !blocked(cand)) { best = cand; break; }
+        }
+        if (best !== null) x = best;
+      }
       prevRight = x + w / 2;
       out.set(it.n.id, { x, y: layerY(it.r, it.layer) });
     }
-  }
+  };
+  for (const items of layerNodes.values()) placeRow(items, null);
 
-  // 4) 꼭지는 맨 위 가운데
+  // 4) 꼭지는 맨 위 가운데. 사람 층이 꼭지 → 업무 선 위에 겹치지 않게 첫 줄 사람을 선 사이로 옮긴다
   if (root) {
     const xs = [...out.values()].map((p) => p.x);
     const mid = xs.length ? (Math.min(...xs) + Math.max(...xs)) / 2 : 0;
-    out.set(root.id, { x: mid, y: -LANES.rowGap });
+    const rootPos = { x: mid, y: -LANES.rowGap };
+    out.set(root.id, rootPos);
+    const people = layerNodes.get(`0:${LAYER.person}`);
+    if (people) {
+      const y = layerY(0, LAYER.person);
+      const lineXs = [];
+      for (const e of edges) {
+        const other = e.source === root.id ? e.target : e.target === root.id ? e.source : null;
+        const o = other && rowOfWork.has(other) ? out.get(other) : null;
+        if (o && o.y > y) lineXs.push(rootPos.x + (o.x - rootPos.x) * ((y - rootPos.y) / (o.y - rootPos.y)));
+      }
+      placeRow(people, lineXs);
+    }
   }
   return out;
 }

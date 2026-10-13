@@ -8,7 +8,7 @@ import { parseImportText } from '../model/import.js';
 import { METHOD_LABELS } from '../llm/connector.js';
 
 const KIND_TEXT = {
-  overview: () => '개요 → 꼭지(이름·목적·배경)와 범위·이해관계자',
+  overview: () => '개요 → 유니버스의 중심 노드(꼭지)의 이름·목적·배경, 그리고 범위·이해관계자',
   scope: (n) => `범위 → 업무 ${n}개`,
   scope_out: () => '범위 제외 → 유니버스 설명',
   steps: (n) => `업무 흐름 → 대표 업무의 절차 속성 ${n}단계(노드로 만들지 않음)`,
@@ -39,7 +39,7 @@ function noteText(n) {
 }
 
 function warningText(w, from) {
-  if (w.code === 'W-SAMPLE-OVERWRITE') return `내장 샘플「${w.name}」${josa(w.name, '을/를')} 덮어씁니다. 「가상 데이터 초기화」를 누르면 원래 샘플로 돌아갑니다.`;
+  if (w.code === 'W-SAMPLE-OVERWRITE') return `내장 샘플「${w.name}」${josa(w.name, '을/를')} 덮어씁니다. 이 창 맨 아래 「가상 데이터 초기화」를 누르면 원래 샘플로 돌아갑니다.`;
   if (w.code === 'W-SAMPLE-FLAG') return '파일에 샘플 표시가 있지만 내장 샘플이 아니므로 「내 유니버스」로 가져옵니다.';
   if (w.code === 'W-REAL-NAME-LIKE') return `실명처럼 보이는 사람 이름 ${w.count}개가 있습니다(${w.labels.join(', ')}). 이 도구는 가상 데이터용입니다. 실제 이름이면 가져오기 전에 역할 이름(예: 정산 담당)으로 바꾸세요.`;
   if (w.code === 'W-EMPNO-LIKE') return `사번·주민번호처럼 보이는 숫자(6자리 이상)가 ${w.count}곳에 있습니다. 실제 번호면 지우거나 V-0000 형식의 가상 사번으로 바꾸세요.`;
@@ -174,7 +174,7 @@ export function importDialog(o) {
       blocks.push(el('p', { class: 'error-text', 'data-testid': 'import-errors' }, `형식 버전이 다릅니다(파일: ${doc.schema_version ?? '없음'}, 이 앱: ${SCHEMA_VERSION}). 가져오지 않았습니다.`));
     } else {
       const summary = el('dl', { 'data-testid': 'import-summary' },
-        el('dt', {}, '구성'), el('dd', {}, `노드 ${p.node_total}개(${p.counts.map((c) => `${c.label} ${c.count}`).join(', ')}), 연결 ${p.edge_total}개, 메모 ${p.memo_total}건`));
+        el('dt', {}, '규모'), el('dd', {}, `노드 ${p.node_total}개(${p.counts.map((c) => `${c.label} ${c.count}`).join(', ')}), 연결 ${p.edge_total}개, 메모 ${p.memo_total}건`));
       if (report) {
         const { min, max } = report.target;
         const fit = report.node_count > max ? '많음' : report.node_count < min ? '적음' : '맞음';
@@ -294,6 +294,10 @@ export function importDialog(o) {
       el('p', { class: 'error-text', 'data-testid': 'import-message', 'aria-live': 'polite' }, st.message),
       head,
       slot,
+      o.onReset ? el('div', { class: 'danger-zone' },
+        el('h4', {}, '위험 구역'),
+        el('p', { class: 'muted small' }, '모든 유니버스를 처음 샘플 상태로 되돌립니다. 직접 만들거나 가져온 유니버스도 지워지므로 먼저 위에서 내보내 두세요. 누르면 한 번 더 확인합니다.'),
+        el('button', { type: 'button', id: 'reset', class: 'danger', 'data-testid': 'reset-all', disabled: !o.app.canReset, onclick: () => o.onReset() }, '가상 데이터 초기화')) : null,
     );
     renderHead();
     renderPreview();
