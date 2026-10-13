@@ -78,7 +78,8 @@ export function parseAttrsCell(text) {
     if (!p) continue;
     const at = p.indexOf('=');
     const key = at < 0 ? '' : p.slice(0, at).trim();
-    if (!key) return { attrs: null, error: { code: CODES.SCHEMA, field: 'attrs', format: true } };
+    // 객체 프로토타입을 건드리는 키는 받지 않는다(조용히 사라지지 않게 거부. 검토7 K-5)
+    if (!key || key === '__proto__' || key === 'constructor' || key === 'prototype') return { attrs: null, error: { code: CODES.SCHEMA, field: 'attrs', format: true } };
     const value = p.slice(at + 1).trim();
     attrs[key] = value === '' ? null : value;
   }

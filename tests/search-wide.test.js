@@ -115,7 +115,7 @@ test('R-22 ② 이름이 비었거나 없거나 깨졌으면 기존 문구 "사�
   }
 });
 
-test('R-22 ② 표준 통합 확인(decideIdentity)의 decided_by도 같은 원칙', () => {
+test('R-22 ② 통합 확인 판정(decideIdentity)의 decided_by도 같은 원칙', () => {
   const pair = { a: 'U-B/N-103', b: 'U-C/N-102', kind: 'work', status: 'confirmed', reason: '시험' };
   const named = openApp(memStorage(), 'U-D1', () => '가상작성자');
   assert.equal(named.decideIdentity(pair).ok, true);

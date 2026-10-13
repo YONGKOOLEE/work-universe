@@ -14,7 +14,7 @@
   header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
   header h1 { font-size: 17px; margin: 0; letter-spacing: .5px; }
   header h1 b { color: var(--accent); }
-  #universe-picker { border-radius: 999px; padding: 6px 12px; max-width: 420px; flex: 1 1 120px; min-width: 120px; }
+  #universe-picker { border-radius: 999px; padding: 6px 12px; max-width: 420px; flex: 1 1 240px; min-width: 240px; } /* 검토7 U-11: 1366에서 긴 이름이 잘리지 않게 최소 폭을 늘림(전체 이름은 title) */
   header button { white-space: nowrap; }
   @media (max-width: 1200px) { header button { padding: 6px 10px; } } /* 화면 점검 S-7: 1366 + 125% 확대에서 머리글이 두 줄이 되지 않게 */
   header .spacer { flex: 1; }
@@ -161,7 +161,10 @@
   .steps { display: grid; gap: 3px; font-size: 13px; color: var(--muted); padding-left: 0; }
   .steps .missed { color: var(--err); }
   /* 표로 추가·고치기(T-19): 칸이 많아 가로로 스크롤 */
-  .batch-wrap { overflow-x: auto; margin: 6px 0; }
+  .batch-wrap { overflow-x: auto; margin: 6px 0; scrollbar-color: var(--line) var(--panel-2); scrollbar-width: thin; }
+  .batch-wrap::-webkit-scrollbar { height: 10px; } .batch-wrap::-webkit-scrollbar-track { background: var(--panel-2); } .batch-wrap::-webkit-scrollbar-thumb { background: var(--line); border-radius: 5px; }
+  #table-dialog { width: min(1240px, 96vw); } /* 검토7 U-4: 표 대화상자는 칸이 많아 넓게 */
+  .graph-tools button[aria-pressed=true] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); } /* U-7: 흐름 정렬 눌림 */
   .batch-grid { min-width: 900px; }
   .batch-grid [data-col=type] { min-width: 70px; } .batch-grid [data-col=label] { min-width: 170px; } .batch-grid [data-col=subtype] { min-width: 90px; } .batch-grid [data-col=description] { min-width: 200px; } .batch-grid [data-col=emp_no] { min-width: 80px; } .batch-grid [data-col=attrs] { min-width: 170px; }
   .batch-grid th, .batch-grid td { text-align: left; vertical-align: top; }
@@ -237,7 +240,7 @@
   .card p { margin: 0; }
   .card .try { font-size: 13px; color: var(--text); background: var(--panel-2); border-radius: 6px; padding: 6px 8px; }
   .card button { justify-self: start; margin-top: 4px; }
-  dialog.wide { width: min(900px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto; }
+  dialog.wide { width: min(900px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto; scrollbar-color: var(--line) var(--panel-2); }
   .import-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .import-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0 10px; }
   .import-notes { list-style: disc; padding-left: 18px; display: grid; gap: 4px; color: var(--warn-text); font-size: 13px; margin: 8px 0; }
@@ -274,7 +277,7 @@
   <div class="graph-wrap">
     <div class="explore-row">
       <div id="explore-bar" class="explore-bar" data-testid="explore-bar"></div>
-      <div class="graph-tools"><button type="button" id="relayout" title="노드 배치를 처음부터 다시 계산합니다">다시 정렬</button><button type="button" id="flowlayout" title="업무를 선후 순서대로 가로로, 사람은 위·산출물은 아래 층으로 놓습니다. 「다시 정렬」로 원래 배치로 돌아갑니다(시제품)">흐름 정렬</button><button type="button" id="fit" title="그래프 전체를 화면에 맞춥니다. 주변만 보기 중이면 전체 그래프로 돌아갑니다">전체 보기</button></div>
+      <div class="graph-tools"><button type="button" id="relayout" title="노드 배치를 처음부터 다시 계산합니다">다시 정렬</button><button type="button" id="flowlayout" aria-pressed="false" title="업무를 선후 순서대로 가로로, 사람은 위·산출물은 아래 층으로 놓습니다. 「다시 정렬」로 원래 배치로 돌아갑니다(시제품)">흐름 정렬</button><button type="button" id="fit" title="그래프 전체를 화면에 맞춥니다. 주변만 보기 중이면 전체 그래프로 돌아갑니다">전체 보기</button></div>
     </div>
     <div id="graph" aria-label="그래프"></div>
     <div id="timebar" class="timebar" data-testid="timebar"></div>

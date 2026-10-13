@@ -62,7 +62,7 @@ export function insightPanel(o) {
     tabs,
     body,
     el('p', { class: 'muted small', 'data-testid': 'insight-note' }, '참고 정보입니다. 해석과 인력 배치는 사람이 정합니다.'),
-    el('div', { class: 'row' }, el('button', { type: 'button', onclick: o.onClose }, '닫기')),
+    el('div', { class: 'row' }, el('button', { type: 'button', 'data-testid': 'insight-close', onclick: o.onClose }, '닫기')),
   );
 }
 

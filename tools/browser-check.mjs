@@ -180,6 +180,8 @@ async function fillPanelForm(cdp, fields) {
     return 'ok';
   })()`);
 }
+// 화면 전체(열린 대화상자 포함)에서 글자가 정확히 "null"인 곳을 모은다(replaceChildren에 빈 값을 넘긴 실수. 검토7 U-1)
+const nullTextSpots = (cdp) => evaluate(cdp, "(() => { const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); const out = []; while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') out.push(w.currentNode.parentElement.id || w.currentNode.parentElement.className || w.currentNode.parentElement.tagName); return out; })()");
 const panelMessage = (cdp) => evaluate(cdp, "(() => { const m = document.querySelector('#detail [data-testid=form-message]'); return m ? { code: m.dataset.code || '', text: m.textContent } : null; })()");
 const clickTestId = (cdp, id) => evaluate(cdp, `document.querySelector('[data-testid=${id}]').click()`);
 
@@ -243,6 +245,54 @@ async function checkBrowser(browser, port) {
   await evaluate(s.cdp, "location.hash = 'U-A1'; location.reload()").catch(() => {});
   await sleep(600);
   await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
+  // ── 일곱 번째 검토 화면 수정 확인(U-2·U-3·U-4·U-7). 데이터를 바꾸지 않는다 ──
+  const escKey = async () => {
+    await s.cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await s.cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await sleep(200);
+  };
+  const activeId = () => evaluate(s.cdp, "(document.activeElement && (document.activeElement.dataset.testid || document.activeElement.id)) || ''");
+  await evaluate(s.cdp, "document.getElementById('flowlayout').click()");
+  await sleep(300);
+  const pressedOn = await evaluate(s.cdp, "document.getElementById('flowlayout').getAttribute('aria-pressed')");
+  await evaluate(s.cdp, "document.getElementById('relayout').click()");
+  await sleep(300);
+  const pressedOff = await evaluate(s.cdp, "document.getElementById('flowlayout').getAttribute('aria-pressed')");
+  check('U-7: 「흐름 정렬」을 누르면 눌림 표시(aria-pressed=true), 「다시 정렬」 뒤 풀림', pressedOn === 'true' && pressedOff === 'false', `${pressedOn}/${pressedOff}`);
+  // U-3: 미해결·숨긴 노드 패널은 열면 「닫기」에 포커스, Esc로 닫히고 연 단추로 돌아감
+  await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+  await sleep(200);
+  await evaluate(s.cdp, "document.querySelector('[data-testid=btn-issues]').focus(); document.querySelector('[data-testid=btn-issues]').click()");
+  await sleep(250);
+  const issueFocus = await activeId();
+  await escKey();
+  const issueClosed = await evaluate(s.cdp, "!document.querySelector('[data-testid=issue-panel]')");
+  const issueBack = await activeId();
+  check('U-3: 미해결 패널 — 열면 「닫기」에 포커스, Esc로 닫히고 「미해결 n건」 단추로 포커스가 돌아감', issueFocus === 'issue-close' && issueClosed && issueBack === 'btn-issues', `${issueFocus} → ${issueClosed} → ${issueBack}`);
+  // U-4: 표 대화상자는 화면 폭에 맞춰 넓어진다(1280 창에서 900px보다 넓음)
+  await evaluate(s.cdp, "window.__wu.select(null); document.querySelector('details.add').open = true");
+  await sleep(150);
+  await clickTestId(s.cdp, 'btn-table-add');
+  await sleep(250);
+  const tableW = await evaluate(s.cdp, "Math.round(document.getElementById('table-dialog').getBoundingClientRect().width)");
+  check('U-4: 표 대화상자가 화면 폭에 맞춰 넓어짐(900px보다 넓음)', tableW > 1000, `${tableW}px`);
+  await clickTestId(s.cdp, 'table-close');
+  await sleep(150);
+  // U-2: 묶은 화면(부서)의 「표로 고치기」는 빈 표·저장 대신 안내
+  await evaluate(s.cdp, "location.hash = 'U-D1'; location.reload()").catch(() => {});
+  await sleep(600);
+  await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-D1' && window.__wu.cy.nodes().length > 0", 8000);
+  await evaluate(s.cdp, "document.querySelector('details.add').open = true");
+  await sleep(150);
+  await clickTestId(s.cdp, 'btn-table-edit');
+  await sleep(250);
+  const grouped = await evaluate(s.cdp, "({ text: document.getElementById('table-dialog').textContent, save: !!document.querySelector('#table-dialog [data-testid=table-save]') })");
+  check('U-2: 묶은 화면의 「표로 고치기」는 각 유니버스를 열어 고치라는 안내만 보이고 저장 단추가 없음', grouped.text.includes('묶은') && !grouped.save, grouped.text.slice(0, 80));
+  await shot(s.cdp, `${browser.name}-22a-grouped-table-edit`);
+  await evaluate(s.cdp, "(document.querySelector('[data-testid=table-close]') || { click() {} }).click()");
+  await evaluate(s.cdp, "location.hash = 'U-A1'; location.reload()").catch(() => {});
+  await sleep(600);
+  await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
   check('저장소 경고 배너 없음(정상 환경)', await evaluate(s.cdp, "document.getElementById('banner').hidden"));
 
   // 처음 화면: 유니버스 개요와 범례
@@ -273,7 +323,7 @@ async function checkBrowser(browser, port) {
   check('R-14 이력이 시간순 문장으로 보임', history.includes('한가람 → 윤바다 인수인계') && history.includes('윤바다 → 서하늘 인수인계') && history.indexOf('2025-03-01') < history.indexOf('2026-09-30'), history.slice(0, 60));
   check('선택한 노드 밖은 흐리게(이웃 강조)', (await evaluate(s.cdp, "window.__wu.cy.elements('.faded').length")) > 0);
   // 검토5 U-1: 자기 유니버스 노드를 고른 상세 패널(드러내기 상자 포함)에 "null" 글자가 없다
-  check('노드를 고른 상세 패널에 "null" 글자 없음', (await evaluate(s.cdp, "(() => { const w = document.createTreeWalker(document.getElementById('detail'), NodeFilter.SHOW_TEXT); while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') return false; return true; })()")));
+  check('노드를 고른 화면 전체(상세 패널 포함)에 "null" 글자 없음', (await nullTextSpots(s.cdp)).length === 0, (await nullTextSpots(s.cdp)).join(','));
   check('드러내기 상자는 묶은 상위 유니버스 이름을 말한다(검토5 U-4)', (await text(s.cdp, '[data-testid=layer]')).includes('「가상정산팀」 화면에서도'));
   await shot(s.cdp, `${browser.name}-2-node`);
 
@@ -1384,6 +1434,15 @@ async function checkBrowser(browser, port) {
   await sleep(500);
   const r19cprint = await evaluate(s.cdp, 'window.__prints');
   check('R-19 ② 확정본 인쇄 → iframe print() 호출, 문서에 버튼·그래프 없음', r19cprint.length === 1 && r19cprint[0].interactive === 0 && r19cprint[0].html.includes('확정'), JSON.stringify(r19cprint.map((p) => p.interactive)));
+  // R-19 ④: 내려받기가 막히면(createObjectURL 실패 흉내) 안내 문구가 보이고, 다시 성공하면 사라진다
+  await evaluate(s.cdp, "window.__origCOU = URL.createObjectURL; URL.createObjectURL = () => { throw new Error('blocked'); }");
+  await clickTestId(s.cdp, 'doc-download');
+  await sleep(150);
+  check('R-19 ④ 내려받기가 막히면 「내려받기가 막혔습니다 … 인쇄에서 PDF로 저장」 안내가 보임', await evaluate(s.cdp, "(() => { const m = document.querySelector('[data-testid=download-blocked]'); if (!m) return false; const r = m.getBoundingClientRect(); return r.width > 0 && r.height > 0 && m.textContent.includes('내려받기가 막혔습니다') && m.textContent.includes('PDF'); })()"));
+  await evaluate(s.cdp, "URL.createObjectURL = window.__origCOU");
+  await clickTestId(s.cdp, 'doc-download');
+  await sleep(150);
+  check('R-19 ④ 다시 내려받기에 성공하면 안내가 사라짐', await evaluate(s.cdp, "!document.querySelector('[data-testid=download-blocked]')"));
   await evaluate(s.cdp, "document.querySelectorAll('iframe[data-testid=print-frame]').forEach((f) => f.remove()); HTMLAnchorElement.prototype.click = window.__origClick; Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', window.__origCW); window.__wu.select(null)");
   // ── R-20 ① ② ③ 미해결 이슈 보기와 「해결로 표시」(CR-12 B, D-22): 대사 확인 업무(U-A1/N-001) ──
   const r20Draft = async () => { // 같은 업무 초안의 「진행 중」 문장들
@@ -1408,6 +1467,7 @@ async function checkBrowser(browser, port) {
   check('R-20 ① 누르면 목록(날짜·업무·내용·해결로 표시)이 뜨고 건수가 같음', r20Items0.length === r20c0.n && (await text(s.cdp, '#detail h2')).includes(`미해결 ${r20c0.n}건`) && (await btnBox('btn-resolve')) && r20Items0.every((x) => x.hasBtn), JSON.stringify(r20Items0.map((x) => x.gid)));
   const r20Prog0 = r20Items0.filter((x) => x.chip === '진행 중');
   check('R-20 ③ 목록의 「진행 중」 항목이 같은 업무 인수인계 초안의 「진행 중」과 같은 메모', r20Prog0.length === r20Draft0.length && r20Draft0.length > 0 && r20Draft0.every((d) => r20Prog0.some((x) => d.includes(x.text))), JSON.stringify([r20Prog0.length, r20Draft0.length]));
+  check('미해결 화면에 "null" 글자 없음', (await nullTextSpots(s.cdp)).length === 0, (await nullTextSpots(s.cdp)).join(','));
   await shot(s.cdp, `${browser.name}-13a-issues`);
   const r20Target = r20Prog0[0];
   const r20Ev = (gid) => evaluate(s.cdp, `JSON.stringify(window.__wu.doc.events.find((e) => e.id === '${gid.split('/')[1]}'))`);
@@ -1448,6 +1508,7 @@ async function checkBrowser(browser, port) {
   await clickTestId(s.cdp, 'btn-table-add');
   await sleep(200);
   check('R-18: 「표로 추가」 대화상자가 열리고 표(크기 있음)가 보임', await evaluate(s.cdp, "(() => { const d = document.getElementById('table-dialog'); const g = document.querySelector('[data-testid=table-grid]'); const r = g ? g.getBoundingClientRect() : null; return d.open && !!r && r.width > 300 && r.height > 20; })()"));
+  check('표로 추가 대화상자에 "null" 글자 없음', (await nullTextSpots(s.cdp)).length === 0, (await nullTextSpots(s.cdp)).join(','));
   const rows5 = await t19Paste('유형\t이름\t설명\t속성\n업무\tT19 표 업무 1\t표로 넣은 첫 업무\t주기=월; 마감=5일\n업무\tT19 표 업무 2\t\t\n사람\tT19 가상 인물\t\t\n산출물\tT19 보고서\t\t\n조직\tT19 가상 조직\t\t');
   check('R-18 ④: 스프레드시트 탭 구분 글을 붙여 넣으면 머리글을 인식해 5행으로 들어감', rows5 === 5 && (await text(s.cdp, '[data-testid=table-note]')).includes('머리글'), `${rows5}행`);
   await shot(s.cdp, `${browser.name}-19a-table-add`);
@@ -1481,6 +1542,7 @@ async function checkBrowser(browser, port) {
   const t19e2 = await t19Events();
   await clickTestId(s.cdp, 'btn-table-edit');
   await sleep(200);
+  check('표로 고치기 대화상자에 "null" 글자 없음', (await nullTextSpots(s.cdp)).length === 0, (await nullTextSpots(s.cdp)).join(','));
   const t19edit = await evaluate(s.cdp, `(() => {
     const rows = [...document.querySelectorAll('[data-testid=table-grid] tbody tr:not(.row-msg-line)')];
     const row = rows.find((r) => r.querySelector('[data-col=label]').value === 'T19 표 업무 1');
@@ -1592,6 +1654,7 @@ async function checkBrowser(browser, port) {
   await sleep(200);
   const r21List = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=hidden-item]')].map((li) => ({ id: li.dataset.id, text: li.textContent, btn: !!li.querySelector('[data-testid=btn-restore]') }))");
   check('R-21 ① 목록에 이름·유형·숨긴 날짜와 「되살리기」가 보임', r21List.length === 1 && r21List[0].id === 'N-003' && r21List[0].text.includes(r21Label) && r21List[0].text.includes('에 숨김') && r21List[0].btn, JSON.stringify(r21List));
+  check('숨긴 노드 화면에 "null" 글자 없음', (await nullTextSpots(s.cdp)).length === 0, (await nullTextSpots(s.cdp)).join(','));
   await shot(s.cdp, `${browser.name}-21a-hidden-list`);
   await clickTestId(s.cdp, 'btn-restore');
   await sleep(400);

@@ -25,14 +25,36 @@ export function confirmedDoc(node) {
   return { name: handoverFileName({ date, target, confirmed: true }), html: handoverDocHtml({ kind: 'confirmed', node }) };
 }
 
-/** HTML 글을 파일로 내려받는다(file://에서도 동작하는 a[download]) */
+export const DOWNLOAD_BLOCKED = '내려받기가 막혔습니다. 「인쇄」에서 PDF로 저장할 수 있습니다.';
+
+/** HTML 글을 파일로 내려받는다(file://에서도 동작하는 a[download]). 예외가 나면 { ok: false }를 돌려준다(R-19 ④) */
 export function downloadHtml(name, html) {
-  const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
-  const a = el('a', { href: url, download: name });
-  document.body.append(a);
-  a.click();
-  a.remove();
+  let url = null;
+  try {
+    url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+    const a = el('a', { href: url, download: name });
+    document.body.append(a);
+    try { a.click(); } finally { a.remove(); }
+  } catch {
+    if (url) { try { URL.revokeObjectURL(url); } catch { /* 무시 */ } }
+    return { ok: false };
+  }
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return { ok: true };
+}
+
+/** 내려받기를 누른 단추 쪽에서 부른다. 막히면 단추 줄 아래에 안내 한 줄을 보인다(성공하면 이전 안내를 치운다) */
+export function downloadWithNotice(btn, name, html) {
+  const row = btn.closest('.toolbar, .draft-head') || btn.parentElement;
+  const host = row.parentElement || row;
+  const old = host.querySelector('[data-testid=download-blocked]');
+  const r = downloadHtml(name, html);
+  if (r.ok) {
+    if (old) old.remove();
+    return r;
+  }
+  if (!old) row.after(el('p', { class: 'notice', role: 'alert', 'data-testid': 'download-blocked' }, DOWNLOAD_BLOCKED));
+  return r;
 }
 
 /** 숨긴 iframe에 HTML을 넣고 그 창의 print()를 부른다(팝업 차단을 피한다). 인쇄 뒤 iframe은 치운다 */

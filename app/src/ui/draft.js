@@ -6,7 +6,7 @@ import { similarExperts, similarSentences, workLoad } from '../rules/insight.js'
 import { todayLocal } from './time.js';
 import { METHOD_LABELS, refineDraft } from '../llm/connector.js';
 import { el } from './dom.js';
-import { downloadHtml, draftDoc, printHtml } from './doc-output.js';
+import { downloadWithNotice, draftDoc, printHtml } from './doc-output.js';
 import { evidenceChips } from './evidence.js';
 import { josa, messageFor } from './messages.js';
 
@@ -168,7 +168,7 @@ function renderDraft(box, d, view, onFocus, o = {}) {
   });
   const docOf = () => draftDoc(view, d, o.asOf || todayLocal());
   const downBtn = el('button', { type: 'button', class: 'small-btn', 'data-testid': 'draft-download' }, '내려받기');
-  downBtn.addEventListener('click', () => { const x = docOf(); downloadHtml(x.name, x.html); });
+  downBtn.addEventListener('click', () => { const x = docOf(); downloadWithNotice(downBtn, x.name, x.html); });
   const printBtn = el('button', { type: 'button', class: 'small-btn', 'data-testid': 'draft-print' }, '인쇄');
   printBtn.addEventListener('click', () => printHtml(docOf().html));
   // replaceChildren은 null을 "null" 글자로 넣으므로 빈 칸을 걸러 낸다

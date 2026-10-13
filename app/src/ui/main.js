@@ -12,7 +12,7 @@ import { describeNode, describeUniverse, eventText, periodStatus } from '../view
 import { exposureOf, projectView } from '../view/collapse.js';
 import { parseGid, toGid } from '../view/view.js';
 import { DRAFT_TARGET_TYPES, SUBTYPE_HANDOVER_DOC } from '../model/schema.js';
-import { confirmedDoc, downloadHtml, printHtml } from './doc-output.js';
+import { confirmedDoc, downloadWithNotice, printHtml } from './doc-output.js';
 import { el } from './dom.js';
 import { createGraph, legendItems } from './graph.js';
 import { renderNodeDetail, renderUniverseSummary } from './detail.js';
@@ -120,7 +120,7 @@ function start() {
     samples: SAMPLES,
     currentId: hashId(),
     now: nowIso,
-    // 확정자·표준 통합 확인의 기록 주체(R-22, D-24). 설정은 아래에서 읽으므로 부를 때마다 지금 값을 돌려준다
+    // 확정자·통합 확인 목록 판정(decideIdentity)의 기록 주체(R-22, D-24). 설정은 아래에서 읽으므로 부를 때마다 지금 값을 돌려준다
     authorName: () => settings.authorName,
   });
 
@@ -171,6 +171,37 @@ function start() {
   let insight = null; // 인사이트 화면: {work, kind}
   let issues = null; // 미해결 이슈 목록 화면(R-20): {target}
   let hiddenOpen = false; // 숨긴 노드 목록 화면(R-21)
+  // 미해결·숨긴 노드·인사이트 패널(U-3): 열 때 「닫기」에 포커스, 닫으면 연 단추로 돌아간다(표 대화상자와 같게)
+  let focusPanelClose = false;
+  let panelOpener = null; // 연 단추의 data-testid
+  const rememberOpener = () => {
+    const a = document.activeElement;
+    panelOpener = a && a.dataset && a.dataset.testid ? a.dataset.testid : null;
+    focusPanelClose = true;
+  };
+  const focusClose = (testid) => {
+    if (!focusPanelClose) return;
+    focusPanelClose = false;
+    const b = $('detail').querySelector(`[data-testid="${testid}"]`);
+    if (b) b.focus();
+  };
+  const restoreOpener = () => {
+    const id = panelOpener;
+    panelOpener = null;
+    const b = id ? $('detail').querySelector(`[data-testid="${id}"]`) : null;
+    if (b) b.focus();
+  };
+  // 세 패널 중 열려 있는 것을 닫는다(Esc와 「닫기」 공통). 닫았으면 true
+  function closeSidePanel() {
+    if (issues) issues = null;
+    else if (hiddenOpen) hiddenOpen = false;
+    else if (insight) insight = null;
+    else return false;
+    renderPanel();
+    graph.highlight(selected);
+    restoreOpener();
+    return true;
+  }
   let viewDate = null; // 시간 슬라이더로 고른 기준일(YYYY-MM-DD). null이면 오늘
   let settingsOpen = false;
   let merging = false; // 통합 확인 목록(T-10)
@@ -199,7 +230,7 @@ function start() {
   picker.title = picker.selectedOptions[0] ? picker.selectedOptions[0].textContent : ''; // 좁은 화면에서 잘린 이름 전체(재검증)
   picker.addEventListener('change', () => openUniverse(picker.value));
 
-  const graph = createGraph($('graph'), { onSelect: select, onToggle: toggle, getFilter: (d) => filterDisplay(d, filterState) });
+  const graph = createGraph($('graph'), { onSelect: select, onToggle: toggle, getFilter: (d) => filterDisplay(d, filterState), onFlow: (on) => $('flowlayout').setAttribute('aria-pressed', String(on)) });
 
   function renderLegend() {
     $('legend').replaceChildren(
@@ -294,6 +325,7 @@ function start() {
   }
 
   function openIssues(targetGid) {
+    rememberOpener();
     settingsOpen = false;
     merging = false;
     editing = null;
@@ -311,6 +343,7 @@ function start() {
   }
 
   function openInsight(workGid, kind = 'similar') {
+    rememberOpener();
     settingsOpen = false;
     merging = false;
     editing = null;
@@ -388,7 +421,7 @@ function start() {
   function docButtons(node) {
     if (node.core_type !== 'artifact' || node.subtype !== SUBTYPE_HANDOVER_DOC) return [];
     return [
-      el('button', { type: 'button', 'data-testid': 'doc-download', onclick: () => { const x = confirmedDoc(node); downloadHtml(x.name, x.html); } }, '내려받기'),
+      el('button', { type: 'button', 'data-testid': 'doc-download', onclick: (e) => { const x = confirmedDoc(node); downloadWithNotice(e.currentTarget, x.name, x.html); } }, '내려받기'),
       el('button', { type: 'button', 'data-testid': 'doc-print', onclick: () => printHtml(confirmedDoc(node).html) }, '인쇄'),
     ];
   }
@@ -508,7 +541,7 @@ function start() {
       const labelOf = (id) => (app.findNode(id) || { label: '' }).label;
       panel.replaceChildren(hiddenPanel({
         nodes: hiddenNodesOf(app.doc), readOnly: app.readOnly, labelOf,
-        onClose: () => { hiddenOpen = false; renderPanel(); },
+        onClose: closeSidePanel,
         // 되살리면 그 노드를 고른 상태로 연다(연결·이력이 바로 보인다). 같은 이름의 노드가 있으면 E-DUP로 거부된다
         onRestore: (id) => {
           const r = app.restoreNode(id);
@@ -519,6 +552,7 @@ function start() {
           return r;
         },
       }));
+      focusClose('hidden-close');
       return;
     }
     if (settingsOpen) {
@@ -569,7 +603,7 @@ function start() {
       panel.replaceChildren(issuePanel({
         view, targetGid: issues.target, rootGid: app.rootGid(), universeId: app.doc.universe.id, readOnly: app.readOnly,
         onFocus: showInGraph,
-        onClose: () => { issues = null; renderPanel(); graph.highlight(selected); },
+        onClose: closeSidePanel,
         // 해결 표시는 메모가 있는 유니버스 문서에 저장한다(묶음 화면의 하위 유니버스 메모 포함). 이미 닫힌 메모면 아무것도 더하지 않는다
         onResolve: (gid) => {
           const r = app.resolveMemo(gid, todayLocal());
@@ -577,10 +611,12 @@ function start() {
           return r;
         },
       }));
+      focusClose('issue-close');
       return;
     }
     if (insight) {
-      panel.replaceChildren(insightPanel({ view, provider, work: insight.work, kind: insight.kind, asOf: asOf(), today: todayLocal(), onTime: setViewDate, onKind: (k) => { insight.kind = k; }, onWork: (w) => { insight.work = w; }, onFocus: showInGraph, onClose: () => { insight = null; renderPanel(); graph.highlight(selected); } }));
+      panel.replaceChildren(insightPanel({ view, provider, work: insight.work, kind: insight.kind, asOf: asOf(), today: todayLocal(), onTime: setViewDate, onKind: (k) => { insight.kind = k; }, onWork: (w) => { insight.work = w; }, onFocus: showInGraph, onClose: closeSidePanel }));
+      focusClose('insight-close');
       return;
     }
     if (drafting) {
@@ -609,7 +645,7 @@ function start() {
       if (summary.node_total <= 1 && !app.readOnly) document.querySelector('details.add').open = true;
       const rootGid = app.rootGid();
       panel.append(...[issueEntry(view, app.rootGid(), { rootGid: app.rootGid(), onOpen: () => openIssues(app.rootGid()) }),
-        hiddenEntry(hiddenNodesOf(app.doc), { onOpen: () => { hiddenOpen = true; renderPanel(); } }),
+        hiddenEntry(hiddenNodesOf(app.doc), { onOpen: () => { rememberOpener(); hiddenOpen = true; renderPanel(); } }),
         el('div', { class: 'row' },
         el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft-universe', onclick: () => openDraft(rootGid) }, '인수인계 초안 만들기'),
         el('button', { type: 'button', 'data-testid': 'btn-insight-universe', onclick: () => openInsight('', 'repeat') }, '인사이트 보기')),
@@ -876,7 +912,9 @@ function start() {
     if (t && (t.closest('dialog[open]') || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
     // Esc는 노드 상세에서만 선택을 푼다. 편집 양식·초안은 입력이, 통합 확인·인사이트·설정은 고른 탭·작업이 사라지므로
     // Esc로 닫지 않는다(각 화면의 「취소」·「닫기」를 쓴다. 검토: 선택 여부에 따라 같은 패널이 닫히기도 하던 불일치)
-    if (!selected || editing || drafting || insight || merging || settingsOpen) return;
+    // 미해결·숨긴 노드·인사이트 패널은 Esc로 닫고 연 단추로 돌아간다(U-3)
+    if (closeSidePanel()) return;
+    if (!selected || editing || drafting || merging || settingsOpen) return;
     select(null);
   });
   $('relayout').addEventListener('click', () => graph.relayout());

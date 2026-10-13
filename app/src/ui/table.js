@@ -127,7 +127,9 @@ export function tableDialog(o) {
     const table = el('div', { class: 'batch-wrap' },
       el('table', { class: 'dg-table batch-grid', 'data-testid': 'table-grid' }, head, el('tbody', {}, ...st.rows.flatMap(row))));
 
-    o.dialog.replaceChildren(
+    const bundled = existing && (o.app.doc.refs || []).some((r) => !r.hidden);
+    // replaceChildren은 null을 "null" 글자로 넣으므로 빈 칸을 걸러 낸다(검토7 U-1)
+    const parts = [
       el('div', { class: 'import-head' },
         el('h2', { id: 'table-title' }, existing ? '표로 고치기' : '표로 추가'),
         el('button', { type: 'button', 'data-testid': 'table-close', onclick: () => o.dialog.close() }, '닫기')),
@@ -142,7 +144,17 @@ export function tableDialog(o) {
       el('p', { class: 'error-text', 'data-testid': 'table-message', 'aria-live': 'polite' }, st.message),
       el('div', { class: 'row' }, el('button', { type: 'button', class: 'primary', 'data-testid': 'table-save', onclick: save }, '저장')),
       el('datalist', { id: 'table-types' }, ...TYPE_CHOICES.map((t) => el('option', { value: t }))),
-    );
+    ];
+    if (bundled) {
+      // 묶은 화면(U-2): 하위 유니버스 노드는 이 문서에 없으므로 빈 표와 「저장」 대신 안내만 보인다
+      o.dialog.replaceChildren(
+        el('div', { class: 'import-head' },
+          el('h2', { id: 'table-title' }, '표로 고치기'),
+          el('button', { type: 'button', 'data-testid': 'table-close', onclick: () => o.dialog.close() }, '닫기')),
+        el('p', { class: 'notice', 'data-testid': 'table-bundled' }, '이 화면은 여러 유니버스를 묶은 화면입니다. 각 유니버스를 열어 고치세요.'));
+      return;
+    }
+    o.dialog.replaceChildren(...parts.filter(Boolean));
   }
 
   return (mode) => {

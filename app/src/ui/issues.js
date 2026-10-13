@@ -19,7 +19,7 @@ export function issueEntry(view, targetGid, { rootGid = null, onOpen }) {
   const n = issuesFor(view, targetGid, rootGid).length;
   if (!n) return el('p', { class: 'muted small', 'data-testid': 'issue-count', 'data-count': '0' }, '미해결 0건');
   return el('p', { class: 'notice', 'data-testid': 'issue-count', 'data-count': String(n) },
-    el('button', { type: 'button', class: 'link', 'data-testid': 'btn-issues', onclick: onOpen }, `미해결 ${n}건`), ' 이슈·진행 중 메모 중 해결로 표시되지 않은 것');
+    el('button', { type: 'button', class: 'link', 'data-testid': 'btn-issues', onclick: onOpen }, `미해결 ${n}건`), ' — 아직 해결 표시하지 않은 이슈·진행 중 메모');
 }
 
 // 메모가 가리키는 업무 이름. 대상이 없으면 단 주제, 둘 다 없으면 빈 칸

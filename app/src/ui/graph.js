@@ -125,7 +125,10 @@ export function legendItems(display, also = []) {
 }
 
 // getFilter(display): 거르기 결과 {nodes:Set, edges:Set} 또는 null(T-18, R-17 ③). 그릴 때마다 다시 적용한다
-export function createGraph(container, { onSelect, onToggle = () => {}, getFilter = () => null }) {
+export function createGraph(container, { onSelect, onToggle = () => {}, getFilter = () => null, onFlow = () => {} }) {
+  // 흐름 정렬 상태(U-7): 흐름 정렬을 하면 true, 다시 정렬·화면 다시 그리기(render)면 false. 「흐름 정렬」 단추의 눌림 표시에 쓴다
+  let flowOn = false;
+  const setFlow = (v) => { if (flowOn !== v) { flowOn = v; onFlow(v); } };
   const cy = cytoscape({
     container,
     elements: [],
@@ -345,6 +348,7 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
   }
 
   function layout() {
+    setFlow(false);
     // ① 꼭지를 가운데 두고 꼭지에서 가까운 순서대로 고리를 이룬다.
     // ② 그 자리에서 출발해 연결된 노드끼리 당기고 겹친 노드는 밀어낸다(라벨 크기 포함).
     // 무작위를 쓰지 않으므로 열 때마다 같은 모양이다.
@@ -396,6 +400,7 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
     // 처음에는 전체 배치를 계산한다. 이후(노드 추가 등)에는 기존 노드 자리를 그대로 두고
     // 새 노드만 이웃 옆이나 그래프 바깥쪽에 놓아, 보던 모양이 흐트러지지 않게 한다
     render(display, selectedGid) {
+      setFlow(false);
       const before = new Map(cy.nodes().map((n) => [n.id(), { ...n.position() }]));
       bigLabels.clear(); // 요소를 새로 만들면 덮어쓴 글자 크기도 사라진다(고른 노드는 아래 highlight가 다시 키운다)
       cy.elements().remove();
@@ -479,6 +484,7 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
       });
       fitTo(undefined, 40);
       applyTinyLabels();
+      setFlow(true);
     },
 
     fit() {

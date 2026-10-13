@@ -63,7 +63,7 @@ export function storageFailReason(err) {
  */
 export function createApp({ store, samples, currentId, now, authorName }) {
   const warnings = [];
-  // 확정자·표준 통합 확인의 기록 주체(R-22, D-24). 작성자 이름이 있으면 그 이름, 없거나 깨졌으면 지금 문구
+  // 확정자·통합 확인 목록 판정(decideIdentity)의 기록 주체(R-22, D-24). 작성자 이름이 있으면 그 이름, 없거나 깨졌으면 지금 문구
   const author = () => cleanAuthorName(typeof authorName === 'function' ? authorName() : authorName) || DEFAULT_AUTHOR;
   let db = store || memoryStore();
   let writable = !!store; // 저장소에 쓸 수 있는가. 샘플 설치가 실패하면 false(읽기 전용)
@@ -230,11 +230,22 @@ export function createApp({ store, samples, currentId, now, authorName }) {
       const ev = v.events.find((x) => x.gid === eventGid && x.type === 'memo');
       if (!ev || !openMemos(v).includes(ev)) return { ok: false, error: { code: CODES.SCHEMA, field: 'event', already_resolved: true } };
       const input = resolveMemoInput(ev, today);
-      if (ev.universe_id === doc.universe.id) return commit(addEvent(doc, input, { now: now() }));
+      // 저장 전에 새 해결 메모로 원래 메모가 실제로 닫히는지 본다(시계가 어긋나 이력 순서상 앞서면 닫히지 않는다. 검토7 K-4)
+      const closes = (next) => {
+        const root = ev.universe_id === doc.universe.id ? next : doc;
+        return !openMemos(buildView(root, (id) => (id === ev.universe_id ? next : resolve(id)))).some((x) => x.gid === eventGid);
+      };
+      const notClosed = { ok: false, error: { code: CODES.SCHEMA, field: 'event', not_closed: true } };
+      if (ev.universe_id === doc.universe.id) {
+        const own = addEvent(doc, input, { now: now() });
+        if (own.ok && !closes(own.doc)) return notClosed;
+        return commit(own);
+      }
       const other = db.loadUniverse(ev.universe_id);
       if (!other) return { ok: false, error: { code: CODES.SCHEMA, field: 'universe_id' } };
       if (validateDocument(other).readOnly) return { ok: false, error: { code: CODES.SCHEMA, reason: 'version' } };
       const result = addEvent(other, input, { now: now() });
+      if (result.ok && !closes(result.doc)) return notClosed;
       if (result.ok) {
         const failed = save(result.doc);
         if (failed) return failed;
@@ -399,7 +410,14 @@ export function createApp({ store, samples, currentId, now, authorName }) {
         // 본문: 설명(2000자)에 넣고, 넘치면 "본문(이어서 N)" 속성으로 나눠 잃지 않게 한다
         const body = String(text || '');
         const extra = {};
-        for (let i = TEXT_MAX, k = 1; i < body.length; i += TEXT_MAX, k += 1) extra[`본문(이어서 ${k})`] = body.slice(i, i + TEXT_MAX);
+        // 설명은 앞뒤 공백을 지우므로(addNode) 설명 조각이 공백·줄바꿈으로 끝나지 않게 자르는 위치를 글자 앞으로 옮긴다.
+        // 이어서 조각(속성)은 지우지 않으므로 그대로 이어 붙이면 원문과 같다(검토7 K-2)
+        let first = Math.min(TEXT_MAX, body.length);
+        if (first < body.length) {
+          while (first > 0 && /\s/.test(body[first - 1])) first -= 1;
+          if (first === 0) first = TEXT_MAX; // 공백만 2000자 이상: 어쩔 수 없이 그 자리에서 자른다
+        }
+        for (let i = first, k = 1; i < body.length; i += TEXT_MAX, k += 1) extra[`본문(이어서 ${k})`] = body.slice(i, i + TEXT_MAX);
         const base = `${date} ${target.label} 인수인계서`.slice(0, 90);
         // addNode는 공백·대소문자·한글 정규화로 이름을 비교하므로 같은 기준으로 겹침을 피한다(여섯 번째 검토 C-12)
         const taken = new Set(d.nodes.filter((n) => n.core_type === 'artifact' && !n.hidden).map((n) => normalizeLabel(n.label)));
@@ -407,7 +425,7 @@ export function createApp({ store, samples, currentId, now, authorName }) {
         for (let k = 2; taken.has(normalizeLabel(label)); k += 1) label = `${base} (${k})`;
         const name = (gid) => (v.getNode(gid) || { label: gid }).label;
         const art = step(addNode(d, {
-          core_type: 'artifact', subtype: SUBTYPE_HANDOVER_DOC, label, description: body.slice(0, TEXT_MAX),
+          core_type: 'artifact', subtype: SUBTYPE_HANDOVER_DOC, label, description: body.slice(0, first),
           attrs: { 확정자: author(), '확정 시각': ctx.now, '보내는 사람': name(draft.from), '받는 사람': name(draft.to), ...(draft.method ? { '초안 생성 방식': METHOD_NAMES[draft.method] || draft.method } : {}), ...extra },
         }, ctx)).node;
         let linked = false;

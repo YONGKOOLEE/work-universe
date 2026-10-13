@@ -326,7 +326,9 @@ export function addEvent(doc, input, ctx) {
     return fail(CODES.SCHEMA, { field: 'to_person_id', same_person: true });
   }
   // 숨긴 노드를 새 이력의 대상으로 쓰지 않는다(연결과 같은 기준). 전역 참조(다른 유니버스)는 여기서 확인하지 않는다
-  for (const [k, v] of Object.entries(pl)) {
+  // 단, 「해결로 표시」(범주 resolved + resolves_id)는 대상이 숨겨져 있어도 그 메모를 닫을 수 있어야 한다(검토7 K-1)
+  const isResolution = pl.category === 'resolved' && !!pl.resolves_id;
+  for (const [k, v] of Object.entries(isResolution ? {} : pl)) {
     for (const id of Array.isArray(v) ? v : [v]) {
       if (typeof id !== 'string' || id.includes('/') || !/_id$|_ids$/.test(k) || k === 'previous_handover_id') continue;
       const n = doc.nodes.find((x) => x.id === id);
@@ -593,7 +595,8 @@ export function addAssignment(doc, input, ctx) {
   if (input.type === 'assign_start') {
     if (active) return fail(CODES.DUP, { existing_id: active.id, already_active: true });
     const r = addEdge(work, { source: pl.person_id, target: pl.work_id, core_type: 'performs', period: { start: input.occurred_at } }, ctx);
-    if (!r.ok) return r;
+    // 끝난 담당 기간과 겹쳐서 거부된 것: 화면이 「같은 노드」가 아니라 담당 기간 문구를 고르게 표시한다(검토7 K-3)
+    if (!r.ok) return r.error && r.error.code === CODES.DUP ? { ...r, error: { ...r.error, period_overlap: true } } : r;
     work = r.doc;
     edge = r.edge;
   } else {
