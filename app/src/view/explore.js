@@ -11,22 +11,41 @@ const norm = (s) => normalizeLabel(String(s || '')).replace(/\s+/g, '');
  * 이름 일부로 노드를 찾는다(R-17 ①②). 숨긴 노드는 빼고, 접힌 하위 유니버스 안의 노드도 찾는다(view 전체가 대상).
  * 합쳐진 노드(동일성 연결)는 원래 이름 중 하나라도 맞으면 찾는다.
  * 순서: 이름이 검색어로 시작하는 것 → 가나다순.
- * @returns {{gid:string, label:string, core_type:string, type_label:string, universe_name:string}[]} 맞는 것 전부(자르기는 화면 몫)
+ * opts.wide(T-26, R-22 ①, D-24): true이면 이름 일치 뒤에 설명·속성 값에만 맞는 노드를 이어 붙인다(이름 일치가 먼저).
+ * 뒤쪽 결과에는 where(어디서 찾았는지: "설명" 또는 `속성 「이름」`)가 붙는다. 기본(false)은 이름만 — 지금까지와 같다.
+ * @returns {{gid:string, label:string, core_type:string, type_label:string, universe_name:string, where?:string}[]} 맞는 것 전부(자르기는 화면 몫)
  */
-export function searchNodes(view, query) {
+export function searchNodes(view, query, opts = {}) {
   const q = norm(query);
   if (!q) return [];
   const hits = [];
+  const wideHits = [];
   for (const n of view.nodes) {
     if (n.hidden) continue;
     // 합쳐진 원본 중 숨긴 것의 이름으로는 찾지 않는다(숨긴 노드는 찾기에 나오지 않음, T-18 오류 검증)
     const names = [n.label, ...(n.merged_from || []).map((g) => view.rawNode(g)).filter((r) => r && !r.hidden).map((r) => r.label)].filter(Boolean);
     const keys = names.map(norm);
-    if (!keys.some((k) => k.includes(q))) continue;
-    hits.push({ gid: n.gid, label: n.label, core_type: n.core_type, type_label: n.type_label, universe_name: n.universe_name, prefix: keys.some((k) => k.startsWith(q)) });
+    const base = { gid: n.gid, label: n.label, core_type: n.core_type, type_label: n.type_label, universe_name: n.universe_name };
+    if (keys.some((k) => k.includes(q))) {
+      hits.push({ ...base, prefix: keys.some((k) => k.startsWith(q)) });
+    } else if (opts.wide) {
+      const where = wideWhere(n, q);
+      if (where) wideHits.push({ ...base, where });
+    }
   }
-  hits.sort((a, b) => Number(b.prefix) - Number(a.prefix) || a.label.localeCompare(b.label, 'ko') || a.gid.localeCompare(b.gid));
-  return hits.map(({ prefix, ...h }) => h);
+  const byName = (a, b) => a.label.localeCompare(b.label, 'ko') || a.gid.localeCompare(b.gid);
+  hits.sort((a, b) => Number(b.prefix) - Number(a.prefix) || byName(a, b));
+  wideHits.sort(byName);
+  return [...hits.map(({ prefix, ...h }) => h), ...wideHits];
+}
+
+/** 설명 → 속성 값 순으로 처음 맞는 곳. 없으면 null. 속성은 값만 본다(속성 이름은 위치 표시에만 쓴다) */
+function wideWhere(n, q) {
+  if (n.description && norm(n.description).includes(q)) return '설명';
+  for (const [k, v] of Object.entries(n.attrs || {})) {
+    if (v != null && typeof v !== 'object' && norm(v).includes(q)) return `속성 「${k}」`;
+  }
+  return null;
 }
 
 /**

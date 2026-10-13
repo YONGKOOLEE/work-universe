@@ -1107,6 +1107,28 @@ async function checkBrowser(browser, port) {
     const escInput = await evaluate(s.cdp, "({ hidden: document.querySelector('[data-testid=find-results]').hidden, value: document.querySelector('[data-testid=find-input]').value })");
     check('R-17 ⑧ 결과 목록 Esc → 목록 닫히고 찾기 칸으로, 찾기 칸 Esc → 목록만 닫고 글자는 남김', escList.hidden && escList.focus === 'find-input' && escList.value === '대사' && escInput.hidden && escInput.value === '대사', JSON.stringify([escList, escInput]));
     await evaluate(s.cdp, "document.querySelector('[data-testid=find-input]').blur()");
+    // T-26 「설명·속성까지」(R-22 ①, D-24): 기본 켬 → 설명·속성에만 있는 낱말이 위치 표시와 함께 나옴, 끄면 이름만, 이름 일치가 먼저
+    const wideBox = await evaluate(s.cdp, "(() => { const c = document.querySelector('[data-testid=find-wide]'); if (!c) return null; const r = c.getBoundingClientRect(); const t = document.querySelector('[data-testid=find-input]').getBoundingClientRect(); return { checked: c.checked, w: r.width, h: r.height, sameRow: Math.abs(r.top - t.top) < 30 }; })()");
+    check('R-22 ① 찾기 상자 옆에 「설명·속성까지」 선택이 있고 기본으로 켜져 있음(크기 있음)', !!wideBox && wideBox.checked && wideBox.w > 0 && wideBox.h > 0 && wideBox.sameRow, JSON.stringify(wideBox));
+    const hitRows = () => evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=find-hit]')].map((b) => b.dataset.gid + '|' + ((b.querySelector('[data-testid=find-where]') || {}).textContent || ''))");
+    await typeFind('가상정산시스템');
+    const wideOn = await hitRows();
+    await shot(s.cdp, `${browser.name}-26a-find-wide`);
+    check('R-22 ① 켬: 설명·속성에만 있는 낱말(가상정산시스템) → 결과에 나오고 어디서 찾았는지(속성 「…」) 표시', wideOn.length === 2 && wideOn.some((h) => h.startsWith('U-A1/N-001|속성 「사용 시스템」')) && wideOn.some((h) => h.startsWith('U-A1/N-002|속성 「절차」')), JSON.stringify(wideOn));
+    await typeFind('점검표');
+    const nameFirst = await hitRows();
+    const wi = nameFirst.findIndex((h) => !h.endsWith('|'));
+    check('R-22 ① 이름 일치(위치 표시 없음)가 먼저, 설명·속성 일치(위치 표시 있음)가 그 아래', wi > 0 && nameFirst.slice(0, wi).every((h) => h.endsWith('|')) && nameFirst.slice(wi).every((h) => !h.endsWith('|')), JSON.stringify(nameFirst.slice(0, 6)));
+    await evaluate(s.cdp, "document.querySelector('[data-testid=find-wide]').click()");
+    await sleep(150);
+    const offRows = await hitRows();
+    check('R-22 ① 끔: 이름 일치만 남고 위치 표시가 없음', offRows.length > 0 && offRows.length === wi && offRows.every((h) => h.endsWith('|')), JSON.stringify(offRows));
+    await typeFind('가상정산시스템');
+    check('R-22 ① 끔: 설명·속성에만 있는 낱말은 「찾는 노드 없음」', (await text(s.cdp, '[data-testid=find-none]')).includes('찾는 노드 없음'));
+    await evaluate(s.cdp, "document.querySelector('[data-testid=find-wide]').click()");
+    await sleep(150);
+    check('R-22 ① 다시 켜면 다시 찾음', (await hitRows()).length === 2);
+    await evaluate(s.cdp, "document.querySelector('[data-testid=find-input]').blur()");
     await typeFind('정산 담당');
     await key('Enter', 'Enter', 13);
     await sleep(300);
@@ -1618,6 +1640,42 @@ async function checkBrowser(browser, port) {
   await sleep(200);
   const saved = await evaluate(s.cdp, "Date.now() - Date.parse(JSON.parse(localStorage.getItem('wu:v1:settings')).lastExportAt)");
   check('R-21 ② 「지금 내보내기」 → 파일 이름이 정해지고 줄이 사라지며 내보내기 시각(지금)이 설정에 저장됨', (await nudge()).hidden && typeof (await evaluate(s.cdp, 'window.__dl')) === 'string' && saved >= 0 && saved < 60000, String(saved));
+
+  // ── T-26 작성자 이름(R-22 ②③, D-24): 설정에 이름 저장 → 초안 확정 → 확정본 상세·내려받기 파일의 확정자가 그 이름 ──
+  // 데이터를 바꾸는 단계라 끝부분에 둔다(앞의 확정·이슈·되살리기 점검의 순서·개수를 건드리지 않는다)
+  await reloadApp();
+  await evaluate(s.cdp, "window.confirm = () => true; window.__wu.select(null); document.getElementById('settings-open').click()");
+  await sleep(200);
+  const authorBox = await evaluate(s.cdp, "(() => { const i = document.querySelector('[data-testid=settings-author]'); if (!i) return null; const r = i.getBoundingClientRect(); return { w: r.width, h: r.height, max: i.maxLength, value: i.value, note: document.querySelector('[data-testid=settings]').textContent.includes('로그인이 아니며') }; })()");
+  check('R-22 ② ③ 설정에 「작성자 이름」 입력 칸(크기 있음, 최대 100자)과 「로그인이 아님」 안내가 있음', !!authorBox && authorBox.w > 0 && authorBox.h > 0 && authorBox.max === 100 && authorBox.value === '' && authorBox.note, JSON.stringify(authorBox));
+  await evaluate(s.cdp, "(() => { const i = document.querySelector('[data-testid=settings-author]'); i.value = '  가상 작성자  '; i.dispatchEvent(new Event('change')); })()");
+  await sleep(150);
+  await evaluate(s.cdp, "document.querySelector('[data-testid=settings-author]').scrollIntoView({ block: 'center' })");
+  await sleep(150);
+  await shot(s.cdp, `${browser.name}-26b-settings-author`);
+  check('R-22 ② 이름을 넣으면 설정(wu:v1:settings)에 공백을 정리해 저장되고 다른 설정은 유지됨', (await evaluate(s.cdp, "(() => { const v = JSON.parse(localStorage.getItem('wu:v1:settings')); return v.authorName + '|' + v.provider; })()")) === '가상 작성자|pregen');
+  await clickTestId(s.cdp, 'settings-close');
+  await sleep(150);
+  await evaluate(s.cdp, "window.__wu.select(null)");
+  await clickTestId(s.cdp, 'btn-draft-universe');
+  await sleep(150);
+  await makeDraft('U-A1/N-001', 'U-A1/N-011', 'U-A1/N-010');
+  await sleep(250);
+  const handoversBefore = await evaluate(s.cdp, "window.__wu.doc.events.filter((e) => e.type === 'handover').length");
+  await clickTestId(s.cdp, 'draft-confirm');
+  await sleep(400);
+  const authorDetail = await text(s.cdp, '#detail');
+  check('R-22 ② 이름을 넣고 확정 → 확정본 상세의 확정자가 그 이름(기본 문구 아님)', authorDetail.includes('가상 작성자') && !authorDetail.includes('사용자(이 브라우저)'), authorDetail.slice(0, 160));
+  check('R-22 ② 확정 이력 메모에도 그 이름, 이력이 1건 늘어남', await evaluate(s.cdp, `(() => { const ev = window.__wu.doc.events.filter((e) => e.type === 'handover'); return ev.length === ${handoversBefore} + 1 && ev[ev.length - 1].note.includes('확정: 가상 작성자'); })()`));
+  await evaluate(s.cdp, `(() => {
+    window.__dl = null; window.__blob = null;
+    const orig = URL.createObjectURL; URL.createObjectURL = (b) => { window.__blob = b; return orig.call(URL, b); };
+    HTMLAnchorElement.prototype.click = function () { window.__dl = this.getAttribute('download'); };
+  })()`);
+  await clickTestId(s.cdp, 'doc-download');
+  await sleep(250);
+  const authorHtml = await evaluate(s.cdp, 'window.__blob ? window.__blob.text() : null');
+  check('R-22 ② 확정본 내려받기 파일의 확정자 줄이 그 이름', typeof (await evaluate(s.cdp, 'window.__dl')) === 'string' && !!authorHtml && authorHtml.includes('확정자: 가상 작성자') && !authorHtml.includes('확정자: 사용자(이 브라우저)'), (authorHtml || '').slice(0, 120));
 
   const errors2 = [...s.log.errors];
   const external2 = [...s.log.external];

@@ -1,6 +1,6 @@
 // 브라우저 저장소(12.4 키). DOM에 의존하지 않도록 storage 객체를 주입받는다.
 
-import { DOC_COLLECTIONS } from '../model/schema.js';
+import { DOC_COLLECTIONS, LABEL_MAX } from '../model/schema.js';
 
 const INDEX_KEY = 'wu:v1:index';
 const SETTINGS_KEY = 'wu:v1:settings';
@@ -96,6 +96,11 @@ export function createStore(storage) {
   };
 }
 
+/** 작성자 이름(R-22, D-24): 앞뒤 공백을 없애고 이름 상한(LABEL_MAX)까지만. 문자열이 아니거나 비면 ''(= 기본 기록 주체) */
+export function cleanAuthorName(v) {
+  return typeof v === 'string' ? v.trim().slice(0, LABEL_MAX).trim() : '';
+}
+
 /** 설정(12.4 wu:v1:settings): 공급자 선택. 저장소가 없거나 값이 깨졌으면 기본값. 키는 저장하지 않는다(Claude API는 P2) */
 export function loadSettings(storage, defaults, allowed = null) {
   if (!storage) return { ...defaults };
@@ -107,6 +112,8 @@ export function loadSettings(storage, defaults, allowed = null) {
     // 마지막 내보내기·백업 권유를 닫은 시각(12.4, D-23). 날짜로 읽을 수 없으면 없는 것으로 본다
     const stamp = (s) => (typeof s === 'string' && !Number.isNaN(Date.parse(s)) ? s : undefined);
     const out = { ...defaults, provider };
+    const author = cleanAuthorName(v.authorName);
+    if (author) out.authorName = author;
     if (stamp(v.lastExportAt)) out.lastExportAt = v.lastExportAt;
     if (stamp(v.backupDismissedAt)) out.backupDismissedAt = v.backupDismissedAt;
     return out;
@@ -120,6 +127,8 @@ export function saveSettings(storage, settings) {
   if (!storage) return false;
   try {
     const out = { provider: settings.provider };
+    const author = cleanAuthorName(settings.authorName);
+    if (author) out.authorName = author;
     if (settings.lastExportAt) out.lastExportAt = settings.lastExportAt;
     if (settings.backupDismissedAt) out.backupDismissedAt = settings.backupDismissedAt;
     storage.setItem(SETTINGS_KEY, JSON.stringify(out));

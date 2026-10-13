@@ -1,7 +1,7 @@
 // 화면 진입점. 빌드하면 모듈 없는 단일 스크립트(IIFE)가 된다(P-1).
 
 import { createApp } from '../app/app.js';
-import { createStore, loadSettings, openStorage, saveSettings } from '../store/local.js';
+import { cleanAuthorName, createStore, loadSettings, openStorage, saveSettings } from '../store/local.js';
 import { PREGEN } from '../../data/pregen.js';
 import { DEFAULT_PROVIDER, PROVIDERS, createProvider } from '../llm/providers.js';
 import { settingsPanel } from './settings.js';
@@ -120,6 +120,8 @@ function start() {
     samples: SAMPLES,
     currentId: hashId(),
     now: nowIso,
+    // 확정자·표준 통합 확인의 기록 주체(R-22, D-24). 설정은 아래에서 읽으므로 부를 때마다 지금 값을 돌려준다
+    authorName: () => settings.authorName,
   });
 
   const $ = (id) => document.getElementById(id);
@@ -523,6 +525,13 @@ function start() {
       panel.replaceChildren(settingsPanel({
         current: settings.provider,
         persisted: !!storage,
+        authorName: settings.authorName || '',
+        onAuthorName: (v) => {
+          const name = cleanAuthorName(v);
+          if (name) settings.authorName = name;
+          else delete settings.authorName;
+          saveSettings(storage, settings);
+        },
         showCheckTools: CHECK_MODE,
         onChange: (name) => {
           settings.provider = name;
@@ -728,7 +737,7 @@ function start() {
   // ── 큰 화면 탐색: 찾기·거르기·주변만 보기(T-18, R-17, D-17). 계산은 view/explore.js, 여기서는 화면만 바꾼다 ──
   const bar = exploreBar({
     container: $('explore-bar'),
-    search: (q) => searchNodes(view, q),
+    search: (q, opts) => searchNodes(view, q, opts),
     onPick: goTo,
     types: (chosen) => legendItems(display, chosen).filter((t) => t.key !== 'root' && t.key !== 'unknown'),
     // 고른 사람이 지금 화면에 없어도(접기·주변만 보기·숨김 뒤) 목록에 남겨 풀 수 있게 한다(C-11)

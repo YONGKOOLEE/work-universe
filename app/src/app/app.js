@@ -9,9 +9,11 @@ import { subtypeRegistered } from '../model/checks.js';
 import { buildView, refGid, toGid } from '../view/view.js';
 
 // 확정한 인수인계서에 남기는 초안 생성 방식의 표시 이름(llm/connector.js METHOD_LABELS의 짧은 꼴)
+const DEFAULT_AUTHOR = '사용자(이 브라우저)'; // 작성자 이름이 비었을 때의 기록 주체(R-22)
 const METHOD_NAMES = { rule: '규칙 기반', pregen: '사전 생성', llm: 'LLM' };
 import { scopeWorks } from '../rules/handover.js';
 import { openMemos, resolveMemoInput } from '../rules/issues.js';
+import { cleanAuthorName } from '../store/local.js';
 import { mergePlan } from '../merge/merge.js';
 import { previewImport } from '../model/import.js';
 import { formReport } from '../rules/form.js';
@@ -59,8 +61,10 @@ export function storageFailReason(err) {
  *   store가 null이면 저장소를 쓸 수 없는 상태다(W-STORAGE → 샘플 읽기 전용, 5.3).
  *   currentId가 없거나 찾을 수 없으면 첫 샘플을 연다.
  */
-export function createApp({ store, samples, currentId, now }) {
+export function createApp({ store, samples, currentId, now, authorName }) {
   const warnings = [];
+  // 확정자·표준 통합 확인의 기록 주체(R-22, D-24). 작성자 이름이 있으면 그 이름, 없거나 깨졌으면 지금 문구
+  const author = () => cleanAuthorName(typeof authorName === 'function' ? authorName() : authorName) || DEFAULT_AUTHOR;
   let db = store || memoryStore();
   let writable = !!store; // 저장소에 쓸 수 있는가. 샘플 설치가 실패하면 false(읽기 전용)
   if (!store) warnings.push({ code: CODES.STORAGE });
@@ -314,7 +318,7 @@ export function createApp({ store, samples, currentId, now }) {
 
     /** 사람의 판정(같음 confirmed / 다름 rejected)을 기록한다(R-11 ②③, 12.7 흐름 3 ⑤). 원래 유니버스는 바뀌지 않는다(R-11 ⑤) */
     decideIdentity({ a, b, kind, status, reason, score }) {
-      return guard() || commit(decideIdentity(doc, { a, b, kind, method: 'human', status, reason, score, decided_by: '사용자(이 브라우저)' }, { now: now() }));
+      return guard() || commit(decideIdentity(doc, { a, b, kind, method: 'human', status, reason, score, decided_by: author() }, { now: now() }));
     },
 
     /** 표준 양식 점검(T-20, R-16): 문서 하나의 업무 중 권장 항목이 빈 것. 막지 않고 알리기만 한다 */
@@ -404,7 +408,7 @@ export function createApp({ store, samples, currentId, now }) {
         const name = (gid) => (v.getNode(gid) || { label: gid }).label;
         const art = step(addNode(d, {
           core_type: 'artifact', subtype: SUBTYPE_HANDOVER_DOC, label, description: body.slice(0, TEXT_MAX),
-          attrs: { 확정자: '사용자(이 브라우저)', '확정 시각': ctx.now, '보내는 사람': name(draft.from), '받는 사람': name(draft.to), ...(draft.method ? { '초안 생성 방식': METHOD_NAMES[draft.method] || draft.method } : {}), ...extra },
+          attrs: { 확정자: author(), '확정 시각': ctx.now, '보내는 사람': name(draft.from), '받는 사람': name(draft.to), ...(draft.method ? { '초안 생성 방식': METHOD_NAMES[draft.method] || draft.method } : {}), ...extra },
         }, ctx)).node;
         let linked = false;
         for (const w of works) {
@@ -417,7 +421,7 @@ export function createApp({ store, samples, currentId, now }) {
           step(addEvent(d, {
             type: 'handover', occurred_at: date,
             payload: { work_id: local(w), from_person_id: local(draft.from), to_person_id: local(draft.to), artifact_id: art.id, ...(prev ? { previous_handover_id: local(prev.gid) } : {}) },
-            note: '인수인계 초안을 확정함(확정: 사용자(이 브라우저))',
+            note: `인수인계 초안을 확정함(확정: ${author()})`,
           }, ctx));
         }
         if (!linked) step(addEdge(d, { source: d.universe.root_node_id, target: art.id, core_type: 'contains' }, ctx));

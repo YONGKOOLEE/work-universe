@@ -15,7 +15,7 @@ export const EXPLORE = {
 /**
  * @param {{
  *   container: HTMLElement,
- *   search: (q:string) => {gid:string,label:string,type_label:string,universe_name:string}[],
+ *   search: (q:string, opts:{wide:boolean}) => {gid:string,label:string,type_label:string,universe_name:string,where?:string}[],
  *   onPick: (gid:string) => void,
  *   types: () => {key:string,label:string,color:string}[],
  *   persons: () => {gid:string,label:string}[],
@@ -28,6 +28,10 @@ export function exploreBar(o) {
 
   // ── 찾기(R-17 ①②⑧) ──
   const input = el('input', { type: 'search', placeholder: '노드 찾기 (이름 일부, 예: 대사)', 'aria-label': '노드 찾기', 'data-testid': 'find-input', autocomplete: 'off', 'aria-controls': 'find-results' });
+  // 「설명·속성까지」(T-26, R-22 ①, D-24): 기본 켬. 저장하지 않는다(화면을 열 때마다 켬, L-27과 같은 방식)
+  const wide = el('input', { type: 'checkbox', checked: true, 'data-testid': 'find-wide' });
+  wide.addEventListener('change', () => { if (input.value.trim()) showResults(); });
+  const wideLabel = el('label', { class: 'check small find-wide' }, wide, '설명·속성까지');
   const results = el('ul', { id: 'find-results', class: 'find-results', 'data-testid': 'find-results', hidden: true, 'aria-label': '찾은 노드' });
   const close = () => { results.hidden = true; };
   const pick = (gid) => {
@@ -42,12 +46,12 @@ export function exploreBar(o) {
       hits = []; // 칸을 비운 뒤 Enter가 이전 결과로 가지 않게
       return close();
     }
-    hits = o.search(q);
+    hits = o.search(q, { wide: wide.checked });
     const shown = hits.slice(0, EXPLORE.RESULT_LIMIT);
     results.replaceChildren(...(hits.length
       ? [
         ...shown.map((h) => el('li', {}, el('button', { type: 'button', 'data-testid': 'find-hit', 'data-gid': h.gid, onclick: () => pick(h.gid) },
-          el('span', { class: 'name' }, h.label), el('span', { class: 'chip' }, h.type_label), el('span', { class: 'uname' }, h.universe_name)))),
+          el('span', { class: 'name' }, h.label), el('span', { class: 'chip' }, h.type_label), h.where ? el('span', { class: 'where', 'data-testid': 'find-where' }, h.where) : null, el('span', { class: 'uname' }, h.universe_name)))),
         hits.length > shown.length ? el('li', { class: 'more muted small', 'data-testid': 'find-more' }, `외 ${hits.length - shown.length}개 — 더 길게 입력하면 좁혀집니다`) : null,
       ].filter(Boolean)
       : [el('li', { class: 'none', 'data-testid': 'find-none', role: 'status' }, `찾는 노드 없음: 「${q}」`)]));
@@ -89,7 +93,7 @@ export function exploreBar(o) {
       quietFocus = false;
     }
   });
-  const findBox = el('div', { class: 'find-box' }, input, results);
+  const findBox = el('div', { class: 'find-box' }, input, wideLabel, results);
   document.addEventListener('click', (e) => { if (!findBox.contains(e.target)) close(); });
   findBox.addEventListener('focusout', (e) => { if (!findBox.contains(e.relatedTarget)) close(); });
 
