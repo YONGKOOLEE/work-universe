@@ -11,6 +11,11 @@ gates:
   plan:approved: approved
   planning:complete: recorded 2026-09-30 (최종 점검 통과, CR-2 승인 후 재확정)
 approvals:   # 형식: gate / 대상 문서 / 사용자 승인 표현(원문) / 시각·시간대(확인 가능한 경우만) / 조건
+  - change: 위험 K-6(메일 첨부 차단) 수용 — 메일 첨부 시험 생략
+    user_expression: "확인했으나 해당 내용은 고려하지 말자 된다고 생각해"
+    date: 2026-10-13
+    time: 미기록
+    conditions: 제출 압축을 메일로 보내 확인하는 단계(T-15 일부)는 하지 않음. 실행안내에 받는 쪽 경고 안내를 넣지 않음
   - change: 일곱 번째 검토 뒤 결정 R7-1~R7-10 전부 추천안, push 허용
     documents: docs/decisions-pending.md 11절, docs/review-2026-10-13.md, CLAUDE.md(push 원칙)
     user_expression: "전부 추천대로하고 push도 니가 해 할 수 있잖아"
