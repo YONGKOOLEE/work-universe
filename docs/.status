@@ -11,6 +11,13 @@ gates:
   plan:approved: approved
   planning:complete: recorded 2026-09-30 (최종 점검 통과, CR-2 승인 후 재확정)
 approvals:   # 형식: gate / 대상 문서 / 사용자 승인 표현(원문) / 시각·시간대(확인 가능한 경우만) / 조건
+  - change: CR-12 (1차 제출에서 실사용 수준까지: R-19 인수인계서 내보내기, R-20 미해결 이슈, R-21 되살리기·백업 권유, R-22 찾기 넓히기·작성자 이름, D-21~D-25, T-23~T-28, T-21 조건부)
+    document: docs/CR-12-초안.md v0.2 → 01·02·03 반영
+    user_expression: "승인 하는데 일정은 폐기 저렇게 일정을 정할 필요 없어보임, 기능동결날짜도 폐기 진행사항에 따라 flexible 하게"
+    date: 2026-10-13
+    time: 미기록
+    reflected: 01(R-19~R-22, P1 표, 변경 CR-12) · 02(5.3 6행, 5.6.1 G 결정, D-21~D-25, 9절 추적, 12.4 authorName·lastExportAt) · 03(T-23~T-28, T-21 조건부, 3절 축소 순서, 동결 문단). 반영: Sonnet 하위 에이전트, 확인: Opus 메인. 해석은 decisions-pending 10절
+    conditions: 날짜 일정 폐기, 기능 동결 날짜 폐기(앞선 "마감 1주 전쯤" 결정 2026-10-04를 대체). 구현 순서·범위 축소 순서는 유지. E(흐름 정렬)는 미결(추천 ① 버튼 유지). 모델 원칙: 메인 Opus, 구현은 Sonnet 하위 에이전트(사용자 2026-10-13)
   - gate: context:approved
     document: docs/00-context.md
     user_expression: "context 승인"
@@ -140,7 +147,7 @@ next_session_first_action: (2026-10-05) docs/HANDOFF.md 1절을 읽는다. 순�
 
 implementation:
   deadline: 1차 제출 마감 2026-10-30(사용자 제공 2026-10-13). 개발·산출물 제출은 1차까지, 2차는 발표만(사용자 "1차에 모든 프로그램을 완료")
-  scope_change: CR-12 초안 docs/CR-12-초안.md(draft, 사용자 "진행" 2026-10-13 = 초안 작성 지시. 내용 승인 대기). 기능 동결 추천 10-23
+  scope_change: CR-12 승인(docs/CR-12-초안.md v0.2, 2026-10-13). 날짜 일정·동결 날짜는 폐기, 동결은 진행에 따라 사용자가 정함
   current_task: (2026-10-13) 조력자 의견 처리(담당 이력 연결·이력 접기·T-20 최소판·흐름 정렬 시제품) 구현·검증 완료. 다음은 사용자 화면 확인과 흐름 정렬 채택 여부, 조력자 업무정의서 샘플 대기. 그 전(2026-10-12): T-19 표 입력 구현·검증 완료. 다음은 (조력자 의견 뒤) T-20 최소판, 그 전에 사용자 화면 확인·T-22 문서 검토. T-21은 1차 제출에서 제외(CR-11)
   tasks:
     - id: HELPER-2026-10-12
