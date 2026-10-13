@@ -11,6 +11,12 @@ gates:
   plan:approved: approved
   planning:complete: recorded 2026-09-30 (최종 점검 통과, CR-2 승인 후 재확정)
 approvals:   # 형식: gate / 대상 문서 / 사용자 승인 표현(원문) / 시각·시간대(확인 가능한 경우만) / 조건
+  - change: 일곱 번째 검토 뒤 결정 R7-1~R7-10 전부 추천안, push 허용
+    documents: docs/decisions-pending.md 11절, docs/review-2026-10-13.md, CLAUDE.md(push 원칙)
+    user_expression: "전부 추천대로하고 push도 니가 해 할 수 있잖아"
+    date: 2026-10-13
+    time: 미기록
+    conditions: R7-1 흐름 정렬 ① 버튼 유지 + 주제 위치 개선, R7-2~R7-5 화면 정리 진행, R7-6 담당 시작에 끝 날짜(선택), R7-7 확정본 근거는 안내만, R7-8 T-21 샘플은 영상 촬영 전까지, R7-9 사람 몫(메일 시험·화면 확인·대리 관찰·문서 검토)은 사용자, 백업 push는 에이전트, R7-10 승인 문서 문구 CR 묶음 승인(D-3·D-4·D-9·D-11·D-12·D-13 반영). 첫 push 2026-10-13 26617a2..b72df34
   - change: C12-8 (메모 payload 선택 필드 resolves_id: 해결 메모가 그 메모 하나만 닫음. 필드 없는 해결 메모는 기존 규칙)
     documents: 02 12.2 memo payload, D-22
     user_expression: "C12-8 진행하고 잘못눌렀으니까 하고있던 작업 전부 다시 시작해"
@@ -149,28 +155,28 @@ final_check:
   notes: R-09는 P2로 1차 제외되어 T-ID 없음(사용자 결정). 차단 조건 없음
 remaining_nonblocking_assumptions: [A-1, A-2, RA-1, DA-1, 기본안 가상 데이터(T-15 전까지 교체 가능), P-1~P-3(T-01·T-02 실측), 주최 측 공지 미확인 항목]
 first_implementation_task: T-01 (최소 종단 흐름 + P-1·P-3 실측 + 그래프 라이브러리·빌드 방식 확정)
-next_session_first_action: (2026-10-05) docs/HANDOFF.md 1절을 읽는다. 순서는 T-22(문서 3개 초안 있음: 사용자 검토 → 필요하면 고침) → T-19(표 입력, 01 R-18·02 D-18·D-19·03 T-19, 시제품 브랜치 proto-cr10-btable의 C 부분은 참고만) → (조력자 의견 뒤) T-20 최소판. 답은 한국어로만. sed -i에 백틱을 넣지 말 것(tech-record 38절)
+next_session_first_action: (2026-10-13 갱신) docs/HANDOFF.md 1절을 읽는다. 지금은 T-28 일곱 번째 검토(docs/review-2026-10-13.md)의 가 묶음 수정 중. 끝나면 메인이 전체 점검 → 제출 압축(9/9)·나란히 재검증 → 커밋. 그다음 사용자 결정 R7-1~10(decisions-pending 11절)과 사람 몫(화면 확인·메일 시험·백업 push 등). 답은 한국어로만. sed -i에 백틱을 넣지 말 것(tech-record 38절)
 
 implementation:
   deadline: 1차 제출 마감 2026-10-30(사용자 제공 2026-10-13). 개발·산출물 제출은 1차까지, 2차는 발표만(사용자 "1차에 모든 프로그램을 완료")
   scope_change: CR-12 승인(docs/CR-12-초안.md v0.2, 2026-10-13). 날짜 일정·동결 날짜는 폐기, 동결은 진행에 따라 사용자가 정함
-  current_task: (2026-10-13) CR-12 진행: T-23·T-24·C12-8·T-25·T-26 완료. 다음 T-27(E 흐름 정렬, 사용자 결정 대기) → T-21(조력자 샘플 시) → T-28(점검·일곱 번째 전체 검토). 그 전: 조력자 의견 처리(담당 이력 연결·이력 접기·T-20 최소판·흐름 정렬 시제품) 구현·검증 완료. 다음은 사용자 화면 확인과 흐름 정렬 채택 여부, 조력자 업무정의서 샘플 대기. 그 전(2026-10-12): T-19 표 입력 구현·검증 완료. 다음은 (조력자 의견 뒤) T-20 최소판, 그 전에 사용자 화면 확인·T-22 문서 검토. T-21은 1차 제출에서 제외(CR-11)
+  current_task: T-28 진행: 일곱 번째 검토 가 묶음 수정 중. (2026-10-13) CR-12: T-23·T-24·C12-8·T-25·T-26 완료, 일곱 번째 검토 기록 b72df34. 남은 것: T-27(E 흐름 정렬, 사용자 결정 R7-1 대기), T-21(조력자 샘플 시). 그 전: 조력자 의견 처리(담당 이력 연결·이력 접기·T-20 최소판·흐름 정렬 시제품) 구현·검증 완료. 다음은 사용자 화면 확인과 흐름 정렬 채택 여부, 조력자 업무정의서 샘플 대기. 그 전(2026-10-12): T-19 표 입력 구현·검증 완료. 다음은 (조력자 의견 뒤) T-20 최소판, 그 전에 사용자 화면 확인·T-22 문서 검토. T-21은 1차 제출에서 제외(CR-11)
   tasks:
     - id: T-26
-      status: 구현·검증 완료(CR-12 D, R-22, D-24). 화면 확인은 끝에 묶어서(미확인)
+      status: 구현·검증 완료(CR-12 D, R-22, D-24). 화면 확인은 끝에 묶어서(미확인). 새 제출 압축·나란히 재검증은 일곱 번째 검토 묶음 끝에(미완)
       date: 2026-10-13
       model: 구현 Sonnet 하위 에이전트 / 코드 검토·재검증·기록·커밋 Opus 메인
       result: searchNodes wide, 「설명·속성까지」, 설정 authorName → 확정자·확정 이력·통합 판정. tech-record 44절, limits L-21·L-26
       normal_checks: 통과 (단위 523, Chrome·Edge 전체 점검: 설명·속성 낱말이 위치와 함께, 이름 일치 먼저, 끄면 이름만, 작성자 이름이 확정본 상세·이력·내려받기 파일에)
-      error_checks: 통과 (끄면 「찾는 노드 없음」, 빈 이름 → 기존 문구, 깨진 설정 기본값, 결함 주입 3종)
+      error_checks: 통과 (끄면 「찾는 노드 없음」, 빈 이름 → 기존 문구, 깨진 설정 기본값, 결함 주입 3종. 「R-22 오류: 숨긴 노드는 설명·속성으로도 찾지 않고, 못 찾으면 빈 목록」 — tests/search-wide.test.js. 미시험: 찾기 후 이력 불변)
       unverified: [사용자 화면 확인]
     - id: T-25
-      status: 구현·검증 완료(CR-12 C, R-21, D-23). 화면 확인은 끝에 묶어서(미확인)
+      status: 구현·검증 완료(CR-12 C, R-21, D-23). 화면 확인은 끝에 묶어서(미확인). 새 제출 압축·나란히 재검증은 일곱 번째 검토 묶음 끝에(미완)
       date: 2026-10-13
       model: 구현 Sonnet 하위 에이전트 / 코드 검토·재검증·기록·커밋 Opus 메인
       result: restoreNode, rules/hidden.js·backup.js, ui/hidden.js·backup.js, 설정 lastExportAt·backupDismissedAt. tech-record 43절, limits L-40·L-41, decisions-pending C12-10·11
       normal_checks: 통과 (단위 513, Chrome·Edge 전체 점검 R-21 15항목: 숨김 → 목록 → 되살리기, 노드·연결 수 동일, 되살림 이력 1건, 8일 전 내보내기 + 변경 → 권유 → 닫기 → 지금 내보내기)
-      error_checks: 통과 (꼭지·없는 노드 거부, 중복 이름 E-DUP, 저장 실패 W-STORAGE, 읽기 전용, 저장소 차단 시 권유 없음, 결함 주입 7건)
+      error_checks: 통과 (꼭지·없는 노드 거부, 중복 이름 E-DUP, 저장 실패 W-STORAGE, 읽기 전용, 저장소 차단 시 권유 없음, 결함 주입 7건. 경계: 「날짜 경계: 내보낸 지 6일(7일 직전)이면 변경이 있어도 권유하지 않고, 7일이면 권유」, 「건수 경계: …29건·30건은 권유하지 않고 31건부터 권유」, 「변경이 0건이면 며칠이 지나도 권유하지 않는다(C12-2)」 — tests/backup.test.js)
       unverified: [사용자 화면 확인]
     - id: C12-8
       status: 구현·검증 완료(사용자 "C12-8 진행", 2026-10-13)
@@ -180,15 +186,15 @@ implementation:
       normal_checks: 통과 (단위: 같은 업무 미해결 2건을 따로 닫음, 초안 「진행 중」 동일 규칙, 기존 규칙 유지; Chrome·Edge 전체 점검)
       error_checks: 통과 (없는 이벤트·메모 아닌 이벤트·해결됨 아닌 범주의 resolves_id 거부, 규칙을 되돌리면 시험 2개 실패)
     - id: T-24
-      status: 구현·검증 완료(CR-12 B, R-20, D-22). 해결 단위 문제(C12-8)는 사용자 결정 대기. 화면 확인은 끝에 묶어서(미확인)
+      status: 구현·검증 완료(CR-12 B, R-20, D-22). 해결 단위 문제(C12-8)는 해소(resolves_id, 아래 C12-8). 화면 확인은 끝에 묶어서(미확인). 새 제출 압축·나란히 재검증은 일곱 번째 검토 묶음 끝에(미완)
       date: 2026-10-13
       model: 구현 Sonnet 하위 에이전트 / 코드 검토·재검증·기록·커밋 Opus 메인
       result: rules/issues.js(openMemos·resolveMemoInput), handover.js 「진행 중」이 같은 함수 사용, app.resolveMemo, ui/issues.js. tech-record 42절, decisions-pending C12-8·9
       normal_checks: 통과 (단위 485, Chrome·Edge 전체 점검 — 미해결 n건·목록·해결 표시 뒤 n-1·이력 1건·원래 메모 불변·초안 「진행 중」과 일치·개요 목록)
-      error_checks: 통과 (두 번 해결 표시 거부·문서 불변, 결함 주입 12개 실패 확인). 미검증: 숨긴 대상 메모, 묶음 화면 해결 표시의 브라우저 경로
-      unverified: [C12-8 해결 단위(설계 문제), 사용자 화면 확인]
+      error_checks: 통과 (두 번 해결 표시 거부·문서 불변, 결함 주입 12개 실패 확인). 0건 표시(「미해결 없음 → 0건」), 저장소 쓰기 실패 W-STORAGE(「저장소 쓰기 실패를 흉내 내면 W-STORAGE이고 문서·목록은 그대로다」). 미검증: 숨긴 대상 메모(일곱 번째 검토 K-1에서 결함으로 확인, 가-코드 묶음에서 수정 중), 묶음 화면 해결 표시의 브라우저 경로, 읽기 전용 거부 시험
+      unverified: [C12-8 해결 단위는 해소(2026-10-13), 사용자 화면 확인, 새 제출 압축·나란히 재검증]
     - id: T-23
-      status: 구현·검증 완료(CR-12 A, R-19, D-21). 사용자 화면 확인·실제 인쇄 미리보기는 끝에 묶어서(미확인)
+      status: 구현·검증 완료(CR-12 A, R-19, D-21). 사용자 화면 확인·실제 인쇄 미리보기는 끝에 묶어서(미확인). 새 제출 압축·나란히 재검증은 일곱 번째 검토 묶음 끝에(미완)
       date: 2026-10-13
       model: 구현 Sonnet 하위 에이전트 / 확인·기록·커밋 Opus 메인
       result: view/handover-doc.js, ui/doc-output.js, 초안·확정본 「내려받기」「인쇄」. tech-record 41절, limits L-38·L-39, decisions-pending C12-6·7

@@ -1,11 +1,15 @@
 # 세션 시작 안내 (HANDOFF)
 
 새 세션은 **이 파일 하나만 먼저 읽는다.** 문서 전체를 읽으면 약 18만 자(6만 토큰 안팎)라서, 작업마다 필요한 절만 골라 읽는다(아래 "작업별로 읽을 곳").
-마지막 갱신: 2026-10-13 (T-19 표 입력, 조력자 의견 처리 완료. 다음은 사용자 화면 확인·흐름 정렬 채택 결정 → 조력자 샘플 대기 → 동결 → 전체 검토)
+마지막 갱신: 2026-10-13 (CR-12 T-23~T-26·C12-8 완료, 일곱 번째 검토 b72df34. 지금은 가 묶음 수정 중 → 제출 압축·나란히 재검증 → 사용자 결정 R7-1~10·사람 몫)
 
 ## 1. 지금 상태 (2026-10-13)
 
-**2026-10-13 추가:** 조력자 2명 의견 처리(tech-record 40절, decisions-pending 9절): 담당 시작·종료가 수행 연결과 함께 반영, 이력 15건 초과 접기, T-20 최소판(표준 양식 점검, rules/form.js), 샘플 맞춤, 「흐름 정렬」 시제품 버튼(채택 여부는 사용자 결정, 스크린샷 `.tmp/shots/*-20*`). 제출 압축은 다시 만들 것(`npm run package`, `check:submit`).
+**2026-10-13 최신:** CR-12(승인 2026-10-13, 1차 제출을 실사용 수준으로) 중 T-23 인수인계서 내려받기·인쇄(R-19), T-24 미해결 이슈 보기·해결 표시(R-20, C12-8 resolves_id 포함), T-25 숨긴 노드 되살리기·백업 권유(R-21), T-26 찾기 넓히기·작성자 이름(R-22)을 구현·검증했다(단위 523, Chrome·Edge 통과). 일곱 번째 전체 검토(T-28, 커밋 b72df34, `docs/review-2026-10-13.md`)가 끝났고, 그중 "가" 묶음(코드: Sonnet / 문서: 이 갱신 포함)을 수정 중이다. **남은 일 순서:** 가 묶음 수정 → 메인의 전체 점검 → 새 제출 압축(`npm run package`, 9/9)·수정 전 판과 나란히 재검증 → 커밋 → 사용자 결정 R7-1~10(decisions-pending 11절)과 사람 몫(화면 확인, 메일 첨부 시험, 백업 push, 문서 3개 검토, 대리 관찰). T-27(흐름 정렬 배치)은 R7-1 결정 뒤, T-21은 조력자 샘플이 오면. 기능 동결 날짜는 폐기(CR-12), 동결은 진행에 따라 사용자가 정한다. 아래 "제출 가능한 판"·"검증" 줄은 CR-12 전 판이라 새 압축으로 바뀐다.
+
+**모델 원칙:** 메인은 Opus, 구현은 Sonnet 하위 에이전트(파일 영역이 겹치지 않게 나눔), 코드 검토·재검증·기록·커밋은 메인(검토 하위 에이전트는 Opus).
+
+**2026-10-13 추가(그 전):** 조력자 2명 의견 처리(tech-record 40절, decisions-pending 9절): 담당 시작·종료가 수행 연결과 함께 반영, 이력 15건 초과 접기, T-20 최소판(표준 양식 점검, rules/form.js), 샘플 맞춤, 「흐름 정렬」 시제품 버튼(채택 여부는 사용자 결정, 스크린샷 `.tmp/shots/*-20*`). 제출 압축은 다시 만들 것(`npm run package`, `check:submit`).
 
 ### 한 줄 요약
 **T-19(표 입력)까지 구현(2026-10-12, 커밋은 git log). 그 전: T-18까지 구현, 여섯 번째 검토(`docs/review-2026-10-05.md`)의 "가"(바로 고칠 것)와 "나"(추천대로)를 처리했다.** 순서는 CR-11로 바뀌었다: **시연 대본·샘플 보강(끝남) → T-22(문서 3개 초안이 있음) → T-19 → (조력자 의견 뒤) T-20 최소판. T-21은 1차 제출에서 제외.** 연속 진행 모드.
@@ -28,6 +32,7 @@ T-22 사용자 검토 반영 → ~~T-19~~(표 입력·일괄 명령, 읽을 곳:
 - T-19 착수 전 정해야 할 17가지는 review-2026-10-05 4절 D-2(표의 열, 머리글 인식, 기존 행 범위, 같은 이름 처리, 꼭지 연결, 오류 표시 등). "답이 없으면" 값으로 decisions-pending에 등록한 뒤 구현.
 ### 승인·결정 현황
 - CR-1~CR-10 승인 완료(CR-9·CR-10은 2026-10-04 "우선 전부 권장대로"). 새 설계 결정은 D-16~D-20(검토 문서 결함 번호 D-1~D-15와 겹치지 않게).
+- CR-12 승인 완료(2026-10-13): R-19~R-22, D-21~D-25, T-23~T-28. 동결 날짜 폐기·진행에 따라 사용자가 정함. 해석은 decisions-pending 10절(C12-1~12). 일곱 번째 검토 뒤 승인 문서 문구 CR 묶음은 R7-10에 대기.
 - 아직 빈 자리: 02 5.6.2 표준 양식 내용(조력자 의견), 12.9.2 시험 문서·v2 결과(실문서), D-P7·B-P3(조력자 의견), limits L-10·L-14·L-25 값(각 작업 끝).
 
 ### 사람 몫 (일정 미정)
@@ -64,7 +69,7 @@ T-22 사용자 검토 반영 → ~~T-19~~(표 입력·일괄 명령, 읽을 곳:
 ## 3. 명령
 
 ```
-npm test                  # 단위 테스트(465개)
+npm test                  # 단위 테스트(523개, 2026-10-13 실행 결과. 이후 늘 수 있음)
 node tools/pregen-dump.mjs        # 사전 생성 작성용 근거 덤프(데이터를 바꾸면 다시 보고 app/data/pregen.js 고침)
 npm run build             # dist/index.html (바이트 크기 표시)
 npm run check:browser     # Chrome·Edge file:// 점검. SHOT_DIR=.tmp/shots 를 주면 화면 PNG 저장
@@ -108,18 +113,19 @@ node tools/perf-check.mjs 300 --browser   # 규모 점검
 | T-18 찾기·거르기·주변만 보기(다시 볼 때) | 01 R-17, 02 D-17, tech-record 37절, `app/src/view/explore.js`, `app/src/ui/explore.js`(상수 EXPLORE), `app/src/ui/graph.js`(tiny-label·bigLabel·fitTo), `tests/explore.test.js` |
 | CR-10 시제품을 볼 때 | 브랜치 `proto-cr10-btable`(`git log main..proto-cr10-btable`), `.tmp/proto-cr10/` 스크린샷, tech-record 36절 |
 | 다섯 번째 검토(2026-10-03) 후속 | `docs/review-2026-10-03.md`(항목·판정·10절 처리 결과), tech-record 35·35.1·35.2절, decisions-pending 4절(CR-9 후보), `tests/review5-*.test.js`, `tests/helpers.js` |
+| CR-12 (T-23~T-26, R-19~R-22) | `docs/CR-12-초안.md`, 01 R-19~R-22, 02 D-21~D-25·12.2 memo payload(resolves_id)·12.4(authorName·lastExportAt), 03 T-23~T-28, tech-record 41~44절, decisions-pending 10절, limits L-38~L-41, `docs/review-2026-10-13.md`, `tests/issues·backup·search-wide.test.js` |
 | 화면 수정 | `app/src/ui/*`, tech-record 8·12·17·21절 |
 
 ## 6. 코드 지도
 
-- `app/src/model`: 스키마 상수·검증·명령(일괄 명령 applyBatch 포함)·가져오기 미리 보기(`import.js`)·표 읽기(`table.js`)(순수 함수)
-- `app/src/view`: 합성 뷰, 상세 문장, 층별 보기, 찾기·거르기(`explore.js`), 새 노드 자리(`place.js`)
+- `app/src/model`: 스키마 상수·검증·명령(일괄 명령 applyBatch, 되살리기 restoreNode 포함)·가져오기 미리 보기(`import.js`)·표 읽기(`table.js`)(순수 함수)
+- `app/src/view`: 합성 뷰, 상세 문장, 층별 보기, 찾기·거르기(`explore.js`, 설명·속성까지 찾기 포함), 새 노드 자리(`place.js`), 흐름 정렬(`lanes.js`), 인수인계서 HTML 만들기(`handover-doc.js`)
 - `app/src/merge`: 통합 확인 목록(사번 자동 연결, 사번 충돌·없음, 업무 후보)
-- `app/src/rules`: 인수인계 초안(`handover.js`), 인사이트(`insight.js`), 문서 초벌 변환(`doc-convert.js`)
+- `app/src/rules`: 인수인계 초안(`handover.js`), 인사이트(`insight.js`), 문서 초벌 변환(`doc-convert.js`), 표준 양식 점검(`form.js`), 미해결 이슈 판정(`issues.js`), 숨긴 노드 목록(`hidden.js`), 백업 권유 판단(`backup.js`)
 - `app/src/llm`: 연결부(`connector.js`)와 공급자(`providers.js`: 사전 생성 기본, Claude API·사내 LLM은 P2 자리)
 - `app/src/app`: 명령 흐름과 저장(가져오기 importUniverse·내보내기 exportJson·초안 확정 confirmHandover 포함)
 - `app/src/store`: 브라우저 저장소
-- `app/src/ui`: 화면(main, graph, detail, editor, draft, insight, start, merge, import, settings)과 도우미(dom, messages, chip-label, evidence 근거 칩, time 날짜)
+- `app/src/ui`: 화면(main, graph, detail, editor, draft, insight, start, merge, import, settings, table 표 대화상자, issues 미해결 목록, hidden 숨긴 노드 목록, backup 백업 권유 줄)과 도우미(dom, messages, chip-label, evidence 근거 칩, time 날짜, doc-output 인수인계서 내려받기·인쇄)
 - `app/data`: 샘플 7개(월말 정산·카드승인·결제운영팀·행사팀·부서·교육팀·조직관리), 정답 표(v2), 시작 화면 문구, 가져오기 예시 문서(`doc-example.js`, inputs 원문 복사)
 - `tests/*.test.js`: 단위 테스트. `tests/helpers.js`(공용 샘플은 깊게 동결됨), `tests/fixtures/corpus/`(가상 업무정의서 10건, 머리 주석에 정답), `tests/fixtures/convert-cases/`(변환기 경계 사례 108개와 스냅숏)
 - `tools/`: 빌드, 브라우저 점검, 비밀값·데이터·규모 점검
