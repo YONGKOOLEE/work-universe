@@ -175,3 +175,20 @@ test('replaceEdge: 새 연결이 허용 안 됨·중복이면 문서 그대로(�
   assert.equal(JSON.stringify(doc), snap);
   assert.equal(replaceEdge(doc, '없는-ID', { source: 'N-001', target: 'N-030', core_type: 'relates_to' }, ctx).ok, false);
 });
+
+test('자기 자신으로 가는 연결은 만들지 않는다(그래프에 안 보이는 연결 방지, 2026-10-18)', async () => {
+  const { createUniverse, addNode, addEdge } = await import('../app/src/model/commands.js');
+  const ctx = { now: '2026-10-18T10:00:00+09:00' };
+  const d = createUniverse({ name: '가상', level: '업무', owner: '가상팀' }, ctx).doc;
+  const a = addNode(d, { core_type: 'work', label: '가' }, ctx);
+  const r = addEdge(a.doc, { source: a.node.id, target: a.node.id, core_type: 'precedes' }, ctx);
+  assert.equal(r.ok, false);
+  assert.equal(r.error.self_loop, true);
+});
+
+test('오류 문구: 사번 길이 초과는 길이 문구, 자기 연결은 자기 연결 문구(2026-10-18)', async () => {
+  const { messageFor } = await import('../app/src/ui/messages.js');
+  assert.match(messageFor({ code: 'E-SCHEMA', field: 'emp_no', too_long: 100 }), /너무 깁니다/);
+  assert.match(messageFor({ code: 'E-SCHEMA', field: 'emp_no' }), /사람 노드에만/);
+  assert.match(messageFor({ code: 'E-SCHEMA', field: 'target', self_loop: true }, { kind: 'edge' }), /자기 자신/);
+});

@@ -78,6 +78,7 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
         emp_no: n.emp_no,
         exposed: n.exposed,
         hidden: !!n.hidden,
+        deleted: !!n.deleted,
         origin: doc.universe.id === rootId ? 'own' : 'ref',
         merged_from: [],
       };
@@ -87,7 +88,8 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
   }
 
   // 3) 동일성 연결: 확정된 것만 합친다. 대표는 숨기지 않은 노드 중 먼저 나온 것(기준 유니버스 우선)
-  const order = new Map(nodes.map((n, i) => [n.gid, (n.hidden ? nodes.length : 0) + i]));
+  // 완전히 삭제한 노드(자리표시)는 대표가 되지 않는다(숨긴 노드보다 더 뒤)
+  const order = new Map(nodes.map((n, i) => [n.gid, (n.deleted ? nodes.length * 2 : n.hidden ? nodes.length : 0) + i]));
   const parent = new Map();
   const find = (g) => {
     let r = g;
@@ -103,6 +105,8 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
         unresolvedLinks.push(link.id);
         continue;
       }
+      // 완전히 삭제한 노드가 낀 연결은 합치지 않는다(내용이 없어 사번이 맞지 않는 것으로 보이는 일도 막는다)
+      if (nodeByGid.get(link.a).deleted || nodeByGid.get(link.b).deleted) continue;
       if (link.method === 'emp_no_auto') {
         const [x, y] = [nodeByGid.get(link.a), nodeByGid.get(link.b)];
         if (!x.emp_no || !y.emp_no || normalizeEmpNo(x.emp_no) !== normalizeEmpNo(y.emp_no)) {

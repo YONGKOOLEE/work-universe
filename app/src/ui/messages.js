@@ -104,6 +104,10 @@ export function messageFor(err, ctx = {}) {
       return `내장 샘플「${err.name}」${josa(err.name, '이/가')} 새 판으로 바뀌어, 이 샘플에 직접 고친 내용은 처음 상태로 돌아갔습니다.`;
     case 'E-SCHEMA':
       if (err.reason === 'version') return `이 유니버스는 다른 버전(${err.found ?? '알 수 없음'})의 형식이라 읽기 전용으로 엽니다. 고칠 수 없습니다.`;
+      if (err.reason === 'in_use' && (err.reasons || []).includes('external')) return '다른 유니버스(상위 묶음)에서 같은 사람·업무로 이어 둔 노드라 바로 지울 수 없습니다. 먼저 숨긴 뒤 「숨긴 노드」 목록에서 「완전히 삭제」하세요(자리표시로 남습니다).';
+      if (err.reason === 'in_use') return '연결이나 다른 이력이 있는 노드는 바로 지울 수 없습니다. 먼저 숨긴 뒤 「숨긴 노드」 목록에서 「완전히 삭제」하세요.';
+      if (err.reason === 'not_hidden') return '숨기지 않은 노드는 완전히 삭제할 수 없습니다. 먼저 숨기세요.';
+      if (err.deleted) return '완전히 삭제한 노드는 되살릴 수 없습니다.';
       if (err.reason === 'invalid') return `이 유니버스에 형식 오류 ${err.count}건이 있습니다. 보이는 내용이 일부 맞지 않을 수 있습니다.`;
       if (err.field === 'period') return '기간을 확인하세요. 날짜는 YYYY-MM-DD(1900~2200년)이고, 끝은 시작보다 앞일 수 없습니다.';
       if (err.field === 'end_date' && err.future) return '끝 날짜는 오늘보다 뒤일 수 없습니다. 지금 담당 중이면 끝 날짜를 비우고, 끝날 때 「담당 종료」를 기록하세요.';
@@ -120,10 +124,11 @@ export function messageFor(err, ctx = {}) {
       if (err.format) return '속성은 「키=값; 키=값」 형식으로 쓰세요.';
       if (err.too_many) return `한 번에 ${err.too_many}행까지 저장할 수 있습니다. 나누어 저장하세요.`;
       if (err.field === 'core_type') return ctx.kind === 'edge' ? '알 수 없는 관계입니다.' : '추가하거나 바꿀 수 없는 유형입니다.';
-      if (err.field === 'emp_no') return '사번은 사람 노드에만 넣을 수 있습니다.';
+      if (err.field === 'emp_no' && !err.too_long) return '사번은 사람 노드에만 넣을 수 있습니다.'; // 길이 초과는 아래 too_long 문구(검토8 재검증 상한)
       if (err.field === 'attrs') return '속성 값은 글자나 숫자만 넣을 수 있습니다.';
       if (err.too_long) return `${name(err.field)}${josa(name(err.field), '이/가')} 너무 깁니다(최대 ${err.too_long}자).`;
       if (err.same_person) return '보내는 사람과 받는 사람이 같습니다.';
+      if (err.self_loop) return '노드를 자기 자신과 이을 수 없습니다. 다른 노드를 고르세요(표의 「다음 업무」에 같은 업무 이름을 적었는지 확인).';
       if (err.hidden && err.field === 'id') return '숨긴 노드는 고칠 수 없습니다. 근거로서 내용을 그대로 지킵니다.';
       if (err.hidden) return ctx.kind === 'edge' ? '숨긴 노드에는 연결할 수 없습니다.' : `숨긴 노드는 ${name(err.field)}(으)로 고를 수 없습니다.`;
       if (err.expected) return `${name(err.field)} 칸에는 ${TYPE_NAMES[err.expected] || err.expected} 노드만 고를 수 있습니다.`;

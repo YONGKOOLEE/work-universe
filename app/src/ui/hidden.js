@@ -13,14 +13,14 @@ export function hiddenEntry(nodes, { onOpen }) {
 
 /**
  * 목록 화면.
- * @param {{nodes:{id:string,label:string,type_label:string,hidden_at:string}[], readOnly:boolean, labelOf:(id:string)=>string, onRestore:(id:string)=>object, onClose:()=>void}} o
+ * @param {{nodes:{id:string,label:string,type_label:string,hidden_at:string}[], readOnly:boolean, labelOf:(id:string)=>string, onRestore:(id:string)=>object, onPurge?:(id:string)=>object, onClose:()=>void}} o
  */
 export function hiddenPanel(o) {
   const wrap = el('div', { 'data-testid': 'hidden-panel' });
   const msg = el('p', { class: 'notice', 'data-testid': 'hidden-error', hidden: true });
   wrap.append(
     el('div', { class: 'row' }, el('h2', {}, `숨긴 노드 ${o.nodes.length}개`), el('button', { type: 'button', 'data-testid': 'hidden-close', onclick: o.onClose }, '닫기')),
-    el('p', { class: 'muted small' }, '「되살리기」를 누르면 노드가 그래프에 다시 나타나고, 숨기기 전의 연결과 이력이 그대로 보입니다. 이력에는 「되살림」이 한 줄 남습니다.'),
+    el('p', { class: 'muted small' }, '「되살리기」를 누르면 노드가 그래프에 다시 나타나고, 숨기기 전의 연결과 이력이 그대로 보입니다. 이력에는 「되살림」이 한 줄 남습니다. 필요 없는 노드는 「완전히 삭제」로 지울 수 있습니다(되돌릴 수 없음).'),
     msg,
   );
   if (!o.nodes.length) {
@@ -42,9 +42,22 @@ export function hiddenPanel(o) {
         }
       },
     }, '되살리기');
+    const purgeBtn = o.readOnly || !o.onPurge ? null : el('button', {
+      type: 'button',
+      class: 'danger',
+      'data-testid': 'btn-purge',
+      onclick: () => {
+        const r = o.onPurge(n.id);
+        if (r && !r.ok) {
+          msg.textContent = messageFor(r.error);
+          msg.dataset.code = r.error.code;
+          msg.hidden = false;
+        }
+      },
+    }, '완전히 삭제');
     ul.append(el('li', { 'data-testid': 'hidden-item', 'data-id': n.id },
       el('div', {}, el('span', { class: 'chip' }, n.type_label), ' ', el('strong', {}, n.label), ' ', n.hidden_at ? el('span', { class: 'muted small' }, `${n.hidden_at}에 숨김`) : null),
-      restoreBtn));
+      el('div', { class: 'row' }, restoreBtn, purgeBtn)));
   }
   wrap.append(ul);
   return wrap;

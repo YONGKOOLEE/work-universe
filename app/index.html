@@ -24,6 +24,9 @@
   button.primary, form button[type=submit] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: bold; }
   #backup-nudge { margin: 0; padding: 8px 16px; background: var(--panel-2); color: var(--text); border-bottom: 1px solid var(--accent); font-size: 14px; }
   #backup-nudge[hidden] { display: none; }
+  #embed-banner { margin: 0; padding: 8px 16px; background: var(--panel-2); color: var(--text); border-bottom: 1px solid var(--accent); font-size: 14px; }
+  #embed-banner[hidden] { display: none; }
+  #embed-banner .embed-message { margin-left: 8px; color: var(--warn-text); }
   #banner { margin: 0; padding: 10px 16px; background: var(--warn-bg); color: var(--warn-text); border-bottom: 1px solid #5a4c1c; font-size: 14px; }
   main { flex: 1; display: flex; min-height: 0; }
   .graph-wrap { flex: 1; min-width: 0; position: relative; background: radial-gradient(ellipse at 50% 45%, #17231a 0%, var(--bg) 70%); display: flex; flex-direction: column; }
@@ -183,7 +186,9 @@
   #table-dialog { width: min(1240px, 96vw); } /* 검토7 U-4: 표 대화상자는 칸이 많아 넓게 */
   .graph-tools button[aria-pressed=true] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); } /* U-7: 흐름 정렬 눌림 */
   .batch-grid { min-width: 900px; }
-  .batch-grid [data-col=type] { min-width: 70px; } .batch-grid [data-col=label] { min-width: 170px; } .batch-grid [data-col=subtype] { min-width: 90px; } .batch-grid [data-col=description] { min-width: 200px; } .batch-grid [data-col=emp_no] { min-width: 80px; } .batch-grid [data-col=attrs] { min-width: 170px; }
+  .batch-grid.links { min-width: 1280px; } /* 연결 칸이 있는 「표로 추가」만 넓게(「표로 고치기」는 900, 검토 R13-1) */
+  .batch-grid .small-btn { white-space: nowrap; } /* 「빼기」가 두 줄로 꺾이지 않게 */
+  .batch-grid [data-col=type] { min-width: 70px; } .batch-grid [data-col=label] { min-width: 170px; } .batch-grid [data-col=subtype] { min-width: 90px; } .batch-grid [data-col=description] { min-width: 200px; } .batch-grid [data-col=emp_no] { min-width: 80px; } .batch-grid [data-col=attrs] { min-width: 170px; } .batch-grid [data-col=assignee], .batch-grid [data-col=outputs], .batch-grid [data-col=next] { min-width: 130px; }
   .batch-grid th, .batch-grid td { text-align: left; vertical-align: top; }
   .batch-grid input, .batch-grid textarea { width: 100%; box-sizing: border-box; font: inherit; }
   .batch-grid textarea { resize: vertical; }
@@ -238,7 +243,7 @@
   button.home { background: none; border: 0; padding: 0; border-radius: 6px; }
   button.home h1 { margin: 0; }
   body.start-mode { overflow: auto; height: auto; min-height: 100vh; }
-  body.start-mode > header, body.start-mode > main, body.start-mode > #banner, body.start-mode > #backup-nudge { display: none; }
+  body.start-mode > header, body.start-mode > main, body.start-mode > #banner, body.start-mode > #embed-banner,body.start-mode > #backup-nudge { display: none; }
   #start-screen:empty { display: none; }
   .start-inner { max-width: 960px; margin: 0 auto; padding: 32px 20px 64px; display: grid; gap: 28px; }
   header.start-hero { display: block; padding: 0; background: none; border: 0; }
@@ -291,6 +296,7 @@
 </header>
 <div id="start-screen"></div>
 <p id="banner" role="alert" hidden></p>
+<p id="embed-banner" role="status" data-testid="embed-banner" hidden></p>
 <p id="backup-nudge" role="status" data-testid="backup-nudge" hidden></p>
 <main>
   <div class="graph-wrap">

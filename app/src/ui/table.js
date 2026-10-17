@@ -5,10 +5,20 @@
 import { el } from './dom.js';
 import { messageFor } from './messages.js';
 import { NODE_TYPES } from '../model/schema.js';
-import { TABLE_COLUMNS, TABLE_RULES, editRowsToOps, editableRows, newRowsToOps, parseTable } from '../model/table.js';
+import { LINK_KEYS, TABLE_COLUMNS, TABLE_RULES, editRowsToOps, editableRows, linkSummary, newRowsToOps, parseTable } from '../model/table.js';
 
 const TYPE_CHOICES = Object.entries(NODE_TYPES).filter(([k]) => k !== 'root').map(([, name]) => name);
-const emptyCells = () => ({ type: '', label: '', subtype: '', description: '', emp_no: '', attrs: '' });
+const emptyCells = () => ({ type: '', label: '', subtype: '', description: '', emp_no: '', attrs: '', assignee: '', outputs: '', next: '' });
+
+// 연결 칸 오류(CR-13 C) 문구. 나머지는 messageFor
+const LINK_TYPE_NAME = { person: '사람', artifact: '산출물', work: '업무' };
+function errorText(error) {
+  if (error && error.field === 'links' && error.work_only) return '담당자·산출물·다음 업무 칸은 업무 행에만 씁니다.';
+  if (error && error.field === 'links' && error.ambiguous) return `같은 이름의 ${LINK_TYPE_NAME[error.ambiguous.core_type] || '노드'}이(가) 여럿입니다(${error.ambiguous.label}): 노드 추가로 이으세요.`;
+  if (error && error.field === 'links' && error.too_long) return `담당자·산출물·다음 업무 칸의 이름이 너무 깁니다(최대 ${error.too_long}자).`;
+  if (error && error.too_many && error.links) return `연결까지 합쳐 한 번에 ${error.links}개 명령까지 저장할 수 있습니다. 행을 나누어 저장하세요.`;
+  return messageFor(error, { kind: 'node' });
+}
 const isBlank = (cells) => Object.values(cells).every((v) => String(v ?? '').trim() === '');
 
 /**
@@ -39,7 +49,7 @@ export function tableDialog(o) {
     st.rows = [...kept, ...rows];
     st.errors = new Map();
     st.message = '';
-    st.note = `${rows.length}행을 읽었습니다. ${t.header ? '첫 줄은 머리글로 읽었습니다.' : '머리글이 없어 열 순서(유형·이름·하위 유형·설명·사번·속성)로 읽었습니다.'} 확인한 뒤 「저장」을 누르세요.`;
+    st.note = `${rows.length}행을 읽었습니다. ${t.header ? '첫 줄은 머리글로 읽었습니다.' : '머리글이 없어 열 순서(유형·이름·하위 유형·설명·사번·속성·담당자·산출물·다음 업무)로 읽었습니다.'} 확인한 뒤 「저장」을 누르세요.`;
     if (t.ignored) st.note += ` 알 수 없는 열(${t.ignored.join(', ')})은 읽지 않았습니다.`;
     if (t.tooMany) st.note += ` 한 번에 ${t.tooMany}행까지 저장할 수 있습니다.`;
   }
@@ -68,7 +78,7 @@ export function tableDialog(o) {
     let ops;
     if (st.mode === 'add') {
       const filled = numbered.filter((r) => !isBlank(r.cells)).map((r) => (r.parseError ? { ...r, error: r.parseError } : r));
-      ops = newRowsToOps(filled, { attachRoot: st.attach ? 'work' : false });
+      ops = newRowsToOps(filled, { attachRoot: st.attach ? 'work' : false, doc: o.app.doc });
     } else {
       ops = editRowsToOps(numbered.map((r) => ({ ...r, error: r.parseError })), o.app.doc);
       if (ops.length === 0) {
@@ -79,11 +89,12 @@ export function tableDialog(o) {
     const r = o.app.applyBatch(ops);
     if (!r.ok) {
       if (r.errors && r.errors.length) {
-        for (const e of r.errors) st.errors.set(e.row, messageFor(e.error, { kind: 'node' }));
+        for (const e of r.errors) st.errors.set(e.row, st.errors.has(e.row) ? `${st.errors.get(e.row)} / ${errorText(e.error)}` : errorText(e.error));
         st.message = `${r.errors.length}행에 문제가 있어 아무것도 저장하지 않았습니다. 표시된 행을 고친 뒤 다시 저장하세요.`;
-      } else st.message = messageFor(r.error, { kind: 'node' });
+      } else st.message = errorText(r.error);
       return render();
     }
+    if (st.mode === 'add') r.summary = linkSummary(r);
     o.dialog.close();
     o.onSaved(r);
   }
@@ -105,10 +116,15 @@ export function tableDialog(o) {
       el('td', {}, el('textarea', { 'data-col': 'description', rows: 1, 'aria-label': `${i + 1}행 설명` }, r.cells.description ?? '')),
       el('td', {}, input('emp_no', { placeholder: 'V-0000', maxlength: 100 })),
       el('td', {}, el('textarea', { 'data-col': 'attrs', rows: 1, 'aria-label': `${i + 1}행 속성`, placeholder: '키=값; 키=값' }, r.cells.attrs ?? '')),
+      ...(existing ? [] : [
+        el('td', {}, input('assignee', { placeholder: '이름, 이름' })),
+        el('td', {}, input('outputs', { placeholder: '이름, 이름' })),
+        el('td', {}, input('next', { placeholder: '이름, 이름' })),
+      ]),
       !existing ? el('td', {}, el('button', { type: 'button', class: 'small-btn', 'aria-label': `${i + 1}행 빼기`, onclick: () => { st.rows = collect(); st.rows.splice(i, 1); st.errors = new Map(); render(); } }, '빼기')) : null,
     );
     const msg = el('tr', { class: 'row-error row-msg-line', hidden: !err },
-      el('td', { colspan: existing ? 7 : 8, 'data-testid': `table-msg-${i}` }, err ? `${i + 1}행: ${err}` : ''));
+      el('td', { colspan: existing ? 7 : 11, 'data-testid': `table-msg-${i}` }, err ? `${i + 1}행: ${err}` : ''));
     return [main, msg];
   }
 
@@ -123,9 +139,9 @@ export function tableDialog(o) {
         el('textarea', { id: 'table-paste', rows: 4, 'data-testid': 'table-paste', placeholder: '유형\t이름\t설명\n업무\t월말 정산\t카드사 대사와 마감', oninput: (e) => { st.pasteText = e.target.value; } }, st.pasteText)),
       el('div', { class: 'row' }, el('button', { type: 'button', 'data-testid': 'table-paste-apply', onclick: () => { st.rows = collect(); paste(); render(); } }, '표로 옮기기'))) : null;
     const head = el('thead', {}, el('tr', {},
-      el('th', {}, '#'), ...TABLE_COLUMNS.map((c) => el('th', { class: `col-${c.key}` }, c.label)), !existing ? el('th', {}) : null));
+      el('th', {}, '#'), ...TABLE_COLUMNS.filter((c) => !existing || !LINK_KEYS.includes(c.key)).map((c) => el('th', { class: `col-${c.key}` }, c.label)), !existing ? el('th', {}) : null));
     const table = el('div', { class: 'batch-wrap' },
-      el('table', { class: 'dg-table batch-grid', 'data-testid': 'table-grid' }, head, el('tbody', {}, ...st.rows.flatMap(row))));
+      el('table', { class: `dg-table batch-grid${st.mode === 'add' ? ' links' : ''}`, 'data-testid': 'table-grid' }, head, el('tbody', {}, ...st.rows.flatMap(row))));
 
     const bundled = existing && (o.app.doc.refs || []).some((r) => !r.hidden);
     // replaceChildren은 null을 "null" 글자로 넣으므로 빈 칸을 걸러 낸다(검토7 U-1)
@@ -134,8 +150,9 @@ export function tableDialog(o) {
         el('h2', { id: 'table-title' }, existing ? '표로 고치기' : '표로 추가'),
         el('button', { type: 'button', 'data-testid': 'table-close', onclick: () => o.dialog.close() }, '닫기')),
       el('p', { class: 'muted small' }, existing
-        ? '지금 유니버스의 노드를 표로 펼쳤습니다. 바꾼 행만 저장되고 수정 이력(바꾸기 전·후)이 남습니다. 유형은 바꿀 수 없고, 속성은 적은 키만 바뀝니다(지우려면 「키=」). 연결은 표로 고치지 않습니다.'
-        : `표의 한 행이 노드 하나입니다(한 번에 ${TABLE_RULES.maxRows}행까지). 저장하면 전부 한 번에 들어가고, 한 행이라도 문제가 있으면 아무것도 저장되지 않습니다. 연결은 표로 넣지 않습니다.`),
+        ? '지금 유니버스의 노드를 표로 펼쳤습니다. 바꾼 행만 저장되고 수정 이력(바꾸기 전·후)이 남습니다. 유형은 바꿀 수 없고, 속성은 적은 키만 바뀝니다(지우려면 「키=」). 연결은 표로 추가할 때만 넣을 수 있습니다.'
+        : `표의 한 행이 노드 하나입니다(한 번에 ${TABLE_RULES.maxRows}행까지). 저장하면 전부 한 번에 들어가고, 한 행이라도 문제가 있으면 아무것도 저장되지 않습니다.`),
+      !existing ? el('p', { class: 'muted small', 'data-testid': 'table-link-help' }, '담당자·산출물·다음 업무 칸에 이름을 적으면 그 노드를 찾아 잇고, 없으면 새로 만듭니다(이름 여러 개는 쉼표나 세미콜론으로, 업무 행에서만).') : null,
       pasteBox,
       st.note ? el('p', { class: 'notice', 'data-testid': 'table-note' }, st.note) : null,
       table,

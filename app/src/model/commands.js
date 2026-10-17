@@ -7,6 +7,7 @@ import {
   BATCH_MAX_ROWS,
   CODES,
   EDGE_TYPES,
+  EVENT_PAYLOAD,
   ID_PREFIX,
   IDENTITY_KINDS,
   IDENTITY_METHODS,
@@ -201,6 +202,7 @@ export function restoreNode(doc, nodeId, ctx) {
   if (!node) return fail(CODES.SCHEMA, { field: 'id' });
   if (node.core_type === 'root') return fail(CODES.SCHEMA, { field: 'core_type' });
   if (!node.hidden) return { ok: true, doc, node, event: null };
+  if (node.deleted) return fail(CODES.SCHEMA, { field: 'id', deleted: true }); // 완전히 삭제한 노드는 되살릴 수 없다
   const dup = findDuplicateNode(doc.nodes, node, nodeId);
   if (dup) return fail(CODES.DUP, { existing_id: dup.id });
 
@@ -211,6 +213,131 @@ export function restoreNode(doc, nodeId, ctx) {
     doc: { ...doc, nodes: doc.nodes.map((n) => (n.id === nodeId ? shown : n)), events: [...doc.events, event] },
     node: shown,
     event,
+  };
+}
+
+// ── 삭제(CR-13 D): 바로 삭제와 숨긴 뒤 완전히 삭제(자리표시) ──────────────────
+
+/** 완전히 삭제한 노드의 이름. 이 노드를 가리키던 이력은 이 이름으로 보인다 */
+export const DELETED_LABEL = '(삭제된 노드)';
+// 자리표시로 만들 때 지우는 노드 필드
+const PURGE_FIELDS = ['description', 'attrs', 'emp_no', 'subtype', 'tags', 'period', 'exposed'];
+
+const eventRefsNode = (ev, nodeId) => {
+  const p = ev.payload;
+  if (!p || typeof p !== 'object') return false;
+  const rule = has(EVENT_PAYLOAD, ev.type) ? EVENT_PAYLOAD[ev.type] : null;
+  if (!rule) return false;
+  if ((rule.nodeRefs || []).some((k) => p[k] === nodeId)) return true;
+  return (rule.nodeListRefs || []).some((k) => Array.isArray(p[k]) && p[k].includes(nodeId));
+};
+const has = (obj, key) => typeof key === 'string' && Object.hasOwn(obj, key);
+// 그 노드 자신의 생성·수정·숨김 이벤트(노드 자신의 이력)
+const isOwnEvent = (ev, nodeId) => ['created', 'updated', 'hidden'].includes(ev.type)
+  && ev.payload && ev.payload.target_kind === 'node' && ev.payload.target_id === nodeId;
+
+/**
+ * 바로 삭제할 수 있는가: 아무도 가리키지 않는 노드(연결·다른 이력·동일성 연결이 없음). 꼭지는 안 된다.
+ * @returns {{ok:boolean, reasons:string[], edge_count:number}} reasons: root | not_found | edges | events | identity_links | refs
+ */
+export function canDeleteNow(doc, nodeId, { externalRefs = false } = {}) {
+  const node = doc.nodes.find((n) => n.id === nodeId);
+  if (!node) return { ok: false, reasons: ['not_found'], edge_count: 0 };
+  const reasons = [];
+  // 다른 유니버스(상위 묶음 등)의 동일성 연결이 이 노드를 가리킴: 이 문서만 보고는 알 수 없어 앱이 알려 준다(검토 R13 재검증 3)
+  if (externalRefs) reasons.push('external');
+  if (node.core_type === 'root') reasons.push('root');
+  const auto = new Set(autoAttachEdges(doc, nodeId).map((e) => e.id));
+  const edgeCount = (doc.edges || []).filter((e) => (e.source === nodeId || e.target === nodeId) && !auto.has(e.id)).length;
+  if (edgeCount) reasons.push('edges');
+  if ((doc.events || []).some((ev) => !isOwnEvent(ev, nodeId) && eventRefsNode(ev, nodeId))) reasons.push('events');
+  const gid = `${doc.universe.id}/${nodeId}`;
+  if ((doc.identity_links || []).some((l) => l.a === gid || l.b === gid)) reasons.push('identity_links');
+  if ((doc.refs || []).some((r) => Object.values(r).some((v) => v === gid || v === nodeId))) reasons.push('refs');
+  return { ok: reasons.length === 0, reasons, edge_count: edgeCount };
+}
+
+// 노드를 문서에서 통째로 뺀다(자기 이벤트 포함). canDeleteNow가 통과한 노드에만 쓴다
+function removeNodeWhole(doc, nodeId) {
+  const auto = new Set(autoAttachEdges(doc, nodeId).map((e) => e.id));
+  return {
+    ...doc,
+    nodes: doc.nodes.filter((n) => n.id !== nodeId),
+    edges: doc.edges.filter((e) => !auto.has(e.id)),
+    events: doc.events.filter((ev) => !isOwnEvent(ev, nodeId)
+      && !(ev.payload && ev.payload.target_kind === 'edge' && auto.has(ev.payload.target_id))),
+  };
+}
+
+// 노드 추가 양식의 「꼭지에 붙이기」(기본 켜짐)가 만든 연결: 꼭지 → 노드 「포함」, 하위 유형·기간·메모 없음, 이력은 생성 한 줄뿐.
+// 막 만든 노드에도 이 연결은 붙어 있으므로 「연결 없음」으로 본다(CR-13 D 구현 판단 — 바꾸려면 AUTO_ATTACH_IS_FREE)
+const AUTO_ATTACH_IS_FREE = true;
+function autoAttachEdges(doc, nodeId) {
+  if (!AUTO_ATTACH_IS_FREE) return [];
+  return (doc.edges || []).filter((e) => e.target === nodeId && e.source === doc.universe.root_node_id && e.core_type === 'contains'
+    && !e.subtype && !e.period && !e.note
+    && !doc.events.some((ev) => ev.payload && ev.payload.target_kind === 'edge' && ev.payload.target_id === e.id && ev.type !== 'created'));
+}
+
+/**
+ * 연결·이력이 없는 노드를 바로 지운다(되돌릴 수 없음). 조건이 안 맞으면 E-SCHEMA(reason 'in_use', reasons).
+ * 노드와 그 노드의 생성·수정·숨김 이벤트를 문서에서 뺀다.
+ */
+export function deleteNodeNow(doc, nodeId, ctx, opts = {}) { // eslint-disable-line no-unused-vars
+  const can = canDeleteNow(doc, nodeId, opts);
+  if (!can.ok) return fail(CODES.SCHEMA, { field: 'id', reason: 'in_use', reasons: can.reasons });
+  const node = doc.nodes.find((n) => n.id === nodeId);
+  return { ok: true, doc: removeNodeWhole(doc, nodeId), node, event: null, removed: true };
+}
+
+/**
+ * 숨긴 노드를 완전히 삭제한다. 숨기지 않은 노드는 거부(E-SCHEMA, reason 'not_hidden').
+ * 바로 삭제 조건이 맞으면 통째로 뺀다. 아니면 자리표시로 비운다: 이름 「(삭제된 노드)」, 내용 필드 제거, deleted:true(hidden 유지),
+ * 붙은 연결(숨긴 것 포함)과 그 연결의 이력을 문서에서 빼고, 이 노드의 예전 수정 이력에서도 내용 값을 지운다.
+ * 이 노드를 가리킨 메모·인수인계 등 다른 이력은 그대로 둔다(ID가 남아 있어 검증이 깨지지 않는다).
+ * 이력에는 updated 한 줄(deleted false → true, 지운 필드 이름만. 지운 값은 남기지 않음).
+ */
+export function purgeNode(doc, nodeId, ctx, opts = {}) {
+  const node = doc.nodes.find((n) => n.id === nodeId);
+  if (!node) return fail(CODES.SCHEMA, { field: 'id' });
+  if (node.core_type === 'root') return fail(CODES.SCHEMA, { field: 'core_type' });
+  if (node.deleted) return { ok: true, doc, node, event: null };
+  if (!node.hidden) return fail(CODES.SCHEMA, { field: 'id', reason: 'not_hidden' });
+  if (canDeleteNow(doc, nodeId, opts).ok) return { ok: true, doc: removeNodeWhole(doc, nodeId), node, event: null, removed: true };
+
+  const cleared = ['label', ...PURGE_FIELDS.filter((k) => node[k] !== undefined)];
+  const placeholder = {
+    id: node.id, core_type: node.core_type, label: DELETED_LABEL, hidden: true, deleted: true,
+    created_at: node.created_at, updated_at: ctx.now,
+  };
+  const removedEdgeIds = new Set(doc.edges.filter((e) => e.source === nodeId || e.target === nodeId).map((e) => e.id));
+  const keep = (obj) => Object.fromEntries(Object.entries(obj || {}).filter(([k]) => k === 'hidden' || k === 'deleted'));
+  const events = doc.events
+    .filter((ev) => !(['created', 'updated', 'hidden'].includes(ev.type) && ev.payload && ev.payload.target_kind === 'edge' && removedEdgeIds.has(ev.payload.target_id)))
+    .map((ev) => {
+      if (!isOwnEvent(ev, nodeId)) return ev;
+      const { note, ...rest } = ev; // eslint-disable-line no-unused-vars
+      if (ev.type !== 'updated') return rest;
+      const before = keep(ev.payload.before);
+      const after = keep(ev.payload.after);
+      // 값을 지운 수정 이력은 「수정(내용 지움)」으로 보이게 표시한다(describe.js eventText)
+      const stripped = Object.keys(ev.payload.after || {}).length !== Object.keys(after).length;
+      return { ...rest, payload: { ...ev.payload, before, after, ...(stripped ? { cleared: true } : {}) } };
+    });
+  const event = makeEvent({ ...doc, events }, 'updated', {
+    target_kind: 'node', target_id: nodeId, before: { deleted: false }, after: { deleted: true }, cleared_fields: cleared,
+  }, ctx);
+  return {
+    ok: true,
+    doc: {
+      ...doc,
+      nodes: doc.nodes.map((n) => (n.id === nodeId ? placeholder : n)),
+      edges: doc.edges.filter((e) => !removedEdgeIds.has(e.id)),
+      events: [...events, event],
+    },
+    node: placeholder,
+    event,
+    removed_edges: removedEdgeIds.size,
   };
 }
 
@@ -228,6 +355,8 @@ export function addEdge(doc, input, ctx) {
   const tgt = doc.nodes.find((n) => n.id === input.target);
   if (!src) return fail(CODES.SCHEMA, { field: 'source' });
   if (!tgt) return fail(CODES.SCHEMA, { field: 'target' });
+  // 자기 자신으로 가는 연결은 그래프에 그려지지 않아(view.js) 보이지 않는 연결로 남는다: 만들지 않는다(2026-10-18, 표 「다음 업무」에 자기 이름)
+  if (input.source === input.target) return fail(CODES.SCHEMA, { field: 'target', self_loop: true });
   // 숨긴 노드는 화면에 없으므로 새 연결의 끝이 될 수 없다(기존 연결은 이력으로 남는다)
   if (src.hidden) return fail(CODES.SCHEMA, { field: 'source', hidden: true });
   if (tgt.hidden) return fail(CODES.SCHEMA, { field: 'target', hidden: true });
@@ -529,19 +658,27 @@ export function decideIdentity(doc, input, ctx) {
  *   {op:'addNode', row?:number, input:object, attachRoot?:boolean} |
  *   {op:'updateNode', row?:number, id:string, changes:object} |
  *   {op:'addEdge', row?:number, input:{source:string, target:string, core_type:string, subtype?:string, period?:object, note?:string}} |
+ *   {op:'assign', row?:number, shown_row?:number, input:{person_id:string, work_id:string, occurred_at?:string}} |
  *   {op:'invalid', row?:number, error:{code:string}}
  * >} ops row는 화면의 행 번호(없으면 1부터 순서)
  * @param {{now:string, random?:()=>number, source?:string, occurred_at?:string}} ctx
  * @returns {{ok:true, doc:object, events:object[], created:object[], updated:object[], warnings:object[], rows:object[]}
  *   | {ok:false, doc:object, errors:{row:number, error:object}[], error:object}}
  */
+export const BATCH_MAX_OPS = BATCH_MAX_ROWS * 6;
+
 export function applyBatch(doc, ops, ctx) {
   if (!Array.isArray(ops) || ops.length === 0) {
     const error = { code: CODES.REQUIRED, field: 'rows' };
     return { ok: false, doc, errors: [], error };
   }
-  if (ops.length > BATCH_MAX_ROWS) {
+  // 행(aux 아님)은 BATCH_MAX_ROWS까지, 표의 연결 칸이 만드는 보조 명령(aux·연결·담당)까지 합쳐 BATCH_MAX_OPS까지(2026-10-18 CR-13 C)
+  if (ops.filter((o) => !o.aux && o.op !== 'addEdge' && o.op !== 'assign').length > BATCH_MAX_ROWS) {
     const error = { code: CODES.SCHEMA, field: 'rows', too_many: BATCH_MAX_ROWS };
+    return { ok: false, doc, errors: [], error };
+  }
+  if (ops.length > BATCH_MAX_OPS) {
+    const error = { code: CODES.SCHEMA, field: 'rows', too_many: BATCH_MAX_ROWS, links: BATCH_MAX_OPS };
     return { ok: false, doc, errors: [], error };
   }
   const rootId = doc.universe.root_node_id;
@@ -556,9 +693,11 @@ export function applyBatch(doc, ops, ctx) {
   const rowNode = new Map(); // 행 번호 → 그 행에서 만든 노드 id ('@행번호' 표식 해석용)
   const failedRows = new Set(); // 실패한 행 번호(그 행을 가리키는 연결은 건너뜀)
   const createdEdges = [];
+  const assignments = [];
 
   ops.forEach((op, i) => {
     const row = op.row ?? i + 1;
+    const shown = op.shown_row ?? row; // 오류를 보일 화면 행(표의 연결 칸이 만든 보조 명령은 그 칸이 있는 행)
     if (op.op === 'invalid') {
       failedRows.add(row);
       errors.push({ row, error: op.error });
@@ -570,7 +709,7 @@ export function applyBatch(doc, ops, ctx) {
         failedRows.add(row);
         const error = { ...r.error };
         if (error.existing_id && createdRow.has(error.existing_id)) error.with_row = createdRow.get(error.existing_id);
-        errors.push({ row, error });
+        errors.push({ row: shown, error });
         return;
       }
       let next = r.doc;
@@ -579,7 +718,7 @@ export function applyBatch(doc, ops, ctx) {
         const e = addEdge(next, { source: rootId, target: r.node.id, core_type: 'contains' }, ctx);
         if (!e.ok) {
           failedRows.add(row);
-          errors.push({ row, error: e.error });
+          errors.push({ row: shown, error: e.error });
           return;
         }
         next = e.doc;
@@ -591,7 +730,7 @@ export function applyBatch(doc, ops, ctx) {
       warnings.push(...r.warnings);
       createdRow.set(r.node.id, row);
       rowNode.set(row, r.node.id);
-      rows.push({ row, kind: 'created', node: r.node });
+      rows.push({ row, kind: 'created', node: r.node, ...(op.aux ? { aux: true } : {}) });
       return;
     }
     if (op.op === 'updateNode') {
@@ -610,10 +749,11 @@ export function applyBatch(doc, ops, ctx) {
       rows.push({ row, kind: r.event ? 'updated' : 'unchanged', node: r.node });
       return;
     }
-    if (op.op === 'addEdge') {
+    if (op.op === 'addEdge' || op.op === 'assign') {
+      const isAssign = op.op === 'assign';
       const input = { ...(op.input || {}) };
       let skip = false;
-      for (const k of ['source', 'target']) {
+      for (const k of isAssign ? ['person_id', 'work_id'] : ['source', 'target']) {
         const m = typeof input[k] === 'string' ? /^@(\d+)$/.exec(input[k]) : null;
         if (!m) continue;
         const ref = Number(m[1]);
@@ -621,7 +761,7 @@ export function applyBatch(doc, ops, ctx) {
         else if (failedRows.has(ref)) skip = true; // 앞 행의 오류가 이미 보고된다
         else {
           failedRows.add(row);
-          errors.push({ row, error: { code: CODES.SCHEMA, field: k, bad_ref: ref } });
+          errors.push({ row: shown, error: { code: CODES.SCHEMA, field: k, bad_ref: ref } });
           return;
         }
       }
@@ -629,10 +769,35 @@ export function applyBatch(doc, ops, ctx) {
         failedRows.add(row);
         return;
       }
+      if (isAssign) {
+        // 담당 시작: 수행 연결 + 담당 시작 이력(addAssignment). 이미 계속 담당 중이면 건너뜀(오류 아님)
+        const occurred = input.occurred_at || String(ctx.now).slice(0, 10);
+        const a = addAssignment(work, { type: 'assign_start', occurred_at: occurred, payload: { person_id: input.person_id, work_id: input.work_id } }, ctx);
+        if (!a.ok) {
+          if (a.error.code === CODES.DUP && a.error.already_active) {
+            warnings.push({ code: 'W-ALREADY-ASSIGNED', row: shown, person_id: input.person_id, work_id: input.work_id });
+            rows.push({ row, kind: 'skipped', reason: 'already_assigned' });
+            return;
+          }
+          failedRows.add(row);
+          errors.push({ row: shown, error: a.error });
+          return;
+        }
+        work = a.doc;
+        events.push(a.event);
+        assignments.push(a.edge);
+        rows.push({ row, kind: 'assigned', edge: a.edge });
+        return;
+      }
       const r = addEdge(work, input, ctx);
       if (!r.ok) {
+        // skipDup: 이미 같은 연결이 있으면 건너뜀(표의 연결 칸)
+        if (op.skipDup && r.error.code === CODES.DUP) {
+          rows.push({ row, kind: 'skipped', reason: 'duplicate_edge' });
+          return;
+        }
         failedRows.add(row);
-        errors.push({ row, error: r.error });
+        errors.push({ row: shown, error: r.error });
         return;
       }
       work = r.doc;
@@ -646,7 +811,7 @@ export function applyBatch(doc, ops, ctx) {
   });
 
   if (errors.length) return { ok: false, doc, errors, error: errors[0].error };
-  return { ok: true, doc: work, events, created, updated, edges: createdEdges, warnings, rows };
+  return { ok: true, doc: work, events, created, updated, edges: createdEdges, assignments, warnings, rows };
 }
 
 // ── 담당 이력과 수행 연결(02-design 3절: 담당 시작·종료는 수행 연결이 생기거나 끝날 때 남는다) ──

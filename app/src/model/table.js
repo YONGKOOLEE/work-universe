@@ -1,13 +1,15 @@
 // 표 입력(T-19, R-18·D-18·D-19): 스프레드시트에서 복사한 탭 구분 글 → 행, 행 → 일괄 명령(순수 함수).
-// 이 모듈은 DOM·저장소를 쓰지 않는다. 연결(관계)은 표로 넣지 않는다(R-18 ⑥).
+// 이 모듈은 DOM·저장소를 쓰지 않는다.
+// 연결 칸(2026-10-18 CR-13 C): 새 행(업무)의 「담당자·산출물·다음 업무」 칸 → 이름으로 노드를 찾아(없으면 새로 만들어) 수행·산출·선후행 연결. 「표로 고치기」에는 연결 칸이 없다.
 // 기본값은 docs/decisions-pending.md 8절(T19-1~17). 바꾸기 쉽게 TABLE_RULES 한 곳에 둔다.
 
-import { BATCH_MAX_ROWS, CODES, LABEL_MAX, NODE_TYPES } from './schema.js';
+import { BATCH_MAX_ROWS, CODES, LABEL_MAX, NODE_TYPES, normalizeLabel } from './schema.js';
 
 export const TABLE_RULES = {
   maxRows: BATCH_MAX_ROWS, // T19-11
   maxInput: 200000, // 붙여 넣을 수 있는 글자 수
   attrSeparators: /[;；\n]/, // 속성 칸 「키=값; 키=값」 (T19-1)
+  linkSeparators: /[,，;；]/, // 연결 칸 「이름, 이름」 (CR-13 C)
 };
 
 // 열 키 → 머리글로 인정하는 이름(T19-1·T19-2). 공백은 없애고 비교한다
@@ -18,7 +20,13 @@ export const TABLE_COLUMNS = [
   { key: 'description', label: '설명', aliases: ['설명', '내용', '비고'] },
   { key: 'emp_no', label: '사번', aliases: ['사번', '사원번호'] },
   { key: 'attrs', label: '속성', aliases: ['속성', '주요속성'] },
+  // 연결 칸(업무 새 행에서만. 머리글 없는 붙여 넣기는 속성 칸 다음에서부터 이 순서)
+  { key: 'assignee', label: '담당자', aliases: ['담당자', '담당', '담당자명'], link: 'person' },
+  { key: 'outputs', label: '산출물', aliases: ['산출물', '산출'], link: 'artifact' },
+  { key: 'next', label: '다음 업무', aliases: ['다음업무', '후행업무', '다음', '후행'], link: 'work' },
 ];
+/** 연결 칸 키(표로 고치기에는 없다) */
+export const LINK_KEYS = TABLE_COLUMNS.filter((c) => c.link).map((c) => c.key);
 const KEYS = TABLE_COLUMNS.map((c) => c.key);
 const squash = (s) => String(s).replace(/\s+/g, '');
 
@@ -152,6 +160,91 @@ const cell = (cells, k) => (cells[k] === undefined || cells[k] === null ? '' : S
  */
 export function newRowsToOps(rows, opt = {}) {
   const attach = opt.attachRoot === undefined ? 'work' : opt.attachRoot;
+  const base = baseRowOps(rows, attach);
+  return LINK_KEYS.some((k) => rows.some((r) => cell(r.cells || {}, k).trim() !== '')) ? withLinkOps(rows, base, opt.doc, attach) : base;
+}
+
+/** 연결 칸 글 「이름, 이름」 → 이름 목록(앞뒤 공백 정리, 빈 값·같은 이름 되풀이 제외) */
+export function splitLinkNames(text) {
+  const seen = new Set();
+  const out = [];
+  for (const part of String(text ?? '').split(TABLE_RULES.linkSeparators)) {
+    const name = part.replace(/\s+/g, ' ').trim();
+    const key = normalizeLabel(name);
+    if (!name || seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+  }
+  return out;
+}
+
+const AUX_ROW_BASE = 10000; // 연결 칸이 만든 보조 명령의 행 번호(화면 행과 겹치지 않는 번호. 오류는 shown_row 로 그 칸이 있는 행에 보인다)
+
+/**
+ * 새 행 명령 뒤에 연결 칸이 만드는 명령을 붙인다: 이름 찾기 → (없으면) 새 노드(aux) → 연결(assign·produces·precedes).
+ * 이름 찾기: 같은 유형의 노드를 이 문서(숨김 제외)와 같은 표의 행에서 normalizeLabel 로 찾는다. 둘 이상이면 그 행 오류.
+ * 연결 칸은 업무 행에서만 쓴다. 오류가 있는 행의 연결 칸은 처리하지 않는다(그 행 오류만 보고).
+ */
+function withLinkOps(rows, base, doc, attach) {
+  const key = (type, label) => `${type}\u0000${normalizeLabel(label)}`;
+  const docIds = new Map();
+  for (const n of doc?.nodes || []) {
+    if (n.hidden || n.core_type === 'root' || typeof n.label !== 'string') continue;
+    const k = key(n.core_type, n.label);
+    docIds.set(k, [...(docIds.get(k) || []), n.id]);
+  }
+  const tableRefs = new Map();
+  base.forEach((op) => {
+    if (op.op !== 'addNode') return;
+    const k = key(op.input.core_type, op.input.label);
+    tableRefs.set(k, [...(tableRefs.get(k) || []), `@${op.row}`]);
+  });
+  const out = base.slice();
+  const auxOps = [];
+  const linkOps = [];
+  const auxRef = new Map(); // 이름 키 → '@보조행'(같은 이름은 한 번만 만든다)
+  let nextAux = AUX_ROW_BASE;
+  const columnOf = Object.fromEntries(TABLE_COLUMNS.map((c) => [c.key, c]));
+  rows.forEach((r, i) => {
+    const op = base[i];
+    const cells = r.cells || {};
+    const has = LINK_KEYS.some((k) => cell(cells, k).trim() !== '');
+    if (!has || op.op === 'invalid') return;
+    const row = op.row;
+    if (op.input.core_type !== 'work') {
+      out[i] = { op: 'invalid', row, error: { code: CODES.SCHEMA, field: 'links', work_only: true } };
+      return;
+    }
+    // 1) 이름 해석(오류가 있으면 이 행은 아무것도 만들지 않는다)
+    const plan = [];
+    for (const colKey of LINK_KEYS) {
+      const type = columnOf[colKey].link;
+      for (const name of splitLinkNames(cell(cells, colKey))) {
+        if (name.length > LABEL_MAX) { out[i] = { op: 'invalid', row, error: { code: CODES.SCHEMA, field: 'links', too_long: LABEL_MAX } }; return; } // 이름 칸이 아니라 연결 칸 문제(검토 R13 재검증 1)
+        const k = key(type, name);
+        const found = [...(docIds.get(k) || []), ...(tableRefs.get(k) || [])];
+        if (found.length > 1) { out[i] = { op: 'invalid', row, error: { code: CODES.DUP, field: 'links', ambiguous: { core_type: type, label: name } } }; return; }
+        plan.push({ colKey, type, name, k, ref: found[0] || auxRef.get(k) || null });
+      }
+    }
+    // 2) 만들기: 없는 이름은 새 노드(같은 이름은 한 번만), 그다음 연결
+    const mine = `@${row}`;
+    for (const p of plan) {
+      if (!p.ref) {
+        const auxRow = nextAux++;
+        auxOps.push({ op: 'addNode', row: auxRow, shown_row: row, aux: true, input: { core_type: p.type, label: p.name }, attachRoot: p.type === 'work' && attach !== false });
+        p.ref = `@${auxRow}`;
+        auxRef.set(p.k, p.ref);
+      }
+      const edgeRow = nextAux++;
+      if (p.colKey === 'assignee') linkOps.push({ op: 'assign', row: edgeRow, shown_row: row, aux: true, input: { person_id: p.ref, work_id: mine } });
+      else linkOps.push({ op: 'addEdge', row: edgeRow, shown_row: row, aux: true, skipDup: true, input: { source: mine, target: p.ref, core_type: p.colKey === 'outputs' ? 'produces' : 'precedes' } });
+    }
+  });
+  return [...out, ...auxOps, ...linkOps];
+}
+
+function baseRowOps(rows, attach) {
   return rows.map((r, i) => {
     const row = r.line ?? i + 1;
     if (r.error) return { op: 'invalid', row, error: r.error };
@@ -232,3 +325,21 @@ export function editableRows(doc) {
     }));
 }
 
+
+/**
+ * 표로 추가한 결과 요약(CR-13 C). 연결 칸을 쓰지 않았으면 null.
+ * 「노드 n개, 연결 m개를 만들었습니다(새로 만든 사람·산출물 k개)」 + 이미 담당 중이라 건너뛴 수
+ */
+export function linkSummary(result) {
+  const rows = result?.rows || [];
+  if (!rows.some((r) => r.aux || r.kind === 'assigned' || r.kind === 'skipped' || r.kind === 'edge')) return null;
+  const links = (result.edges || []).length + (result.assignments || []).length;
+  const fresh = rows.filter((r) => r.aux && (r.node.core_type === 'person' || r.node.core_type === 'artifact')).length;
+  const freshWork = rows.filter((r) => r.aux && r.node.core_type === 'work').length;
+  const already = rows.filter((r) => r.kind === 'skipped' && r.reason === 'already_assigned').length;
+  const dup = rows.filter((r) => r.kind === 'skipped' && r.reason === 'duplicate_edge').length;
+  let text = `노드 ${(result.created || []).length}개, 연결 ${links}개를 만들었습니다(새로 만든 사람·산출물 ${fresh}개${freshWork ? `, 새 업무 ${freshWork}개` : ''}).`;
+  if (already) text += ` 이미 담당 중이라 건너뛴 담당 ${already}건.`;
+  if (dup) text += ` 이미 있는 연결 ${dup}건은 건너뛰었습니다.`;
+  return text;
+}

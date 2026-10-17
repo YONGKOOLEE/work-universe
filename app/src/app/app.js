@@ -1,7 +1,7 @@
 // 명령 흐름 조립과 현재 상태(12.7 app). 화면은 이 객체만 호출한다.
 
 import {
-  addAssignment, addEdge, addEvent, addNode, applyBatch, addRef, addSubtype, createUniverse, decideIdentity, hideEdge, hideNode, hideRef, replaceEdge, restoreNode, updateEdge, updateNode,
+  addAssignment, addEdge, addEvent, addNode, applyBatch, addRef, addSubtype, canDeleteNow, createUniverse, decideIdentity, deleteNodeNow, hideEdge, hideNode, hideRef, purgeNode, replaceEdge, restoreNode, updateEdge, updateNode,
 } from '../model/commands.js';
 import { CODES, DRAFT_TARGET_TYPES, SUBTYPE_HANDOVER_DOC, TEXT_MAX, normalizeLabel } from '../model/schema.js';
 import { validateDocument } from '../model/validate.js';
@@ -79,12 +79,13 @@ export function storageFailReason(err) {
  *   store가 null이면 저장소를 쓸 수 없는 상태다(W-STORAGE → 샘플 읽기 전용, 5.3).
  *   currentId가 없거나 찾을 수 없으면 첫 샘플을 연다.
  */
-export function createApp({ store, samples, currentId, now, authorName }) {
+export function createApp({ store, samples, currentId, now, authorName, locked = false }) {
   const warnings = [];
   // 확정자·통합 확인 목록 판정(decideIdentity)의 기록 주체(R-22, D-24). 작성자 이름이 있으면 그 이름, 없거나 깨졌으면 지금 문구
   const author = () => cleanAuthorName(typeof authorName === 'function' ? authorName() : authorName) || DEFAULT_AUTHOR;
   let db = store || memoryStore();
-  let writable = !!store; // 저장소에 쓸 수 있는가. 샘플 설치가 실패하면 false(읽기 전용)
+  // locked: 내용 포함 HTML 보기(CR-13 B). 저장소 경고 없이 읽기 전용으로 연다
+  let writable = !!store && !locked; // 저장소에 쓸 수 있는가. 샘플 설치가 실패하면 false(읽기 전용)
   if (!store) warnings.push({ code: CODES.STORAGE });
 
   // 모든 내장 샘플을 저장소에 넣어 둔다. 상위 유니버스가 하위 유니버스를 찾을 수 있어야 한다(참조).
@@ -152,7 +153,7 @@ export function createApp({ store, samples, currentId, now, authorName }) {
     },
     readOnly,
     // 저장소 자체를 쓸 수 있는지(읽기 전용이어도 초기화로 복구할 수 있는 경우를 가르기 위해)
-    canReset: !!store,
+    canReset: !!store && !locked,
     warnings,
 
     // 현재 문서 조회(검토5 C-8): 화면이 doc 내부 배열을 직접 뒤지지 않게 한다
@@ -175,6 +176,11 @@ export function createApp({ store, samples, currentId, now, authorName }) {
     /** 현재 유니버스 꼭지의 전역 참조 */
     rootGid() {
       return toGid(doc.universe.id, doc.universe.root_node_id);
+    },
+
+    /** 저장소의 유니버스 문서(없으면 null). 내용 포함 HTML 만들기에서 하위 유니버스를 모을 때 쓴다 */
+    docOf(id) {
+      return id === doc.universe.id ? doc : db.loadUniverse(id);
     },
 
     /** 고를 수 있는 유니버스 목록(샘플 + 사용자가 만든 것) */
@@ -221,6 +227,28 @@ export function createApp({ store, samples, currentId, now, authorName }) {
     /** 숨긴 노드를 되살린다(R-21, D-23). 저장 1회. 같은 이름의 보이는 노드가 있으면 E-DUP(existing_id) */
     restoreNode(nodeId) {
       return guard() || commit(restoreNode(doc, nodeId, { now: now() }));
+    },
+    /** 바로 삭제할 수 있는 노드인가(연결·다른 이력이 없음, CR-13 D) */
+    canDeleteNow(nodeId) {
+      return canDeleteNow(doc, nodeId, { externalRefs: this.externallyLinked(nodeId) });
+    },
+    /** 다른 유니버스(상위 묶음 등)의 동일성 연결(identity_links)이 이 노드를 가리키는가. 그러면 통째로 지우지 않고 자리표시로만 비운다 */
+    externallyLinked(nodeId) {
+      if (!db) return false;
+      const gid = `${doc.universe.id}/${nodeId}`;
+      return db.listUniverses().some((e) => {
+        if (e.id === doc.universe.id) return false;
+        const other = db.loadUniverse(e.id);
+        return !!other && (other.identity_links || []).some((l) => l.a === gid || l.b === gid);
+      });
+    },
+    /** 연결·이력이 없는 노드를 바로 지운다(되돌릴 수 없음). 저장 1회 */
+    deleteNodeNow(nodeId) {
+      return guard() || commit(deleteNodeNow(doc, nodeId, { now: now() }, { externalRefs: this.externallyLinked(nodeId) }));
+    },
+    /** 숨긴 노드를 완전히 삭제한다(자리표시로 비움, 되돌릴 수 없음). 저장 1회 */
+    purgeNode(nodeId) {
+      return guard() || commit(purgeNode(doc, nodeId, { now: now() }, { externalRefs: this.externallyLinked(nodeId) }));
     },
     addEdge(input) {
       return guard() || commit(addEdge(doc, input, { now: now() }));

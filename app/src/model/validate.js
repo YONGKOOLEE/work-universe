@@ -92,6 +92,9 @@ export function validateDocument(doc) {
     if (badText(n.description, TEXT_MAX)) err(CODES.SCHEMA, `${path}.description`);
     if (n.hidden !== undefined && typeof n.hidden !== 'boolean') err(CODES.SCHEMA, `${path}.hidden`);
     if (n.exposed !== undefined && typeof n.exposed !== 'boolean') err(CODES.SCHEMA, `${path}.exposed`);
+    // 완전히 삭제한 노드(자리표시): 값이 있으면 boolean이고, true면 숨긴 상태여야 한다(CR-13 D)
+    if (n.deleted !== undefined && typeof n.deleted !== 'boolean') err(CODES.SCHEMA, `${path}.deleted`);
+    else if (n.deleted === true && n.hidden !== true) err(CODES.SCHEMA, `${path}.deleted`);
     if (periodError(n.period)) err(CODES.SCHEMA, `${path}.period`);
     if (n.attrs !== undefined) {
       const okAttrs = isObject(n.attrs) && Object.values(n.attrs).every((v) => typeof v === 'string' || typeof v === 'number');

@@ -31,6 +31,8 @@ import { splitHint, workFormMissing } from '../rules/form.js';
 import { starterSteps } from '../rules/starter-steps.js';
 import { josa, messageFor } from './messages.js';
 import { exportFileName, importDialog } from './import.js';
+import { EMBED_HASH_PREFIX, embedFileName } from '../view/embed.js';
+import { EMBED_WARNINGS, captureAppHtml, createEmbedApp, embedHtmlFor, importEmbedToStorage, readEmbedFromDocument, renderEmbedBanner } from './embed-banner.js';
 import { tableDialog } from './table.js';
 import { convertDocument } from '../rules/doc-convert.js';
 import { convertDocumentWith } from '../llm/connector.js';
@@ -42,8 +44,11 @@ import { EXPLORE, exploreBar } from './explore.js';
 const CHECK_MODE = new URLSearchParams(location.search).has('check');
 
 // 다른 유니버스로 이동: 주소 끝의 #유니버스ID를 바꾸고 다시 연다(file://에서도 동작)
+// 내용 포함 HTML을 읽기 전용으로 보는 중이면 주소를 #embed/ID로 둔다(일반 ID에는 '/'가 없어 섞이지 않는다, CR-13 B)
+let embedPrefix = '';
+
 function openUniverse(id) {
-  location.hash = id;
+  location.hash = embedPrefix + id;
   location.reload();
 }
 
@@ -83,9 +88,10 @@ function wireCreateDialog(app, $) {
 }
 
 // 가져오기(T-17): 문서 초벌 변환(CR-5 ②)·JSON 파일 → 미리 보기 → 가져오기. 시작 화면과 본 화면이 함께 쓴다
-function wireImportDialog(app, $, getProvider, methodLabel, onExport = null, onReset = null) {
+function wireImportDialog(app, $, getProvider, methodLabel, onExport = null, onReset = null, onExportHtml = null) {
   const open = importDialog({
     onExport,
+    onExportHtml,
     onReset,
     dialog: $('import-dialog'),
     app,
@@ -117,15 +123,28 @@ function goStart() {
 // 주소의 #유니버스ID. 깨진 인코딩(#%E0 등)이면 빈 값으로 보고 시작 화면을 연다
 function hashId() {
   try {
-    return decodeURIComponent(location.hash.slice(1));
+    const h = decodeURIComponent(location.hash.slice(1));
+    return embedPrefix && h.startsWith(embedPrefix) ? h.slice(embedPrefix.length) : h;
   } catch {
     return '';
   }
 }
 
 function start() {
-  const storage = openStorage(() => window.localStorage);
-  const app = createApp({
+  // 내용 포함 HTML로 내려받을 때 쓸 앱 원본: 화면을 그리기 전에 잡는다(CR-13 B)
+  const appHtml = captureAppHtml(document);
+  const emb = readEmbedFromDocument(document);
+  const embedOk = !!(emb && emb.ok);
+  if (embedOk) {
+    // 주소에 유니버스가 없으면 담긴 유니버스를 바로 연다. 주소가 #embed/…이면 계속 보기 모드. 그 밖의 주소는 일반 모드(가져온 뒤 등)
+    if (location.hash === '' || location.hash === '#') history.replaceState(null, '', `${location.pathname}${location.search}#${EMBED_HASH_PREFIX}${emb.embed.root}`);
+    if (location.hash.startsWith(`#${EMBED_HASH_PREFIX}`)) embedPrefix = EMBED_HASH_PREFIX;
+  }
+  const embedMode = embedPrefix !== '';
+  const embedWarning = emb && !emb.ok ? EMBED_WARNINGS[emb.reason] : '';
+  const storage = embedMode ? null : openStorage(() => window.localStorage);
+  const appDeps = { samples: SAMPLES, currentId: hashId(), now: nowIso };
+  const app = embedMode ? createEmbedApp(emb.embed, appDeps) : createApp({
     store: storage ? createStore(storage) : null,
     samples: SAMPLES,
     currentId: hashId(),
@@ -157,7 +176,18 @@ function start() {
     saveSettings(storage, settings);
     if (hashId()) showBackupNudge();
   };
-  const openImport = wireImportDialog(app, $, () => provider, providerLabel, hashId() ? doExport : null, doReset);
+  // 내용 포함 HTML 내려받기(CR-13 B): 지금 유니버스와 하위 유니버스를 앱 HTML에 넣어 한 파일로
+  const doExportHtml = (btn) => {
+    const html = embedHtmlFor(appHtml, app);
+    if (html === null) return;
+    const r = downloadWithNotice(btn, embedFileName(exportFileName(app.doc.universe)), html);
+    if (r.ok) {
+      settings.lastExportAt = nowIso();
+      saveSettings(storage, settings);
+      if (hashId()) showBackupNudge();
+    }
+  };
+  const openImport = wireImportDialog(app, $, () => provider, providerLabel, hashId() ? doExport : null, doReset, hashId() ? doExportHtml : null);
 
   // 주소에 유니버스가 없으면(더블클릭으로 처음 열었을 때) 시작 화면을 보여 준다(R-08)
   if (!hashId()) { // 깨진 인코딩(#%E0)도 시작 화면(hashId의 주석대로, 여섯 번째 검토 C-16)
@@ -166,7 +196,7 @@ function start() {
     $('start-screen').replaceChildren(startScreen({
       universes: app.universes(),
       guide: SAMPLE_GUIDE,
-      warnings: app.warnings.map((w) => messageFor(w)),
+      warnings: [...app.warnings.map((w) => messageFor(w)), ...(embedWarning ? [embedWarning] : [])],
       readOnly: app.readOnly,
       onOpen: openUniverse,
       onCreate: openCreate,
@@ -231,6 +261,31 @@ function start() {
     banner.dataset.code = app.warnings.map((w) => w.code).join(' ');
     banner.hidden = false;
   }
+  if (embedWarning) {
+    banner.textContent = [banner.textContent, embedWarning].filter(Boolean).join(' ');
+    banner.hidden = false;
+  }
+  if (embedMode) {
+    // 읽기 전용 보기: 안내 줄과 「내 유니버스로 가져오기」. 저장소를 쓸 수 없으면 단추를 막고 이유를 보인다
+    const probe = openStorage(() => window.localStorage);
+    const slot = $('embed-banner');
+    const rootName = (emb.embed.docs.find((d) => d.universe.id === emb.embed.root) || emb.embed.docs[0]).universe.name;
+    renderEmbedBanner(slot, {
+      name: rootName,
+      canImport: !!probe,
+      reason: probe ? '' : '이 브라우저의 저장소를 쓸 수 없어 가져올 수 없습니다.',
+      onImport: () => {
+        const r = importEmbedToStorage(emb.embed, { samples: SAMPLES, now: nowIso });
+        if (r.ok) {
+          embedPrefix = '';
+          location.hash = emb.embed.root;
+          location.reload();
+          return;
+        }
+        slot.querySelector('[data-testid=embed-message]').textContent = r.message;
+      },
+    });
+  }
 
   $('home').addEventListener('click', goStart);
   const picker = $('universe-picker');
@@ -281,6 +336,7 @@ function start() {
       return box;
     }
     if (node.core_type === 'root') return null;
+    if (node.hidden || node.deleted) return null; // 숨긴·삭제한 노드는 고칠 수 없으므로 「위층에 드러내기」 체크칸을 보이지 않는다(검토 R13 재검증 5)
     const { universe_id: uid, local_id: lid } = parseGid(gid);
     const own = uid === app.doc.universe.id;
     // 이 유니버스를 묶은 상위 유니버스가 없으면 "드러내기"는 뜻이 없으므로 보이지 않는다(검토5 U-4)
@@ -488,6 +544,7 @@ function start() {
         ...first),
       moreTools([
         node.core_type === 'root' ? null : el('button', { type: 'button', class: 'danger', 'data-testid': 'btn-hide', onclick: () => hideSelected(node) }, '숨기기'),
+        node.core_type !== 'root' && app.canDeleteNow(node.id).ok ? el('button', { type: 'button', class: 'danger', 'data-testid': 'btn-delete', onclick: () => deleteSelected(node) }, '삭제') : null,
         insightButton(gid),
         insightAllButton(),
         ...nbMore,
@@ -497,6 +554,14 @@ function start() {
   function hideSelected(node) {
     if (!window.confirm(`「${node.label}」${josa(node.label, '을/를')} 숨깁니다. 그래프에서 사라지지만 이력과 근거로서의 내용은 남습니다. 다시 보이게 하려면 유니버스 개요(아무것도 고르지 않은 화면)의 「숨긴 노드」에서 「되살리기」를 누르세요.`)) return;
     const r = app.hideNode(node.id);
+    if (!r.ok) return window.alert(messageFor(r.error));
+    afterSave(r, null);
+  }
+
+  // 연결·이력이 없는 노드(막 만든 실수 노드)는 바로 지운다. 그 밖의 노드는 숨긴 뒤 「숨긴 노드」 목록에서 완전히 삭제한다(CR-13 D)
+  function deleteSelected(node) {
+    if (!window.confirm(`「${node.label}」${josa(node.label, '을/를')} 지웁니다. 연결·이력이 없는 노드라 바로 지워지고 되돌릴 수 없습니다.`)) return;
+    const r = app.deleteNodeNow(node.id);
     if (!r.ok) return window.alert(messageFor(r.error));
     afterSave(r, null);
   }
@@ -587,6 +652,19 @@ function start() {
       panel.replaceChildren(hiddenPanel({
         nodes: hiddenNodesOf(app.doc), readOnly: app.readOnly, labelOf,
         onClose: closeSidePanel,
+        // 완전히 삭제: 되돌릴 수 없으므로 확인을 받는다. 지운 뒤에도 목록을 연 채로 둔다(남은 숨긴 노드를 이어서 정리)
+        onPurge: (id) => {
+          const node = app.findNode(id);
+          const n = hiddenNodesOf(app.doc).find((h) => h.id === id);
+          const label = node ? node.label : '';
+          const msg = app.canDeleteNow(id).ok
+            ? `「${label}」${josa(label, '을/를')} 완전히 지웁니다. 연결·이력이 없는 노드라 되돌릴 수 없습니다.`
+            : `「${label}」${josa(label, '을/를')} 완전히 지웁니다. 연결 ${n ? n.edge_count : 0}개도 함께 지워지고 되돌릴 수 없습니다. 이 노드를 언급한 이력은 남고 「(삭제된 노드)」로 보입니다.`;
+          if (!window.confirm(msg)) return { ok: true, cancelled: true };
+          const r = app.purgeNode(id);
+          if (r.ok) afterSave(r, selected);
+          return r;
+        },
         // 되살리면 그 노드를 고른 상태로 연다(연결·이력이 바로 보인다). 같은 이름의 노드가 있으면 E-DUP로 거부된다
         onRestore: (id) => {
           const r = app.restoreNode(id);
@@ -1025,7 +1103,7 @@ function start() {
     onSaved: (r) => {
       const last = r.created[r.created.length - 1] || r.updated[r.updated.length - 1];
       afterSave(r, last ? toGid(currentId(), last.id) : selected);
-      renderAddForm(`표에서 ${r.created.length}개를 추가하고 ${r.updated.length}개를 고쳤습니다.`);
+      renderAddForm(r.summary || `표에서 ${r.created.length}개를 추가하고 ${r.updated.length}개를 고쳤습니다.`); // 연결 칸을 썼으면 연결 요약(CR-13 C)
     },
   });
 

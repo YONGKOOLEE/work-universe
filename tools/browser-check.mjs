@@ -3,12 +3,13 @@
 // 사용: npm run build && npm run check:browser
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { killOwnBrowsers, pickBrowsers } from './browsers.mjs';
 import { SAMPLE_A1 } from '../app/data/sample-a1.js';
 import { SAMPLES } from '../app/data/index.js';
+import { readEmbedFromHtml, stripEmbed } from '../app/src/view/embed.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 // PAGE를 주면 그 파일을 점검한다(T-15: 제출 압축을 푼 index.html)
@@ -1720,6 +1721,40 @@ async function checkBrowser(browser, port) {
   await sleep(400);
   check('R-18 ③: 고친 뒤 다시 저장하면 전부 저장됨(4개)', (await t19Count()) === t19n1 + 4 && !(await evaluate(s.cdp, "document.getElementById('table-dialog').open")), `${t19n1} → ${await t19Count()}`);
 
+  // CR-13 C 연결 칸: 기존 사람 이름 + 새 산출물 + 같은 표의 다른 업무를 다음 업무로 → 수행·산출·선후행 연결, 오류는 전체 거부
+  const c13n0 = await t19Count();
+  const c13e0 = await t19Events();
+  await clickTestId(s.cdp, 'btn-table-add');
+  await sleep(200);
+  check('CR-13 C: 표 맨 위 안내(담당자·산출물·다음 업무 칸)와 연결 칸 머리글이 보임', (await text(s.cdp, '[data-testid=table-link-help]')).includes('담당자·산출물·다음 업무 칸에 이름을 적으면') && (await evaluate(s.cdp, "['담당자', '산출물', '다음 업무'].every((h) => [...document.querySelectorAll('[data-testid=table-grid] thead th')].some((th) => th.textContent === h))")));
+  await t19Paste('유형\t이름\t담당자\t산출물\t다음 업무\n업무\tCR13 연결 업무 1\t서하늘\tCR13 새 산출물\tCR13 연결 업무 2\n업무\tCR13 연결 업무 2\t\t\t');
+  await shot(s.cdp, `${browser.name}-19c-table-links`);
+  const c13wrap = await evaluate(s.cdp, "(() => { const d = document.getElementById('table-dialog').getBoundingClientRect(); const w = document.querySelector('.batch-wrap'); return { dialogRight: Math.round(d.right), vw: window.innerWidth, scroll: w.scrollWidth > w.clientWidth, docScroll: document.documentElement.scrollWidth > window.innerWidth }; })()");
+  check('CR-13 C: 칸이 많아도 가로 스크롤은 표 안에서만 생기고 대화상자가 화면 밖으로 나가지 않음', c13wrap.dialogRight <= c13wrap.vw && !c13wrap.docScroll, JSON.stringify(c13wrap));
+  await clickTestId(s.cdp, 'table-save');
+  await sleep(500);
+  const c13 = await evaluate(s.cdp, `(() => {
+    const d = window.__wu.doc; const by = (l) => d.nodes.find((n) => n.label === l);
+    const w1 = by('CR13 연결 업무 1'); const w2 = by('CR13 연결 업무 2'); const out = by('CR13 새 산출물'); const p = by('서하늘');
+    const has = (t, s, g) => d.edges.some((e) => e.core_type === t && e.source === s && e.target === g && !e.hidden);
+    return { made: !!(w1 && w2 && out), people: d.nodes.filter((n) => n.label === '서하늘').length, perf: !!(w1 && p) && has('performs', p.id, w1.id), prod: !!(w1 && out) && has('produces', w1.id, out.id), prec: !!(w1 && w2) && has('precedes', w1.id, w2.id), hist: !!w1 && d.events.some((e) => e.type === 'assign_start' && e.payload.work_id === w1.id), cy: !!w1 && window.__wu.cy.edges().filter((e) => e.data('source') === 'U-A1/' + w1.id || e.data('target') === 'U-A1/' + w1.id).length };
+  })()`);
+  check('CR-13 C: 저장 → 수행·산출·선후행 연결이 문서에 생기고 그래프에 보임(새 사람은 만들지 않음, 담당 이력 남음)', !(await evaluate(s.cdp, "document.getElementById('table-dialog').open")) && c13.made && c13.people === 1 && c13.perf && c13.prod && c13.prec && c13.hist && c13.cy >= 3 && (await t19Count()) === c13n0 + 3, JSON.stringify(c13));
+  check('CR-13 C: 이력 = 노드 3 + 꼭지 연결 2 + 산출·선후행 2 + 수행 1 + 담당 시작 1', (await t19Events()) === c13e0 + 9, `${c13e0} → ${await t19Events()}`);
+  // 오류: 사람 행에 산출물 값 → 사유, 아무것도 저장되지 않음
+  const c13n1 = await t19Count();
+  const c13e1 = await t19Events();
+  await clickTestId(s.cdp, 'btn-table-add');
+  await sleep(150);
+  await t19Paste('유형\t이름\t산출물\n업무\tCR13 오류시험 업무\t\n사람\tCR13 오류시험 사람\t보고서');
+  await clickTestId(s.cdp, 'table-save');
+  await sleep(300);
+  const c13err = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid^=table-msg-]')].map((e) => e.textContent)");
+  check('CR-13 C: 사람 행에 산출물 값 → 그 행에 「업무 행에만 씁니다」 사유, 아무것도 저장되지 않고 대화상자는 그대로', (await t19Count()) === c13n1 && (await t19Events()) === c13e1 && c13err[0] === '' && c13err[1].includes('업무 행에만 씁니다') && (await evaluate(s.cdp, "document.getElementById('table-dialog').open")), JSON.stringify(c13err));
+  await shot(s.cdp, `${browser.name}-19d-table-links-error`);
+  await clickTestId(s.cdp, 'table-close');
+  await sleep(100);
+
   // ② 표로 고치기: 바꾼 행만 수정 이력(변경 전·후), 표에 없는 속성은 남음
   const t19e2 = await t19Events();
   await clickTestId(s.cdp, 'btn-table-edit');
@@ -1847,6 +1882,71 @@ async function checkBrowser(browser, port) {
   await evaluate(s.cdp, "window.__wu.select(null)");
   await sleep(150);
   check('R-21 모두 되살리면 개요의 「숨긴 노드」 표시가 사라짐', !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=hidden-count]')")));
+
+  // ── CR-13 D 삭제: (가) 막 만든 노드는 「삭제」로 바로, (나) 연결·이력이 있는 노드는 숨긴 뒤 「완전히 삭제」(자리표시) ──
+  {
+    const delRevealSlot = () => evaluate(s.cdp, "(() => { const d = document.getElementById('add-slot').closest('details'); if (d) d.open = true; })()");
+    const delSelect = async (gid) => { await evaluate(s.cdp, `window.__wu.select(${JSON.stringify(gid)})`); await sleep(200); };
+    const delIdOf = (label) => evaluate(s.cdp, `(window.__wu.doc.nodes.find((n) => n.label === ${JSON.stringify(label)}) || {}).id || null`);
+    const delConfirms = [];
+    await evaluate(s.cdp, "window.__delMsgs = []; window.confirm = (m) => { window.__delMsgs.push(m); return true; }");
+    await evaluate(s.cdp, 'window.__wu.select(null)');
+    await sleep(150);
+    await delRevealSlot();
+    // (가) 바로 삭제
+    const addA = await submitAdd(s.cdp, 'work', '삭제 시험 노드');
+    check('삭제 시험: 노드 추가 성공', addA.code === 'OK', JSON.stringify(addA));
+    const idA = await delIdOf('삭제 시험 노드');
+    const delNodes0 = await nodeCount(s.cdp);
+    await delSelect(`U-A1/${idA}`);
+    check('삭제 (가) 막 만든 노드는 「더 보기」에 「삭제」가 있음(숨기기 옆)', await evaluate(s.cdp, "!!document.querySelector('#detail [data-testid=btn-delete]') && !!document.querySelector('#detail [data-testid=btn-hide]')"));
+    await shot(s.cdp, `${browser.name}-cr13d-a-delete-btn`);
+    await clickTestId(s.cdp, 'btn-delete');
+    await sleep(350);
+    const msgA = await evaluate(s.cdp, 'window.__delMsgs.at(-1)');
+    check('삭제 (가) 확인 문구: 연결·이력이 없어 바로 지워지고 되돌릴 수 없음', typeof msgA === 'string' && msgA.includes('삭제 시험 노드') && msgA.includes('바로 지워지고 되돌릴 수 없습니다'), String(msgA));
+    check('삭제 (가) 그래프에서 사라지고 문서에서도 노드·이력이 빠짐, 선택 해제', (await nodeCount(s.cdp)) === delNodes0 - 1 && !(await hasLabel(s.cdp, '삭제 시험 노드')) && (await evaluate(s.cdp, `!window.__wu.doc.nodes.some((n) => n.id === ${JSON.stringify(idA)}) && !window.__wu.doc.events.some((e) => e.payload && e.payload.target_id === ${JSON.stringify(idA)}) && window.__wu.selected === null && !window.__wu.doc.edges.some((e) => e.source === ${JSON.stringify(idA)} || e.target === ${JSON.stringify(idA)})`)));
+    // (나) 연결·이력이 있는 노드
+    await delRevealSlot();
+    await fb17Form({ 'node-type': 'person', 'node-label': '삭제 시험 담당자', 'node-link-other': 'N-001' });
+    await fb17Submit();
+    await sleep(300);
+    const idB = await delIdOf('삭제 시험 담당자');
+    check('삭제 시험: 연결 있는 사람 노드 추가', !!idB);
+    await delSelect(`U-A1/${idB}`);
+    check('삭제 (나) 연결이 있는 노드에는 「삭제」가 없고 「숨기기」만 있음', await evaluate(s.cdp, "!document.querySelector('#detail [data-testid=btn-delete]') && !!document.querySelector('#detail [data-testid=btn-hide]')"));
+    await clickTestId(s.cdp, 'btn-event');
+    await sleep(100);
+    await fillPanelForm(s.cdp, { 'event-type': 'affiliation_change', 'event-date': '2026-10-05' });
+    await sleep(300);
+    check('삭제 시험: 사람 노드에 소속 변경 이력이 쌓임', await evaluate(s.cdp, `window.__wu.doc.events.some((e) => e.type === 'affiliation_change' && e.payload.person_id === ${JSON.stringify(idB)})`));
+    await delSelect(`U-A1/${idB}`);
+    await clickTestId(s.cdp, 'btn-hide');
+    await sleep(300);
+    check('삭제 (나) 숨기면 그래프에서 빠짐', !(await hasLabel(s.cdp, '삭제 시험 담당자')));
+    await evaluate(s.cdp, 'window.__wu.select(null)');
+    await sleep(150);
+    await clickTestId(s.cdp, 'btn-hidden');
+    await sleep(200);
+    check('삭제 (나) 숨긴 노드 목록의 각 항목에 「되살리기」 옆 「완전히 삭제」가 있음', await evaluate(s.cdp, `(() => { const li = [...document.querySelectorAll('[data-testid=hidden-item]')].find((x) => x.dataset.id === ${JSON.stringify(idB)}); return !!li && !!li.querySelector('[data-testid=btn-restore]') && !!li.querySelector('[data-testid=btn-purge]'); })()`));
+    await shot(s.cdp, `${browser.name}-cr13d-b-hidden-list-purge`);
+    await evaluate(s.cdp, `[...document.querySelectorAll('[data-testid=hidden-item]')].find((x) => x.dataset.id === ${JSON.stringify(idB)}).querySelector('[data-testid=btn-purge]').click()`);
+    await sleep(400);
+    const msgB = await evaluate(s.cdp, 'window.__delMsgs.at(-1)');
+    check('삭제 (나) 확인 문구: 연결 n개도 함께 지워지고 이력은 「(삭제된 노드)」로 남음', typeof msgB === 'string' && msgB.includes('완전히 지웁니다') && /연결 \d+개도 함께/.test(msgB) && msgB.includes('(삭제된 노드)'), String(msgB));
+    check('삭제 (나) 목록에서 사라짐(자리표시는 목록에 안 나옴)', await evaluate(s.cdp, `![...document.querySelectorAll('[data-testid=hidden-item]')].some((x) => x.dataset.id === ${JSON.stringify(idB)})`));
+    check('삭제 (나) 문서: 이름 「(삭제된 노드)」, deleted·hidden true, 내용·연결 제거, 이력(소속 변경)은 유지, 검증용 이벤트 1건', await evaluate(s.cdp, `(() => { const d = window.__wu.doc; const n = d.nodes.find((x) => x.id === ${JSON.stringify(idB)}); return !!n && n.label === '(삭제된 노드)' && n.deleted === true && n.hidden === true && !d.edges.some((e) => e.source === n.id || e.target === n.id) && d.events.some((e) => e.type === 'affiliation_change' && e.payload.person_id === n.id) && d.events.filter((e) => e.payload && e.payload.target_id === n.id && e.payload.after && e.payload.after.deleted === true).length === 1; })()`));
+    check('삭제 (나) 그래프·찾기에 자리표시가 나오지 않음', !(await hasLabel(s.cdp, '(삭제된 노드)')) && !(await hasLabel(s.cdp, '삭제 시험 담당자')));
+    await delSelect(`U-A1/${idB}`);
+    const histB = await text(s.cdp, '[data-testid=history]');
+    check('삭제 (나) 그 노드를 가리킨 이력이 「(삭제된 노드)」로 보임', histB.includes('(삭제된 노드)') && !histB.includes('삭제 시험 담당자'), histB.slice(0, 160));
+    await shot(s.cdp, `${browser.name}-cr13d-c-purged-history`);
+    check('삭제 화면에 "null" 글자 없음', (await nullTextSpots(s.cdp)).length === 0, (await nullTextSpots(s.cdp)).join(','));
+    await evaluate(s.cdp, 'window.__wu.select(null)');
+    await sleep(150);
+    check('삭제 (나) 숨긴 노드가 더 없으면 개요에 「숨긴 노드」 표시가 사라짐', !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=hidden-count]')")));
+    void delConfirms;
+  }
 
   // ── T-25 백업 권유(R-21 ②): 내보낸 지 8일 + 변경 → 한 줄 → 닫기 → 다시 열어도 숨김 → 「지금 내보내기」 → 사라지고 내보내기 시각 저장 ──
   const reloadApp = async () => {
@@ -1998,6 +2098,118 @@ async function checkBrowser(browser, port) {
   }
   s.cdp.close();
   await close(s);
+
+  // 4) 내용 포함 HTML(CR-13 B): 내려받기 → 새 프로필로 열기(읽기 전용) → 다시 내려받기(왕복) → 내 유니버스로 가져오기
+  {
+    const grabHtml = async (cdp) => {
+      await evaluate(cdp, "(() => { window.__dl = null; window.__blob = null; if (!window.__patched) { window.__patched = true; const orig = URL.createObjectURL; URL.createObjectURL = (b) => { window.__blob = b; return orig.call(URL, b); }; HTMLAnchorElement.prototype.click = function () { window.__dl = this.getAttribute('download'); }; } document.getElementById('import-open').click(); document.querySelector('[data-testid=import-tab-export]').click(); window.__btnBox = (() => { const r = document.querySelector('[data-testid=export-html]').getBoundingClientRect(); return [r.width, r.height]; })(); document.querySelector('[data-testid=export-html]').click(); })()");
+      await sleep(300);
+      const name = await evaluate(cdp, 'window.__dl');
+      const html = await evaluate(cdp, 'window.__blob ? window.__blob.text() : null');
+      const box = await evaluate(cdp, 'window.__btnBox');
+      const note = await text(cdp, '[data-testid=export-html-note]');
+      await shot(cdp, `${browser.name}-30-embed-export-tab`);
+      await evaluate(cdp, "document.getElementById('import-dialog').close()");
+      return { name, html, box, note };
+    };
+    const distHtml = await readFile(join(root, 'dist/index.html'), 'utf8');
+    // 파서가 줄바꿈(CRLF→LF)·태그 사이 공백을 다듬으므로 글자 단위 완전 일치 대신 앱 스크립트·스타일 본문과 라이선스 주석이 같은지 본다
+    const between = (h, a, b) => { const i = h.indexOf(a); return i < 0 ? null : h.slice(i + a.length, h.lastIndexOf(b)); };
+    const sameApp = (h) => { const x = stripEmbed(h); const lf = distHtml.replace(/\r\n/g, '\n'); return between(x, '<script>', '</script>') === between(lf, '<script>', '</script>') && x.includes('Cytoscape.js') && x.startsWith('<!doctype html>\n<!--') && x.includes("connect-src 'none'"); };
+    const embedProfile = `${profile}-embed`;
+    await rm(embedProfile, { recursive: true, force: true });
+    s = await openSession(exe, embedProfile, port);
+    const marker = `내용 포함 점검 ${Date.now() % 10000}`;
+    await submitAdd(s.cdp, 'work', marker);
+    const a1 = await grabHtml(s.cdp);
+    check('CR-13 B 내보내기 탭에 「HTML 파일로 내려받기(내용 포함)」 단추(크기 있음)와 설명 줄', a1.box && a1.box[0] > 0 && a1.box[1] > 0 && a1.note.includes('더블클릭') && a1.note.includes('보낼 사람에게만'), JSON.stringify([a1.box, a1.note]));
+    check('CR-13 B 파일 이름은 이름-ID.html', /-U-A1\.html$/.test(a1.name || ''), a1.name);
+    const embedCount = (a1.html.match(/id="wu-embed"/g) || []).length;
+    check('CR-13 B 내려받은 HTML에 내장 데이터가 하나, 앱 스크립트 앞에 있음', embedCount === 1 && a1.html.indexOf('id="wu-embed"') < a1.html.indexOf('<script>'));
+    check('CR-13 B 내장 데이터를 빼면 원래 dist/index.html과 앱 스크립트 본문이 같음(라이선스 주석·CSP 보존)', sameApp(a1.html), `${stripEmbed(a1.html).length} vs ${distHtml.length}`);
+    await evaluate(s.cdp, "location.hash = 'U-D1'; location.reload()").catch(() => {});
+    await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-D1' && window.__wu.cy.nodes().length > 0", 8000);
+    const d1 = await grabHtml(s.cdp);
+    const d1Embed = readEmbedFromHtml(d1.html);
+    check('CR-13 B 부서 묶음(U-D1): 하위 유니버스 문서까지 한 파일에 들어 감', !!d1Embed && d1Embed.root === 'U-D1' && d1Embed.docs.length >= 3, d1Embed ? d1Embed.docs.map((d) => d.universe.id).join() : 'null');
+    s.cdp.close();
+    await close(s);
+    const fA1 = join(tmp, 'embed-A1.html');
+    const fD1 = join(tmp, 'embed-D1.html');
+    const fBad = join(tmp, 'embed-bad.html');
+    await writeFile(fA1, a1.html);
+    if (process.env.SHOT_DIR) await writeFile(join(process.env.SHOT_DIR, `${browser.name}-embed-A1.html`), a1.html); // 사람이 열어 볼 수 있게 남긴다
+    await writeFile(fD1, d1.html);
+    await writeFile(fBad, a1.html.replace('{"format"', '{깨짐"format"'));
+
+    // 새 프로필로 열기: 시작 화면 없이 바로 그 유니버스, 읽기 전용, 안내 줄, 저장소 안 건드림
+    const viewProfile = `${profile}-embedview`;
+    await rm(viewProfile, { recursive: true, force: true });
+    s = await openSession(exe, viewProfile, port);
+    const openFile = async (file, hash = '') => {
+      await evaluate(s.cdp, `location.href = ${JSON.stringify(pathToFileURL(file).href + '?check' + hash)}`).catch(() => {});
+      await sleep(600);
+      return waitFor(s.cdp, 'window.__wu && window.__wu.doc && window.__wu.cy.nodes().length > 0', 8000);
+    };
+    const bannerInfo = () => evaluate(s.cdp, "(() => { const b = document.getElementById('embed-banner'); const r = b.getBoundingClientRect(); const btn = document.querySelector('[data-testid=embed-import]'); return { hidden: b.hidden, w: r.width, h: r.height, text: b.textContent, btnOff: btn ? btn.disabled : null, hash: location.hash, ro: window.__wu.readOnly, id: window.__wu.doc.universe.id }; })()");
+    check('CR-13 B 내용 포함 파일 열기: 시작 화면 없이 그 유니버스가 보임', await openFile(fA1) && (await evaluate(s.cdp, "window.__wu.doc.universe.id")) === 'U-A1' && !(await evaluate(s.cdp, "document.body.classList.contains('start-mode')")));
+    check('CR-13 B 보낸 쪽에서 추가한 노드가 보임(내용이 들어 있음)', await hasLabel(s.cdp, marker));
+    const b1 = await bannerInfo();
+    check('CR-13 B 읽기 전용 안내 줄(크기 있음)과 「내 유니버스로 가져오기」 단추, 읽기 전용', !b1.hidden && b1.w > 0 && b1.h > 0 && b1.text.includes('이 파일에 담긴 「') && b1.text.includes('읽기 전용') && b1.text.includes('내 유니버스로 가져오기') && b1.btnOff === false && b1.ro === true && b1.hash.startsWith('#embed/'), JSON.stringify(b1));
+    check('CR-13 B 읽기 전용이라 노드 추가가 막힘', (await text(s.cdp, '#add-slot')).includes('읽기 전용'));
+    check('CR-13 B 보기만 했으면 이 브라우저 저장소의 같은 유니버스는 그대로(보낸 노드 없음)', !(await evaluate(s.cdp, `(localStorage.getItem('wu:v1:u:U-A1') || '').includes(${JSON.stringify(marker)})`)));
+    await shot(s.cdp, `${browser.name}-31-embed-view-A1`);
+    // 다시 내려받기(두 번 내보내기 왕복)
+    const a2 = await grabHtml(s.cdp);
+    check('CR-13 B 내용 포함 파일에서 다시 내려받아도 내장 데이터 하나, 빼면 dist와 같음(왕복)', (a2.html.match(/id="wu-embed"/g) || []).length === 1 && sameApp(a2.html) && readEmbedFromHtml(a2.html).docs[0].nodes.some((n) => n.label === marker), `${a2.html ? stripEmbed(a2.html).length : 'null'}`);
+    // 가져오기 → 일반 모드
+    await evaluate(s.cdp, "window.confirm = () => true");
+    await clickTestId(s.cdp, 'embed-import');
+    await sleep(600);
+    const imported1 = await waitFor(s.cdp, `window.__wu && window.__wu.readOnly === false && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().some(n => n.data('label') === ${JSON.stringify(marker)})`, 8000);
+    const b1b = await evaluate(s.cdp, "({ hash: location.hash, banner: document.getElementById('embed-banner').hidden })");
+    check('CR-13 B 「내 유니버스로 가져오기」 → 일반 모드(읽기 전용 아님, 안내 줄 없음)로 열리고 보낸 노드가 있음', imported1 && b1b.banner === true && b1b.hash === '#U-A1', JSON.stringify(b1b));
+    check('CR-13 B 가져온 뒤 저장소에 보낸 노드가 저장됨', await evaluate(s.cdp, `(localStorage.getItem('wu:v1:u:U-A1') || '').includes(${JSON.stringify(marker)})`));
+    check('CR-13 B 일반 모드에서는 노드 추가가 다시 가능', !(await text(s.cdp, '#add-slot')).includes('읽기 전용'));
+    // 묶음
+    check('CR-13 B 부서 묶음 파일 열기: 하위 유니버스까지 보임(고르기 목록에 하위 모두)', await openFile(fD1) && await evaluate(s.cdp, "(() => { const ids = [...document.getElementById('universe-picker').options].map((o) => o.value); return window.__wu.doc.universe.id === 'U-D1' && window.__wu.doc.refs.filter((r) => !r.hidden).every((r) => ids.includes(r.child_universe_id)); })()"));
+    await shot(s.cdp, `${browser.name}-32-embed-view-D1`);
+    await evaluate(s.cdp, "(() => { const p = document.getElementById('universe-picker'); const ids = [...p.options].map((o) => o.value).filter((v) => v !== 'U-D1'); window.__child = window.__wu.doc.refs.find((r) => !r.hidden).child_universe_id; p.value = window.__child; p.dispatchEvent(new Event('change')); })()");
+    await sleep(600);
+    const childOk = await waitFor(s.cdp, 'window.__wu && window.__wu.doc && window.__wu.doc.universe.id !== \'U-D1\' && window.__wu.cy.nodes().length > 0', 8000);
+    const bc = childOk ? await bannerInfo() : null;
+    check('CR-13 B 보기 모드에서 하위 유니버스로 옮겨도 읽기 전용 유지(#embed/ 주소)', !!bc && bc.ro === true && bc.hash.startsWith('#embed/') && !bc.hidden, JSON.stringify(bc));
+    await openFile(fD1);
+    await evaluate(s.cdp, "window.confirm = () => true");
+    await clickTestId(s.cdp, 'embed-import');
+    await sleep(600);
+    check('CR-13 B 묶음 가져오기 → 일반 모드로 열림', await waitFor(s.cdp, "window.__wu && window.__wu.readOnly === false && window.__wu.doc.universe.id === 'U-D1' && location.hash === '#U-D1'", 8000));
+    // 가져오기 취소(덮어쓰기 거절)
+    await openFile(fA1);
+    await evaluate(s.cdp, "window.confirm = () => false");
+    await clickTestId(s.cdp, 'embed-import');
+    await sleep(400);
+    check('CR-13 B 덮어쓰기를 거절하면 그대로 보기 모드에 머물고 취소 안내', (await evaluate(s.cdp, "location.hash.startsWith('#embed/') && window.__wu.readOnly")) && (await text(s.cdp, '[data-testid=embed-message]')).includes('취소'));
+    // 깨진 내장 데이터: 경고만 띄우고 평소처럼(시작 화면)
+    await evaluate(s.cdp, `location.href = ${JSON.stringify(pathToFileURL(fBad).href + '?check')}`).catch(() => {});
+    await sleep(600);
+    const badOk = await waitFor(s.cdp, 'window.__wu && window.__wu.start === true', 8000);
+    check('CR-13 B 내장 데이터가 깨진 파일: 경고만 띄우고 평소처럼 시작 화면이 열림', badOk && (await text(s.cdp, '[data-testid=start-warning]')).includes('깨져 있어'));
+    await shot(s.cdp, `${browser.name}-33-embed-broken`);
+    const errorsE = [...s.log.errors];
+    const externalE = [...s.log.external];
+    check('CR-13 B 내용 포함 파일 점검 중 스크립트 오류·외부 요청 0건', errorsE.length + externalE.length === 0, [...errorsE, ...externalE].join(' | '));
+    s.cdp.close();
+    await close(s);
+    // 저장소를 쓸 수 없으면 가져오기 단추를 막고 이유를 보인다
+    const blockProfile = `${profile}-embedblocked`;
+    await rm(blockProfile, { recursive: true, force: true });
+    s = await openSession(exe, blockProfile, port, { blockStorage: true });
+    check('CR-13 B 저장소 차단: 내용 포함 파일은 보이고 가져오기 단추는 막히고 이유가 보임', await openFile(fA1) && await (async () => { const bi = await bannerInfo(); return bi.btnOff === true && bi.text.includes('저장소를 쓸 수 없어') && bi.ro === true; })());
+    await shot(s.cdp, `${browser.name}-34-embed-blocked`);
+    s.cdp.close();
+    await close(s);
+  }
 
   return { browser: browser.name, version, exe, checks };
 }

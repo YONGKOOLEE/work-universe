@@ -31,7 +31,7 @@ export function periodText(period, asOf = null) {
 const STATUS_LABEL = { current: '현재', ended: '종료', scheduled: '예정' };
 
 /** 문장·근거 칩에 쓰는 노드 이름. 숨긴 노드는 표시를 붙인다(4절 "숨김 후 참조"). 초안·이력 문장·근거 칩이 모두 이것을 쓴다(검토5 C-2) */
-export const displayName = (node) => (node.hidden ? `${node.label}(숨김 처리된 노드)` : node.label);
+export const displayName = (node) => (node.deleted ? '(삭제된 노드)' : node.hidden ?`${node.label}(숨김 처리된 노드)` : node.label);
 
 /** 이름에 띄어쓰기 없이 긴 낱말(10자 이상)이 있는가. 그래프가 그런 이름만 글자 단위로 줄바꿈한다(화면 점검 S-3, 재검증) */
 export const hasLongWord = (label, max = 9) => String(label || '').split(/\s+/).some((w) => w.length > max);
@@ -80,11 +80,14 @@ export function eventText(view, ev) {
         return `통합 확인 — ${raw(ev.link.a)} · ${raw(ev.link.b)}: ${word}${ev.link.method === 'emp_no_auto' ? '(사번 자동)' : ''}`;
       }
       if (ev.type === 'created') return '생성';
+      // 완전히 삭제(CR-13 D): 지운 필드 이름만 남기고 값은 남기지 않는다
+      if (p.after && p.after.deleted === true) return `완전히 삭제(내용 지움${Array.isArray(p.cleared_fields) ? `: ${p.cleared_fields.map((k) => FIELD_NAMES[k] || k).join(', ')}` : ''})`;
       // 숨긴 노드·연결을 되살림(R-21): updated의 hidden true → false
       if (p.before && p.before.hidden === true && p.after && p.after.hidden === false && Object.keys(p.after).length === 1) return '되살림(숨김 해제)';
       {
         const keys = Object.keys(p.after || {});
         const changes = keys.map((k) => `${FIELD_NAMES[k] || k}: ${fieldValue(p.before && p.before[k])} → ${fieldValue(p.after[k])}`);
+        if (!changes.length && (ev.payload && ev.payload.cleared)) return '수정(내용 지움)';
         return `수정 — ${changes.join(', ') || '변경 내용 없음'}`;
       }
     case 'hidden':
@@ -163,7 +166,7 @@ export function describeNode(view, gid, { asOf = null, past = false } = {}) {
     after: !!asOf && ev.occurred_at > asOf,
   }));
 
-  return { found: true, gid: node.gid, title: node.label, core_type: node.core_type, hidden, rows, links, no_links: links.length === 0, history };
+  return { found: true, gid: node.gid, title: node.label, core_type: node.core_type, hidden, deleted: !!node.deleted, rows, links, no_links: links.length === 0, history };
 }
 
 /** 노드를 고르지 않았을 때 보여 줄 유니버스 개요. */

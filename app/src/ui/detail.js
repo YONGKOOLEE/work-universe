@@ -43,7 +43,7 @@ export function renderNodeDetail(panel, d, { onFocus, extra = null, toolbar = nu
   }
   panel.append(el('h2', {}, d.title));
   if (toolbar) panel.append(toolbar);
-  if (d.hidden) panel.append(el('p', { class: 'notice', 'data-testid': 'hidden-note' }, '숨김 처리된 노드입니다. 내용과 이력은 유지됩니다.'));
+  if (d.hidden) panel.append(el('p', { class: 'notice', 'data-testid': 'hidden-note' }, d.deleted ? '완전히 삭제된 노드입니다. 내용은 지워졌고, 이 노드를 언급한 이력만 남아 있습니다.' : '숨김 처리된 노드입니다. 내용과 이력은 유지됩니다.'));
 
   const dl = el('dl', { 'data-testid': 'attrs' });
   for (const r of d.rows) dl.append(el('dt', {}, r.label), el('dd', {}, r.value));

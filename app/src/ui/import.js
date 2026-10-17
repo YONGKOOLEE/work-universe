@@ -268,7 +268,9 @@ export function importDialog(o) {
     const exportBody = () => el('div', { class: 'editor' },
       el('p', { class: 'muted small' }, '지금 연 유니버스를 JSON 파일로 내려받습니다. 다른 PC에서 「JSON 파일」 탭으로 열면 그대로 이어서 쓸 수 있습니다. 브라우저 저장은 이 PC에만 남으므로, 시연 전후에 내려받아 두면 안전합니다.'),
       el('dl', {}, el('dt', {}, '유니버스'), el('dd', { 'data-testid': 'export-name' }, `${u.name} (${u.level})`), el('dt', {}, '파일 이름'), el('dd', {}, exportFileName(u))),
-      el('div', { class: 'row' }, el('button', { type: 'button', class: 'primary', 'data-testid': 'export-download', onclick: () => o.onExport() }, 'JSON 파일로 내려받기')));
+      el('div', { class: 'row' }, el('button', { type: 'button', class: 'primary', 'data-testid': 'export-download', onclick: () => o.onExport() }, 'JSON 파일로 내려받기'),
+        o.onExportHtml ? el('button', { type: 'button', 'data-testid': 'export-html', onclick: (e) => o.onExportHtml(e.currentTarget) }, 'HTML 파일로 내려받기(내용 포함)') : null),
+      o.onExportHtml ? el('p', { class: 'muted small', 'data-testid': 'export-html-note' }, '받는 사람은 이 파일 하나를 더블클릭하면 이 유니버스를 바로 볼 수 있습니다. 내용이 파일에 들어 있으니 보낼 사람에게만 주세요.') : null);
     const body = st.tab === 'export' ? exportBody() : st.tab === 'doc'
       ? el('div', { class: 'editor' },
         el('p', { class: 'muted small' }, '업무정의서 같은 문서를 붙여 넣으면 제목(#)·표·번호 목록을 규칙으로 읽어 유니버스 초벌을 만듭니다. 업무 흐름은 절차 속성으로, 요건·예외 같은 절은 주제 하나로 묶어 노드를 10~20개 정도로 만듭니다(월말 정산 수준).'),
@@ -312,7 +314,7 @@ export function importDialog(o) {
   };
 }
 
-/** 내보내기 파일 이름: 이름-ID.json(파일 이름에 못 쓰는 글자는 _) */
+/** 내보내기 파일 이름: 이름-ID.json(파일 이름에 못 쓰는 글자는 _). 내용 포함 HTML은 확장자만 .html(view/embed.js embedFileName) */
 export function exportFileName(universe) {
   return `${String(universe.name).replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 60)}-${universe.id}.json`;
 }
