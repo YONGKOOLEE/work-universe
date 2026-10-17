@@ -35,7 +35,7 @@ export function startScreen(o) {
   return el('div', { class: 'start-inner' },
     el('header', { class: 'start-hero' },
       el('h1', {}, '업무 ', el('b', {}, 'UNIVERSE')),
-      el('p', { class: 'lead' }, '업무 하나하나를 지도처럼 그려, 누가 무엇을 해 왔는지 한눈에 보고 인수인계를 돕는 도구입니다.'),
+      el('p', { class: 'lead' }, '흩어진 업무 지식을 업무별 지도로 모아, 누가 무엇을 어떻게 해 왔는지 찾아보고 인수인계 초안과 인사이트(비슷한 경험자·일 쏠림·빈 자리)를 근거와 함께 얻는 도구입니다.'),
       o.warnings.length ? el('p', { class: 'notice', 'data-testid': 'start-warning' }, o.warnings.join(' ')) : null,
       el('div', { class: 'row' },
         recommended ? el('button', { type: 'button', class: 'primary big', 'data-testid': 'start-primary', onclick: () => o.onOpen(recommended.id) }, `샘플 바로 열기: ${recommended.name}`) : null,

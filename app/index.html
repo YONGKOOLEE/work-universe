@@ -124,6 +124,7 @@
   .field { display: grid; gap: 4px; }
   [hidden] { display: none !important; } /* .field 같은 display 규칙이 hidden 속성을 이기지 않게(업무 양식에 사번 칸이 보이던 결함, 여섯 번째 검토 U-1) */
   .field > span { color: var(--muted); font-size: 13px; }
+  .link-group, .link-detail { display: grid; gap: 8px; min-width: 0; } /* 노드 추가 양식의 「함께 이을 노드」 묶음 */
   textarea { font: inherit; padding: 6px 8px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; resize: vertical; }
   .attr-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; margin-bottom: 6px; }
   .attr-row input { min-width: 0; }

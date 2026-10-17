@@ -1,7 +1,7 @@
 // 명령 흐름 조립과 현재 상태(12.7 app). 화면은 이 객체만 호출한다.
 
 import {
-  addAssignment, addEdge, addEvent, addNode, applyBatch, addRef, addSubtype, createUniverse, decideIdentity, hideEdge, hideNode, hideRef, restoreNode, updateEdge, updateNode,
+  addAssignment, addEdge, addEvent, addNode, applyBatch, addRef, addSubtype, createUniverse, decideIdentity, hideEdge, hideNode, hideRef, replaceEdge, restoreNode, updateEdge, updateNode,
 } from '../model/commands.js';
 import { CODES, DRAFT_TARGET_TYPES, SUBTYPE_HANDOVER_DOC, TEXT_MAX, normalizeLabel } from '../model/schema.js';
 import { validateDocument } from '../model/validate.js';
@@ -227,6 +227,10 @@ export function createApp({ store, samples, currentId, now, authorName }) {
     },
     updateEdge(edgeId, changes) {
       return guard() || commit(updateEdge(doc, edgeId, changes, { now: now() }));
+    },
+    /** 연결의 관계·상대를 바꾼다: 옛 연결 숨김 + 새 연결 생성을 저장 1회로(전부 아니면 전무) */
+    replaceEdge(edgeId, input) {
+      return guard() || commit(replaceEdge(doc, edgeId, input, { now: now() }));
     },
     hideEdge(edgeId) {
       return guard() || commit(hideEdge(doc, edgeId, { now: now() }));

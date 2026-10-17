@@ -313,6 +313,21 @@ export function hideEdge(doc, edgeId, ctx) {
   };
 }
 
+/**
+ * 연결의 관계·상대(양 끝)를 바꾼다: 옛 연결을 숨기고(hideEdge) 새 연결을 만든다(addEdge). 하나라도 실패하면 문서 그대로.
+ * 지우지 않는 원칙(D-04)에 따라 이력에는 숨김과 생성 이벤트가 둘 다 남는다. 옛 연결을 숨긴 문서에서 새 연결을 검사하므로
+ * 같은 끝·관계로 다시 만들 때 옛 연결과 중복이 되지 않는다.
+ * @param {{source:string, target:string, core_type:string, subtype?:string, period?:object, note?:string}} input 새 연결 내용
+ * @returns {{ok:true, doc:object, edge:object, hidden:object, events:object[]} | {ok:false, error:object}}
+ */
+export function replaceEdge(doc, edgeId, input, ctx) {
+  const h = hideEdge(doc, edgeId, ctx);
+  if (!h.ok) return h;
+  const a = addEdge(h.doc, input, ctx);
+  if (!a.ok) return { ok: false, error: a.error };
+  return { ok: true, doc: a.doc, edge: a.edge, hidden: h.edge, event: a.event, events: [h.event, a.event].filter(Boolean) };
+}
+
 // ── 이벤트 ──────────────────────────────────────────────────────────────
 
 /**
@@ -506,10 +521,14 @@ export function decideIdentity(doc, input, ctx) {
  * 노드 추가·수정 명령 여러 개를 차례로 적용한다. 전부 아니면 전무: 하나라도 실패하면 원래 문서를 그대로 두고
  * 실패한 행을 모두 돌려준다(고칠 곳을 한꺼번에 보이려고 실패한 행은 건너뛰고 끝까지 검사한다).
  * 같은 묶음 안의 앞 행은 뒤 행의 중복 검사에 반영된다(표 안 같은 이름 → E-DUP, with_row로 앞 행 번호).
+ * addEdge의 source·target에는 노드 id 또는 같은 묶음 안에서 앞서 만든 노드를 가리키는 표식 '@<행번호>'(예: '@1')를 쓸 수 있다.
+ * 행 번호는 그 addNode 행의 row(없으면 1부터 순서). 앞 행이 아니거나 노드를 만들지 않은 행을 가리키면 E-SCHEMA(bad_ref).
+ * 앞 행이 실패했으면 그 행의 오류만 보고하고 이 연결 행은 건너뛴다. 연결 검증은 addEdge 그대로(허용 조합·중복·숨김).
  * @param {object} doc
  * @param {Array<
  *   {op:'addNode', row?:number, input:object, attachRoot?:boolean} |
  *   {op:'updateNode', row?:number, id:string, changes:object} |
+ *   {op:'addEdge', row?:number, input:{source:string, target:string, core_type:string, subtype?:string, period?:object, note?:string}} |
  *   {op:'invalid', row?:number, error:{code:string}}
  * >} ops row는 화면의 행 번호(없으면 1부터 순서)
  * @param {{now:string, random?:()=>number, source?:string, occurred_at?:string}} ctx
@@ -534,16 +553,21 @@ export function applyBatch(doc, ops, ctx) {
   const errors = [];
   const rows = [];
   const createdRow = new Map(); // 묶음 안에서 만든 노드 id → 행 번호
+  const rowNode = new Map(); // 행 번호 → 그 행에서 만든 노드 id ('@행번호' 표식 해석용)
+  const failedRows = new Set(); // 실패한 행 번호(그 행을 가리키는 연결은 건너뜀)
+  const createdEdges = [];
 
   ops.forEach((op, i) => {
     const row = op.row ?? i + 1;
     if (op.op === 'invalid') {
+      failedRows.add(row);
       errors.push({ row, error: op.error });
       return;
     }
     if (op.op === 'addNode') {
       const r = addNode(work, op.input, ctx);
       if (!r.ok) {
+        failedRows.add(row);
         const error = { ...r.error };
         if (error.existing_id && createdRow.has(error.existing_id)) error.with_row = createdRow.get(error.existing_id);
         errors.push({ row, error });
@@ -554,6 +578,7 @@ export function applyBatch(doc, ops, ctx) {
       if (op.attachRoot) {
         const e = addEdge(next, { source: rootId, target: r.node.id, core_type: 'contains' }, ctx);
         if (!e.ok) {
+          failedRows.add(row);
           errors.push({ row, error: e.error });
           return;
         }
@@ -565,12 +590,14 @@ export function applyBatch(doc, ops, ctx) {
       created.push(r.node);
       warnings.push(...r.warnings);
       createdRow.set(r.node.id, row);
+      rowNode.set(row, r.node.id);
       rows.push({ row, kind: 'created', node: r.node });
       return;
     }
     if (op.op === 'updateNode') {
       const r = updateNode(work, op.id, op.changes, ctx);
       if (!r.ok) {
+        failedRows.add(row);
         errors.push({ row, error: r.error });
         return;
       }
@@ -583,11 +610,43 @@ export function applyBatch(doc, ops, ctx) {
       rows.push({ row, kind: r.event ? 'updated' : 'unchanged', node: r.node });
       return;
     }
+    if (op.op === 'addEdge') {
+      const input = { ...(op.input || {}) };
+      let skip = false;
+      for (const k of ['source', 'target']) {
+        const m = typeof input[k] === 'string' ? /^@(\d+)$/.exec(input[k]) : null;
+        if (!m) continue;
+        const ref = Number(m[1]);
+        if (rowNode.has(ref)) input[k] = rowNode.get(ref);
+        else if (failedRows.has(ref)) skip = true; // 앞 행의 오류가 이미 보고된다
+        else {
+          failedRows.add(row);
+          errors.push({ row, error: { code: CODES.SCHEMA, field: k, bad_ref: ref } });
+          return;
+        }
+      }
+      if (skip) {
+        failedRows.add(row);
+        return;
+      }
+      const r = addEdge(work, input, ctx);
+      if (!r.ok) {
+        failedRows.add(row);
+        errors.push({ row, error: r.error });
+        return;
+      }
+      work = r.doc;
+      events.push(r.event);
+      createdEdges.push(r.edge);
+      rows.push({ row, kind: 'edge', edge: r.edge });
+      return;
+    }
+    failedRows.add(row);
     errors.push({ row, error: { code: CODES.SCHEMA, field: 'op' } });
   });
 
   if (errors.length) return { ok: false, doc, errors, error: errors[0].error };
-  return { ok: true, doc: work, events, created, updated, warnings, rows };
+  return { ok: true, doc: work, events, created, updated, edges: createdEdges, warnings, rows };
 }
 
 // ── 담당 이력과 수행 연결(02-design 3절: 담당 시작·종료는 수행 연결이 생기거나 끝날 때 남는다) ──

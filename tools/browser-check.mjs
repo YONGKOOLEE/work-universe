@@ -13,7 +13,7 @@ import { SAMPLES } from '../app/data/index.js';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 // PAGE를 주면 그 파일을 점검한다(T-15: 제출 압축을 푼 index.html)
 const pageUrl = `${pathToFileURL(process.env.PAGE || join(root, 'dist/index.html')).href}?check`; // ?check: 점검용 전역(window.__wu)을 켠다
-const tmp = join(root, '.tmp/browser-check');
+const tmp = process.env.CHECK_TMP || join(root, '.tmp/browser-check'); // 다른 작업과 겹치지 않게 임시 프로필 폴더·포트를 바꿀 수 있다(CHECK_TMP, CHECK_PORT)
 
 const BROWSERS = [
   { name: 'Chrome', paths: ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe'] },
@@ -587,7 +587,7 @@ async function checkBrowser(browser, port) {
     const startText = await text(s.cdp, '#start-screen');
     // 눌러지는 것과 눈에 보이는 것은 다르다: 핵심 요소가 실제로 화면에 그려지는지(크기가 있는지) 확인한다
     check('R-08 시작 화면의 제목·설명·추천 버튼이 실제로 보임', await evaluate(s.cdp, "['.start-hero h1', '.start-hero .lead', '[data-testid=start-primary]', '[data-testid=start-create]'].every((q) => { const r = document.querySelector(q).getBoundingClientRect(); return r.width > 0 && r.height > 0; })"));
-    check('R-08 시작 화면에 이게 무엇인지 한 줄 설명과 가상 데이터 안내', startText.includes('누가 무엇을 해 왔는지 한눈에 보고 인수인계를 돕는 도구') && startText.includes('모든 이름과 데이터는 가상'));
+    check('R-08 시작 화면에 이게 무엇인지 한 줄 설명과 가상 데이터 안내', startText.includes('흩어진 업무 지식을 업무별 지도로 모아') && startText.includes('인수인계 초안과 인사이트(비슷한 경험자·일 쏠림·빈 자리)를 근거와 함께 얻는 도구') &&startText.includes('모든 이름과 데이터는 가상'));
     check('R-08 "처음이라면 이 순서로" 4단계 안내', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=start-steps] li').length")) === 4);
     check(`샘플 카드 ${SAMPLES.length}개(내장 샘플 전부)와 추천(월말 정산) 표시, 내 유니버스 안내`, (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=start-samples] .card').length")) === SAMPLES.length && (await evaluate(s.cdp, "document.querySelector('[data-testid=card-U-A1]').classList.contains('recommended')")) && !!(await evaluate(s.cdp, "!!document.querySelector('[data-testid=start-mine], [data-testid=start-mine-empty]')")));
     check('시작 화면에 "null" 글자 없음', await evaluate(s.cdp, "(() => { const w = document.createTreeWalker(document.getElementById('start-screen'), NodeFilter.SHOW_TEXT); while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') return false; return true; })()"));
@@ -1462,6 +1462,71 @@ async function checkBrowser(browser, port) {
   await evaluate(s.cdp, 'window.__wu.select(null)');
   await sleep(150);
   check('R7-5: 개요에 용어 한 줄(유니버스·노드·꼭지)', (await text(s.cdp, '[data-testid=term-note]')).includes('꼭지'));
+  // ── 사용자 화면 확인 의견 2026-10-17: 노드 추가 때 함께 이을 노드, 연결 수정에서 관계·상대 바꾸기 ──
+  await s.cdp.send('Emulation.setDeviceMetricsOverride', { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false });
+  await evaluate(s.cdp, "window.confirm = () => true; window.__wu.select(null)");
+  await sleep(200);
+  const fb17Form = (fields) => evaluate(s.cdp, `(() => {
+    const slot = document.getElementById('add-slot');
+    const set = (id, v) => { const e = slot.querySelector('[data-testid=' + id + ']'); if (!e) return false; if (id === 'node-link-other') e.dispatchEvent(new Event('focus')); e.value = v; e.dispatchEvent(new Event('change')); return true; };
+    const f = ${JSON.stringify(fields)};
+    for (const [k, v] of Object.entries(f)) if (!set(k, v)) return 'missing ' + k;
+    return 'ok';
+  })()`);
+  const fb17Submit = () => evaluate(s.cdp, "document.getElementById('add-slot').querySelector('button[type=submit]').click()");
+  const fb17Msg = () => evaluate(s.cdp, "(() => { const m = document.querySelector('#add-slot [data-testid=form-message]'); return m ? { code: m.dataset.code || '', text: m.textContent } : null; })()");
+  const fb17Counts = () => evaluate(s.cdp, "({ nodes: window.__wu.doc.nodes.length, edges: window.__wu.doc.edges.length })");
+  check('노드 추가 양식에 「함께 이을 노드(선택)」 칸이 보임(크기 있음), 비워 두면 관계·방향 칸은 숨음', await evaluate(s.cdp, "(() => { const o = document.querySelector('#add-slot [data-testid=node-link-other]'); const d = document.querySelector('#add-slot .link-detail'); const r = o.getBoundingClientRect(); return r.width > 0 && r.height > 0 && d.hidden; })()"));
+  const fb17Before = await fb17Counts();
+  const fb17Reveal = () => evaluate(s.cdp, "(() => { const slot = document.getElementById('add-slot'); const d = slot.closest('details'); if (d) d.open = true; slot.scrollIntoView({ block: 'end' }); })()");
+  await fb17Reveal();
+  await sleep(150);
+  // 사람이 업무를 고르면 관계가 「수행」, 방향이 새 노드 → 상대로 자동 추천된다
+  await fb17Form({ 'node-type': 'person', 'node-label': '시험 담당자', 'node-link-other': 'N-001' });
+  const fb17Auto = await evaluate(s.cdp, "(() => { const q = (id) => document.querySelector('#add-slot [data-testid=' + id + ']'); return { rel: q('node-link-type').value, dir: q('node-link-direction').value, shown: !document.querySelector('#add-slot .link-detail').hidden }; })()");
+  check('함께 이을 노드로 업무를 고르면 관계 수행·방향 새 노드 → 상대가 추천되고 칸이 보임', fb17Auto.rel === 'performs' && fb17Auto.dir === 'out' && fb17Auto.shown, JSON.stringify(fb17Auto));
+  await fb17Reveal();
+  await sleep(100);
+  await shot(s.cdp, `${browser.name}-fb17-a-node-add-link`);
+  // 허용되지 않는 조합(산출물 → 업무 수행): 저장 전에 사유를 보이고 아무것도 저장하지 않는다
+  await fb17Form({ 'node-type': 'artifact', 'node-label': '시험 산출물', 'node-link-other': 'N-001', 'node-link-type': 'performs' });
+  await fb17Submit();
+  await sleep(200);
+  const fb17Pair = await fb17Msg();
+  const fb17After1 = await fb17Counts();
+  check('오류: 허용되지 않는 조합으로 함께 잇기 → E-PAIR 사유, 노드·연결 모두 저장 안 됨', !!fb17Pair && fb17Pair.code === 'E-PAIR' && fb17Pair.text.includes('사람 → 업무') && fb17After1.nodes === fb17Before.nodes && fb17After1.edges === fb17Before.edges, JSON.stringify([fb17Pair, fb17After1]));
+  await fb17Reveal();
+  await sleep(100);
+  await shot(s.cdp, `${browser.name}-fb17-b-node-add-pair-error`);
+  // 정상: 사람 → 업무 수행으로 한 번에 저장
+  await fb17Form({ 'node-type': 'person', 'node-label': '시험 담당자', 'node-link-other': 'N-001' });
+  await fb17Submit();
+  await sleep(300);
+  const fb17Saved = await evaluate(s.cdp, "(() => { const d = window.__wu.doc; const n = d.nodes.find((x) => x.label === '시험 담당자'); const e = n && d.edges.find((x) => x.source === n.id && x.target === 'N-001' && x.core_type === 'performs' && !x.hidden); const ev = n ? d.events.filter((x) => x.payload && (x.payload.target_id === n.id || (e && x.payload.target_id === e.id))).length : 0; return { id: n && n.id, edge: !!e, events: ev, drawn: !!n && !window.__wu.cy.getElementById('U-A1/' + n.id).empty() && window.__wu.cy.edges().some((x) => x.data('source') === 'U-A1/' + n.id && x.data('target') === 'U-A1/N-001') }; })()");
+  check('함께 이을 노드를 골라 추가 → 노드와 수행 연결이 한 번에 생기고 그래프에 그려짐(이력 둘)', !!fb17Saved.id && fb17Saved.edge && fb17Saved.events === 2 && fb17Saved.drawn, JSON.stringify([fb17Saved, await fb17Msg()]));
+  // 연결 수정: 관계를 수행 → 참조로 바꾸면 옛 연결은 목록에서 사라지고 새 관계로 보인다
+  await evaluate(s.cdp, `window.__wu.select('U-A1/${fb17Saved.id}')`);
+  await sleep(250);
+  const fb17Btn = await evaluate(s.cdp, "(() => { const b = document.querySelector('#detail .link-tools button'); return b ? { text: b.textContent, title: b.title } : null; })()");
+  check('연결 줄 「수정」 단추의 title이 관계·상대·기간·메모 고치기', !!fb17Btn && fb17Btn.text === '수정' && fb17Btn.title === '관계·상대·기간·메모 고치기', JSON.stringify(fb17Btn));
+  await evaluate(s.cdp, "document.querySelector('#detail .link-tools button').click()");
+  await sleep(200);
+  const fb17Edit = await evaluate(s.cdp, "(() => { const f = document.querySelector('#detail [data-testid=edge-edit-form]'); if (!f) return null; const q = (id) => f.querySelector('[data-testid=' + id + ']'); const r = q('edge-edit-type').getBoundingClientRect(); return { rel: q('edge-edit-type').value, other: q('edge-edit-other').value, dir: q('edge-edit-direction').value, hint: q('edge-edit-hint').textContent, size: r.width > 0 && r.height > 0 }; })()");
+  check('연결 수정 양식에 관계·방향·상대 칸이 현재 값으로 채워지고 안내 한 줄이 보임', !!fb17Edit && fb17Edit.rel === 'performs' && fb17Edit.other === 'N-001' && fb17Edit.dir === 'out' && fb17Edit.size && fb17Edit.hint.includes('옛 연결은 숨기고(기록은 남음) 새 연결을 만듭니다'), JSON.stringify(fb17Edit));
+  await shot(s.cdp, `${browser.name}-fb17-c-edge-edit`);
+  // 오류: 허용되지 않는 관계(산출) → E-PAIR, 연결은 그대로
+  await fillPanelForm(s.cdp, { 'edge-edit-type': 'produces' });
+  await sleep(200);
+  const fb17EditErr = await panelMessage(s.cdp);
+  check('오류: 연결 수정에서 허용되지 않는 관계로 바꾸면 E-PAIR, 옛 연결이 그대로', !!fb17EditErr && fb17EditErr.code === 'E-PAIR' && (await evaluate(s.cdp, `window.__wu.doc.edges.filter((e) => e.source === '${fb17Saved.id}' && !e.hidden).length`)) === 1, JSON.stringify(fb17EditErr));
+  const fb17Ev0 = await evaluate(s.cdp, 'window.__wu.doc.events.length');
+  await fillPanelForm(s.cdp, { 'edge-edit-type': 'references' });
+  await sleep(300);
+  const fb17Links = await text(s.cdp, '#detail [data-testid=links]');
+  const fb17Edges = await evaluate(s.cdp, `window.__wu.doc.edges.filter((e) => e.source === '${fb17Saved.id}').map((e) => e.core_type + ':' + e.hidden)`);
+  check('연결 수정에서 관계를 바꾸면 옛 연결(수행)은 목록에서 사라지고 새 관계(참조)로 보이며 이력 둘(숨김·생성)', fb17Links.includes('참조') && !fb17Links.includes('수행') && fb17Edges.join() === 'performs:true,references:false' && (await evaluate(s.cdp, 'window.__wu.doc.events.length')) === fb17Ev0 + 2, JSON.stringify([fb17Links.slice(0, 80), fb17Edges]));
+  await shot(s.cdp, `${browser.name}-fb17-d-edge-replaced`);
+  await s.cdp.send('Emulation.clearDeviceMetricsOverride');
   // ── R-03 ③ 초안 확정(CR-8): 초기화한 깨끗한 월말 정산에서 확정 → 인수인계서·이력 → 다음 초안의 이전 인수인계 근거 ──
   await evaluate(s.cdp, "window.confirm = () => true; window.__wu.select(null)");
   await clickTestId(s.cdp, 'btn-draft-universe');
@@ -1944,7 +2009,7 @@ if (!existsSync(join(root, 'dist/index.html'))) {
 }
 console.log(`대상: ${pageUrl}\n점검일: ${new Date().toISOString()}\n`);
 let failed = 0;
-let port = 9333;
+let port = Number(process.env.CHECK_PORT) || 9333;
 for (const b of pickBrowsers(BROWSERS)) { // --only=chrome 이면 Chrome만(평소 수정). 제출 점검은 둘 다
   const r = await checkBrowser(b, port++);
   if (r.skipped) { console.log(`## ${r.browser}: 건너뜀(${r.skipped})\n`); continue; }

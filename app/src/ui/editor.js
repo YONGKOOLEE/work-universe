@@ -2,7 +2,7 @@
 // 양식은 값을 모아 onSubmit(values)을 부르고, 돌려받은 결과({ok, error})로 오류 사유를 보여 준다.
 // 저장·검증은 app → model이 한다. 여기서는 입력과 표시만 한다.
 
-import { EDGE_TYPES, MEMO_CATEGORIES, NODE_TYPES, allowedRelations } from '../model/schema.js';
+import { EDGE_TYPES, MEMO_CATEGORIES, NODE_TYPES, allowedRelations, pairAllowed } from '../model/schema.js';
 import { el } from './dom.js';
 import { messageFor } from './messages.js';
 import { todayLocal } from './time.js';
@@ -63,6 +63,22 @@ function select(options, value, attrs = {}) {
 function nodeOptions(nodes, { empty } = {}) {
   const opts = nodes.map((n) => [n.id, `${n.label} (${n.type_label})`]);
   return empty ? [['', empty], ...opts] : opts;
+}
+
+// 두 노드 유형 사이에 기본으로 권할 관계와 방향. a → b가 되면 out, b → a면 in. 쓸 수 있는 관계가 없으면 null
+const RELATION_PREFERENCE = ['performs', 'produces', 'belongs_to', 'relates_to', 'references', 'precedes', 'contains'];
+function suggestRelation(aType, bType) {
+  const ok = allowedRelations(aType, bType);
+  for (const relation of RELATION_PREFERENCE) {
+    const x = ok.find((y) => y.relation === relation);
+    if (x) return { relation, out: x.forward };
+  }
+  return null;
+}
+
+// E-PAIR 안내에 쓸 문맥: 고른 두 노드와 그 사이에 쓸 수 있는 관계
+function pairContext(relation, s, t) {
+  return { kind: 'edge', relation, source: s, target: t, suggestions: allowedRelations(s.core_type, t.core_type) };
 }
 
 // 오류·성공 메시지 영역. 중복이면 기존 노드로 가는 링크를 붙인다
@@ -164,6 +180,39 @@ export function nodeForm(o) {
   const attachField = el('label', { class: 'check' }, attach, ' 유니버스의 중심 노드(꼭지)에 바로 연결하기');
   if (o.mode === 'add') type.addEventListener('change', () => { attach.checked = type.value === 'work'; });
 
+  // 추가할 때만(선택): 상대 노드를 골라 노드와 연결을 한 번에 저장한다. 비워 두면 연결 없이 노드만 추가한다
+  const link = o.mode === 'add' && o.getCandidates ? linkFields() : null;
+  function linkFields() {
+    const other = select([['', '(연결하지 않음)']], '', { 'data-testid': 'node-link-other' });
+    const relation = select(Object.entries(EDGE_TYPES), 'relates_to', { 'data-testid': 'node-link-type' });
+    const direction = select([['out', '새 노드 → 상대'], ['in', '상대 → 새 노드']], 'out', { 'data-testid': 'node-link-direction' });
+    const detail = el('div', { class: 'link-detail', hidden: true }, field('관계', relation), field('방향', direction));
+    const candidates = () => o.getCandidates();
+    const fill = () => {
+      const keep = other.value;
+      const list = candidates();
+      other.replaceChildren(...nodeOptions(list, { empty: '(연결하지 않음)' }).map(([v, t]) => el('option', { value: v, selected: v === keep }, t)));
+      if (!list.some((n) => n.id === keep)) other.value = '';
+    };
+    const sync = () => {
+      detail.hidden = !other.value;
+      if (!other.value) return; // 상대나 새 노드 유형이 바뀔 때마다 알맞은 관계·방향을 다시 추천한다(직접 고르는 것은 그 뒤에)
+      const t = candidates().find((n) => n.id === other.value);
+      const sug = t && suggestRelation(type.value, t.core_type);
+      if (sug) {
+        relation.value = sug.relation;
+        direction.value = sug.out ? 'out' : 'in';
+      }
+    };
+    other.addEventListener('focus', fill);
+    other.addEventListener('change', sync);
+    type.addEventListener('change', sync);
+    fill();
+    const box = el('div', { class: 'link-group', 'data-testid': 'node-link' }, field('함께 이을 노드(선택)', other), detail,
+      el('p', { class: 'muted small' }, '노드를 고르면 추가와 연결이 한 번에 저장됩니다. 연결할 수 없는 조합이면 저장하기 전에 알려 드립니다.'));
+    return { el: box, other, relation, direction, candidates };
+  }
+
   const msg = messageBox();
   const form = el(
     'form',
@@ -178,6 +227,7 @@ export function nodeForm(o) {
     field('속성', attrs.el),
     field('기간(선택)', period.el),
     o.mode === 'add' ? attachField : null,
+    link ? link.el : null,
     msg.box,
     actions(o.mode === 'add' ? '추가' : '저장', o.onCancel),
   );
@@ -196,8 +246,30 @@ export function nodeForm(o) {
     };
     if (isRoot) delete values.label;
     if (o.mode === 'add') values.attach_root = attach.checked;
+    let ctx = { kind: 'node' };
+    if (link && link.other.value) {
+      const out = link.direction.value === 'out';
+      values.link = { other_id: link.other.value, core_type: link.relation.value, out };
+      // 허용되지 않는 조합은 저장하기 전에 사유를 보인다(새 노드 이름이 비어 있으면 이름 오류가 먼저 나가도록 건너뜀)
+      const t = link.candidates().find((n) => n.id === link.other.value);
+      if (t && values.label !== undefined && String(values.label).trim()) {
+        const fresh = { id: '@new', label: String(values.label).trim(), core_type: type.value };
+        const s = out ? fresh : t;
+        const d = out ? t : fresh;
+        if (!pairAllowed(values.link.core_type, s.core_type, d.core_type)) {
+          return msg.show({ ok: false, error: { code: 'E-PAIR' } }, pairContext(values.link.core_type, s, d));
+        }
+      }
+    }
     const result = o.onSubmit(values);
-    msg.show(result, { kind: 'node' }, o.onFocusLocal);
+    // 연결 쪽에서 난 오류면 연결 문구로 보인다
+    if (!result.ok && result.edge_error && link) {
+      const t = link.candidates().find((n) => n.id === link.other.value);
+      const out = link.direction.value === 'out';
+      const fresh = { id: '@new', label: String(values.label || '').trim(), core_type: type.value };
+      ctx = t ? pairContext(link.relation.value, out ? fresh : t, out ? t : fresh) : { kind: 'edge', relation: link.relation.value };
+    }
+    msg.show(result, ctx, o.onFocusLocal);
   });
   return form;
 }
@@ -254,15 +326,32 @@ export function edgeForm(o) {
   return form;
 }
 
-/** 연결 수정 양식(기간·메모). 양 끝과 관계는 바꿀 수 없다. */
+/**
+ * 연결 수정 양식. 기간·메모는 그 자리에서 고치고, 관계나 상대(방향)를 바꾸면 옛 연결을 숨기고 새 연결을 만든다(한 번의 저장).
+ * onSubmit({period, note}) 또는 관계·상대가 바뀌면 onSubmit({replace:true, input:{source, target, core_type, subtype?, period?, note?}})
+ * @param {{edge:object, node:object, candidates:object[], title:string, onSubmit:(values)=>object, onCancel:()=>void}} o node는 지금 고른(연결의 한쪽 끝) 노드
+ */
 export function edgeEditForm(o) {
+  const focalIsTarget = o.edge.target === o.node.id && o.edge.source !== o.node.id;
+  const otherId = focalIsTarget ? o.edge.source : o.edge.target;
   const period = periodEditor(o.edge.period || {});
-  const note = el('input', { value: o.edge.note || '', maxlength: 2000, autocomplete: 'off' });
+  const note = el('input', { value: o.edge.note || '', maxlength: 2000, autocomplete: 'off', 'data-testid': 'edge-edit-note' });
+  const relation = select(Object.entries(EDGE_TYPES), o.edge.core_type, { 'data-testid': 'edge-edit-type' });
+  const direction = select([['out', `${o.node.label} → 상대`], ['in', `상대 → ${o.node.label}`]], focalIsTarget ? 'in' : 'out', { 'data-testid': 'edge-edit-direction' });
+  const list = o.candidates.filter((n) => n.id !== o.node.id);
+  const opts = nodeOptions(list);
+  // 지금 상대가 목록에 없으면(숨긴 노드 등) 그대로 둘 수 있게 항목을 하나 보태 둔다
+  if (!list.some((n) => n.id === otherId)) opts.unshift([otherId, '(현재 상대)']);
+  const other = select(opts, otherId, { 'data-testid': 'edge-edit-other' });
   const msg = messageBox();
   const form = el(
     'form',
     { class: 'editor', novalidate: true, 'data-testid': 'edge-edit-form' },
     el('h3', {}, `연결 수정: ${o.title}`),
+    el('p', { class: 'muted small', 'data-testid': 'edge-edit-hint' }, '관계나 상대를 바꾸면 옛 연결은 숨기고(기록은 남음) 새 연결을 만듭니다.'),
+    field('관계', relation),
+    field('방향', direction),
+    field('상대 노드', other),
     field('기간', period.el),
     field('메모', note),
     msg.box,
@@ -270,7 +359,27 @@ export function edgeEditForm(o) {
   );
   form.addEventListener('submit', (evt) => {
     evt.preventDefault();
-    msg.show(o.onSubmit({ period: period.value(), note: note.value }), { kind: 'edge' });
+    const out = direction.value === 'out';
+    const changed = relation.value !== o.edge.core_type || other.value !== otherId || out !== !focalIsTarget;
+    if (!changed) return msg.show(o.onSubmit({ period: period.value(), note: note.value }), { kind: 'edge' });
+    const input = {
+      core_type: relation.value,
+      source: out ? o.node.id : other.value,
+      target: out ? other.value : o.node.id,
+      period: period.value(),
+      note: note.value,
+    };
+    // 관계가 그대로면 하위 유형도 이어 간다(관계가 바뀌면 하위 유형은 관계에 딸린 것이므로 비운다)
+    if (relation.value === o.edge.core_type && o.edge.subtype) input.subtype = o.edge.subtype;
+    const result = o.onSubmit({ replace: true, input });
+    const ctx = { kind: 'edge', relation: relation.value };
+    if (!result.ok && result.error.code === 'E-PAIR') {
+      const byId = (id) => (id === o.node.id ? o.node : list.find((n) => n.id === id));
+      const s = byId(input.source);
+      const t = byId(input.target);
+      if (s && t) Object.assign(ctx, pairContext(relation.value, s, t));
+    }
+    msg.show(result, ctx);
   });
   return form;
 }

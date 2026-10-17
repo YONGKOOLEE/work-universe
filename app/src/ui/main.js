@@ -506,7 +506,7 @@ function start() {
     const edgeId = parseGid(link.edge_gid).local_id;
     const title = `${link.relation} ${link.other.label}`;
     return el('div', { class: 'row link-tools' },
-      el('button', { type: 'button', class: 'small-btn', onclick: () => { editing = { kind: 'edge-edit', edgeId, title }; renderPanel(); } }, '수정'),
+      el('button', { type: 'button', class: 'small-btn', title: '관계·상대·기간·메모 고치기', onclick: () => { editing = { kind: 'edge-edit', edgeId, title }; renderPanel(); } }, '수정'),
       el('button', { type: 'button', class: 'small-btn danger', onclick: () => {
         if (!window.confirm(`연결 「${title}」${josa(title, '을/를')} 숨깁니다. 기록은 남습니다.`)) return;
         const r = app.hideEdge(edgeId);
@@ -529,7 +529,8 @@ function start() {
           onSubmit: (values) => afterSave(app.addEdge(values)) });
       case 'edge-edit': {
         const edge = app.findEdge(editing.edgeId);
-        return edgeEditForm({ edge, title: editing.title, onCancel: cancel, onSubmit: (values) => afterSave(app.updateEdge(edge.id, values)) });
+        return edgeEditForm({ edge, node, candidates: ownNodes(), title: editing.title, onCancel: cancel,
+          onSubmit: (values) => afterSave(values.replace ? app.replaceEdge(edge.id, values.input) : app.updateEdge(edge.id, values)) });
       }
       case 'event': {
         const handovers = view.events
@@ -1045,11 +1046,20 @@ function start() {
         subtypes: app.subtypes(),
         onAddSubtype: (t, nm) => app.addSubtype(t, nm),
         onFocusLocal: (id) => focus(toGid(currentId(), id)),
+        getCandidates: ownNodes,
         onSubmit: (values) => {
-          const { attach_root: attachRoot, ...input } = values;
-          // 노드와 꼭지 연결(포함)을 한 묶음으로 저장한다(D-18): 연결만 실패해 노드만 남는 일이 없다
-          const b = app.applyBatch([{ op: 'addNode', input, attachRoot: !!attachRoot }]);
-          if (!b.ok) return b.errors && b.errors.length ? { ok: false, error: b.errors[0].error } : b;
+          const { attach_root: attachRoot, link, ...input } = values;
+          // 노드·꼭지 연결(포함)·함께 이을 연결을 한 묶음으로 저장한다(D-18): 연결만 실패해 노드만 남는 일이 없다.
+          // 새 노드는 묶음 안 1행이므로 연결 쪽 끝은 '@1'로 가리킨다
+          const ops = [{ op: 'addNode', row: 1, input, attachRoot: !!attachRoot }];
+          if (link) {
+            ops.push({ op: 'addEdge', row: 2, input: { core_type: link.core_type, source: link.out ? '@1' : link.other_id, target: link.out ? link.other_id : '@1' } });
+          }
+          const b = app.applyBatch(ops);
+          if (!b.ok) {
+            if (!(b.errors && b.errors.length)) return b;
+            return { ok: false, error: b.errors[0].error, edge_error: b.errors[0].row === 2 };
+          }
           const node = b.created[0];
           const r = { ...b, node };
           afterSave(r, toGid(currentId(), node.id));
