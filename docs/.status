@@ -11,6 +11,12 @@ gates:
   plan:approved: approved
   planning:complete: recorded 2026-09-30 (최종 점검 통과, CR-2 승인 후 재확정)
 approvals:   # 형식: gate / 대상 문서 / 사용자 승인 표현(원문) / 시각·시간대(확인 가능한 경우만) / 조건
+  - change: 점검 방식 — 다른 프로그램 보호, 평소 브라우저 점검은 Chrome만
+    documents: CLAUDE.md(작업 방식), docs/HANDOFF.md 3·4절, docs/tech-record.md 45절
+    user_expression: "다른 프로그램도 돌리니까 점검 같은거 하는과정에서 맘대로 중지하고 하지 말고 매번 chrom edge별 점검은 안해도 될거같은데 한번 검토해보고"
+    date: 2026-10-17
+    time: 미기록
+    conditions: 이름 전체 종료(taskkill /IM 등) 금지, 점검 도구는 자기 임시 프로필 것만 정리. 검토 결과(Edge 단독 앱 결함 0건)에 따라 평소 Chrome만, Chrome·Edge 둘 다는 제출 압축 때 check:submit에서
   - change: 위험 K-6(메일 첨부 차단) 수용 — 메일 첨부 시험 생략
     user_expression: "확인했으나 해당 내용은 고려하지 말자 된다고 생각해"
     date: 2026-10-13
@@ -167,6 +173,15 @@ implementation:
   scope_change: CR-12 승인(docs/CR-12-초안.md v0.2, 2026-10-13). 날짜 일정·동결 날짜는 폐기, 동결은 진행에 따라 사용자가 정함
   current_task: (2026-10-13 저녁) CR-12 T-23~T-26·C12-8·일곱 번째 검토(T-28)·가·나 묶음 완료, push됨 9b56b0c. 남은 것: 사용자 화면 확인 체크리스트, T-27 E는 ①로 결정됨(구현 끝), T-21(F)은 조력자 샘플 도착 시, 사람 몫(T-14·T-15·T-16), 기능 동결 선언·제출
   tasks:
+    - id: CHECKLIST-2026-10-17
+      status: 사용자 화면 확인 체크리스트 2절(2-1~2-15) 결과 받음. 14개 ○, 2-2 ✕("이력 부족은 안 보임")는 체크리스트 기대값 오류로 판정(결함 아님). 1·3~6절은 미기입(미확인)
+      date: 2026-10-17
+      model: 판정·도구 수정·기록 Opus 메인
+      result: 2-2 — 월말 정산 윤바다→서하늘 초안의 근거 없는 항목은 유사 경험자 하나이고, 비교했지만 해당자가 없어 「해당 없음 — …」으로 나오는 것이 설계(N-5, browser-check "N-5 유사 경험자" 항목이 이력 부족이 없어야 함을 확인). 「이력 부족」은 근거가 아예 없는 새 업무(교육팀 신규 과정 등)에서 나옴. 2-4 확정본 파일 이름 「2026-10-14-월말_정산_점검-인수인계서(확정)」 사용자 보고(정상)
+      tooling: 사용자 지시로 점검 방식 변경 — tools/browsers.mjs(--only=chrome|edge, 자기 임시 프로필 브라우저만 정리), npm run check:chrome, 이름 전체 종료 지침 폐기(HANDOFF 4절, tech-record 39·45절, CLAUDE.md)
+      normal_checks: 통과 (단위 553, check:chrome 311항목 모두 통과(Chrome 155.0.8059.41, Edge 미실행 = 선택 동작), guide-check --only=chrome 모두 통과, 정리 시험 26 → 38 → 26: 시험용 12개만 꺼짐)
+      error_checks: 통과 (--only=firefox → 안내 후 종료 코드 2, 없는 경로 정리 → 0개)
+      unverified: [체크리스트 1·3~6절, Edge 점검(다음 제출 압축 때 check:submit에서)]
     - id: T-28-REVIEW7
       status: 일곱 번째 전체 검토와 가·나 묶음 처리 완료. 사용자 화면 확인은 체크리스트로(.tmp/guide/확인-체크리스트-20261013.md, 미확인)
       date: 2026-10-13

@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { killOwnBrowsers, pickBrowsers } from './browsers.mjs';
 import { SAMPLE_A1 } from '../app/data/sample-a1.js';
 import { SAMPLES } from '../app/data/index.js';
 
@@ -50,6 +51,7 @@ async function launch(exe, profileDir, port, retry = true) {
   // 같은 프로필을 닫자마자 다시 열면 이전 프로세스가 잠금을 쥔 채일 수 있다: 한 번 더 시도
   if (retry) {
     await sleep(4000);
+    killOwnBrowsers(profileDir);
     return launch(exe, profileDir, port, false);
   }
   throw new Error('DevTools 연결 실패');
@@ -210,6 +212,7 @@ async function checkBrowser(browser, port) {
   const exe = browser.paths.find(existsSync);
   if (!exe) return { browser: browser.name, skipped: '설치되지 않음' };
   const profile = join(tmp, browser.name.toLowerCase());
+  killOwnBrowsers(profile); // 앞선 점검이 멈춰 남긴 것만(-blocked 프로필 포함). 사용자 브라우저는 그대로
   await rm(profile, { recursive: true, force: true });
   const checks = [];
   const check = (name, pass, detail = '') => { checks.push({ name, pass: !!pass, detail }); if (process.env.CHECK_LIVE) console.log((pass ? 'PASS ' : 'FAIL ') + name + (pass ? '' : '  [' + detail + ']')); };
@@ -1877,7 +1880,7 @@ if (!existsSync(join(root, 'dist/index.html'))) {
 console.log(`대상: ${pageUrl}\n점검일: ${new Date().toISOString()}\n`);
 let failed = 0;
 let port = 9333;
-for (const b of BROWSERS) {
+for (const b of pickBrowsers(BROWSERS)) { // --only=chrome 이면 Chrome만(평소 수정). 제출 점검은 둘 다
   const r = await checkBrowser(b, port++);
   if (r.skipped) { console.log(`## ${r.browser}: 건너뜀(${r.skipped})\n`); continue; }
   console.log(`## ${r.browser} — ${r.version}`);

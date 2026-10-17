@@ -62,11 +62,12 @@
 npm test                  # 단위 테스트(553개, 2026-10-13 9b56b0c 기준. 이후 늘 수 있음)
 node tools/pregen-dump.mjs        # 사전 생성 작성용 근거 덤프(데이터를 바꾸면 다시 보고 app/data/pregen.js 고침)
 npm run build             # dist/index.html (바이트 크기 표시)
-npm run check:browser     # Chrome·Edge file:// 점검. SHOT_DIR=.tmp/shots 를 주면 화면 PNG 저장
+npm run check:chrome      # 평소 수정 뒤: Chrome만 file:// 점검(2026-10-17부터 기본). SHOT_DIR=.tmp/shots 를 주면 화면 PNG 저장
+npm run check:browser     # Chrome·Edge 둘 다(제출 점검이 자동으로 부름). --only=edge 도 가능
 npm run check:secrets     # 비밀값 형식 검색(dist 포함). 0건이어야 함
 npm run package           # 제출 압축 release/업무유니버스-제출본-날짜.zip
 npm run check:submit      # 제출 점검 9단계(압축을 풀어 새 프로필로 브라우저 점검 + 실행 안내 따라가기). --quick은 브라우저 생략
-npm run check:guide       # 실행 안내 "5분 둘러보기"를 실제 마우스·키보드로 따라가기(Chrome·Edge)
+npm run check:guide       # 실행 안내 "5분 둘러보기"를 실제 마우스·키보드로 따라가기(Chrome·Edge, 뒤에 -- --only=chrome 가능)
 node tools/virtual-data-check.mjs   # R-06 형식 점검
 node tools/convert-snapshot.mjs     # 변환기 경계 사례 108개 차이 보기(규칙을 일부러 바꿨으면 사례마다 판정한 뒤 --write)
 node tools/perf-check.mjs 300 --browser   # 규모 점검
@@ -75,7 +76,7 @@ node tools/perf-check.mjs 300 --browser   # 규모 점검
 ## 4. 작업 요령 (이 PC에서 겪은 함정)
 
 - **셸 문제:** Bash heredoc에 백틱(`)이나 `${}`가 섞이면 셸이 깨진다. 여러 줄 수정은 Write 도구로 `.tmp/*.cjs` 스크립트를 만든 뒤 `node`로 실행하거나, Edit 도구를 쓴다.
-- **브라우저 점검이 멈출 때:** 페이지를 다시 연 뒤 `window.confirm` 자동 수락이 풀린 경우가 많다. 멈추면 `taskkill //F //IM chrome.exe //IM msedge.exe`로 정리한다. 점검은 `timeout`을 두고 돌린다.
+- **브라우저 점검이 멈출 때:** 페이지를 다시 연 뒤 `window.confirm` 자동 수락이 풀린 경우가 많다. **Chrome·Edge를 이름으로 전부 끄지 않는다**(사용자 브라우저까지 꺼짐, 2026-10-17 사용자 지시). 점검 도구가 시작할 때 자기 임시 프로필(`.tmp/browser-check/*`, `.tmp/guide-check-*`)로 띄운 것만 정리한다(`tools/browsers.mjs` killOwnBrowsers). 그래도 안 되면 멈추고 보고한다. 점검은 `timeout`을 두고 돌린다.
 - **화면 확인:** 자동 점검은 "눌러짐"만 확인할 수 있다. 새 화면은 반드시 스크린샷으로 보고, 핵심 요소가 실제로 그려지는지(크기가 있는지) 점검을 넣는다.
 - **화면 글자:** `replaceChildren(..., null)`은 "null" 글자를 넣는다. 빈 값은 걸러 낸다(점검이 잡는다).
 - **노드 추가:** `node`는 PowerShell PATH에 없을 수 있다. Bash에서는 `export PATH="/c/Program Files/nodejs:$PATH"`.
@@ -85,7 +86,7 @@ node tools/perf-check.mjs 300 --browser   # 규모 점검
 - **브라우저 점검 순서:** 월말 정산 데이터를 바꾸는 단계(초안 확정 등)는 「가상 데이터 초기화」 뒤 끝부분에 둔다. 앞에 두면 뒤의 개수 점검이 깨진다.
 
 - **정규식을 스크립트로 넣지 말 것(재발):** 2026-10-04 `.cjs` 치환 스크립트 안의 `\s+`가 `s+`로 들어가 수정이 효과 없었다(테스트도 못 잡음). 정규식은 Edit 도구로, 판정은 순수 함수로 빼서 테스트한다.
-- **브라우저를 여러 에이전트가 쓸 때:** `check:browser`는 포트 9333, `check:guide` 9600, `perf-check` 9911을 쓴다. 다른 에이전트에는 겹치지 않는 포트 범위(예: 9700~)와 자기 프로필 폴더를 주고, `taskkill` 전체 종료를 금지한다.
+- **브라우저를 여러 에이전트가 쓸 때:** `check:browser`는 포트 9333, `check:guide` 9600, `perf-check` 9911을 쓴다. 다른 에이전트에는 겹치지 않는 포트 범위(예: 9700~)와 자기 프로필 폴더를 주고, `taskkill` 전체 종료를 금지한다(메인도 마찬가지, CLAUDE.md "다른 프로그램 보호").
 
 ## 5. 작업별로 읽을 곳 (필요한 절만)
 

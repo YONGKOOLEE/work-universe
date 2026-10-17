@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { killOwnBrowsers, pickBrowsers } from './browsers.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const pageUrl = `${pathToFileURL(process.env.PAGE || join(root, 'dist/index.html')).href}?check`; // ?check: 점검용 전역을 켠다
@@ -13,6 +14,7 @@ const BROWSERS = [
   { name: 'Chrome', exe: 'C:/Program Files/Google/Chrome/Application/chrome.exe' },
   { name: 'Edge', exe: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe' },
 ].filter((b) => existsSync(b.exe));
+const PICKED = pickBrowsers(BROWSERS); // --only=chrome 이면 Chrome만
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failures = 0;
 const check = (name, ok, detail = '') => {
@@ -85,6 +87,7 @@ async function shot(cdp, name) {
 async function walk(browser, port) {
   console.log(`\n== ${browser.name}: 실행 안내 따라가기`);
   const profile = join(root, '.tmp', `guide-check-${browser.name}`);
+  killOwnBrowsers(profile); // 앞선 점검이 멈춰 남긴 것만(사용자 브라우저는 그대로)
   await rm(profile, { recursive: true, force: true });
   const proc = spawn(browser.exe, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--proxy-server=http://127.0.0.1:9', '--window-size=1280,860', 'about:blank'], { stdio: 'ignore' });
   let wsUrl;
@@ -187,6 +190,6 @@ async function walk(browser, port) {
 
 console.log(`대상: ${pageUrl}\n안내에서 뽑은 화면 이름: ${labels.join(' / ')}`);
 let port = 9600;
-for (const b of BROWSERS) await walk(b, port++);
+for (const b of PICKED) await walk(b, port++);
 console.log(failures ? `\n실패 ${failures}건` : '\n모두 통과');
 process.exit(failures ? 1 : 0);
