@@ -65,8 +65,8 @@ npm run build             # dist/index.html (바이트 크기 표시)
 npm run check:chrome      # 평소 수정 뒤: Chrome만 file:// 점검(2026-10-17부터 기본). SHOT_DIR=.tmp/shots 를 주면 화면 PNG 저장
 npm run check:browser     # Chrome·Edge 둘 다(제출 점검이 자동으로 부름). --only=edge 도 가능
 npm run check:secrets     # 비밀값 형식 검색(dist 포함). 0건이어야 함
-npm run package           # 제출 압축 release/업무유니버스-제출본-날짜.zip
-npm run check:submit      # 제출 점검 9단계(압축을 풀어 새 프로필로 브라우저 점검 + 실행 안내 따라가기). --quick은 브라우저 생략
+npm run package           # 제출 압축 release/업무유니버스-제출본-날짜-커밋.zip(변경이 남아 있으면 -작업중)
+npm run check:submit      # 제출 점검 10단계(커밋 안 된 변경 없음 포함, 압축을 풀어 새 프로필로 Chrome·Edge 점검 + 실행 안내 따라가기). --quick은 브라우저 생략
 npm run check:guide       # 실행 안내 "5분 둘러보기"를 실제 마우스·키보드로 따라가기(Chrome·Edge, 뒤에 -- --only=chrome 가능)
 node tools/virtual-data-check.mjs   # R-06 형식 점검
 node tools/convert-snapshot.mjs     # 변환기 경계 사례 108개 차이 보기(규칙을 일부러 바꿨으면 사례마다 판정한 뒤 --write)

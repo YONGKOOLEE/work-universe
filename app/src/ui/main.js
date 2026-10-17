@@ -27,7 +27,8 @@ import { hiddenNodesOf } from '../rules/hidden.js';
 import { nowIso, todayLocal } from './time.js';
 import { personLoad, repeatPatternsFor, workLoad } from '../rules/insight.js';
 import { monthAsOf, timeMonths } from '../rules/flow.js';
-import { workFormMissing } from '../rules/form.js';
+import { splitHint, workFormMissing } from '../rules/form.js';
+import { starterSteps } from '../rules/starter-steps.js';
 import { josa, messageFor } from './messages.js';
 import { exportFileName, importDialog } from './import.js';
 import { tableDialog } from './table.js';
@@ -59,6 +60,14 @@ function wireCreateDialog(app, $) {
   $('create-form').addEventListener('submit', (evt) => {
     evt.preventDefault();
     const input = { name: $('create-name').value, level: $('create-level').value, owner: $('create-owner').value, description: $('create-description').value };
+    // 첫 업무(선택): 업무 이름 없이 나머지만 채우면 막는다
+    const starter = { work: $('create-start-work').value, person: $('create-start-person').value, cycle: $('create-start-cycle').value, due: $('create-start-due').value, artifact: $('create-start-artifact').value };
+    if (!starter.work.trim() && Object.values(starter).some((v) => v.trim())) {
+      $('create-message').textContent = '첫 업무 이름을 넣거나 아래 칸을 비우세요.';
+      $('create-message').dataset.code = 'starter-work-required';
+      return;
+    }
+    if (starter.work.trim()) input.starter = starter;
     const same = input.name.trim() && input.level.trim() ? app.findSameUniverse(input.name, input.level) : null;
     if (same && !window.confirm(`같은 이름·단위의 유니버스「${same.name}」(${same.level})가 이미 있습니다. 그래도 새로 만들까요?`)) return;
     const r = app.createUniverse(input);
@@ -666,7 +675,7 @@ function start() {
     }
     if (!selected) {
       const summary = describeUniverse(view);
-      renderUniverseSummary(panel, summary, display.nodes.length);
+      renderUniverseSummary(panel, summary, display.nodes.length, { split: splitHint(app.doc), starter: starterSteps(app.doc, view) });
       // 꼭지만 있으면 「노드 추가」를 펼쳐 둔다(검토5 U-5). 안내 문구(detail.js)와 같은 기준: 하위 유니버스를 묶은 화면은 노드가 있으므로 건드리지 않는다
       if (summary.node_total <= 1 && !app.readOnly) document.querySelector('details.add').open = true;
       const rootGid = app.rootGid();

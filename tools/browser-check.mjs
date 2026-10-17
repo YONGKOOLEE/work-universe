@@ -673,6 +673,60 @@ async function checkBrowser(browser, port) {
   await sleep(500);
   await waitFor(s.cdp, "window.__wu && window.__wu.doc.universe.id === 'U-A1'", 8000);
 
+  // ── 첫 업무(선택, 조력자 의견 2026-10-17 "어떻게 시작할지 막막하다")와 「처음 할 일」 상자 ──
+  await evaluate(s.cdp, 'window.confirm = () => true');
+  const fillStarter = (name, f) => evaluate(s.cdp, `(() => {
+    document.getElementById('create-open').click();
+    document.getElementById('create-name').value = ${JSON.stringify(name)};
+    document.getElementById('create-level').value = '업무';
+    document.getElementById('create-owner').value = '가상 시험팀';
+    const f = ${JSON.stringify(f)};
+    document.getElementById('create-start-work').value = f.work || '';
+    document.getElementById('create-start-person').value = f.person || '';
+    document.getElementById('create-start-cycle').value = f.cycle || '';
+    document.getElementById('create-start-due').value = f.due || '';
+    document.getElementById('create-start-artifact').value = f.artifact || '';
+    document.querySelector('#create-form button[type=submit]').click();
+  })()`);
+  const nBefore = await evaluate(s.cdp, "document.getElementById('universe-picker').options.length");
+  await fillStarter('첫 업무 막힘 시험', { person: '김가상' });
+  await sleep(200);
+  check('첫 업무: 업무 이름 없이 담당자만 채우면 막고 안내, 유니버스는 안 생김', (await text(s.cdp, '#create-message')).includes('첫 업무 이름') && await evaluate(s.cdp, "document.getElementById('create-dialog').open") && (await evaluate(s.cdp, "document.getElementById('universe-picker').options.length")) === nBefore);
+  await evaluate(s.cdp, "document.getElementById('create-dialog').close()");
+  await fillStarter('첫 업무 시험 유니버스', { work: '월말 점검', person: '김가상', cycle: '매월', due: '매월 5일', artifact: '점검표' });
+  await sleep(500);
+  const starterOpened = await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.name === '첫 업무 시험 유니버스' && window.__wu.cy.nodes().length === 4", 8000);
+  check('첫 업무: 업무·담당자·산출물을 적고 만들면 그래프에 노드 4개(꼭지 포함)가 바로 생김', starterOpened);
+  if (starterOpened) {
+    await evaluate(s.cdp, 'window.__wu.select(null)');
+    await sleep(150);
+    check('첫 업무: 개요에 「처음 할 일」 상자가 보이고 크기가 있음(3단계, 완료 표시 없음)', await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=starter-steps]'); if (!b) return false; const r = b.getBoundingClientRect(); return r.width > 0 && r.height > 0 && b.textContent.includes('처음 할 일') && b.querySelectorAll('li').length === 3 && b.querySelectorAll('li[data-done=\"1\"]').length === 0; })()"));
+    check('첫 업무: 업무 개수 노드가 하나라 「업무 더 넣기」가 남아 있음, 나눠 보세요 안내는 없음', (await text(s.cdp, '[data-testid=starter-steps]')).includes('업무 더 넣기') && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=split-hint]')")));
+    await shot(s.cdp, `${browser.name}-8b-starter-universe`);
+    await evaluate(s.cdp, "window.__wu.select(window.__wu.doc.universe.id + '/' + window.__wu.doc.nodes.find((n) => n.core_type === 'work').id)");
+    await sleep(150);
+    const starterForm = await text(s.cdp, '[data-testid=form-missing]');
+    check('첫 업무: 업무 상세에 「표준 양식: 권장 항목」 줄(설명·절차·주의사항이 남음, 주기·마감·담당·관련 문서는 채워짐)', starterForm.includes('표준 양식: 권장 항목 3개') && starterForm.includes('설명') && starterForm.includes('절차') && starterForm.includes('주의사항') && !starterForm.includes('담당'), starterForm);
+  }
+  // 나눠 보세요 안내: 카드승인(U-K1)에는 보이고 월말 정산(U-A1)에는 없다
+  await evaluate(s.cdp, "location.hash = 'U-A1'; location.reload()").catch(() => {});
+  await sleep(500);
+  await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1'", 8000);
+  await evaluate(s.cdp, 'window.__wu.select(null)');
+  await sleep(150);
+  check('나눠 보세요: 월말 정산(노드 9개)에는 안내가 없음', !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=split-hint]')")));
+  await evaluate(s.cdp, "location.hash = 'U-K1'; location.reload()").catch(() => {});
+  await sleep(500);
+  await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-K1'", 8000);
+  await evaluate(s.cdp, 'window.__wu.select(null)');
+  await sleep(150);
+  const splitText = await text(s.cdp, '[data-testid=split-hint]');
+  check('나눠 보세요: 카드승인(꼭지 제외 37개)에는 안내가 보이고 크기가 있으며 「유니버스 묶기」를 권함', splitText.includes('37개') && splitText.includes('유니버스 묶기') && await evaluate(s.cdp, "(() => { const r = document.querySelector('[data-testid=split-hint]').getBoundingClientRect(); return r.width > 0 && r.height > 0; })()"));
+  await shot(s.cdp, `${browser.name}-8c-split-hint`);
+  await evaluate(s.cdp, "location.hash = 'U-A1'; location.reload()").catch(() => {});
+  await sleep(500);
+  await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1'", 8000);
+
   // ── T-17 가져오기: 문서 초벌 변환(CR-5 ②) → 미리 보기 → 가져오기, JSON 파일, 내보내기(D-06) ──
   await evaluate(s.cdp, "window.confirm = () => true; document.getElementById('import-open').click()");
   await sleep(200);

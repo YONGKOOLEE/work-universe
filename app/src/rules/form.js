@@ -12,6 +12,8 @@ export const STANDARD_FORM = {
   description: '설명',
   /** 담당: 사람 → 업무 수행 연결이 한 번이라도 있으면 채운 것(지금 담당이 없는 것은 공백 인사이트가 다룬다) */
   performer: '담당',
+  /** 한 유니버스의 노드(꼭지 제외)가 이 수를 넘으면 「나눠 보세요」를 안내한다. 02 5.6.2 쪼개는 단위(업무당 10~20개)에 여유를 둔 값. 바꾸려면 여기만 */
+  splitAbove: 25,
 };
 
 const nonEmpty = (v) => v !== undefined && v !== null && String(v).trim() !== '';
@@ -59,4 +61,14 @@ export function formReport(view) {
     if (missing && missing.length) works.push({ gid: n.gid, label: n.label, universe_name: n.universe_name, missing });
   }
   return { total, incomplete: works.length, works };
+}
+
+/**
+ * 큰 유니버스에 「업무별로 나누세요」 안내가 필요한지(조력자 의견 2026-10-17 "업무가 커지면 그림이 난잡해진다").
+ * 이 유니버스 문서 자신의 숨기지 않은 노드(꼭지 제외)만 센다. 하위 유니버스 노드는 묶은 화면에서 이미 접혀 보이므로 세지 않는다.
+ * @returns {{count:number, limit:number}|null}
+ */
+export function splitHint(doc) {
+  const count = (doc.nodes || []).filter((n) => !n.hidden && n.core_type !== 'root').length;
+  return count > STANDARD_FORM.splitAbove ? { count, limit: STANDARD_FORM.splitAbove } : null;
 }

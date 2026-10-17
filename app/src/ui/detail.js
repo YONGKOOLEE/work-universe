@@ -78,7 +78,7 @@ export function renderNodeDetail(panel, d, { onFocus, extra = null, toolbar = nu
 }
 
 /** 노드를 고르지 않았을 때: 유니버스 개요와 사용법 한 줄. */
-export function renderUniverseSummary(panel, s, shown = null) {
+export function renderUniverseSummary(panel, s, shown = null, extras = {}) {
   panel.replaceChildren();
   panel.append(el('h2', {}, s.name));
   const dl = el('dl', { 'data-testid': 'summary' });
@@ -97,6 +97,16 @@ export function renderUniverseSummary(panel, s, shown = null) {
     panel.append(el('p', { class: 'notice', 'data-testid': 'empno-conflict' }, `사번 충돌: ${c.emp_no}가 서로 다른 이름으로 있습니다(${c.nodes.map((n) => `${n.label}·${n.universe_name}`).join(', ')}). 자동으로 합치지 않습니다. 확인이 필요합니다.`));
   }
   if (s.stale_links.length) panel.append(el('p', { class: 'notice', 'data-testid': 'stale-links' }, `사번이 바뀌어 더는 맞지 않는 사번 자동 연결 ${s.stale_links.length}건은 합치지 않았습니다. 다시 확인이 필요합니다.`));
+  // 큰 유니버스: 업무별로 나누라는 안내(막지 않는다)
+  if (extras.split) {
+    panel.append(el('p', { class: 'notice', 'data-testid': 'split-hint' }, `이 유니버스에 노드가 ${extras.split.count}개입니다. 표준 양식은 업무당 10~20개라 한 화면에 다 그리면 글자가 작아집니다. 업무별 유니버스로 나눈 뒤 「유니버스 묶기」로 묶으면 위에서는 접혀 보여 읽기 쉽습니다. 지금은 「노드 찾기」·「주변만 보기」·「흐름 정렬」로 좁혀 보세요.`));
+  }
+  // 「처음 할 일」: 새로 만든 유니버스가 다음에 할 일 3단계(다 하면 사라진다). 새 사람에게 가장 필요한 안내라 일반 안내보다 위에 둔다
+  if (extras.starter) {
+    panel.append(el('div', { class: 'hint', 'data-testid': 'starter-steps' },
+      el('p', {}, el('strong', {}, '처음 할 일')),
+      el('ul', { class: 'starter-list' }, ...extras.starter.steps.map((st) => el('li', { class: st.done ? 'done' : '', 'data-done': st.done ? '1' : '0' }, `${st.done ? '✓' : '○'} ${st.label}`)))));
+  }
   // 꼭지만 있는 빈 유니버스(새로 만든 직후)에는 다음 행동을 안내한다(검토5 U-5)
   const empty = s.node_total <= 1;
   panel.append(el('div', { class: 'hint', 'data-testid': 'hint' },

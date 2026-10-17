@@ -42,6 +42,7 @@ record(`R-06 형식 점검(내장 샘플 ${SAMPLES.length}개)`, r06.length === 
 // 5) 압축
 const pkg = await buildPackage();
 record('제출 압축 만들기', pkg.bytes > 0, `${pkg.path.replace(root, '.')} ${pkg.bytes}바이트`);
+record('커밋하지 않은 변경 없음(제출본이 커밋 ' + pkg.commit + '과 같음)', !pkg.dirty, pkg.dirty ? 'app·docs/submission·tools·package.json에 변경이 남아 있음' : '');
 
 // 6) 압축 풀기 → 파일 비교. Windows 탐색기와 같은 계열인 PowerShell Expand-Archive(.NET)로 푼다(zip 작성 코드와 별개 구현으로 검증)
 const out = join(root, '.tmp', 'submit-extract');

@@ -25,6 +25,9 @@ const FIELD_NAMES = {
   category: '분류',
   note: '내용',
   id: '노드',
+  starter_work: '첫 업무 이름',
+  starter_person: '담당자 이름',
+  starter_artifact: '산출물 이름',
 };
 
 // 유형·관계의 표시 이름은 스키마 한 곳에서 가져온다(검토5 C-7)

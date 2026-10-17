@@ -5,6 +5,7 @@ import {
 } from '../model/commands.js';
 import { CODES, DRAFT_TARGET_TYPES, SUBTYPE_HANDOVER_DOC, TEXT_MAX, normalizeLabel } from '../model/schema.js';
 import { validateDocument } from '../model/validate.js';
+import { applyStarter } from '../model/starter.js';
 import { subtypeRegistered } from '../model/checks.js';
 import { buildView, refGid, toGid } from '../view/view.js';
 
@@ -319,9 +320,12 @@ export function createApp({ store, samples, currentId, now, authorName }) {
       if (guard()) return guard();
       const created = createUniverse(input, { now: now() });
       if (!created.ok) return created;
-      const failedCreate = save(created.doc);
+      // 「첫 업무(선택)」: 업무·담당자·산출물을 만든 뒤 저장은 한 번. 하나라도 실패하면 아무것도 저장하지 않는다
+      const started = applyStarter(created.doc, input.starter, { now: now() });
+      if (!started.ok) return started;
+      const failedCreate = save(started.doc);
       if (failedCreate) return failedCreate;
-      return created;
+      return { ...created, doc: started.doc, ...(started.created ? { starter: started.created } : {}) };
     },
 
     /** 현재 유니버스에 하위 유형을 등록한다(1.3 ②). 데이터만 늘고 코드 변경은 없다 */

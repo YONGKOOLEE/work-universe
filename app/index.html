@@ -109,6 +109,11 @@
   dialog h2 { margin: 0 0 6px; font-size: 17px; }
   fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
   legend { color: var(--muted); font-size: 13px; padding: 0 4px; }
+  #create-starter { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; } /* 첫 업무 칸: 두 줄로 놓아 대화상자 높이를 줄임 */
+  #create-starter label:first-of-type { grid-column: 1 / -1; }
+  #create-starter input { width: 100%; box-sizing: border-box; }
+  .starter-list { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 4px; }
+  .starter-list li.done { color: var(--muted); text-decoration: line-through; }
   .error-text { color: var(--err); font-size: 13px; min-height: 1em; }
   .editor { display: grid; gap: 8px; font-size: 14px; min-width: 0; }
   .editor > p:empty { display: none; } /* 화면 점검 S-4: 비어 있는 안내 줄이 40px 빈칸을 만듦 */
@@ -304,12 +309,19 @@
 <dialog id="create-dialog" aria-labelledby="create-title">
   <form id="create-form" novalidate>
     <h2 id="create-title">새 유니버스 만들기</h2>
-    <p class="muted small">빈 유니버스를 만듭니다. 만든 뒤 오른쪽 아래 「노드 추가」에서 업무를 하나씩 추가해 구성합니다.</p>
+    <p class="muted small">업무 하나부터 시작하세요. 첫 업무를 적으면 업무·담당자·산출물이 이어진 작은 지도가 바로 생깁니다. 비워 두면 빈 유니버스를 만듭니다.</p>
     <label>이름 <input id="create-name" maxlength="100" autocomplete="off" placeholder="예: 연말 교육 운영"></label>
     <label>단위 <input id="create-level" list="create-levels" value="업무" autocomplete="off"></label>
     <datalist id="create-levels"><option value="업무"><option value="팀"><option value="부서"><option value="본부"><option value="회사"></datalist>
     <label>작성 주체 <input id="create-owner" autocomplete="off" placeholder="예: 가상 교육팀"></label>
     <label>설명(선택) <textarea id="create-description" rows="3"></textarea></label>
+    <fieldset id="create-starter"><legend>첫 업무(선택) — 채우면 작은 업무 지도가 바로 생깁니다</legend>
+      <label>업무 이름 <input id="create-start-work" maxlength="100" autocomplete="off" placeholder="예: 월말 정산 점검"></label>
+      <label>담당자(내 이름) <input id="create-start-person" maxlength="100" autocomplete="off" placeholder="예: 김가상"></label>
+      <label>주기 <input id="create-start-cycle" autocomplete="off" placeholder="예: 매월"></label>
+      <label>마감 <input id="create-start-due" autocomplete="off" placeholder="예: 매월 5일"></label>
+      <label>산출물 <input id="create-start-artifact" maxlength="100" autocomplete="off" placeholder="예: 정산 점검표"></label>
+    </fieldset>
     <div id="create-message" class="error-text" aria-live="polite"></div>
     <div class="row"><button type="submit" class="primary">만들기</button><button type="button" id="create-cancel">취소</button></div>
   </form>
