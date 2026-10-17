@@ -721,7 +721,7 @@ async function checkBrowser(browser, port) {
   await evaluate(s.cdp, 'window.__wu.select(null)');
   await sleep(150);
   const splitText = await text(s.cdp, '[data-testid=split-hint]');
-  check('나눠 보세요: 카드승인(꼭지 제외 37개)에는 안내가 보이고 크기가 있으며 「유니버스 묶기」를 권함', splitText.includes('37개') && splitText.includes('유니버스 묶기') && await evaluate(s.cdp, "(() => { const r = document.querySelector('[data-testid=split-hint]').getBoundingClientRect(); return r.width > 0 && r.height > 0; })()"));
+  check('나눠 보세요: 카드승인(꼭지 포함 38개)에는 안내가 보이고 크기가 있으며 「유니버스 묶기」를 권함', splitText.includes('38개') && splitText.includes('유니버스 묶기') && await evaluate(s.cdp, "(() => { const r = document.querySelector('[data-testid=split-hint]').getBoundingClientRect(); return r.width > 0 && r.height > 0; })()"));
   await shot(s.cdp, `${browser.name}-8c-split-hint`);
   await evaluate(s.cdp, "location.hash = 'U-A1'; location.reload()").catch(() => {});
   await sleep(500);
@@ -1159,6 +1159,12 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, "document.getElementById('wide-toggle').click()");
     await sleep(400);
     const w1 = await asideW();
+    // 처음 사용자 검토 2026-10-17: 1366 너비에서 넓게 보기를 켜면 그래프 위 도구줄이 겹쳤다. 도구줄 요소끼리 교차하지 않아야 한다
+    await s.cdp.send('Emulation.setDeviceMetricsOverride', { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false });
+    await sleep(400);
+    const overlap = await evaluate(s.cdp, "(() => { const els = [...document.querySelectorAll('.explore-row .explore-bar > *, .explore-row .graph-tools button')].filter((e) => e.offsetWidth > 0); const rs = els.map((e) => [e, e.getBoundingClientRect()]); const bad = []; for (let i = 0; i < rs.length; i++) for (let j = i + 1; j < rs.length; j++) { const [a, ra] = rs[i], [b, rb] = rs[j]; if (a.contains(b) || b.contains(a)) continue; if (ra.left < rb.right - 1 && rb.left < ra.right - 1 && ra.top < rb.bottom - 1 && rb.top < ra.bottom - 1) bad.push((a.id || a.className || a.tagName) + '/' + (b.id || b.className || b.tagName)); } return { n: els.length, bad }; })()");
+    await s.cdp.send('Emulation.clearDeviceMetricsOverride');
+    check('넓게 보기 1366에서 도구줄 요소끼리 겹치지 않음', overlap.n >= 5 && overlap.bad.length === 0, JSON.stringify(overlap));
     await evaluate(s.cdp, "document.getElementById('wide-toggle').click()");
     await sleep(400);
     const w2 = await asideW();

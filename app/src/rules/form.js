@@ -42,7 +42,7 @@ export function workFormMissing(view, workGid) {
     });
   if (!hasDoc) missing.push(STANDARD_FORM.relatedDocAttr);
 
-  const hasPerformer = edges.some((e) => e.core_type === 'performs' && e.target === work.gid && view.getNode(e.source)?.core_type === 'person');
+  const hasPerformer = edges.some((e) => e.core_type === 'performs' && e.target === work.gid && view.getNode(e.source)?.core_type === 'person' && !view.getNode(e.source).hidden);
   if (!hasPerformer) missing.push(STANDARD_FORM.performer);
   return missing;
 }

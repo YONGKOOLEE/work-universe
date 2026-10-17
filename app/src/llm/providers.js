@@ -26,6 +26,22 @@ export function pregenKey(task, target, item, evidenceIds, people = '') {
 }
 export const peopleKey = (from, to) => (from && to ? `${from}>${to}` : '');
 
+/**
+ * 규칙 기반 문장의 지문(FNV-1a 32비트, 16진수 8자리). 사전 생성 줄에는 만들 때의 규칙 기반 문장 지문(fp)을 넣고,
+ * 조회할 때 지금 규칙 기반 문장의 지문과 같을 때만 쓴다 → 근거 ID가 같아도 내용이 바뀐 항목은 규칙 기반으로 돌아간다(K-9, 12.3).
+ * 기준일에만 달라지는 "기록 없는 기간" 경고 문장은 지문에서 뺀다(사전 생성 문장에도 넣지 않는다, 검토5 I-6).
+ */
+const VOLATILE = /개 기간은 기록이 없어 판단하지 않습니다/;
+export function fingerprint(sentences) {
+  const s = (Array.isArray(sentences) ? sentences : []).map((x) => (x && typeof x.text === 'string' ? x.text : '')).filter((t) => !VOLATILE.test(t)).join('\n');
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i += 1) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
+}
+
 /** 규칙 기반 초안 항목의 근거 ID 전체 */
 export { itemEvidence };
 
@@ -44,14 +60,15 @@ function pregenProvider(file) {
       for (const item of draft.items) {
         if (item.insufficient) continue;
         const hit = index.get(pregenKey(task, draft.target, item.key, itemEvidence(item), peopleKey(draft.from, draft.to)));
-        if (hit) items.push({ key: item.key, sentences: hit.sentences });
+        if (hit && hit.fp === fingerprint(item.sentences)) items.push({ key: item.key, sentences: hit.sentences });
       }
       return { items };
     },
-    // 설명(인사이트 설명 insight_explain, 업무 후보 이유 work_candidate_reason): 대상과 근거가 맞으면 문장, 아니면 null
-    explain(target, evidenceIds, task = 'insight_explain') {
+    // 설명(인사이트 설명 insight_explain, 업무 후보 이유 work_candidate_reason): 대상·근거가 맞고 규칙 기반 문장 지문이 같으면 문장, 아니면 null
+    // rule: 지금의 규칙 기반 문장(지문 비교용). 없으면 비교할 수 없으므로 쓰지 않는다
+    explain(target, evidenceIds, task = 'insight_explain', rule = null) {
       const hit = index.get(pregenKey(task, target, '', evidenceIds));
-      return hit ? { sentences: hit.sentences } : null;
+      return hit && rule && hit.fp === fingerprint(rule) ? { sentences: hit.sentences } : null;
     },
   };
 }

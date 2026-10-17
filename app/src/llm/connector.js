@@ -70,7 +70,7 @@ export function explainInsight(req, { provider = null, exists }) {
   if (!provider || provider.name === 'none' || typeof provider.explain !== 'function') return rule;
   let got;
   try {
-    got = provider.explain(req.target, req.evidence_ids, req.task || 'insight_explain');
+    got = provider.explain(req.target, req.evidence_ids, req.task || 'insight_explain', req.rule);
   } catch (err) {
     return { ...rule, fallback: { code: FALLBACK, reason: `공급자 오류: ${err && err.message ? err.message : err}` } };
   }

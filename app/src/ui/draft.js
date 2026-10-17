@@ -179,18 +179,19 @@ function renderDraft(box, d, view, onFocus, o = {}) {
       el('span', { class: 'method', 'data-testid': 'draft-method', title: METHOD_LABELS[d.method] }, `생성 방식: ${METHOD_LABELS[d.method].replace(/\(.*\)$/, '')}`),
       copyBtn, downBtn, printBtn),
     el('h3', { class: 'draft-title' }, d.title),
+    d.method === 'pregen' ? el('p', { class: 'muted small', 'data-testid': 'draft-method-note' }, '문장은 개발 중 Claude가 이 근거만 보고 썼고, 앱이 근거를 검증합니다. 근거가 맞지 않거나 미리 쓴 문장이 없으면 규칙 기반으로 만듭니다.') : null,
     d.fallback ? el('p', { class: 'notice', 'data-testid': 'draft-fallback' }, `규칙 기반으로 대체함: ${d.fallback.reason}`) : null,
     d.method !== 'rule' && d.counts && d.counts.rule ? el('p', { class: 'muted small', 'data-testid': 'draft-counts' }, `${METHOD_LABELS[d.method]} ${d.counts.provider}개 항목, 나머지 ${d.counts.rule}개는 규칙 기반(사전 생성 결과가 없거나 데이터가 바뀐 항목)`) : null,
     // 사전 생성을 골랐는데 이 조합에 미리 써 둔 문장이 없어 전부 규칙 기반이면 이유를 한 줄로 알린다(재검증 5-4)
     d.method === 'rule' && !d.fallback && o.provider && o.provider.name === 'pregen' ? el('p', { class: 'muted small', 'data-testid': 'draft-rule-reason' }, '이 대상·사람 조합은 미리 써 둔 문장이 없어 규칙 기반으로 만들었습니다(기록을 그대로 옮겨 적은 문장).') : null,
     ...d.items.map((i) =>
       el('section', { class: `draft-item${i.insufficient ? ' insufficient' : ''}`, 'data-testid': `draft-item-${i.key}` },
-        el('h4', {}, i.title, i.insufficient ? null : el('span', { class: `method-chip ${i.method || 'rule'}`, 'data-testid': 'item-method' }, i.method === 'pregen' ? '사전 생성' : i.method === 'llm' ? 'LLM' : '규칙 기반')),
+        el('h4', {}, i.title, i.insufficient ? null : el('span', { class: `method-chip ${i.method || 'rule'}`, 'data-testid': 'item-method', title: i.method === 'pregen' ? '개발 중 Claude가 이 근거만 보고 쓴 문장 — 앱이 열 때마다 근거 ID를 검증하고, 맞지 않으면 규칙 기반 문장으로 바꿉니다' : undefined }, i.method === 'pregen' ? '사전 생성' : i.method === 'llm' ? 'LLM' : '규칙 기반')),
         i.insufficient && i.empty_reason
           ? el('p', { class: 'muted', 'data-testid': 'not-found' }, `해당 없음 — ${i.empty_reason}`)
           : i.insufficient
           ? el('p', { class: 'muted', 'data-testid': 'insufficient' }, '이력 부족 — 근거가 되는 기록이 없어 내용을 만들지 않았습니다.')
-          : el('ul', {}, ...i.sentences.map((s) => el('li', {}, el('span', {}, s.text), evidenceChips(view, s.evidence_ids, onFocus, { dedupe: false, unknown: true })))),
+          : el('ul', {}, ...i.sentences.map((s) => el('li', {}, el('span', {}, s.text), el('span', { class: 'evidence-row' }, el('span', { class: 'evidence-label' }, '근거:'), evidenceChips(view, s.evidence_ids, onFocus, { dedupe: false, unknown: true }))))),
       ),
     ),
     el('p', { class: 'muted small' }, '축적된 이력으로 만든 초안입니다. 근거를 눌러 확인하고, 담당자가 검토해 확정하세요.'),

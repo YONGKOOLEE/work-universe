@@ -222,11 +222,11 @@ export function editableRows(doc) {
     .map((n) => ({
       id: n.id,
       cells: {
-        type: NODE_TYPES[n.core_type] || '',
-        label: n.label,
-        subtype: n.subtype || '',
-        description: n.description || '',
-        emp_no: n.emp_no || '',
+        type: Object.hasOwn(NODE_TYPES, n.core_type) ? NODE_TYPES[n.core_type] : '',
+        label: String(n.label ?? ''),
+        subtype: String(n.subtype || ''),
+        description: String(n.description || ''),
+        emp_no: String(n.emp_no || ''),
         attrs: formatAttrsCell(n.attrs),
       },
     }));

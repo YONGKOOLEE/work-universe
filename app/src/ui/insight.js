@@ -22,7 +22,7 @@ function explainBox(view, req, o) {
   if (!req) return null;
   const r = explainInsight(req, { provider: o.provider, exists: view.exists });
   return el('div', { class: 'explain', 'data-testid': 'insight-explain', 'data-method': r.method },
-    el('h4', {}, '설명', el('span', { class: `method-chip ${r.method}`, title: METHOD_LABELS[r.method] }, METHOD_LABELS[r.method].replace(/\(.*\)$/, ''))),
+    el('h4', {}, '설명', el('span', { class: `method-chip ${r.method}`, title: r.method === 'pregen' ? '개발 중 Claude가 이 근거만 보고 쓴 문장 — 앱이 열 때마다 근거 ID를 검증하고, 맞지 않으면 규칙 기반 문장으로 바꿉니다' : METHOD_LABELS[r.method] }, METHOD_LABELS[r.method].replace(/\(.*\)$/, ''))),
     // 근거가 많으면 접어 둔다(표를 밀어내지 않게)
     el('ul', {}, ...r.sentences.map((s) => el('li', {}, s.text, ' ', s.evidence_ids.length > 4
       ? el('details', { class: 'evidence-fold' }, el('summary', { class: 'muted small' }, `근거 ${s.evidence_ids.length}건`), chips(view, s.evidence_ids, o.onFocus))

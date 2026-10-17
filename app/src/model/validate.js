@@ -1,7 +1,7 @@
 // 유니버스 문서 검증(12.2·12.5). 불러오기·가져오기 때 쓴다. 순수 함수.
 // 모르는 노드·관계 유형은 오류로 멈추지 않고 통과시킨다(1.3, 화면에서 "기타"로 표시).
 
-import { findDuplicateEdge, findDuplicateNode, isDate, periodError, subtypeRegistered } from './checks.js';
+import { edgeDupKey, findDuplicateEdge, isDate, nodeDupKey, periodError, subtypeRegistered } from './checks.js';
 import {
   CODES,
   EDGE_TYPES,
@@ -16,6 +16,7 @@ import {
   LABEL_MAX,
   NODE_TYPES,
   SCHEMA_VERSION,
+  TEXT_MAX,
   pairAllowed,
   DOC_COLLECTIONS,
 } from './schema.js';
@@ -24,6 +25,10 @@ const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
 const isBlank = (v) => typeof v !== 'string' || v.trim() === '';
 const isGlobalRef = (v) => typeof v === 'string' && v.includes('/');
 const ID_PATTERN = /^[^\s/]+$/;
+// 상속 속성(constructor·toString 등)을 유형 이름으로 보지 않는다(검토 2026-10-17)
+const has = (obj, key) => typeof key === 'string' && Object.hasOwn(obj, key);
+// 값이 있을 때 글자이고 상한 이하인지(가져온 JSON의 숫자·배열·너무 긴 값을 막는다)
+const badText = (v, max) => v !== undefined && v !== null && (typeof v !== 'string' || v.length > max);
 
 /**
  * @param {object} doc 12.2 유니버스 문서
@@ -66,7 +71,7 @@ export function validateDocument(doc) {
   (Array.isArray(u.subtypes) ? u.subtypes : []).forEach((s, i) => {
     const path = `universe.subtypes[${i}]`;
     if (!isObject(s) || isBlank(s.name)) return err(CODES.REQUIRED, path);
-    if (!NODE_TYPES[s.core_type] && !EDGE_TYPES[s.core_type]) return err(CODES.SCHEMA, path);
+    if (!has(NODE_TYPES, s.core_type) && !has(EDGE_TYPES, s.core_type)) return err(CODES.SCHEMA, path);
     const key = `${s.core_type}|${s.name}`;
     if (seenSubtypes.has(key)) err(CODES.DUP, path);
     seenSubtypes.add(key);
@@ -83,6 +88,8 @@ export function validateDocument(doc) {
     if (isBlank(n.label) || n.label.trim().length > LABEL_MAX) err(CODES.REQUIRED, `${path}.label`);
     if (n.subtype && !subtypeRegistered(doc, n.core_type, n.subtype)) err(CODES.SUBTYPE, `${path}.subtype`);
     if (n.emp_no !== undefined && n.core_type !== 'person') err(CODES.SCHEMA, `${path}.emp_no`);
+    else if (badText(n.emp_no, LABEL_MAX)) err(CODES.SCHEMA, `${path}.emp_no`);
+    if (badText(n.description, TEXT_MAX)) err(CODES.SCHEMA, `${path}.description`);
     if (n.hidden !== undefined && typeof n.hidden !== 'boolean') err(CODES.SCHEMA, `${path}.hidden`);
     if (n.exposed !== undefined && typeof n.exposed !== 'boolean') err(CODES.SCHEMA, `${path}.exposed`);
     if (periodError(n.period)) err(CODES.SCHEMA, `${path}.period`);
@@ -101,24 +108,28 @@ export function validateDocument(doc) {
     err(CODES.SCHEMA, 'universe.root_node_id');
   }
 
-  // 중복(숨긴 노드 제외). 앞에 있는 노드를 기존 노드로 안내한다
-  const seen = [];
+  // 중복(숨긴 노드 제외). 앞에 있는 노드를 기존 노드로 안내한다. 키 Map으로 찾는다(노드 수 제곱 비교 방지, findDuplicateNode와 같은 기준)
+  const firstByKey = new Map();
   doc.nodes.forEach((n, i) => {
     if (!isObject(n) || n.hidden) return;
-    const dup = findDuplicateNode(seen, n);
-    if (dup) err(CODES.DUP, `nodes[${i}]`, { existing_id: dup.id });
-    seen.push(n);
+    const key = nodeDupKey(n);
+    if (key !== null) {
+      const dup = firstByKey.get(key);
+      if (dup) err(CODES.DUP, `nodes[${i}]`, { existing_id: dup.id });
+      else firstByKey.set(key, n);
+    }
     if (n.core_type === 'person' && !n.emp_no) warnings.push({ code: CODES.NO_EMPNO, target_id: n.id });
   });
 
   // 연결
   const edgeIds = new Set();
-  const seenEdges = [];
+  const seenEdges = new Map(); // 출발|도착|관계 → 보이는 연결들(기간 겹침은 같은 묶음 안에서만 비교)
   doc.edges.forEach((e, i) => {
     const path = `edges[${i}]`;
     if (!isObject(e) || isBlank(e.id)) return err(CODES.REQUIRED, `${path}.id`);
-    if (edgeIds.has(e.id)) err(CODES.DUP, `${path}.id`, { existing_id: e.id });
+    if (edgeIds.has(e.id) || nodesById.has(e.id)) err(CODES.DUP, `${path}.id`, { existing_id: e.id });
     edgeIds.add(e.id);
+    if (badText(e.note, TEXT_MAX)) err(CODES.SCHEMA, `${path}.note`);
     for (const k of ['source', 'target', 'core_type']) {
       if (isBlank(e[k])) err(CODES.REQUIRED, `${path}.${k}`);
     }
@@ -131,9 +142,12 @@ export function validateDocument(doc) {
     if (periodError(e.period)) err(CODES.SCHEMA, `${path}.period`);
     if (e.hidden !== undefined && typeof e.hidden !== 'boolean') err(CODES.SCHEMA, `${path}.hidden`);
     if (!e.hidden) {
-      const dup = findDuplicateEdge(seenEdges, e);
+      const key = edgeDupKey(e);
+      const group = seenEdges.get(key) || [];
+      const dup = findDuplicateEdge(group, e);
       if (dup) err(CODES.DUP, path, { existing_id: dup.id });
-      seenEdges.push(e);
+      group.push(e);
+      seenEdges.set(key, group);
     }
   });
 
@@ -142,9 +156,10 @@ export function validateDocument(doc) {
   doc.events.forEach((ev, i) => {
     const path = `events[${i}]`;
     if (!isObject(ev) || isBlank(ev.id)) return err(CODES.REQUIRED, `${path}.id`);
-    if (eventIds.has(ev.id)) err(CODES.DUP, `${path}.id`, { existing_id: ev.id });
+    if (eventIds.has(ev.id) || nodesById.has(ev.id) || edgeIds.has(ev.id)) err(CODES.DUP, `${path}.id`, { existing_id: ev.id });
     eventIds.add(ev.id);
-    if (!EVENT_TYPES[ev.type]) return err(CODES.SCHEMA, `${path}.type`);
+    if (badText(ev.note, TEXT_MAX)) err(CODES.SCHEMA, `${path}.note`);
+    if (!has(EVENT_TYPES, ev.type)) return err(CODES.SCHEMA, `${path}.type`);
     if (isBlank(ev.occurred_at)) err(CODES.REQUIRED, `${path}.occurred_at`);
     else if (!isDate(ev.occurred_at)) err(CODES.SCHEMA, `${path}.occurred_at`);
     if (ev.source !== undefined && !EVENT_SOURCES.includes(ev.source)) err(CODES.SCHEMA, `${path}.source`);
@@ -193,7 +208,7 @@ export function validateDocument(doc) {
 // 이벤트 payload의 필수 키와 참조 ID 오류. 다른 유니버스를 가리키는 전역 참조("U/N")는 여기서 확인하지 않는다.
 // 명령(addEvent)에서도 같은 규칙으로 쓴다.
 export function eventPayloadErrors(doc, nodesById, edgeIds, ev) {
-  const rule = EVENT_PAYLOAD[ev.type];
+  const rule = has(EVENT_PAYLOAD, ev.type) ? EVENT_PAYLOAD[ev.type] : undefined;
   const payload = ev.payload;
   const out = [];
   if (!rule) return out;
@@ -204,7 +219,7 @@ export function eventPayloadErrors(doc, nodesById, edgeIds, ev) {
   for (const k of rule.required || []) {
     if (payload[k] === undefined || payload[k] === null || payload[k] === '') out.push({ code: CODES.REQUIRED, field: k });
   }
-  if (ev.type === 'memo' && payload.category !== undefined && !MEMO_CATEGORIES[payload.category]) {
+  if (ev.type === 'memo' && payload.category !== undefined && !has(MEMO_CATEGORIES, payload.category)) {
     out.push({ code: CODES.SCHEMA, field: 'category' });
   }
   // C12-8: 해결한 메모 하나를 가리킨다. 해결됨 메모에만, 같은 문서의 메모 이벤트만(전역 참조는 쓰지 않는다)
@@ -237,7 +252,7 @@ export function eventPayloadErrors(doc, nodesById, edgeIds, ev) {
     if (!node) return out.push({ code: CODES.SCHEMA, field });
     const expected = EVENT_REF_TYPES[field];
     // 모르는 유형(1.3 "기타")은 멈추지 않도록 통과시킨다
-    if (expected && NODE_TYPES[node.core_type] && node.core_type !== expected) out.push({ code: CODES.SCHEMA, field, expected });
+    if (expected && has(NODE_TYPES, node.core_type) && node.core_type !== expected) out.push({ code: CODES.SCHEMA, field, expected });
   };
   for (const k of rule.nodeRefs || []) checkNode(k, payload[k]);
   for (const k of rule.nodeListRefs || []) {

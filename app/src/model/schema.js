@@ -69,12 +69,15 @@ export const DRAFT_TARGET_TYPES = ['root', 'work'];
 export const SUBTYPE_HANDOVER_DOC = '인수인계서';
 export const SUBTYPE_ROLE = '역할';
 
+// 상속 속성(constructor·toString 등)이 아닌 자기 키만 찾는다(검토 2026-10-17)
+export const hasKey = (obj, key) => typeof key === 'string' && Object.hasOwn(obj, key);
+
 export function nodeTypeLabel(coreType) {
-  return NODE_TYPES[coreType] || UNKNOWN_TYPE_LABEL;
+  return hasKey(NODE_TYPES, coreType) ? NODE_TYPES[coreType] : UNKNOWN_TYPE_LABEL;
 }
 
 export function edgeTypeLabel(coreType) {
-  return EDGE_TYPES[coreType] || UNKNOWN_TYPE_LABEL;
+  return hasKey(EDGE_TYPES, coreType) ? EDGE_TYPES[coreType] : UNKNOWN_TYPE_LABEL;
 }
 
 // 12.1 중복 비교용 정규화: 앞뒤 공백 제거 + 영문 소문자
@@ -164,8 +167,8 @@ const PAIR_RULES = {
 
 // 모르는 관계·노드 유형은 불러올 때 멈추지 않도록(1.3) 허용으로 본다.
 export function pairAllowed(edgeType, sourceType, targetType) {
-  const rule = PAIR_RULES[edgeType];
-  if (!rule || !NODE_TYPES[sourceType] || !NODE_TYPES[targetType]) return true;
+  const rule = hasKey(PAIR_RULES, edgeType) ? PAIR_RULES[edgeType] : undefined;
+  if (!rule || !hasKey(NODE_TYPES, sourceType) || !hasKey(NODE_TYPES, targetType)) return true;
   return rule(sourceType, targetType);
 }
 
@@ -180,7 +183,7 @@ export function allowedRelations(aType, bType) {
 }
 
 export function eventTypeLabel(type) {
-  return EVENT_TYPES[type] || UNKNOWN_TYPE_LABEL;
+  return hasKey(EVENT_TYPES, type) ? EVENT_TYPES[type] : UNKNOWN_TYPE_LABEL;
 }
 
 // 표 입력(T-19, D-18)에서 한 번에 처리하는 행 수 상한(T19-11). 바꾸려면 여기 한 곳만 고친다

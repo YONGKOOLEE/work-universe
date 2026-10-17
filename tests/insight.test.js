@@ -84,10 +84,12 @@ test('숨긴 업무·숨긴 사람은 후보에서 빠진다', () => {
   assert.ok(labelsOf({}).includes('윤바다'));
   const hiddenWork = hideNode(SAMPLE_EVENT, 'N-101', { now: '2026-10-01T10:00:00+09:00' }).doc;
   assert.ok(!labelsOf({ 'U-B': hiddenWork }).includes('윤바다'));
-  // 합쳐진 사람은 한쪽 노드만 숨기면 남고, 모든 노드를 숨겨야 후보에서 빠진다
+  // 합쳐진 사람은 한쪽 노드만 숨기면 사람 노드는 남는다. 다만 숨긴 쪽(행사팀 기록)에 붙은 수행 연결은 되살리지 않으므로(검토8 R8-1, D-04 숨김=삭제)
+  // 행사팀 경력으로만 후보가 되던 윤바다는 후보에서 빠진다. 2026-10-17 기대값 변경: 이전에는 후보에 남는다고 봤다(decisions-pending 13절 R8-1)
   const now = { now: '2026-10-01T10:00:00+09:00' };
   const hiddenInB = hideNode(SAMPLE_EVENT, 'N-202', now).doc;
-  assert.ok(labelsOf({ 'U-B': hiddenInB }).includes('윤바다'));
+  assert.ok(viewOf('U-D1', { 'U-B': hiddenInB }).nodes.some((n) => n.label === '윤바다' && !n.hidden));
+  assert.ok(!labelsOf({ 'U-B': hiddenInB }).includes('윤바다'));
   const hiddenInA = hideNode(SAMPLE_A1, 'N-011', now).doc;
   assert.ok(!labelsOf({ 'U-B': hiddenInB, 'U-A1': hiddenInA }).includes('윤바다'));
 });

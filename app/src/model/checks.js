@@ -45,6 +45,20 @@ export function findDuplicateNode(nodes, cand, excludeId) {
   });
 }
 
+// findDuplicateNode와 같은 기준의 묶음 키(대량 검증용). 같은 키끼리만 중복 후보이고, 중복이 될 수 없는 노드는 null
+// 사람은 정규화 사번, 그 외는 유형 + 정규화 라벨. 꼭지·사번 없는 사람은 null
+export function nodeDupKey(n) {
+  if (n.core_type === 'root') return null;
+  // 글자가 아닌 이름·사번(가져온 잘못된 JSON)은 키를 만들지 않는다: 형식 오류는 검증이 따로 알리고, 깊은 배열에서 String()이 멈추지 않게
+  if (n.core_type === 'person') return n.emp_no && typeof n.emp_no === 'string' ? JSON.stringify(['person', normalizeEmpNo(n.emp_no)]) : null;
+  return typeof n.label === 'string' ? JSON.stringify([n.core_type, normalizeLabel(n.label)]) : null;
+}
+
+// 같은 키의 연결끼리만 중복 후보(출발·도착·관계 유형이 같아야 한다)
+export function edgeDupKey(e) {
+  return JSON.stringify([e.source, e.target, e.core_type]);
+}
+
 // 같은 출발·도착·관계 유형이면서 유효 기간이 겹치면 중복(숨긴 연결은 제외)
 export function findDuplicateEdge(edges, cand, excludeId) {
   return edges.find(

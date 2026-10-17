@@ -13,22 +13,41 @@ import { toGid } from './view.js';
  * 기본: 꼭지, 담당자(수행 연결이 있는 사람), 최상위 업무(다른 업무에 포함되지 않은 업무), 유니버스 사이 공유 주제.
  * @returns {{exposed:boolean, explicit:boolean, reason:string}}
  */
-export function exposureOf(view, gid) {
+/**
+ * exposureOf가 노드마다 연결 전체를 훑지 않도록 유니버스별로 한 번만 계산해 두는 표(여덟 번째 검토 7b).
+ * performers: 유니버스 → 수행 연결의 출발 노드 집합, underWork: 유니버스 → 업무에 포함된 대상 노드 집합
+ */
+export function exposureIndex(view) {
+  const performers = new Map();
+  const underWork = new Map();
+  const setOf = (m, u) => {
+    if (!m.has(u)) m.set(u, new Set());
+    return m.get(u);
+  };
+  for (const e of view.edges) {
+    if (e.hidden || e.synthetic) continue;
+    if (e.core_type === 'performs') setOf(performers, e.universe_id).add(e.source);
+    else if (e.core_type === 'contains' && view.getNode(e.source)?.core_type === 'work') setOf(underWork, e.universe_id).add(e.target);
+  }
+  return { performers, underWork };
+}
+
+export function exposureOf(view, gid, index = null) {
   const node = view.rawNode(gid);
   if (!node) return { exposed: false, explicit: false, reason: '' };
   if (node.core_type === 'root') return { exposed: true, explicit: false, reason: '꼭지' };
   if (typeof node.exposed === 'boolean') {
     return { exposed: node.exposed, explicit: true, reason: node.exposed ? '직접 드러냄' : '직접 숨김' };
   }
-  const own = view.edges.filter((e) => !e.hidden && !e.synthetic && e.universe_id === node.universe_id);
+  const idx = index || exposureIndex(view);
   const canon = view.canonical(gid);
   switch (node.core_type) {
     case 'person': {
-      const performs = own.some((e) => e.core_type === 'performs' && e.source === canon);
+      const performs = !!idx.performers.get(node.universe_id)?.has(canon);
       return { exposed: performs, explicit: false, reason: performs ? '담당자' : '담당 업무 없음' };
     }
     case 'work': {
-      const underWork = own.some((e) => e.core_type === 'contains' && e.target === canon && view.getNode(e.source)?.core_type === 'work');
+      const underWork = !!idx.underWork.get(node.universe_id)?.has(canon);
       return { exposed: !underWork, explicit: false, reason: underWork ? '하위 업무' : '최상위 업무' };
     }
     case 'topic': {
@@ -74,6 +93,7 @@ export function projectView(view, { expanded = new Set() } = {}) {
   //    접힌 원본만 있으면: 어느 원본에든 직접 지정(위층에 드러내기)이 있으면 그 지정을 따르고, 없으면 기본 규칙 중 하나라도 맞으면 보인다
   //    (검토 2026-10-03: 합쳐진 윤바다의 드러내기를 꺼도 다른 원본의 기본 규칙 때문에 계속 보이던 문제)
   const visible = new Set();
+  const expIndex = exposureIndex(view);
   for (const n of view.nodes) {
     if (n.hidden) continue;
     const raws = [n.gid, ...n.merged_from].map((g) => view.rawNode(g)).filter((r) => r && !r.hidden);
@@ -82,9 +102,9 @@ export function projectView(view, { expanded = new Set() } = {}) {
       continue;
     }
     // 직접 지정은 원본이 어느 단계에 있든(손자 유니버스여도) 본다. 직접 숨김만 있으면 숨긴다
-    const explicit = raws.map((r) => exposureOf(view, r.gid)).filter((e) => e.explicit);
+    const explicit = raws.map((r) => exposureOf(view, r.gid, expIndex)).filter((e) => e.explicit);
     if (explicit.length && !explicit.some((e) => e.exposed)) continue;
-    const exp = raws.filter((r) => collapsedU.has(r.universe_id)).map((r) => exposureOf(view, r.gid));
+    const exp = raws.filter((r) => collapsedU.has(r.universe_id)).map((r) => exposureOf(view, r.gid, expIndex));
     if (exp.some((e) => e.exposed)) visible.add(n.gid);
   }
 

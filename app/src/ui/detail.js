@@ -99,13 +99,15 @@ export function renderUniverseSummary(panel, s, shown = null, extras = {}) {
   if (s.stale_links.length) panel.append(el('p', { class: 'notice', 'data-testid': 'stale-links' }, `사번이 바뀌어 더는 맞지 않는 사번 자동 연결 ${s.stale_links.length}건은 합치지 않았습니다. 다시 확인이 필요합니다.`));
   // 큰 유니버스: 업무별로 나누라는 안내(막지 않는다)
   if (extras.split) {
-    panel.append(el('p', { class: 'notice', 'data-testid': 'split-hint' }, `이 유니버스에 노드가 ${extras.split.count}개입니다. 표준 양식은 업무당 10~20개라 한 화면에 다 그리면 글자가 작아집니다. 업무별 유니버스로 나눈 뒤 「유니버스 묶기」로 묶으면 위에서는 접혀 보여 읽기 쉽습니다. 지금은 「노드 찾기」·「주변만 보기」·「흐름 정렬」로 좁혀 보세요.`));
+    panel.append(el('p', { class: 'hint', 'data-testid': 'split-hint' }, `${extras.universeId === 'U-K1' ? '이 샘플은 단계마다 노드를 만든 비교 자료입니다. ' : ''}노드 ${s.node_total}개 — 한 화면에 다 그리면 이름이 작아집니다(월말 정산 점검은 업무 3개·노드 10개). 업무 하나씩 유니버스로 만들고 「유니버스 묶기」로 묶으면 위에서는 접혀 보입니다. 지금은 「노드 찾기」나, 노드를 고른 뒤 「더 보기」 → 「주변만 보기」로 좁혀 보세요.`));
   }
   // 「처음 할 일」: 새로 만든 유니버스가 다음에 할 일 3단계(다 하면 사라진다). 새 사람에게 가장 필요한 안내라 일반 안내보다 위에 둔다
   if (extras.starter) {
     panel.append(el('div', { class: 'hint', 'data-testid': 'starter-steps' },
       el('p', {}, el('strong', {}, '처음 할 일')),
-      el('ul', { class: 'starter-list' }, ...extras.starter.steps.map((st) => el('li', { class: st.done ? 'done' : '', 'data-done': st.done ? '1' : '0' }, `${st.done ? '✓' : '○'} ${st.label}`)))));
+      el('ul', { class: 'starter-list' }, ...extras.starter.steps.map((st) => el('li', { class: st.done ? 'done' : '', 'data-done': st.done ? '1' : '0' }, `${st.done ? '✓' : '○'} `, st.work && extras.onSelect && !st.done
+        ? el('button', { type: 'button', class: 'starter-go', 'data-testid': 'starter-go', title: '이 업무를 고릅니다', onclick: () => extras.onSelect(st.work.gid) }, st.label)
+        : st.label)))));
   }
   // 꼭지만 있는 빈 유니버스(새로 만든 직후)에는 다음 행동을 안내한다(검토5 U-5)
   const empty = s.node_total <= 1;

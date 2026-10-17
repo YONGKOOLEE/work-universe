@@ -146,8 +146,8 @@ export function nodeForm(o) {
   const sub = subtypeEditor(o.subtypes, () => type.value, n.subtype, 'node-subtype');
   const subtypeField = field('하위 유형(선택)', sub.el);
   const label = el('input', { value: n.label || '', maxlength: 100, autocomplete: 'off', 'data-testid': 'node-label', disabled: isRoot });
-  const description = el('textarea', { rows: 3, 'data-testid': 'node-description' }, n.description || '');
-  const empNo = el('input', { value: n.emp_no || '', placeholder: 'V-0000', autocomplete: 'off', 'data-testid': 'node-empno' });
+  const description = el('textarea', { rows: 3, maxlength: 2000, 'data-testid': 'node-description' }, n.description || '');
+  const empNo = el('input', { value: n.emp_no || '', placeholder: 'V-0000', maxlength: 100, autocomplete: 'off', 'data-testid': 'node-empno' });
   const empField = field('사번(선택)', empNo);
   const attrs = attrsEditor(n.attrs || {});
   const period = periodEditor(n.period || {});
@@ -211,7 +211,7 @@ export function edgeForm(o) {
   const direction = select([['out', `${o.node.label} → 상대`], ['in', `상대 → ${o.node.label}`]], 'out', { 'data-testid': 'edge-direction' });
   const other = select(nodeOptions(o.candidates, { empty: '상대 노드를 고르세요' }), '', { 'data-testid': 'edge-other' });
   const period = periodEditor();
-  const note = el('input', { autocomplete: 'off', placeholder: '예: 인수 후 담당' });
+  const note = el('input', { autocomplete: 'off', maxlength: 2000, placeholder: '예: 인수 후 담당' });
   const sub = subtypeEditor(o.subtypes || [], () => relation.value, null, 'edge-subtype');
   relation.addEventListener('change', () => sub.refresh());
   const msg = messageBox();
@@ -257,7 +257,7 @@ export function edgeForm(o) {
 /** 연결 수정 양식(기간·메모). 양 끝과 관계는 바꿀 수 없다. */
 export function edgeEditForm(o) {
   const period = periodEditor(o.edge.period || {});
-  const note = el('input', { value: o.edge.note || '', autocomplete: 'off' });
+  const note = el('input', { value: o.edge.note || '', maxlength: 2000, autocomplete: 'off' });
   const msg = messageBox();
   const form = el(
     'form',

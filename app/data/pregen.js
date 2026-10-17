@@ -279,10 +279,51 @@ const candidate = [
   },
 ].map(({ pair, ...x }) => ({ task: 'work_candidate_reason', target: `work_candidate|${[...pair].sort().join('|')}`, ...x }));
 
+// 지문(fp): 줄을 쓸 때의 규칙 기반 문장의 지문(llm/providers.js fingerprint). 조회 때 지금 규칙 기반 문장의 지문과 다르면 그 항목은 규칙 기반으로 돌아간다(K-9).
+// 문장은 건드리지 않고 이 표만 `node tools/pregen-dump.mjs --write-fp`로 다시 만든다(데이터를 고쳐 문장을 새로 쓴 뒤). 키: task|target|item|보내는>받는
+// FP-BEGIN
+const FP = {
+  "handover|U-A1/N-000|업무_개요|U-A1/N-011>U-A1/N-012": 'b492e1f0',
+  "handover|U-A1/N-000|세부_업무_절차|U-A1/N-011>U-A1/N-012": '4e87acaf',
+  "handover|U-A1/N-000|일정_마감|U-A1/N-011>U-A1/N-012": '2f13cf1a',
+  "handover|U-A1/N-000|주의사항|U-A1/N-011>U-A1/N-012": '63bc7d08',
+  "handover|U-A1/N-000|진행_중|U-A1/N-011>U-A1/N-012": '3c1df702',
+  "handover|U-A1/N-000|산출물_문서|U-A1/N-011>U-A1/N-012": '9e94f20c',
+  "handover|U-A1/N-000|관계자_연락처|U-A1/N-011>U-A1/N-012": '9332aaaa',
+  "handover|U-A1/N-000|최근_이슈|U-A1/N-011>U-A1/N-012": '78821adc',
+  "handover|U-A1/N-000|이전_인수인계|U-A1/N-011>U-A1/N-012": '699c8b7f',
+  "handover|U-A1/N-000|유사_경험자|U-A1/N-011>U-A1/N-012": 'cf156094',
+  "handover|U-C/N-101|업무_개요|U-C/N-202>U-C/N-201": 'fa081938',
+  "handover|U-C/N-101|세부_업무_절차|U-C/N-202>U-C/N-201": 'fb082476',
+  "handover|U-C/N-101|일정_마감|U-C/N-202>U-C/N-201": 'f0da42b5',
+  "handover|U-C/N-101|주의사항|U-C/N-202>U-C/N-201": '041f61b4',
+  "handover|U-C/N-101|진행_중|U-C/N-202>U-C/N-201": '0dc0f762',
+  "handover|U-C/N-101|산출물_문서|U-C/N-202>U-C/N-201": '27154aca',
+  "handover|U-C/N-101|관계자_연락처|U-C/N-202>U-C/N-201": 'a8c4f7fd',
+  "handover|U-C/N-101|최근_이슈|U-C/N-202>U-C/N-201": '991d9712',
+  "handover|U-C/N-101|이전_인수인계|U-C/N-202>U-C/N-201": 'a5e69b9d',
+  "insight_explain|similar|U-A1/N-001||": 'e2a4a3e7',
+  "insight_explain|repeat|U-A1||": '0d20fb69',
+  "insight_explain|repeat|U-D1||": '79ac9b60',
+  "insight_explain|density|U-D1|n=3||": '5d65ae56',
+  "insight_explain|density|U-C|n=3||": '20f66f7b',
+  "insight_explain|flow|U-A1|month||": 'c78f93fa',
+  "insight_explain|flow|U-O|month||": '6e8d1326',
+  "work_candidate_reason|work_candidate|U-B/N-101|U-K1/N-104||": 'b1db6c11',
+  "work_candidate_reason|work_candidate|U-A1/N-001|U-B/N-101||": 'b1db6c11',
+  "work_candidate_reason|work_candidate|U-A1/N-001|U-K1/N-104||": 'b1db6c11',
+  "work_candidate_reason|work_candidate|U-A1/N-001|U-K1/N-105||": 'b1db6c11',
+  "work_candidate_reason|work_candidate|U-B/N-101|U-K1/N-105||": 'b1db6c11',
+  "work_candidate_reason|work_candidate|U-A1/N-003|U-C/N-104||": '47aa15ea',
+  "work_candidate_reason|work_candidate|U-B/N-103|U-C/N-102||": 'cf9fed35',
+};
+// FP-END
+const fpKey = (it) => [it.task, it.target, it.item || '', it.from && it.to ? `${it.from}>${it.to}` : ''].join('|');
+
 export const PREGEN = {
   schema_version: '1.0',
   generator: 'Claude Code (개발 시 작성)',
   generated_at: '2026-10-02T15:00:00+09:00',
   data_version: 'v2',
-  items: [...handoverA1, ...handoverC, ...explain, ...candidate],
+  items: [...handoverA1, ...handoverC, ...explain, ...candidate].map((it) => ({ ...it, fp: FP[fpKey(it)] })),
 };

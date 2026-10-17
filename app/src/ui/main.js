@@ -250,6 +250,9 @@ function start() {
           ? el('li', { class: 'legend-note' }, el('span', { class: 'dot collapsed' }), '이중 테두리 + 숫자: 접힌 하위 유니버스(더블클릭하면 펼침) · 점선: 요약 연결')
           : null,
         // 노드가 많은 화면(부서 등)은 글자가 작다: 확대·이동 방법을 범례 끝에 알린다(재검증 5-2)
+        display.nodes.some((n) => n.merged_from && n.merged_from.length)
+          ? el('li', { class: 'legend-note', 'data-testid': 'legend-merged' }, '숫자 없는 이중 테두리: 같은 사람으로 합친 노드')
+          : null,
         el('li', { class: 'legend-note', 'data-testid': 'legend-zoom' }, '마우스 휠: 확대·축소 · 빈 곳 끌기: 이동'),
       ].filter(Boolean),
     );
@@ -675,7 +678,7 @@ function start() {
     }
     if (!selected) {
       const summary = describeUniverse(view);
-      renderUniverseSummary(panel, summary, display.nodes.length, { split: splitHint(app.doc), starter: starterSteps(app.doc, view) });
+      renderUniverseSummary(panel, summary, display.nodes.length, { split: splitHint(app.doc), starter: starterSteps(app.doc, view), universeId: app.doc.universe.id, onSelect: (g) => { reveal(g); select(view.canonical(g)); } });
       // 꼭지만 있으면 「노드 추가」를 펼쳐 둔다(검토5 U-5). 안내 문구(detail.js)와 같은 기준: 하위 유니버스를 묶은 화면은 노드가 있으므로 건드리지 않는다
       if (summary.node_total <= 1 && !app.readOnly) document.querySelector('details.add').open = true;
       const rootGid = app.rootGid();

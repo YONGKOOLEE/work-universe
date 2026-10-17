@@ -6,7 +6,7 @@ import { workFormMissing } from './form.js';
 /**
  * @param {object} doc 현재 유니버스 문서
  * @param {object} view buildView 결과
- * @returns {{steps:{key:string, label:string, done:boolean}[]}|null} 보일 것이 없으면 null
+ * @returns {{steps:{key:string, label:string, done:boolean, work?:{gid:string,label:string}}[]}|null} 보일 것이 없으면 null
  */
 export function starterSteps(doc, view) {
   if (doc.universe.is_sample) return null;
@@ -16,7 +16,8 @@ export function starterSteps(doc, view) {
   const steps = [
     {
       key: 'memo',
-      label: '업무에 이력 한 줄 남기기(「이력 추가」 → 메모: 주의사항·이슈)',
+      label: `하늘색 업무 「${works[0].label}」을 누르고 「이력 추가」 → 메모로 주의사항·이슈 한 줄 남기기`,
+      work: { gid: works[0].gid, label: works[0].label },
       done: doc.events.some((e) => e.type === 'memo'),
     },
     {

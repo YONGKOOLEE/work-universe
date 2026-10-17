@@ -103,7 +103,7 @@ export function tableDialog(o) {
       el('td', {}, input('label', { maxlength: 100 })),
       el('td', {}, input('subtype')),
       el('td', {}, el('textarea', { 'data-col': 'description', rows: 1, 'aria-label': `${i + 1}행 설명` }, r.cells.description ?? '')),
-      el('td', {}, input('emp_no', { placeholder: 'V-0000' })),
+      el('td', {}, input('emp_no', { placeholder: 'V-0000', maxlength: 100 })),
       el('td', {}, el('textarea', { 'data-col': 'attrs', rows: 1, 'aria-label': `${i + 1}행 속성`, placeholder: '키=값; 키=값' }, r.cells.attrs ?? '')),
       !existing ? el('td', {}, el('button', { type: 'button', class: 'small-btn', 'aria-label': `${i + 1}행 빼기`, onclick: () => { st.rows = collect(); st.rows.splice(i, 1); st.errors = new Map(); render(); } }, '빼기')) : null,
     );

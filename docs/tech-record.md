@@ -51,6 +51,7 @@
 - 44. T-26 찾기 넓히기·작성자 이름 (2026-10-13)
 - 45. 브라우저 점검 범위와 프로세스 정리 방식 (2026-10-17)
 - 46. 첫 업무 칸·처음 할 일·나눠 보세요 안내 (2026-10-17)
+- 47. 여덟 번째 검토: 사전 생성 지문·숨긴 합쳐진 노드·검증 강화 (2026-10-17)
 <!-- toc:end -->
 
 ## 1. 도구·라이브러리 (확인일 2026-09-30)
@@ -651,3 +652,12 @@
 - **A:** `model/starter.js applyStarter` — 업무(꼭지에 포함 연결, 주기·마감 속성), 담당자(사람 + addAssignment 오늘 담당 시작), 산출물(산출 연결). `app.createUniverse`가 유니버스와 함께 저장 한 번. 화면은 `#create-starter`(두 줄 격자). `rules/starter-steps.js starterSteps` — 직접 만든 유니버스(샘플·묶음 제외)에 이력 한 줄·권장 항목·업무 더 넣기 3단계, 다 하면 사라짐. 개요에서 일반 안내보다 위.
 - **B:** `rules/form.js splitHint` — 자기 노드(꼭지 제외, 숨김 제외)가 `STANDARD_FORM.splitAbove`(25)를 넘을 때. 하위 유니버스 노드는 세지 않는다. 샘플 판정: 카드승인 37 보임, 조직관리 23·월말 정산 9·묶음 0 안 보임.
 - **검증:** 단위 553 → 569, check:chrome 새 7항목, 스크린샷(.tmp/shots17: 8b·8c·dialog-main).
+
+## 47. 여덟 번째 검토: 사전 생성 지문·숨긴 합쳐진 노드·검증 강화 (2026-10-17)
+
+- 전체 기록은 `docs/review-2026-10-17.md`. 여기에는 다음에 코드를 고칠 사람이 알아야 할 것만 둔다.
+- **사전 생성 지문(R8-2):** `llm/providers.js fingerprint`(FNV-1a 32비트) — 사전 생성 줄의 `fp`는 만들 때의 규칙 기반 문장 지문. 조회 때 지금 규칙 문장 지문과 같을 때만 쓴다. 기준일에만 달라지는 "기록 없는 기간" 경고 문장은 지문에서 뺀다(VOLATILE). **샘플을 고쳐 문장을 새로 쓰면** `node tools/pregen-dump.mjs --write-fp`로 `app/data/pregen.js`의 FP 표를 다시 만든다(`--check-fp`, tests/pregen.test.js 낡음 ⑥이 알려 줌).
+- **숨긴 합쳐진 노드(R8-1, D8-1):** buildView에서 연결의 원래 끝점이 숨김이고 합쳐진 노드면 그 연결을 숨김. 사람 노드는 다른 쪽이 남으면 보인다. 기존 테스트 기대값 1줄을 바꿈(insight.test.js "숨긴 업무·숨긴 사람").
+- **검증 상한(R8-3):** 명령(addNode·updateNode·addEdge·updateEdge·addEvent)과 가져오기 검증이 같은 상한을 쓴다(설명·메모 2000, 사번 100). 한쪽만 바꾸면 앱이 저장한 문서를 다시 못 가져온다(재검증 회귀 ①).
+- **유형 조회(R8-6):** 유형 표 조회는 `schema.js hasKey`(Object.hasOwn). `NODE_TYPES[x]`처럼 쓰면 constructor 같은 상속 속성이 걸린다.
+- **성능(R8-7):** 검증은 키 Map(`checks.js nodeDupKey·edgeDupKey`), 층별 보기는 `collapse.js exposureIndex` 한 번 계산.

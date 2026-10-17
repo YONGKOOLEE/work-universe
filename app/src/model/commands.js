@@ -16,6 +16,7 @@ import {
   SCHEMA_VERSION,
   TEXT_MAX,
   USER_EVENT_TYPES,
+  hasKey,
   pairAllowed,
   pairKey,
 } from './schema.js';
@@ -70,9 +71,11 @@ function normalizeNodeFields(f) {
 function nodeFieldError(doc, f, { excludeId, isUpdate = false } = {}) {
   if (!f.core_type) return { code: CODES.REQUIRED, field: 'core_type' };
   if (!f.label || f.label.length > LABEL_MAX) return { code: CODES.REQUIRED, field: 'label' };
-  if (!isUpdate && (!NODE_TYPES[f.core_type] || f.core_type === 'root')) return { code: CODES.SCHEMA, field: 'core_type' };
+  if (!isUpdate && (!hasKey(NODE_TYPES, f.core_type) || f.core_type === 'root')) return { code: CODES.SCHEMA, field: 'core_type' };
   if (f.subtype && !subtypeRegistered(doc, f.core_type, f.subtype)) return { code: CODES.SUBTYPE, field: 'subtype' };
   if (f.emp_no && f.core_type !== 'person') return { code: CODES.SCHEMA, field: 'emp_no' };
+  // 사번 길이: 가져오기 검증(validate.js)과 같은 상한(검토8 재검증)
+  if (f.emp_no && String(f.emp_no).length > LABEL_MAX) return { code: CODES.SCHEMA, field: 'emp_no', too_long: LABEL_MAX };
   if (f.exposed !== undefined && typeof f.exposed !== 'boolean') return { code: CODES.SCHEMA, field: 'exposed' };
   if (f.attrs !== undefined) {
     const ok =
@@ -228,10 +231,12 @@ export function addEdge(doc, input, ctx) {
   // 숨긴 노드는 화면에 없으므로 새 연결의 끝이 될 수 없다(기존 연결은 이력으로 남는다)
   if (src.hidden) return fail(CODES.SCHEMA, { field: 'source', hidden: true });
   if (tgt.hidden) return fail(CODES.SCHEMA, { field: 'target', hidden: true });
-  if (!EDGE_TYPES[input.core_type]) return fail(CODES.SCHEMA, { field: 'core_type' });
+  if (!hasKey(EDGE_TYPES, input.core_type)) return fail(CODES.SCHEMA, { field: 'core_type' });
   if (!pairAllowed(input.core_type, src.core_type, tgt.core_type)) return fail(CODES.PAIR);
   if (input.subtype && !subtypeRegistered(doc, input.core_type, input.subtype)) return fail(CODES.SUBTYPE, { field: 'subtype' });
   if (periodError(input.period)) return fail(CODES.SCHEMA, { field: 'period' });
+  // 연결 메모 길이: 가져오기 검증(validate.js)과 같은 상한. 앱이 저장한 문서를 다시 가져오지 못하는 일을 막는다(검토8 재검증)
+  if (input.note && String(input.note).trim().length > TEXT_MAX) return fail(CODES.SCHEMA, { field: 'note', too_long: TEXT_MAX });
 
   const fields = { source: input.source, target: input.target, core_type: input.core_type };
   if (!isEmpty(input.period)) fields.period = input.period;
@@ -269,6 +274,7 @@ export function updateEdge(doc, edgeId, changes, ctx) {
   }
   if (merged.subtype && !subtypeRegistered(doc, merged.core_type, merged.subtype)) return fail(CODES.SUBTYPE, { field: 'subtype' });
   if (periodError(merged.period)) return fail(CODES.SCHEMA, { field: 'period' });
+  if (merged.note !== undefined && (typeof merged.note !== 'string' || merged.note.length > TEXT_MAX)) return fail(CODES.SCHEMA, { field: 'note', too_long: TEXT_MAX });
   const dup = !merged.hidden && findDuplicateEdge(doc.edges, merged, edgeId);
   if (dup) return fail(CODES.DUP, { existing_id: dup.id });
 
@@ -373,7 +379,7 @@ export function addSubtype(doc, input) {
   const name = typeof input.name === 'string' ? input.name.trim() : '';
   if (!input.core_type) return fail(CODES.REQUIRED, { field: 'core_type' });
   if (!name || name.length > LABEL_MAX) return fail(CODES.REQUIRED, { field: 'name' });
-  const known = (NODE_TYPES[input.core_type] && input.core_type !== 'root') || EDGE_TYPES[input.core_type];
+  const known = (hasKey(NODE_TYPES, input.core_type) && input.core_type !== 'root') || hasKey(EDGE_TYPES, input.core_type); // 상속 속성(constructor 등)은 유형이 아님(검토8 R8-6)
   if (!known) return fail(CODES.SCHEMA, { field: 'core_type' });
   if (subtypeRegistered(doc, input.core_type, name)) return fail(CODES.DUP, { field: 'name' });
 

@@ -1,5 +1,5 @@
 // 오류·경고 코드(12.5) → 한국어 화면 메시지
-import { EDGE_TYPES, NODE_TYPES } from '../model/schema.js';
+import { EDGE_TYPES, NODE_TYPES, hasKey } from '../model/schema.js';
 
 const FIELD_NAMES = {
   label: '이름',
@@ -87,7 +87,7 @@ export function messageFor(err, ctx = {}) {
       // 고른 두 노드의 유형과, 이 두 노드에 쓸 수 있는 관계(N-4)
       const s = ctx.source;
       const t = ctx.target;
-      const what = ` 고른 노드: 「${s.label}」${josa(s.label, '은/는')} ${TYPE_NAMES[s.core_type] || s.core_type}, 「${t.label}」${josa(t.label, '은/는')} ${TYPE_NAMES[t.core_type] || t.core_type}입니다.`;
+      const what = ` 고른 노드: 「${s.label}」${josa(s.label, '은/는')} ${(hasKey(TYPE_NAMES, s.core_type) ? TYPE_NAMES[s.core_type] : s.core_type)}, 「${t.label}」${josa(t.label, '은/는')} ${(hasKey(TYPE_NAMES, t.core_type) ? TYPE_NAMES[t.core_type] : t.core_type)}입니다.`;
       const lastRelation = (ctx.suggestions || []).length ? (EDGE_NAMES[ctx.suggestions[ctx.suggestions.length - 1].relation] || ctx.suggestions[ctx.suggestions.length - 1].relation) : '';
       const ok = (ctx.suggestions || []).map((x) => {
         const name = EDGE_NAMES[x.relation] || x.relation;

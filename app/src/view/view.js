@@ -2,7 +2,7 @@
 // 원본 문서는 바꾸지 않는다(R-11 ⑤). 노드마다 출처를 전역 참조("<유니버스 ID>/<노드 ID>")로 유지한다.
 // 브라우저 기능(DOM, 저장소)을 쓰지 않는다.
 
-import { EVENT_PAYLOAD, edgeTypeLabel, nodeTypeLabel, NODE_TYPES, normalizeEmpNo, normalizeLabel } from '../model/schema.js';
+import { EVENT_PAYLOAD, edgeTypeLabel, hasKey, nodeTypeLabel, NODE_TYPES, normalizeEmpNo, normalizeLabel } from '../model/schema.js';
 
 export function toGid(universeId, localId) {
   return `${universeId}/${localId}`;
@@ -68,7 +68,7 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
         id: n.id,
         core_type: n.core_type,
         type_label: nodeTypeLabel(n.core_type),
-        known_type: !!NODE_TYPES[n.core_type],
+        known_type: hasKey(NODE_TYPES, n.core_type),
         subtype: n.subtype,
         label: n.label,
         description: n.description,
@@ -124,6 +124,8 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
     const c = canonical(n.gid);
     if (c !== n.gid) nodeByGid.get(c).merged_from.push(n.gid);
   }
+  // 대표 노드로 바뀌기 전 각 노드의 숨김 여부(연결의 원래 끝점이 숨김인지 보기 위해 보관)
+  const rawHidden = new Map(nodes.map((n) => [n.gid, n.hidden]));
   // 대표 노드는 합쳐진 노드가 모두 숨겨졌을 때만 숨김으로 본다
   for (const n of nodes) {
     if (n.merged_from.length) n.hidden = n.hidden && n.merged_from.every((g) => nodeByGid.get(g).hidden);
@@ -134,9 +136,13 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
   const edges = [];
   for (const doc of docs) {
     for (const e of doc.edges) {
-      const source = canonical(toGid(doc.universe.id, e.source));
-      const target = canonical(toGid(doc.universe.id, e.target));
+      const rawSource = toGid(doc.universe.id, e.source);
+      const rawTarget = toGid(doc.universe.id, e.target);
+      const source = canonical(rawSource);
+      const target = canonical(rawTarget);
       if (source === target) continue; // 합쳐진 두 노드 사이의 연결은 자기 연결이 되므로 그리지 않는다
+      // 합쳐진 노드의 한쪽을 숨기면(= 삭제, D-04) 그 쪽 끝점의 연결은 대표 노드에 남기지 않는다(여덟 번째 검토 1)
+      const endHidden = (raw, rep) => !!rawHidden.get(raw) && (rep !== raw || nodeByGid.get(rep).merged_from.length > 0);
       edges.push({
         gid: toGid(doc.universe.id, e.id),
         universe_id: doc.universe.id,
@@ -148,7 +154,7 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
         subtype: e.subtype,
         period: e.period,
         note: e.note,
-        hidden: !!e.hidden,
+        hidden: !!e.hidden || endHidden(rawSource, source) || endHidden(rawTarget, target),
         synthetic: false,
       });
     }
@@ -174,7 +180,7 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
   const events = [];
   for (const doc of docs) {
     for (const ev of doc.events) {
-      const rule = EVENT_PAYLOAD[ev.type] || {};
+      const rule = (hasKey(EVENT_PAYLOAD, ev.type) && EVENT_PAYLOAD[ev.type]) || {};
       const payload = ev.payload || {};
       const toNodeGid = (id) => canonical(refGid(doc.universe.id, id));
       const nodeGids = [];

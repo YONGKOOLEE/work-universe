@@ -29,8 +29,8 @@
   .graph-wrap { flex: 1; min-width: 0; position: relative; background: radial-gradient(ellipse at 50% 45%, #17231a 0%, var(--bg) 70%); display: flex; flex-direction: column; }
   #graph { flex: 1; min-height: 0; position: relative; }
   /* 큰 화면 탐색(T-18): 찾기·거르기·상태 막대와 「다시 정렬·전체 보기」를 그래프 위 한 줄에 */
-  .explore-row { display: flex; align-items: flex-start; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--line); background: var(--panel); position: relative; z-index: 2; }
-  .explore-bar { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 13px; }
+  .explore-row { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 6px 8px; padding: 6px 12px; border-bottom: 1px solid var(--line); background: var(--panel); position: relative; z-index: 2; }
+  .explore-bar { flex: 1 1 380px; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 13px; }
   .graph-tools { display: flex; gap: 6px; flex-shrink: 0; }
   .find-box { position: relative; display: flex; align-items: center; gap: 4px 10px; }
   .find-wide { white-space: nowrap; }
@@ -113,6 +113,7 @@
   #create-starter label:first-of-type { grid-column: 1 / -1; }
   #create-starter input { width: 100%; box-sizing: border-box; }
   .starter-list { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 4px; }
+  .starter-list li { display: flex; gap: 4px; align-items: baseline; } /* ○와 누르는 글을 한 줄에(검토8 재검증) */
   .starter-list li.done { color: var(--muted); text-decoration: line-through; }
   .error-text { color: var(--err); font-size: 13px; min-height: 1em; }
   .editor { display: grid; gap: 8px; font-size: 14px; min-width: 0; }
@@ -223,6 +224,9 @@
   .explain h4 { margin: 0; font-size: 13px; display: flex; gap: 6px; align-items: center; }
   .explain ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
   .method-chip { margin-left: 6px; font-size: 11px; padding: 0 6px; border-radius: 8px; border: 1px solid var(--line); color: var(--muted); font-weight: normal; }
+  .evidence-label { color: var(--muted); font-size: 12px; margin-right: 4px; }
+  .evidence-row { display: flex; align-items: baseline; margin-top: 2px; }
+  .starter-list button.starter-go { flex: 1; min-width: 0; background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
   .method-chip.pregen { border-color: var(--accent); color: var(--accent); }
   .dg-n { display: flex; align-items: center; gap: 6px; font-size: 13px; }
   .dg-n input { width: 4em; }
@@ -310,12 +314,12 @@
   <form id="create-form" novalidate>
     <h2 id="create-title">새 유니버스 만들기</h2>
     <p class="muted small">업무 하나부터 시작하세요. 첫 업무를 적으면 업무·담당자·산출물이 이어진 작은 지도가 바로 생깁니다. 비워 두면 빈 유니버스를 만듭니다.</p>
-    <label>이름 <input id="create-name" maxlength="100" autocomplete="off" placeholder="예: 연말 교육 운영"></label>
+    <label>이름 <input id="create-name" maxlength="100" autocomplete="off" placeholder="예: 가상 교육팀 업무 지도"></label>
     <label>단위 <input id="create-level" list="create-levels" value="업무" autocomplete="off"></label>
     <datalist id="create-levels"><option value="업무"><option value="팀"><option value="부서"><option value="본부"><option value="회사"></datalist>
     <label>작성 주체 <input id="create-owner" autocomplete="off" placeholder="예: 가상 교육팀"></label>
     <label>설명(선택) <textarea id="create-description" rows="3"></textarea></label>
-    <fieldset id="create-starter"><legend>첫 업무(선택) — 채우면 작은 업무 지도가 바로 생깁니다</legend>
+    <fieldset id="create-starter"><legend>이 유니버스에 넣을 첫 업무(선택) — 채우면 작은 지도가 바로 생깁니다</legend>
       <label>업무 이름 <input id="create-start-work" maxlength="100" autocomplete="off" placeholder="예: 월말 정산 점검"></label>
       <label>담당자(내 이름) <input id="create-start-person" maxlength="100" autocomplete="off" placeholder="예: 김가상"></label>
       <label>주기 <input id="create-start-cycle" autocomplete="off" placeholder="예: 매월"></label>

@@ -68,7 +68,7 @@ export function eventText(view, ev) {
     }
     case 'memo': {
       const cat = memoCategoryOf(p);
-      return `${cat === 'issue' ? '' : `[${MEMO_CATEGORIES[cat]}] `}${ev.note || '메모'}`;
+      return `${cat === 'issue' || !Object.hasOwn(MEMO_CATEGORIES, cat) ? '' : `[${MEMO_CATEGORIES[cat]}] `}${ev.note || '메모'}`;
     }
     case 'created':
     case 'updated':
@@ -101,7 +101,9 @@ export function eventText(view, ev) {
  */
 export function affiliationAt(view, personGid, asOf) {
   const g = view.canonical(personGid);
-  const edge = view.edges.find((e) => !e.hidden && e.core_type === 'belongs_to' && e.source === g && periodStatus(e.period, asOf) === 'current');
+  // 숨긴 조직으로 가는 연결은 건너뛴다(상세 연결 목록과 맞춤, 검토 2026-10-17)
+  const edge = view.edges.find((e) => !e.hidden && e.core_type === 'belongs_to' && e.source === g && periodStatus(e.period, asOf) === 'current'
+    && !(view.getNode(e.target) || {}).hidden);
   if (edge) return { label: view.getNode(edge.target)?.label || '미기재', from: 'edge', event_gid: null, note: '' };
   const evs = (view.index.eventsByNode.get(g) || []).filter((ev) => ev.type === 'affiliation_change' && ev.occurred_at <= asOf);
   if (!evs.length) return { label: '미기재', from: null, event_gid: null, note: '' };

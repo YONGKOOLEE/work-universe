@@ -279,6 +279,7 @@ export function createApp({ store, samples, currentId, now, authorName }) {
       if (universeId === doc.universe.id) return commit(updateNode(doc, nodeId, changes, { now: now() }));
       const other = db.loadUniverse(universeId);
       if (!other) return { ok: false, error: { code: CODES.SCHEMA, field: 'universe_id' } };
+      if (validateDocument(other).readOnly) return { ok: false, error: { code: CODES.SCHEMA, reason: 'version' } };
       const result = updateNode(other, nodeId, changes, { now: now() });
       if (result.ok) {
         const failed = save(result.doc);
@@ -406,6 +407,7 @@ export function createApp({ store, samples, currentId, now, authorName }) {
       const uid = target.universe_id;
       let d = uid === doc.universe.id ? doc : db.loadUniverse(uid);
       if (!d) return { ok: false, error: { code: CODES.SCHEMA, field: 'universe_id' } };
+      if (d !== doc && validateDocument(d).readOnly) return { ok: false, error: { code: CODES.SCHEMA, reason: 'version' } };
       // 대상 유니버스 안의 ID로. 묶은 화면에서 합쳐진 노드의 대표가 다른 유니버스에 있어도, 대상 유니버스에 원본이 있으면 그 원본의 ID를 쓴다
       // (전역 참조를 그대로 저장하면 그 유니버스를 단독으로 열 때 사람을 찾지 못한다, 여섯 번째 검토 C-2). 원본이 없으면 전역 참조 그대로
       const local = (gid) => {

@@ -3,11 +3,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PREGEN } from '../app/data/pregen.js';
 import { SAMPLE_A1 } from '../app/data/sample-a1.js';
-import { addEvent } from '../app/src/model/commands.js';
+import { addEvent, updateNode } from '../app/src/model/commands.js';
 import { createUniverse, addNode } from '../app/src/model/commands.js';
 import { buildView } from '../app/src/view/view.js';
 import { buildHandoverDraft } from '../app/src/rules/handover.js';
-import { createProvider, itemEvidence, peopleKey, pregenKey, PROVIDERS, DEFAULT_PROVIDER } from '../app/src/llm/providers.js';
+import { createProvider, fingerprint, itemEvidence, peopleKey, pregenKey, PROVIDERS, DEFAULT_PROVIDER } from '../app/src/llm/providers.js';
 import { explainInsight, refineDraft } from '../app/src/llm/connector.js';
 import { CANDIDATE_VIEWS, EXPLAIN_SCENARIOS, HANDOVER_SCENARIOS, candidateRequestsOf, explainRequestOf, handoverDraftOf, viewOf } from '../tools/pregen-scenarios.mjs';
 
@@ -188,4 +188,76 @@ test('흐름 변화 설명: 사전 생성 문장에는 규칙 경고를 덧붙�
   assert.ok(!withPregen.sentences.some((s) => s.text.includes('개 기간은 기록이 없어 판단하지 않습니다')));
   const ruleOnly = explainInsight(req, { provider: null, exists: existsIn(view) });
   assert.equal(ruleOnly.sentences.filter((s) => s.text.includes('15개 기간은 기록이 없어 판단하지 않습니다')).length, 1);
+});
+
+// 낡은 사전 생성 방지(K-9, 12.3, T-20, 코드 검토 2026-10-17 R4): 근거 ID가 같아도 내용(설명·속성)이 바뀌면 규칙 기반으로 돌아간다
+const A1_H = HANDOVER_SCENARIOS[0];
+const refineEdited = (edit, provider = pregen) => {
+  const doc = edit(SAMPLE_A1);
+  const v = buildView(doc);
+  const draft = buildHandoverDraft(v, { target: A1_H.target, from: A1_H.from, to: A1_H.to, asOf: '2026-10-02' }).draft;
+  return { draft, r: refineDraft(draft, { provider, exists: existsIn(v) }) };
+};
+const methods = (r) => Object.fromEntries(r.items.filter((i) => !i.insufficient).map((i) => [i.key, i.method]));
+const editDesc = (doc) => updateNode(doc, 'N-000', { description: '이제 분기마다 하는 업무로 바뀌었다(고친 설명)' }, ctx).doc;
+const editAttr = (doc) => {
+  const n = doc.nodes.find((x) => x.id === 'N-002');
+  return updateNode(doc, 'N-002', { attrs: { ...n.attrs, 주의사항: '고친 주의사항: 오후에 내려받는다' } }, ctx).doc;
+};
+
+test('낡음 ① 샘플 그대로면 모든 사전 생성 줄에 지문이 있고 전부 사전 생성이다', () => {
+  assert.ok(PREGEN.items.every((it) => /^[0-9a-f]{8}$/.test(it.fp)), '지문 없는 줄');
+  assert.equal(fingerprint([{ text: 'a' }]), 'e40c292c'); // FNV-1a 32비트 기준값("a")
+  const { r } = refineEdited((d) => d);
+  assert.ok(Object.values(methods(r)).every((m) => m === 'pregen'), JSON.stringify(methods(r)));
+});
+
+test('낡음 ② 꼭지 설명만 고치면(근거 ID 그대로) 업무_개요만 규칙 기반이 되고 나머지는 사전 생성 유지', () => {
+  const { draft, r } = refineEdited(editDesc);
+  const ev = (d) => itemEvidence(d.items.find((i) => i.key === '업무_개요'));
+  assert.deepEqual(ev(draft), ev(refineEdited((d) => d).draft)); // 근거 ID는 그대로(이 결함의 조건)
+  const m = methods(r);
+  assert.equal(m['업무_개요'], 'rule');
+  for (const [k, v] of Object.entries(m)) if (k !== '업무_개요') assert.equal(v, 'pregen', k);
+  const shown = r.items.find((i) => i.key === '업무_개요');
+  assert.ok(shown.sentences.some((s) => s.text.includes('분기마다')), '고친 설명이 규칙 기반 문장에 보여야 함');
+});
+
+test('낡음 ③ 업무 속성(주의사항)만 고치면 해당 항목만 규칙 기반', () => {
+  const { r } = refineEdited(editAttr);
+  const m = methods(r);
+  assert.equal(m['주의사항'], 'rule');
+  assert.ok(Object.entries(m).every(([k, v]) => k === '주의사항' || v === 'pregen'), JSON.stringify(m));
+  assert.ok(r.items.find((i) => i.key === '주의사항').sentences.some((s) => s.text.includes('고친 주의사항')));
+});
+
+test('낡음 ④ 지문 비교를 끄면 ②가 실패한다(되돌림): 지문을 지금 문장 것으로 맞춰 버린 파일이면 낡은 문장이 사전 생성으로 보인다', () => {
+  const { draft } = refineEdited(editDesc);
+  const rule = draft.items.find((i) => i.key === '업무_개요');
+  const neutralized = { ...PREGEN, items: PREGEN.items.map((it) => (it.task === 'handover' && it.target === A1_H.target && it.item === '업무_개요' ? { ...it, fp: fingerprint(rule.sentences) } : it)) };
+  const { r } = refineEdited(editDesc, createProvider('pregen', { pregen: neutralized }));
+  assert.equal(methods(r)['업무_개요'], 'pregen'); // 비교가 없던 때의 결함 동작 → 비교가 있어야 ②가 지켜진다
+});
+
+test('낡음 ⑤ 인사이트 설명·업무 후보 이유: 지금 규칙 기반 문장과 지문이 다르면 규칙 기반, 같으면 사전 생성, 기준일에만 달라지는 경고는 영향 없음', () => {
+  const { view, req } = explainRequestOf(EXPLAIN_SCENARIOS[0]);
+  const changed = { ...req, rule: [{ ...req.rule[0], text: `${req.rule[0].text} (고침)` }, ...req.rule.slice(1)] };
+  assert.equal(explainInsight(changed, { provider: pregen, exists: existsIn(view) }).method, 'rule');
+  assert.equal(explainInsight(req, { provider: pregen, exists: existsIn(view) }).method, 'pregen');
+  const flow = explainRequestOf(EXPLAIN_SCENARIOS[6], '2027-06-01');
+  assert.equal(explainInsight(flow.req, { provider: pregen, exists: existsIn(flow.view) }).method, 'pregen');
+  const { view: cv, reqs } = candidateRequestsOf('U-D1');
+  const odd = { ...reqs.find((q) => q.target.includes('U-A1/N-003')), };
+  assert.equal(explainInsight({ ...odd, rule: [{ ...odd.rule[0], text: '다른 이유' }] }, { provider: pregen, exists: existsIn(cv) }).method, 'rule');
+});
+
+test('낡음 ⑥ pregen-dump --check-fp와 같은 기준: 시나리오의 지금 규칙 기반 지문이 파일의 fp와 모두 같다', () => {
+  for (const s of HANDOVER_SCENARIOS) {
+    const { draft } = handoverDraftOf(s);
+    for (const i of draft.items) {
+      if (i.insufficient) continue;
+      const line = PREGEN.items.find((it) => it.task === 'handover' && it.target === draft.target && it.item === i.key && it.from === draft.from && it.to === draft.to);
+      assert.equal(line.fp, fingerprint(i.sentences), `${s.id} ${i.key}`);
+    }
+  }
 });

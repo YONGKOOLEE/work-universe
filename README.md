@@ -6,11 +6,12 @@
 
 ```
 npm install
-npm test              # 단위 테스트(model·view·rules·llm·app·store)
+npm test              # 단위 테스트(model·view·rules·merge·llm·app·store·data·tools)
 npm run build         # dist/index.html (스크립트 포함, 파일 하나)
-npm run check:browser # Chrome·Edge에서 file:// 점검(P-1·P-3)
+npm run check:chrome  # 평소 수정 뒤: Chrome만 file:// 점검
+npm run check:browser # Chrome·Edge 둘 다(P-1·P-3, 제출 점검이 부름). --only=chrome|edge
 npm run package       # 제출 압축(release/)
-npm run check:submit  # 제출 점검(빌드·테스트·비밀값·R-06·압축·풀어서 브라우저 점검)
+npm run check:submit  # 제출 점검(빌드·테스트·비밀값·R-06·압축·커밋 안 된 변경 없음·풀어서 Chrome·Edge 점검)
 npm run check:secrets # 비밀값 형식 검색(dist 포함). 0건이어야 함
 npm run check:guide   # 실행 안내 "5분 둘러보기"를 실제 마우스·키보드로 따라가기
 node tools/virtual-data-check.mjs   # 가상 데이터 형식 점검(R-06)
