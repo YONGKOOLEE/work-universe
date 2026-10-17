@@ -224,22 +224,6 @@ const explain = [
 // 역할 (c) 업무 후보 이유(T-10): 통합 확인 목록의 업무 후보마다. 왜 후보인지와 두 업무의 차이까지만 쓰고, 같은지는 사람이 정한다
 const candidate = [
   {
-    pair: ['U-B/N-101', 'U-K1/N-104'],
-    evidence_ids: ['U-K1/N-104', 'U-B/N-101', 'U-A1/N-030', 'U-B/N-302'],
-    sentences: [
-      { text: '카드승인의 「거래 조회」와 행사팀의 「2025 행사」(참가비 정산 포함)는 둘 다 「대사 불일치」라는 이름의 주제와 이어져 있습니다(두 주제가 같은지는 확인 전).', evidence_ids: ['U-K1/N-104', 'U-B/N-101', 'U-A1/N-030', 'U-B/N-302'] },
-      { text: '업무 설명으로 보면 하는 일의 범위가 달라 보이므로, 같은 업무인지 담당자 확인이 필요합니다.', evidence_ids: ['U-K1/N-104', 'U-B/N-101'] },
-    ],
-  },
-  {
-    pair: ['U-A1/N-001', 'U-B/N-101'],
-    evidence_ids: ['U-A1/N-001', 'U-B/N-101', 'U-A1/N-030', 'U-B/N-302'],
-    sentences: [
-      { text: '「대사 확인」은 정산 결과를 원천 자료와 대조하는 매월 업무이고, 「2025 행사」는 참가비 정산이 포함된 연 1회 행사 운영입니다.', evidence_ids: ['U-A1/N-001', 'U-B/N-101'] },
-      { text: '둘 다 「대사 불일치」라는 이름의 주제와 이어져 후보에 올랐습니다(두 주제가 같은지는 확인 전).', evidence_ids: ['U-A1/N-030', 'U-B/N-302'] },
-    ],
-  },
-  {
     pair: ['U-A1/N-001', 'U-K1/N-104'],
     evidence_ids: ['U-A1/N-001', 'U-K1/N-104', 'U-A1/N-030'],
     sentences: [
@@ -252,13 +236,6 @@ const candidate = [
     evidence_ids: ['U-A1/N-001', 'U-K1/N-105', 'U-A1/N-030'],
     sentences: [
       { text: '둘 다 「대사 불일치」 주제를 다루지만, 「장애 시 재처리」는 장애로 저장해 둔 건을 별도 처리로 다시 보내는 일이고 「대사 확인」은 월말 정산 결과를 대조하는 일입니다.', evidence_ids: ['U-A1/N-001', 'U-K1/N-105', 'U-A1/N-030'] },
-    ],
-  },
-  {
-    pair: ['U-B/N-101', 'U-K1/N-105'],
-    evidence_ids: ['U-K1/N-105', 'U-B/N-101', 'U-A1/N-030', 'U-B/N-302'],
-    sentences: [
-      { text: '공통점은 「대사 불일치」라는 이름의 주제뿐입니다(두 주제가 같은지는 확인 전). 하는 일은 카드승인 재처리와 행사 운영으로 다릅니다.', evidence_ids: ['U-K1/N-105', 'U-B/N-101', 'U-A1/N-030', 'U-B/N-302'] },
     ],
   },
   {
@@ -309,11 +286,8 @@ const FP = {
   "insight_explain|density|U-C|n=3||": '20f66f7b',
   "insight_explain|flow|U-A1|month||": 'c78f93fa',
   "insight_explain|flow|U-O|month||": '6e8d1326',
-  "work_candidate_reason|work_candidate|U-B/N-101|U-K1/N-104||": 'b1db6c11',
-  "work_candidate_reason|work_candidate|U-A1/N-001|U-B/N-101||": 'b1db6c11',
   "work_candidate_reason|work_candidate|U-A1/N-001|U-K1/N-104||": 'b1db6c11',
   "work_candidate_reason|work_candidate|U-A1/N-001|U-K1/N-105||": 'b1db6c11',
-  "work_candidate_reason|work_candidate|U-B/N-101|U-K1/N-105||": 'b1db6c11',
   "work_candidate_reason|work_candidate|U-A1/N-003|U-C/N-104||": '47aa15ea',
   "work_candidate_reason|work_candidate|U-B/N-103|U-C/N-102||": 'cf9fed35',
 };

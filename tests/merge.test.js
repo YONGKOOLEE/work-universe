@@ -45,6 +45,21 @@ test('R-11 ③: 사번 충돌(윤바다/윤바다라)과 사번 없음(임가온
   assert.equal(plan.auto.length, 0); // 샘플 부서는 이미 윤바다를 이어 두었다
 });
 
+test('D8-2: 부서 샘플에 미리 넣은 「다른 업무」 판정 3건(2025 행사 쌍)은 후보에서 빠지고, 대기는 사람 2 + 업무 4 = 6건', () => {
+  const doc = all['U-D1'];
+  const rejected = doc.identity_links.filter((l) => l.status === 'rejected');
+  assert.equal(rejected.length, 3);
+  for (const l of rejected) assert.deepEqual([l.kind, l.method, l.decided_by], ['work', 'human', '가상 운영부 담당(샘플)']);
+  assert.deepEqual(validateDocument(doc).errors, []);
+  const plan = mergePlan(viewOf('U-D1'), doc.identity_links);
+  assert.deepEqual(plan.counts, { auto: 0, persons: 2, works: 4, pending: 6 });
+  assert.ok(!plan.works.some((w) => [w.a, w.b].includes('U-B/N-101')));
+  assert.equal(plan.works.length, 4);
+  // 같은 판정을 앱이 만들 때와 같은 필드(decideIdentity)
+  const made = decideIdentity({ ...doc, identity_links: [] }, { a: 'U-K1/N-104', b: 'U-B/N-101', kind: 'work', status: 'rejected', reason: 'x', decided_by: 'y' }, ctx).link;
+  assert.deepEqual(Object.keys(made).sort(), Object.keys(rejected[0]).sort());
+});
+
 test('R-11 ②: 업무는 자동으로 합치지 않고 후보로만 나온다 — 정답 표의 같은 업무 쌍이 모두 후보에 있다', () => {
   for (const sw of ANSWERS_V1.same_work_pairs) {
     const plan = mergePlan(viewOf(sw.view), all[sw.view].identity_links);

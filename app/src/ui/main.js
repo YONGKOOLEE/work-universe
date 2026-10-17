@@ -36,7 +36,7 @@ import { convertDocument } from '../rules/doc-convert.js';
 import { convertDocumentWith } from '../llm/connector.js';
 import { DOC_EXAMPLE } from '../../data/doc-example.js';
 import { filterDisplay, neighborhoodDisplay, personsIn, searchNodes } from '../view/explore.js';
-import { exploreBar } from './explore.js';
+import { EXPLORE, exploreBar } from './explore.js';
 
 // 점검 도구(tools/*-check.mjs)만 주소에 ?check를 붙여 연다. 그때만 점검용 전역 window.__wu를 만든다(D-4-10, 사용자 결정 2026-10-03)
 const CHECK_MODE = new URLSearchParams(location.search).has('check');
@@ -461,15 +461,21 @@ function start() {
     const node = view.getNode(gid);
     if (!node || node.hidden) return null;
     const nb = nbhdButtons(gid) || [];
+    // D8-3: 확정한 인수인계서의 「내려받기」「인쇄」는 첫 줄로, 그래프 노드가 많으면(NBHD_PROMOTE_ABOVE 초과) 「주변만 보기」도 첫 줄로.
+    // 이미 주변만 보기 중이면 지금처럼 「더 보기」 안에 둔다
+    const docs = docButtons(node);
+    const promoteNb = !nbhd && display.nodes.length > EXPLORE.NBHD_PROMOTE_ABOVE;
+    const first = [...docs, ...(promoteNb ? nb : [])];
+    const nbMore = promoteNb ? [] : nb;
     if (!isOwn(gid)) {
-      return el('div', {}, el('div', { class: 'row toolbar' }, draftButton(gid), historyJumpButton()),
-        moreTools([...docButtons(node), insightButton(gid), insightAllButton(), ...nb]),
+      return el('div', {}, el('div', { class: 'row toolbar' }, draftButton(gid), historyJumpButton(), ...first),
+        moreTools([insightButton(gid), insightAllButton(), ...nbMore]),
         el('p', { class: 'muted small' }, '다른 유니버스의 노드입니다. 고치려면 ',
           el('button', { type: 'button', class: 'link', onclick: () => openUniverse(node.universe_id) }, `「${node.universe_name}」 열기`), '.'));
     }
     if (app.readOnly) {
-      return el('div', {}, el('div', { class: 'row toolbar' }, draftButton(gid), historyJumpButton()),
-        moreTools([...docButtons(node), insightButton(gid), insightAllButton(), ...nb]));
+      return el('div', {}, el('div', { class: 'row toolbar' }, draftButton(gid), historyJumpButton(), ...first),
+        moreTools([insightButton(gid), insightAllButton(), ...nbMore]));
     }
     const btn = (label, kind, testid) => el('button', { type: 'button', 'data-testid': testid, onclick: () => { editing = { kind }; renderPanel(); } }, label);
     return el('div', {},
@@ -478,13 +484,13 @@ function start() {
         btn('연결 추가', 'edge', 'btn-edge'),
         btn('이력 추가', 'event', 'btn-event'),
         draftButton(gid),
-        historyJumpButton()),
+        historyJumpButton(),
+        ...first),
       moreTools([
         node.core_type === 'root' ? null : el('button', { type: 'button', class: 'danger', 'data-testid': 'btn-hide', onclick: () => hideSelected(node) }, '숨기기'),
-        ...docButtons(node),
         insightButton(gid),
         insightAllButton(),
-        ...nb,
+        ...nbMore,
       ]));
   }
 

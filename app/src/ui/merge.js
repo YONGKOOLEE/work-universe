@@ -16,7 +16,7 @@ export function candidateReason(view, item, provider) {
 export function mergePanel(o) {
   const { view, plan } = o;
   const decideButtons = (item, sameLabel, diffLabel) => (o.readOnly || !item.b ? null : el('div', { class: 'row' },
-    el('button', { type: 'button', class: 'primary small-btn', 'data-testid': 'merge-same', onclick: () => o.onDecide(item, 'confirmed') }, sameLabel),
+    el('button', { type: 'button', class: 'small-btn', 'data-testid': 'merge-same', onclick: () => o.onDecide(item, 'confirmed') }, sameLabel),
     el('button', { type: 'button', class: 'small-btn', 'data-testid': 'merge-diff', onclick: () => o.onDecide(item, 'rejected') }, diffLabel)));
 
   const personList = plan.persons.length

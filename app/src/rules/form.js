@@ -2,6 +2,8 @@
 // 권장 항목은 조력자 의견(2026-10-12)과 사용자 결정("전부 추천으로 진행")으로 정했다: 절차·주기·마감·주의사항·관련 문서·담당(수행 연결)·설명.
 // 이 모듈은 DOM·저장소를 쓰지 않는다. 데이터 틀(스키마)은 바꾸지 않고 속성 이름 약속만 쓴다(R-07).
 
+import { hasCautionMemo } from './handover.js';
+
 /** 권장 항목 한 곳. 바꾸려면 여기만 고친다 */
 export const STANDARD_FORM = {
   /** 업무 노드의 attrs에서 값을 찾는 권장 속성(이 순서로 알린다) */
@@ -30,7 +32,11 @@ export function workFormMissing(view, workGid) {
   const attrs = work.attrs || {};
   const missing = [];
   if (!nonEmpty(work.description)) missing.push(STANDARD_FORM.description);
-  for (const k of STANDARD_FORM.workAttrs) if (!nonEmpty(attrs[k])) missing.push(k);
+  for (const k of STANDARD_FORM.workAttrs) {
+    // 주의사항은 속성 말고 주의사항 범주 메모도 인정한다 — 인수인계 초안이 그 메모를 주의사항 근거로 쓰기 때문(D8-4)
+    if (k === '주의사항' && hasCautionMemo(view, work.gid)) continue;
+    if (!nonEmpty(attrs[k])) missing.push(k);
+  }
 
   const edges = view.edges.filter((e) => !e.hidden);
   const hasDoc = nonEmpty(attrs[STANDARD_FORM.relatedDocAttr])

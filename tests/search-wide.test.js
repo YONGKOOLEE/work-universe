@@ -116,13 +116,14 @@ test('R-22 ② 이름이 비었거나 없거나 깨졌으면 기존 문구 "사�
 });
 
 test('R-22 ② 통합 확인 판정(decideIdentity)의 decided_by도 같은 원칙', () => {
+  // 2026-10-17 D8-2: 부서 샘플에 다른 업무 판정 3건이 미리 있어 첫 human 연결이 아닌 이번 쌍으로 찾는다
   const pair = { a: 'U-B/N-103', b: 'U-C/N-102', kind: 'work', status: 'confirmed', reason: '시험' };
   const named = openApp(memStorage(), 'U-D1', () => '가상작성자');
   assert.equal(named.decideIdentity(pair).ok, true);
-  assert.equal(named.doc.identity_links.find((l) => l.method === 'human').decided_by, '가상작성자');
+  assert.equal(named.doc.identity_links.find((l) => l.method === 'human' && l.a === pair.a).decided_by, '가상작성자');
   const plain = openApp(memStorage(), 'U-D1', () => '');
   assert.equal(plain.decideIdentity(pair).ok, true);
-  assert.equal(plain.doc.identity_links.find((l) => l.method === 'human').decided_by, '사용자(이 브라우저)');
+  assert.equal(plain.doc.identity_links.find((l) => l.method === 'human' && l.a === pair.a).decided_by, '사용자(이 브라우저)');
 });
 
 test('R-22 ② 설정: 작성자 이름 저장·읽기, 공백 정리, 상한(LABEL_MAX), 깨진 값은 기본값, 비면 저장 안 함', () => {

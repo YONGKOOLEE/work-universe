@@ -3,7 +3,7 @@
 // 두 팀에 있는 윤바다(V-1002)는 사번 자동으로 같은 사람으로 이었다(D-03). 이 연결이 있어야 유사 경험자 계산이 팀을 넘어 동작한다(T-08).
 // 고치면 STAMP를 바꾼다.
 
-const STAMP = '2026-10-04T00:10:00+09:00'; // 검토5 V-5
+const STAMP = '2026-10-17T00:10:00+09:00'; // D8-2 다른 업무 판정 3건
 
 export const SAMPLE_DEPT = {
   schema_version: '1.0',
@@ -32,5 +32,9 @@ export const SAMPLE_DEPT = {
   ],
   identity_links: [
     { id: 'I-001', a: 'U-A1/N-011', b: 'U-B/N-202', kind: 'person', method: 'emp_no_auto', status: 'confirmed', reason: '사번 V-1002, 이름 윤바다가 같음' },
+    // D8-2: 이름만 같은 주제 「대사 불일치」로 후보에 오른 엉뚱한 3쌍을 사람이 "다른 업무"로 판정한 기록(앱의 「다른 업무」와 같은 모양)
+    { id: 'I-002', a: 'U-K1/N-104', b: 'U-B/N-101', kind: 'work', method: 'human', status: 'rejected', reason: '이름만 같은 주제 「대사 불일치」로 묶임 — 행사 정산과 카드승인·월말 정산은 다른 업무(샘플에 미리 넣은 판정)', decided_by: '가상 운영부 담당(샘플)', decided_at: STAMP },
+    { id: 'I-003', a: 'U-A1/N-001', b: 'U-B/N-101', kind: 'work', method: 'human', status: 'rejected', reason: '이름만 같은 주제 「대사 불일치」로 묶임 — 행사 정산과 카드승인·월말 정산은 다른 업무(샘플에 미리 넣은 판정)', decided_by: '가상 운영부 담당(샘플)', decided_at: STAMP },
+    { id: 'I-004', a: 'U-K1/N-105', b: 'U-B/N-101', kind: 'work', method: 'human', status: 'rejected', reason: '이름만 같은 주제 「대사 불일치」로 묶임 — 행사 정산과 카드승인·월말 정산은 다른 업무(샘플에 미리 넣은 판정)', decided_by: '가상 운영부 담당(샘플)', decided_at: STAMP },
   ],
 };

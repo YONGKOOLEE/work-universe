@@ -71,6 +71,16 @@ function memoScope(view, { start, works, workIds }) {
   return { memos, related };
 }
 
+/**
+ * 업무 하나에 대해 초안의 「주의사항」이 쓰는 범주 메모(주의사항)가 있는지. 초안과 같은 범위(memoScope)·같은 범주 판정이다.
+ * 표준 양식 점검(rules/form.js)이 같이 쓴다 — 양식과 초안의 판정이 어긋나지 않게(D8-4).
+ */
+export function hasCautionMemo(view, workGid) {
+  const node = view.getNode(workGid);
+  if (!node || node.hidden) return false;
+  return memoScope(view, scopeOf(view, node.gid)).memos.some((ev) => memoCategoryOf(ev.payload) === 'caution');
+}
+
 /** 대상(업무 또는 꼭지) 범위의 미해결 메모 — 초안의 「진행 중」과 같은 판정에 이슈 범주를 더한 목록(R-20) */
 export function openMemosOf(view, targetGid) {
   const node = view.getNode(targetGid);

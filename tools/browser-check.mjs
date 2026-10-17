@@ -1048,6 +1048,10 @@ async function checkBrowser(browser, port) {
     check('R-11 ③: 사번 충돌(윤바다/윤바다라)과 사번 없음(임가온)이 확인 목록에', persons.includes('사번 충돌') && persons.includes('윤바다라') && persons.includes('임가온'), persons.slice(0, 80));
     check('R-11 ②: 업무 후보(장소 섭외 ↔ 강의실·강사 섭외)와 이유(사전 생성), 자동으로 합치지 않음', worksTxt.includes('장소 섭외') && worksTxt.includes('강의실·강사 섭외') && worksTxt.includes('사전 생성') && worksTxt.includes('일정에 맞춰 장소를 알아보고'), worksTxt.slice(0, 80));
     check('U-12: 사번 없음 카드에 고치는 방법(유니버스를 열어 「수정」에서 사번)이 적혀 있음', persons.includes('고치는 방법') && persons.includes('「수정」에서 사번을 넣으세요'));
+    // 2026-10-17 D8-2: 부서 샘플에 「다른 업무」 판정 3건이 미리 들어 있어 후보가 4건, 첫 항목은 2025 행사가 아니며, 「같은 업무」는 강조색이 아니다
+    const d82 = await evaluate(s.cdp, "(() => { const lis = [...document.querySelectorAll('[data-testid=merge-works] li')]; const same = document.querySelector('[data-testid=merge-works] [data-testid=merge-same]'); const diff = document.querySelector('[data-testid=merge-works] [data-testid=merge-diff]'); return JSON.stringify({ n: lis.length, first: lis[0] ? lis[0].querySelector('strong').textContent : '', samePrimary: same.classList.contains('primary'), sameClass: same.className, diffClass: diff.className, decided: (document.querySelector('[data-testid=merge-decided]') || { children: [] }).children.length }); })()");
+    const d82o = JSON.parse(d82);
+    check('D8-2: 부서 통합 확인 목록에 업무 후보 4건, 첫 항목은 2025 행사가 아님, 「같은 업무」가 강조색이 아님(「다른 업무」와 같은 모양), 판정 기록에 미리 넣은 3건', d82o.n === 4 && !d82o.first.includes('2025 행사') && !d82o.samePrimary && d82o.sameClass === d82o.diffClass && d82o.decided >= 4 && hint.includes('6건'), d82);
     await shot(s.cdp, `${browser.name}-9e-merge`);
     const before = await evaluate(s.cdp, "window.__wu.view.canonical('U-C/N-102') === window.__wu.view.canonical('U-B/N-103')");
     // 장소 섭외 후보의 「같은 업무」
@@ -1385,6 +1389,7 @@ async function checkBrowser(browser, port) {
     // 검토 B-3: 주변만 보기 중 하위 유니버스 꼭지 펼치기(더블클릭과 같은 toggle) → 주변만 보기를 끝내고 전체에서 펼침
     await evaluate(s.cdp, "window.__wu.select('U-D1/N-000')");
     await sleep(150);
+    check('D8-3: 부서 화면(노드 15개 초과)에서 노드를 고르면 「주변만 보기」가 첫 줄에 보임(크기 있음, 「더 보기」 밖)', await evaluate(s.cdp, "(() => { const b = document.querySelector('#detail .toolbar > [data-testid=btn-nbhd]'); if (!b) return false; const r = b.getBoundingClientRect(); return r.width > 0 && r.height > 0 && !b.closest('details'); })()"));
     await clickTestId(s.cdp, 'btn-nbhd');
     await sleep(400);
     await evaluate(s.cdp, "window.__wu.toggle('U-B')");
@@ -1431,6 +1436,7 @@ async function checkBrowser(browser, port) {
   check('R7-2: 업무 상세에는 수정·연결 추가·이력 추가·인수인계 초안 만들기·이력으로만 한 줄에 보임', topBtns === '수정|연결 추가|이력 추가|인수인계 초안 만들기|이력으로', topBtns);
   const moreInfo = await evaluate(s.cdp, "(() => { const d = document.querySelector('details.more-tools'); return d && { open: d.open, btns: [...d.querySelectorAll('button')].map((b) => b.dataset.testid) }; })()");
   check('R7-2: 「더 보기」는 닫혀 있고 숨기기·유사 경험자·인사이트 보기·주변만 보기·주변 2단계가 들어 있음', !!moreInfo && !moreInfo.open && ['btn-hide', 'btn-similar', 'btn-insight', 'btn-nbhd', 'btn-nbhd2'].every((t) => moreInfo.btns.includes(t)), JSON.stringify(moreInfo));
+  check('D8-3: 월말 정산(노드 15개 이하)에서는 「주변만 보기」가 첫 줄에 없고 「더 보기」 안에 있음', await evaluate(s.cdp, "!document.querySelector('#detail .toolbar > [data-testid=btn-nbhd]') && !!document.querySelector('#detail details.more-tools [data-testid=btn-nbhd]')"));
   await shot(s.cdp, `${browser.name}-27a-detail-more-closed`);
   await evaluate(s.cdp, "document.querySelector('details.more-tools summary').focus()");
   check('R7-2: 「더 보기」 summary가 포커스를 받음(키보드 접근)', (await evaluate(s.cdp, 'document.activeElement.tagName')) === 'SUMMARY');
@@ -1528,8 +1534,7 @@ async function checkBrowser(browser, port) {
   check('R-19 ② 초안 인쇄 → 숨긴 iframe의 print() 호출, 문서에 버튼·그래프·스크립트 없음, A4 세로 지정', r19print.length === 1 && r19print[0].interactive === 0 && r19print[0].html.includes('이력') && (await evaluate(s.cdp, "!!document.querySelector('iframe[data-testid=print-frame]')")) && r19html.includes('size: A4 portrait'), JSON.stringify(r19print.map((p) => p.interactive)));
   await evaluate(s.cdp, "document.querySelectorAll('iframe[data-testid=print-frame]').forEach((f) => f.remove()); window.__prints = []; window.__dl = null; window.__blob = null; window.__confirmedDoc = window.__wu.doc.nodes.filter((n) => n.subtype === '인수인계서' && !n.hidden && n.label.includes('대사 확인 인수인계서')).pop().id; window.__wu.select(window.__wu.doc.universe.id + '/' + window.__confirmedDoc)");
   await sleep(250);
-  await evaluate(s.cdp, "document.querySelectorAll('#detail details.more-tools').forEach((d) => { d.open = true; })");
-  check('R-19 ① ② 확정 인수인계서 상세에 「내려받기」「인쇄」 버튼이 보임(「더 보기」를 연 뒤 크기 있음)', (await btnBox('doc-download')) && (await btnBox('doc-print')));
+  check('R-19 ① ② 확정 인수인계서 상세 첫 줄(「더 보기」 밖)에 「내려받기」「인쇄」 버튼이 보임(크기 있음, D8-3)', (await btnBox('doc-download')) && (await btnBox('doc-print')) && (await evaluate(s.cdp, "['doc-download', 'doc-print'].every((t) => { const b = document.querySelector('#detail .toolbar > [data-testid=' + t + ']'); return !!b && !b.closest('details'); }) && !document.querySelector('details.more-tools [data-testid=doc-download]')")));
   await clickTestId(s.cdp, 'doc-download');
   await sleep(200);
   const r19cname = await evaluate(s.cdp, 'window.__dl');

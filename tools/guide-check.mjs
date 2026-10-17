@@ -168,8 +168,11 @@ async function walk(browser, port) {
     const p7 = await panel(cdp);
     check(`7단계: 「${findLabel}」 칸에 "대사"를 넣고 결과 「대사 확인」을 누르면 상세가 열림`, pickedOk && p7.includes('대사 확인') && p7.includes('연결된 노드'), p7.slice(0, 40));
     const before7 = await ev(cdp, 'window.__wu.cy.nodes().length');
-    const moreOk = await clickText(cdp, labels.find((l) => l === '더 보기') || '더 보기', 'summary'); // 안내: 상세의 「더 보기」를 열고
-    check('7단계: 상세의 「더 보기」를 누르면 「주변만 보기」가 보임', moreOk && (await ev(cdp, "!![...document.querySelectorAll('#detail button')].find((b) => b.offsetParent && b.textContent.includes('주변만 보기'))")));
+    // D8-3: 노드가 많은 화면(부서 등)에서는 「주변만 보기」가 첫 줄에 있어 「더 보기」를 열 필요가 없다. 안 보이면 「더 보기」를 연다(안내문은 두 경우를 모두 말한다)
+    const nbVisible = () => ev(cdp, "!![...document.querySelectorAll('#detail button')].find((b) => b.offsetParent && b.textContent.includes('주변만 보기'))");
+    const nbFirstRow = await nbVisible();
+    const moreOk = nbFirstRow || await clickText(cdp, labels.find((l) => l === '더 보기') || '더 보기', 'summary'); // 안내: 상세의 「더 보기」를 열고(첫 줄에 이미 있으면 바로)
+    check('7단계: 「주변만 보기」가 보임(첫 줄 또는 「더 보기」를 연 뒤)', moreOk && (await nbVisible()));
     const nbOk = await clickText(cdp, nbLabel || '주변만 보기');
     await sleep(600);
     const after7 = await ev(cdp, 'window.__wu.cy.nodes().length');
