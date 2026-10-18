@@ -94,6 +94,7 @@ export function exploreBar(o) {
       quietFocus = false;
     }
   });
+  // (재검증 R-1: 결과 목록이 열린 상태에서 「설명·속성까지」가 목록에 덮여 눌리지 않아, 찾기에 딸린 옵션이므로 찾기 칸 옆에 둔다. 접는 것은 흐름 정렬·거르기뿐)
   const findBox = el('div', { class: 'find-box' }, input, wideLabel, results);
   document.addEventListener('click', (e) => { if (!findBox.contains(e.target)) close(); });
   findBox.addEventListener('focusout', (e) => { if (!findBox.contains(e.relatedTarget)) close(); });
@@ -149,7 +150,11 @@ export function exploreBar(o) {
   }
 
   const status = el('div', { class: 'explore-status', 'data-testid': 'explore-status', role: 'status' });
-  o.container.replaceChildren(findBox, details, status);
+  // 거르기도 고급 도구 줄로. 줄 순서: 흐름 정렬(index.html) · 거르기. 「설명·속성까지」는 찾기 칸 옆에 남긴다(재검증 R-1)
+  if (o.advanced) {
+    o.advanced.append(details);
+    o.container.replaceChildren(findBox, status);
+  } else o.container.replaceChildren(findBox, details, status);
 
   return {
     clear,

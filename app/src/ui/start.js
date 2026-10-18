@@ -1,5 +1,6 @@
 // 시작 화면(R-08, 5.3): 별도 설명 없이 첫 화면에서 탐색을 시작할 수 있게 한다.
-// 구성: 이게 무엇인지 한 줄 + 바로 열 수 있는 샘플 카드 + 내 유니버스 + 처음이라면 해 볼 순서.
+// 구성: 이게 무엇인지 한 줄 + 「무엇을 하고 싶어요?」 세 갈래 카드(2026-10-18 CR-13 A) + 작은 단추들 + 내 유니버스.
+// 처음이라면 이 순서로·샘플 카드 7개는 「샘플·처음 순서 더 보기」(기본 접힘) 안에 둔다. 작은 단추들은 강조하지 않는다(세 갈래 카드가 먼저 눈에 띄게, 재검증 N-7).
 
 import { el } from './dom.js';
 
@@ -12,7 +13,8 @@ const STEPS = [
 ];
 
 /**
- * @param {{universes:object[], guide:object, warnings:string[], readOnly:boolean, onOpen:(id)=>void, onCreate:()=>void, onImport?:()=>void}} o
+ * @param {{universes:object[], guide:object, warnings:string[], readOnly:boolean, onOpen:(id)=>void, onCreate:()=>void, onCreateMine?:()=>void, onImport?:()=>void, onTour?:(id:string)=>void}} o
+ *   onTour(시나리오): 그 시나리오의 예시 유니버스를 열고 따라 하기를 시작한다(세 갈래 카드 a·c)
  */
 export function startScreen(o) {
   const samples = o.universes
@@ -32,25 +34,40 @@ export function startScreen(o) {
     );
   };
 
+  // 세 갈래(CR-13 A): 처음 보는 사람이 "무엇을 하고 싶어?"에 답하면 앱 안 따라 하기나 새 업무 지도로 바로 들어간다. 쉬운 말: 업무 지도·동그라미
+  const way = (testid, title, desc, onclick, disabled = false) => el('li', {},
+    el('button', { type: 'button', class: 'start-way', 'data-testid': testid, disabled, onclick }, el('strong', {}, title), el('span', {}, desc)));
+  const ways = [
+    o.onTour ? way('start-way-handover', '인수인계를 앞두고 있어요', '예시 업무로 인수인계 초안을 만들어 봅니다(3분)', () => o.onTour('handover')) : null,
+    way('start-way-mine', '내 업무를 정리해 두고 싶어요', '업무 하나부터 작은 지도를 만듭니다', o.onCreateMine || o.onCreate, o.readOnly),
+    o.onTour ? way('start-way-team', '팀 업무를 한눈에 보고 싶어요', '여러 업무를 묶은 팀·부서 지도를 봅니다', () => o.onTour('team')) : null,
+  ].filter(Boolean);
+
   return el('div', { class: 'start-inner' },
     el('header', { class: 'start-hero' },
       el('h1', {}, '업무 ', el('b', {}, 'UNIVERSE')),
       el('p', { class: 'lead' }, '흩어진 업무 지식을 업무별 지도로 모아, 누가 무엇을 어떻게 해 왔는지 찾아보고 인수인계 초안과 인사이트(비슷한 경험자·일 쏠림·빈 자리)를 근거와 함께 얻는 도구입니다.'),
       o.warnings.length ? el('p', { class: 'notice', 'data-testid': 'start-warning' }, o.warnings.join(' ')) : null,
-      el('div', { class: 'row' },
-        recommended ? el('button', { type: 'button', class: 'primary big', 'data-testid': 'start-primary', onclick: () => o.onOpen(recommended.id) }, `샘플 바로 열기: ${recommended.name}`) : null,
-        el('button', { type: 'button', class: 'big', 'data-testid': 'start-create', disabled: o.readOnly, onclick: o.onCreate }, '새 유니버스 만들기'),
-        o.onImport ? el('button', { type: 'button', class: 'big', 'data-testid': 'start-import', disabled: o.readOnly, onclick: o.onImport }, '문서·파일 가져오기') : null,
+      el('h2', {}, '무엇을 하고 싶어요?'),
+      el('ul', { class: 'start-ways', 'data-testid': 'start-ways' }, ...ways),
+      el('p', { class: 'muted small' }, '아래 단추는 따라 하기 없이 바로 시작합니다.'),
+      el('div', { class: 'start-small' },
+        recommended ? el('button', { type: 'button', class: '', 'data-testid': 'start-primary', onclick: () => o.onOpen(recommended.id) }, `샘플 바로 열기: ${recommended.name}`) : null,
+        el('button', { type: 'button', 'data-testid': 'start-create', disabled: o.readOnly, onclick: o.onCreate }, '새 유니버스 만들기'),
+        o.onImport ? el('button', { type: 'button', 'data-testid': 'start-import', disabled: o.readOnly, onclick: o.onImport }, '문서·파일 가져오기') : null,
       ),
       el('p', { class: 'muted small' }, '모든 이름과 데이터는 가상입니다. 설치나 로그인은 필요 없습니다.'),
-      el('p', { class: 'muted small', 'data-testid': 'start-terms' }, '용어: 유니버스는 업무를 묶은 한 단위, 노드는 그래프의 동그라미 하나, 꼭지는 유니버스의 중심 노드입니다.'),
+      el('p', { class: 'muted small', 'data-testid': 'start-terms' }, '용어: 유니버스는 업무를 묶은 한 단위(업무 지도 하나), 노드는 그래프의 동그라미 하나, 꼭지는 유니버스의 중심 노드(가운데 큰 동그라미)입니다.'),
     ),
-    el('section', {}, el('h2', {}, '처음이라면 이 순서로'), el('ol', { class: 'steps-list', 'data-testid': 'start-steps' },
-      ...STEPS.map(([t, d]) => el('li', {}, el('strong', {}, t), el('span', { class: 'muted' }, d))))),
-    el('section', {}, el('h2', {}, '샘플 유니버스'), el('ul', { class: 'cards', 'data-testid': 'start-samples' }, ...samples.map(card))),
     el('section', {}, el('h2', {}, '내 유니버스'),
       mine.length
         ? el('ul', { class: 'cards', 'data-testid': 'start-mine' }, ...mine.map(card))
         : el('p', { class: 'muted', 'data-testid': 'start-mine-empty' }, '아직 없습니다. 「새 유니버스 만들기」로 시작하세요.')),
+    // 접어 둔다(기본 접힘): 처음 보는 사람에게 목록 열한 개가 한꺼번에 보이지 않게(CR-13 A). 기능은 그대로 펼치면 있다
+    el('details', { class: 'start-more', 'data-testid': 'start-more' }, el('summary', {}, '샘플·처음 순서 더 보기'),
+      el('section', {}, el('h2', {}, '처음이라면 이 순서로'), el('ol', { class: 'steps-list', 'data-testid': 'start-steps' },
+      ...STEPS.map(([t, d]) => el('li', {}, el('strong', {}, t), el('span', { class: 'muted' }, d))))),
+      el('section', {}, el('h2', {}, '샘플 유니버스'), el('ul', { class: 'cards', 'data-testid': 'start-samples' }, ...samples.map(card))),
+    ),
   );
 }

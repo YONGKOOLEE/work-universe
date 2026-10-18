@@ -39,6 +39,9 @@ import { convertDocumentWith } from '../llm/connector.js';
 import { DOC_EXAMPLE } from '../../data/doc-example.js';
 import { filterDisplay, neighborhoodDisplay, personsIn, searchNodes } from '../view/explore.js';
 import { EXPLORE, exploreBar } from './explore.js';
+import { createTour } from './tour.js';
+import { scenarioOf } from '../rules/tour-steps.js';
+import { createFieldId, fillMineDefaults } from '../rules/new-universe.js';
 
 // 점검 도구(tools/*-check.mjs)만 주소에 ?check를 붙여 연다. 그때만 점검용 전역 window.__wu를 만든다(D-4-10, 사용자 결정 2026-10-03)
 const CHECK_MODE = new URLSearchParams(location.search).has('check');
@@ -47,29 +50,97 @@ const CHECK_MODE = new URLSearchParams(location.search).has('check');
 // 내용 포함 HTML을 읽기 전용으로 보는 중이면 주소를 #embed/ID로 둔다(일반 ID에는 '/'가 없어 섞이지 않는다, CR-13 B)
 let embedPrefix = '';
 
-function openUniverse(id) {
-  location.hash = embedPrefix + id;
+// tourId가 있으면 주소 끝에 ~tour=시나리오를 붙인다: 다시 열린 화면이 읽고(takeTourFromHash) 바로 주소에서 지운다(CR-13 A, 저장소를 쓰지 않는다)
+function openUniverse(id, tourId = '') {
+  location.hash = embedPrefix + id + (tourId ? `~tour=${tourId}` : '');
   location.reload();
 }
 
+// 주소 끝의 ~tour=시나리오를 읽고 지운다. 모르는 시나리오 이름이면 null(주소는 지운다)
+function takeTourFromHash() {
+  const m = /~tour=([a-z]+)$/.exec(location.hash);
+  if (!m) return null;
+  history.replaceState(null, '', location.pathname + location.search + location.hash.slice(0, m.index));
+  return scenarioOf(m[1]) ? m[1] : null;
+}
+
 // 새 유니버스(R-12): 이름·단위·작성 주체가 필수. 같은 이름·단위가 있으면 확인한다. 시작 화면과 본 화면이 함께 쓴다
-function wireCreateDialog(app, $) {
+// 두 모양: open() = 「새 유니버스 만들기」(예전 그대로), openMine() = 「내 업무 지도 만들기」(첫 업무 칸이 맨 위, 이름·단위·작성 주체는 접힌 「지도 정보」에서 비우면 자동으로 채움, 재검증 N-3)
+function wireCreateDialog(app, $, getAuthorName = () => undefined) {
   const dialog = $('create-dialog');
-  const open = () => {
-    $('create-form').reset();
-    $('create-message').textContent = '';
-    dialog.showModal();
+  const form = $('create-form');
+  const meta = $('create-meta');
+  const starterBox = $('create-starter');
+  const info = $('create-info');
+  const NORMAL = {
+    title: '새 유니버스 만들기',
+    legend: '이 유니버스에 넣을 첫 업무(선택) — 채우면 작은 지도가 바로 생깁니다',
+    intro: '업무 하나부터 시작하세요. 첫 업무를 적으면 업무·담당자·산출물이 이어진 작은 지도가 바로 생깁니다. 비워 두면 빈 유니버스를 만듭니다.',
+    namePh: '예: 가상 교육팀 업무 지도',
+    ownerPh: '예: 가상 교육팀',
   };
+  const MINE = {
+    title: '내 업무 지도 만들기',
+    legend: '내 첫 업무 — 업무 이름만 넣어도 됩니다',
+    intro: '맡은 업무 하나부터 적어 보세요. 업무 이름만 넣으면 업무·담당자·산출물이 이어진 작은 지도가 바로 생깁니다. 나머지는 나중에 채워도 됩니다.',
+    namePh: '비우면 「업무 이름 + 업무 지도」',
+    ownerPh: '비우면 설정의 작성자 이름 또는 「내 팀」',
+  };
+  let mine = false;
+  const setMode = (isMine) => {
+    mine = isMine;
+    const m = isMine ? MINE : NORMAL;
+    $('create-title').textContent = m.title;
+    $('create-intro').textContent = m.intro;
+    $('create-starter-legend').textContent = m.legend;
+    $('create-name').placeholder = m.namePh;
+    $('create-owner').placeholder = m.ownerPh;
+    if (isMine) {
+      info.append(meta); // 이름·단위·작성 주체·설명은 접힌 「지도 정보」 안으로
+      info.hidden = false;
+      info.open = false;
+    } else {
+      info.hidden = true;
+      form.insertBefore(meta, starterBox); // 예전 모양: 이름·단위·작성 주체 → 첫 업무
+    }
+  };
+  const showError = (message, code, field) => {
+    $('create-message').textContent = message;
+    $('create-message').dataset.code = code;
+    const id = createFieldId(field);
+    const input = id ? $(id) : null;
+    if (!input) return;
+    if (info.contains(input)) info.open = true; // 접힌 「지도 정보」 안의 칸이면 펼쳐서 초점을 준다
+    input.focus();
+  };
+  const show = (isMine) => {
+    form.reset();
+    setMode(isMine);
+    $('create-message').textContent = '';
+    delete $('create-message').dataset.code;
+    dialog.showModal();
+    if (isMine) $('create-start-work').focus(); // 첫 칸에서 바로 입력
+  };
+  const open = () => show(false);
+  const openMine = () => show(true);
   $('create-open').addEventListener('click', open);
   $('create-cancel').addEventListener('click', () => dialog.close());
-  $('create-form').addEventListener('submit', (evt) => {
+  form.addEventListener('submit', (evt) => {
     evt.preventDefault();
-    const input = { name: $('create-name').value, level: $('create-level').value, owner: $('create-owner').value, description: $('create-description').value };
-    // 첫 업무(선택): 업무 이름 없이 나머지만 채우면 막는다
+    let input = { name: $('create-name').value, level: $('create-level').value, owner: $('create-owner').value, description: $('create-description').value };
     const starter = { work: $('create-start-work').value, person: $('create-start-person').value, cycle: $('create-start-cycle').value, due: $('create-start-due').value, artifact: $('create-start-artifact').value };
-    if (!starter.work.trim() && Object.values(starter).some((v) => v.trim())) {
-      $('create-message').textContent = '첫 업무 이름을 넣거나 아래 칸을 비우세요.';
-      $('create-message').dataset.code = 'starter-work-required';
+    if (mine) {
+      // 내 업무 모드: 업무 이름은 필수, 비어 있는 이름·단위·작성 주체는 자동으로 채운다(R-12 필수 규칙은 채운 값으로 통과)
+      const f = fillMineDefaults({ ...input, starter }, getAuthorName());
+      if (!f.ok) {
+        showError('업무 이름을 넣어 주세요. 예: 월말 정산 점검', f.code, f.field);
+        return;
+      }
+      input = f.input;
+      delete input.starter;
+    } else if (!starter.work.trim() && Object.values(starter).some((v) => v.trim())) {
+      // 첫 업무(선택): 업무 이름 없이 나머지만 채우면 막는다
+      showError('첫 업무 이름을 넣거나 아래 칸을 비우세요.', 'starter-work-required', 'starter_work');
       return;
     }
     if (starter.work.trim()) input.starter = starter;
@@ -77,14 +148,13 @@ function wireCreateDialog(app, $) {
     if (same && !window.confirm(`같은 이름·단위의 유니버스「${same.name}」(${same.level})가 이미 있습니다. 그래도 새로 만들까요?`)) return;
     const r = app.createUniverse(input);
     if (!r.ok) {
-      $('create-message').textContent = messageFor(r.error);
-      $('create-message').dataset.code = r.error.code;
+      showError(messageFor(r.error), r.error.code, r.error.field);
       return;
     }
     openUniverse(r.doc.universe.id);
   });
   if (app.readOnly) $('create-open').disabled = true;
-  return open;
+  return { open, openMine };
 }
 
 // 가져오기(T-17): 문서 초벌 변환(CR-5 ②)·JSON 파일 → 미리 보기 → 가져오기. 시작 화면과 본 화면이 함께 쓴다
@@ -131,6 +201,7 @@ function hashId() {
 }
 
 function start() {
+  const tourId = takeTourFromHash(); // 시작 화면의 「인수인계를 앞두고 있어요」·「팀 업무를 한눈에…」가 붙인 따라 하기 시나리오(CR-13 A)
   // 내용 포함 HTML로 내려받을 때 쓸 앱 원본: 화면을 그리기 전에 잡는다(CR-13 B)
   const appHtml = captureAppHtml(document);
   const emb = readEmbedFromDocument(document);
@@ -192,14 +263,16 @@ function start() {
   // 주소에 유니버스가 없으면(더블클릭으로 처음 열었을 때) 시작 화면을 보여 준다(R-08)
   if (!hashId()) { // 깨진 인코딩(#%E0)도 시작 화면(hashId의 주석대로, 여섯 번째 검토 C-16)
     document.body.classList.add('start-mode');
-    const openCreate = wireCreateDialog(app, $);
+    const create = wireCreateDialog(app, $, () => settings.authorName);
     $('start-screen').replaceChildren(startScreen({
       universes: app.universes(),
       guide: SAMPLE_GUIDE,
       warnings: [...app.warnings.map((w) => messageFor(w)), ...(embedWarning ? [embedWarning] : [])],
       readOnly: app.readOnly,
-      onOpen: openUniverse,
-      onCreate: openCreate,
+      onOpen: (id) => openUniverse(id),
+      onTour: (id) => openUniverse(scenarioOf(id).universeId, id),
+      onCreate: create.open,
+      onCreateMine: create.openMine,
       onImport: openImport,
     }));
     if (CHECK_MODE) window.__wu = { start: true, readOnly: app.readOnly };
@@ -211,6 +284,12 @@ function start() {
   let insight = null; // 인사이트 화면: {work, kind}
   let issues = null; // 미해결 이슈 목록 화면(R-20): {target}
   let hiddenOpen = false; // 숨긴 노드 목록 화면(R-21)
+  // 따라 하기(CR-13 A): 완료 조건에 쓰는 표시. 따라 하기를 시작할 때 지운다
+  let draftShown = false; // 초안 결과가 그려졌음
+  let evidenceUsed = false; // 초안의 근거 칩을 눌렀음
+  let foundGid = null; // 「노드 찾기」로 고른 노드
+  let tour = null;
+  const tourHook = () => { if (tour) tour.check(); };
   // 미해결·숨긴 노드·인사이트 패널(U-3): 열 때 「닫기」에 포커스, 닫으면 연 단추로 돌아간다(표 대화상자와 같게)
   let focusPanelClose = false;
   let panelOpener = null; // 연 단추의 data-testid
@@ -390,6 +469,7 @@ function start() {
     insight = null;
     issues = null;
     drafting = { target: targetGid };
+    draftShown = false;
     renderPanel();
   }
 
@@ -631,6 +711,7 @@ function start() {
     applyTime();
     renderExploreStatus(); // 거르기 「n/전체 또렷」 숫자를 펼친 화면에 맞춘다
     graph.relayout();
+    tourHook(); // 그래프를 다시 그렸으므로 짚기를 다시 한다
     return true;
   }
 
@@ -641,9 +722,17 @@ function start() {
     graph.highlight(g);
     const node = graph.cy.getElementById(g);
     if (!node.empty()) graph.cy.animate({ center: { eles: node } }, { duration: 200 });
+    if (drafting) evidenceUsed = true; // 따라 하기: 초안의 근거 칩을 눌렀음
+    tourHook();
   }
 
+  // 화면 오른쪽 패널을 그린 뒤 따라 하기에 알린다(완료 조건 확인·대상 다시 짚기)
   function renderPanel() {
+    renderPanelBody();
+    tourHook();
+  }
+
+  function renderPanelBody() {
     const panel = $('detail');
     // 다른 화면(설정·통합 확인·이슈·인사이트·초안)이 열리면 숨긴 노드 목록은 닫는다
     if (settingsOpen || merging || issues || insight || drafting) hiddenOpen = false;
@@ -738,12 +827,12 @@ function start() {
       return;
     }
     if (insight) {
-      panel.replaceChildren(insightPanel({ view, provider, work: insight.work, kind: insight.kind, asOf: asOf(), today: todayLocal(), onTime: setViewDate, onKind: (k) => { insight.kind = k; }, onWork: (w) => { insight.work = w; }, onFocus: showInGraph, onClose: closeSidePanel }));
+      panel.replaceChildren(insightPanel({ view, provider, work: insight.work, kind: insight.kind, asOf: asOf(), today: todayLocal(), onTime: setViewDate, onKind: (k) => { insight.kind = k; tourHook(); }, onWork: (w) => { insight.work = w; }, onFocus: showInGraph, onClose: closeSidePanel }));
       focusClose('insight-close');
       return;
     }
     if (drafting) {
-      panel.replaceChildren(draftPanel({ view, provider, target: drafting.target, asOf: todayLocal(), viewDate, readOnly: app.readOnly, onFocus: showInGraph, onClose: () => { drafting = null; renderPanel(); graph.highlight(selected); },
+      panel.replaceChildren(draftPanel({ view, provider, target: drafting.target, preset: tour ? tour.preset() : undefined, onDraft: () => { draftShown = true; tourHook(); }, asOf: todayLocal(), viewDate, readOnly: app.readOnly, onFocus: showInGraph, onClose: () => { drafting = null; renderPanel(); graph.highlight(selected); },
         // 확정(R-03 ③, CR-8): 저장되면 초안 화면을 닫고 새 인수인계서를 연다
         onConfirm: (input) => {
           const r = app.confirmHandover(input);
@@ -895,6 +984,7 @@ function start() {
   // ── 큰 화면 탐색: 찾기·거르기·주변만 보기(T-18, R-17, D-17). 계산은 view/explore.js, 여기서는 화면만 바꾼다 ──
   const bar = exploreBar({
     container: $('explore-bar'),
+    advanced: $('tools-more'), // 거르기는 「도구 더 보기」 줄로(CR-13 A). 「설명·속성까지」는 찾기 칸 옆
     search: (q, opts) => searchNodes(view, q, opts),
     onPick: goTo,
     types: (chosen) => legendItems(display, chosen).filter((t) => t.key !== 'root' && t.key !== 'unknown'),
@@ -917,6 +1007,7 @@ function start() {
   // 키보드로 고른 경우 상세 패널 제목으로 초점을 옮겨 Tab으로 이어서 읽을 수 있게 한다
   function goTo(gid) {
     const g = view.canonical(gid);
+    foundGid = g; // 따라 하기: 노드 찾기로 골랐음(select가 화면을 그리며 알리므로 먼저 둔다)
     reveal(g);
     select(g);
     exploreNote = { text: `찾음: 「${(view.getNode(g) || { label: g }).label}」` };
@@ -1094,7 +1185,7 @@ function start() {
   });
   if (app.readOnly) $('group-open').disabled = true;
 
-  wireCreateDialog(app, $);
+  const createDialog = wireCreateDialog(app, $, () => settings.authorName);
 
   // 표로 추가·고치기(T-19): 한 번의 묶음 저장. 끝나면 마지막 새 노드를 고른다
   const openTable = tableDialog({
@@ -1163,7 +1254,53 @@ function start() {
     openUniverse(app.doc.universe.id);
   }
 
+  // 「도구 더 보기」(CR-13 A): 흐름 정렬·거르기를 처음엔 접어 둔다. 한 번 펼치면 설정(moreTools)에 기억한다. 저장에 실패하면 이번 화면에서만 유지
+  let toolsOpen = settings.moreTools === true;
+  const applyTools = (open, persist) => {
+    toolsOpen = open;
+    $('tools-more').hidden = !open;
+    $('tools-toggle').setAttribute('aria-expanded', String(open));
+    if (persist) {
+      if (open) settings.moreTools = true;
+      else delete settings.moreTools;
+      saveSettings(storage, settings);
+    }
+    graph.cy.resize(); // 줄이 늘거나 줄면 그래프 영역 높이가 바뀐다
+  };
+  applyTools(toolsOpen, false);
+  $('tools-toggle').addEventListener('click', () => applyTools(!toolsOpen, true));
+
+  // 따라 하기(CR-13 A): 읽기 전용(내용 포함 파일)에서는 쓰지 않는다
+  const tourState = () => ({
+    universeId: currentId(),
+    selected,
+    draftOpen: !!drafting,
+    draftShown: !!drafting && draftShown,
+    evidenceUsed,
+    expandedCount: expanded.size,
+    foundGid,
+    nbhd: !!nbhd,
+    insightOpen: !!insight,
+    insightKind: insight ? insight.kind : null,
+  });
+  if (embedMode) $('tour-open').hidden = true;
+  else {
+    tour = createTour({
+      slot: $('tour-slot'),
+      getState: tourState,
+      getCy: () => graph.cy,
+      universeId: currentId,
+      onOpenUniverse: openUniverse,
+      onStart: () => { draftShown = false; evidenceUsed = false; foundGid = null; },
+      onMake: () => createDialog.openMine(),
+      canMake: !app.readOnly,
+      toolsHint: () => !toolsOpen,
+    });
+    $('tour-open').addEventListener('click', () => tour.openHelp());
+  }
+
   refresh();
+  if (tour && tourId && scenarioOf(tourId).universeId === currentId()) tour.start(tourId);
 
   // 개발 점검 도구(tools/browser-check.mjs)가 그래프 좌표와 상태를 읽기 위한 연결점(?check일 때만)
   if (CHECK_MODE) window.__wu = {
@@ -1181,6 +1318,13 @@ function start() {
     },
     get selected() {
       return selected;
+    },
+    // CR-13 A 점검용: 따라 하기 상태(mode·scenario·index)와 「도구 더 보기」 펼침
+    get tour() {
+      return tour ? tour.info() : null;
+    },
+    get toolsOpen() {
+      return toolsOpen;
     },
     // T-18 점검용: 주변만 보기·거르기 상태
     get nbhd() {

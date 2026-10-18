@@ -240,6 +240,10 @@
   .subtype-box { display: grid; gap: 6px; }
   #create-form { display: grid; gap: 8px; font-size: 14px; }
   #create-form label { display: grid; gap: 4px; color: var(--muted); }
+  #create-meta { display: grid; gap: 8px; }
+  #create-info > summary { cursor: pointer; color: var(--accent); font-size: 14px; }
+  #create-info[open] > summary { margin-bottom: 8px; }
+  #create-info[hidden] { display: none; }
   button.home { background: none; border: 0; padding: 0; border-radius: 6px; }
   button.home h1 { margin: 0; }
   body.start-mode { overflow: auto; height: auto; min-height: 100vh; }
@@ -281,6 +285,40 @@
   .import-actions { margin-top: 14px; position: sticky; bottom: -18px; background: var(--panel); padding: 10px 0; }
   h4 { margin: 12px 0 4px; font-size: 14px; color: var(--accent); }
   dd { white-space: pre-line; }
+  /* 따라 하기(CR-13 A): 오른쪽 패널 맨 위에 붙는 카드. 대상은 .tour-target(요소)·cytoscape 클래스 tour-target(노드)으로 짚는다 */
+  .tour-slot { position: sticky; top: -16px; z-index: 3; margin: -16px -16px 12px; padding: 10px 16px; background: var(--panel-2); border-bottom: 2px solid var(--accent); }
+  .tour-slot + .aside-tools { margin-top: 0; }
+  .tour-card { display: grid; gap: 6px; font-size: 14px; }
+  .tour-card .tour-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .tour-card .tour-count { color: var(--accent); font-weight: bold; font-size: 13px; }
+  .tour-card .tour-story { color: var(--muted); font-size: 13px; margin: 0; }
+  .tour-card .tour-task { margin: 0; line-height: 1.5; }
+  .tour-card .tour-sub { margin: 0; color: var(--warn-text); font-size: 13px; }
+  .tour-card .tour-hint { margin: 0; color: var(--ok); font-size: 13px; }
+  .tour-card .row { margin-top: 2px; }
+  .tour-target { outline: 3px solid #ffd84d; outline-offset: 2px; animation: tour-pulse 1.1s ease-in-out infinite; }
+  @keyframes tour-pulse { 0%, 100% { outline-color: #ffd84d; } 50% { outline-color: rgba(255, 216, 77, .15); } }
+  .tour-target.tour-inset { outline-offset: -4px; } /* 그래프처럼 큰 대상은 테두리를 안쪽에 그린다(재검증 N-2) */
+  .tour-blank-hint { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 4; pointer-events: none; padding: 6px 16px; border-radius: 999px; background: var(--panel-2); color: var(--text); border: 2px solid var(--accent); font-size: 14px; font-weight: bold; white-space: nowrap; animation: tour-hint-pulse 1.1s ease-in-out infinite; }
+  @keyframes tour-hint-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+  @media (prefers-reduced-motion: reduce) { .tour-target { animation: none; } .tour-blank-hint { animation: none; } }
+  .tour-open { width: 30px; height: 30px; padding: 0; border-radius: 50%; font-weight: bold; }
+  .tools-more { flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding-top: 4px; border-top: 1px dashed var(--line); font-size: 13px; }
+  #tools-toggle::before { content: '▸ '; }
+  #tools-toggle[aria-expanded=true]::before { content: '▾ '; }
+  #tools-toggle[aria-expanded=true] { border-color: var(--accent); }
+  .start-ways { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; padding: 0; margin: 0; }
+  .start-ways > li { min-width: 0; display: flex; }
+  .start-way { width: 100%; white-space: normal; font-size: 14px; display: grid; gap: 8px; align-content: start; text-align: left; border-radius: 14px; padding: 18px; background: var(--panel-2); background: color-mix(in srgb, var(--accent) 9%, var(--panel)); border: 2px solid var(--accent); }
+  .start-way:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 18%, var(--panel)); }
+  .start-way:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
+  .start-way:disabled { border-color: var(--line); background: var(--panel); }
+  .start-way strong { font-size: 18px; color: var(--accent); }
+  .start-way span { word-break: keep-all; color: var(--text); font-size: 14px; line-height: 1.5; }
+  .start-small { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  details.start-more > summary { cursor: pointer; font-size: 16px; color: var(--accent); padding: 4px 0; }
+  details.start-more[open] > summary { margin-bottom: 12px; }
+  details.start-more > section { margin-bottom: 20px; }
   @media (max-width: 800px) { .aside-tools { display: none; } main.wide aside { width: auto; } main { flex-direction: column; } aside { width: auto; border-left: 0; border-top: 1px solid var(--line); max-height: 50vh; } .graph-wrap { min-height: 320px; } }
 </style>
 </head>
@@ -292,6 +330,7 @@
   <button type="button" id="create-open" class="primary">새 유니버스</button>
   <button type="button" id="group-open">유니버스 묶기</button>
   <button type="button" id="import-open" title="업무정의서 문서를 붙여 넣어 초벌로 바꾸거나, JSON 파일을 열거나, 지금 유니버스를 JSON 파일로 내려받습니다">가져오기·내보내기</button>
+  <button type="button" id="tour-open" class="tour-open" data-testid="tour-open" title="따라 하기 다시 보기" aria-label="따라 하기 다시 보기">?</button>
   <button type="button" id="settings-open" title="생성 방식과 작성자 이름을 정합니다">설정</button>
 </header>
 <div id="start-screen"></div>
@@ -302,13 +341,15 @@
   <div class="graph-wrap">
     <div class="explore-row">
       <div id="explore-bar" class="explore-bar" data-testid="explore-bar"></div>
-      <div class="graph-tools"><button type="button" id="relayout" title="노드 배치를 처음부터 다시 계산합니다">다시 정렬</button><button type="button" id="flowlayout" aria-pressed="false" title="업무를 선후 순서대로 가로로, 사람은 위·산출물은 아래 층으로 놓습니다. 「다시 정렬」로 원래 배치로 돌아갑니다(시제품)">흐름 정렬</button><button type="button" id="fit" title="그래프 전체를 화면에 맞춥니다. 주변만 보기 중이면 전체 그래프로 돌아갑니다">전체 보기</button></div>
+      <div class="graph-tools"><button type="button" id="relayout" title="노드 배치를 처음부터 다시 계산합니다">다시 정렬</button><button type="button" id="fit" title="그래프 전체를 화면에 맞춥니다. 주변만 보기 중이면 전체 그래프로 돌아갑니다">전체 보기</button><button type="button" id="tools-toggle" data-testid="tools-toggle" aria-expanded="false" aria-controls="tools-more" title="흐름 정렬·거르기 같은 고급 도구를 펼치거나 접습니다(펼침 상태는 이 브라우저에 기억)">도구 더 보기</button></div>
+      <div id="tools-more" class="tools-more" data-testid="tools-more" hidden><button type="button" id="flowlayout" aria-pressed="false" title="업무를 선후 순서대로 가로로, 사람은 위·산출물은 아래 층으로 놓습니다. 「다시 정렬」로 원래 배치로 돌아갑니다(시제품)">흐름 정렬</button></div>
     </div>
     <div id="graph" aria-label="그래프"></div>
     <div id="timebar" class="timebar" data-testid="timebar"></div>
     <ul id="legend" aria-label="범례"></ul>
   </div>
   <aside>
+    <div id="tour-slot" class="tour-slot" data-testid="tour-slot" hidden></div>
     <div class="aside-tools"><button type="button" id="wide-toggle" class="small-btn" aria-pressed="false" title="오른쪽 패널을 넓혀 인수인계 초안·인사이트·통합 확인을 한 번에 더 많이 봅니다">패널 넓게 보기</button></div>
     <section id="detail" aria-live="polite"></section>
     <details class="add">
@@ -320,19 +361,22 @@
 <dialog id="create-dialog" aria-labelledby="create-title">
   <form id="create-form" novalidate>
     <h2 id="create-title">새 유니버스 만들기</h2>
-    <p class="muted small">업무 하나부터 시작하세요. 첫 업무를 적으면 업무·담당자·산출물이 이어진 작은 지도가 바로 생깁니다. 비워 두면 빈 유니버스를 만듭니다.</p>
+    <p id="create-intro" class="muted small">업무 하나부터 시작하세요. 첫 업무를 적으면 업무·담당자·산출물이 이어진 작은 지도가 바로 생깁니다. 비워 두면 빈 유니버스를 만듭니다.</p>
+    <div id="create-meta">
     <label>이름 <input id="create-name" maxlength="100" autocomplete="off" placeholder="예: 가상 교육팀 업무 지도"></label>
     <label>단위 <input id="create-level" list="create-levels" value="업무" autocomplete="off"></label>
     <datalist id="create-levels"><option value="업무"><option value="팀"><option value="부서"><option value="본부"><option value="회사"></datalist>
     <label>작성 주체 <input id="create-owner" autocomplete="off" placeholder="예: 가상 교육팀"></label>
     <label>설명(선택) <textarea id="create-description" rows="3"></textarea></label>
-    <fieldset id="create-starter"><legend>이 유니버스에 넣을 첫 업무(선택) — 채우면 작은 지도가 바로 생깁니다</legend>
+    </div>
+    <fieldset id="create-starter"><legend id="create-starter-legend">이 유니버스에 넣을 첫 업무(선택) — 채우면 작은 지도가 바로 생깁니다</legend>
       <label>업무 이름 <input id="create-start-work" maxlength="100" autocomplete="off" placeholder="예: 월말 정산 점검"></label>
       <label>담당자(내 이름) <input id="create-start-person" maxlength="100" autocomplete="off" placeholder="예: 김가상"></label>
       <label>주기 <input id="create-start-cycle" autocomplete="off" placeholder="예: 매월"></label>
       <label>마감 <input id="create-start-due" autocomplete="off" placeholder="예: 매월 5일"></label>
       <label>산출물 <input id="create-start-artifact" maxlength="100" autocomplete="off" placeholder="예: 정산 점검표"></label>
     </fieldset>
+    <details id="create-info" hidden><summary>지도 정보(비우면 자동으로 채움)</summary></details>
     <div id="create-message" class="error-text" aria-live="polite"></div>
     <div class="row"><button type="submit" class="primary">만들기</button><button type="button" id="create-cancel">취소</button></div>
   </form>

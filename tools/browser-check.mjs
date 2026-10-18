@@ -224,6 +224,44 @@ async function checkBrowser(browser, port) {
   const version = s.version;
   check(`P-1 file:// 로드·그래프 표시(노드 ${NODES}, 연결 ${EDGES})`, s.ready && (await nodeCount(s.cdp)) === NODES && (await edgeCount(s.cdp)) === EDGES);
 
+  // ── CR-13 A(2026-10-18) 「도구 더 보기」: 새 프로필은 기본 접힘(흐름 정렬·거르기·설명·속성까지가 보이지 않음), 펼치면 기억, 접으면 기억.
+  //    아래 흐름 정렬·거르기·설명·속성까지 점검은 도구가 보여야 하므로(크기 확인) 이 단계가 끝나면 펼친 채로 둔다 ──
+  const reloadReady = async () => {
+    await evaluate(s.cdp, 'location.reload()').catch(() => {});
+    await sleep(500);
+    return waitFor(s.cdp, 'window.__wu && window.__wu.cy && window.__wu.cy.nodes().length > 0', 8000);
+  };
+  const visibleSize = (sel) => evaluate(s.cdp, `(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return false; const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; })()`);
+  const toolsVisible = async () => ({ flow: await visibleSize('#flowlayout'), filter: await visibleSize('[data-testid=filter-open]') }); // 재검증 R-1: 「설명·속성까지」는 찾기 칸 옆이라 접히지 않는다(keepVisible)
+  const keepVisible = async () => ({ find: await visibleSize('[data-testid=find-input]'), wide: await visibleSize('[data-testid=find-wide]'), relayout: await visibleSize('#relayout'), fit: await visibleSize('#fit'), time: await visibleSize('[data-testid=time-range]'), toggle: await visibleSize('#tools-toggle') });
+  const toolState = async () => ({ ...(await toolsVisible()), open: await evaluate(s.cdp, 'window.__wu.toolsOpen'), aria: await evaluate(s.cdp, "document.getElementById('tools-toggle').getAttribute('aria-expanded')") });
+  const t0 = await toolState();
+  const keep0 = await keepVisible();
+  check('CR-13 A 새 프로필: 「흐름 정렬」「거르기」는 기본 접힘(보이지 않음), 「도구 더 보기」는 보이고 aria-expanded=false', !t0.flow && !t0.filter && t0.open === false && t0.aria === 'false' && keep0.toggle, JSON.stringify(t0));
+  check('CR-13 A 접혀 있어도 「노드 찾기」「설명·속성까지」「다시 정렬」「전체 보기」「시간 보기」 막대는 그대로 보임(크기 있음)', Object.values(keep0).every(Boolean), JSON.stringify(keep0));
+  await shot(s.cdp, `${browser.name}-35-tools-collapsed`);
+  await clickTestId(s.cdp, 'tools-toggle');
+  await sleep(250);
+  const t1 = await toolState();
+  check('CR-13 A 「도구 더 보기」를 누르면 「흐름 정렬」「거르기」가 보임(크기 있음), aria-expanded=true', t1.flow && t1.filter && t1.open === true && t1.aria === 'true', JSON.stringify(t1));
+  await shot(s.cdp, `${browser.name}-35b-tools-open`);
+  const r1 = await reloadReady();
+  const t2 = await toolState();
+  check('CR-13 A 한 번 펼치면 설정에 기억: 다시 열어도 펼쳐 있음(settings.moreTools)', r1 && t2.flow && t2.filter && (await evaluate(s.cdp, "JSON.parse(localStorage.getItem('wu:v1:settings')).moreTools")) === true, JSON.stringify(t2));
+  await clickTestId(s.cdp, 'tools-toggle');
+  await sleep(200);
+  await reloadReady();
+  const t3 = await toolState();
+  check('CR-13 A 접으면 그것도 기억: 다시 열어도 접혀 있고 설정에 필드가 없음', !t3.flow && !t3.filter && t3.open === false && (await evaluate(s.cdp, "JSON.parse(localStorage.getItem('wu:v1:settings')).moreTools")) === undefined, JSON.stringify(t3));
+  // 깨진 값("yes")은 접힘
+  await evaluate(s.cdp, "(() => { const v = JSON.parse(localStorage.getItem('wu:v1:settings') || '{}'); v.moreTools = 'yes'; localStorage.setItem('wu:v1:settings', JSON.stringify(v)); })()");
+  await reloadReady();
+  check('CR-13 A 설정 값이 깨져 있으면("yes") 접힘으로 열림', (await evaluate(s.cdp, 'window.__wu.toolsOpen')) === false && !(await visibleSize('#flowlayout')));
+  await clickTestId(s.cdp, 'tools-toggle'); // 이 아래 점검을 위해 펼친 채로 둔다(저장됨)
+  await sleep(200);
+  await reloadReady();
+  check('CR-13 A (이 아래 점검용) 펼친 상태가 저장되어 다시 열어도 펼쳐 있음', (await evaluate(s.cdp, 'window.__wu.toolsOpen')) === true && (await visibleSize('#flowlayout')));
+
   // ── 흐름 정렬(시제품, 조력자 의견 2026-10-12): 가로 = 선후, 세로 = 유형 층. 기본 배치와 나란히 화면을 남긴다 ──
   const flowShot = async (id, tag) => {
     await evaluate(s.cdp, `location.hash = '${id}'; location.reload()`).catch(() => {});
@@ -594,18 +632,288 @@ async function checkBrowser(browser, port) {
     check('시작 화면에 "null" 글자 없음', await evaluate(s.cdp, "(() => { const w = document.createTreeWalker(document.getElementById('start-screen'), NodeFilter.SHOW_TEXT); while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') return false; return true; })()"));
     await evaluate(s.cdp, 'window.scrollTo(0, 0)');
     await shot(s.cdp, `${browser.name}-0-start`);
-    // 한 번 눌러 탐색 시작(R-08): 추천 샘플이 열리고 그래프가 보인다
-    await evaluate(s.cdp, "document.querySelector('[data-testid=start-primary]').click()");
+    // ── CR-13 A(2026-10-18) 시작 화면 세 갈래 + 앱 안 따라 하기 ──
+    // 바꾼 이유: 예전에는 「샘플 바로 열기」(start-primary)로 R-08 "첫 화면에서 탐색을 시작할 수 있음"을 확인했다. 이제 첫 화면의 중심은
+    // 「무엇을 하고 싶어요?」 세 갈래 카드라서 R-08은 카드로 확인하고, 「샘플 바로 열기」는 따라 하기 없이 열리는 별도 점검으로 남긴다.
+    const cardInfo = await evaluate(s.cdp, "(() => { const ids = ['start-way-handover', 'start-way-mine', 'start-way-team']; return ids.map((id) => { const e = document.querySelector('[data-testid=' + id + ']'); if (!e) return null; const r = e.getBoundingClientRect(); return { w: r.width > 0 && r.height > 0, text: e.textContent }; }); })()");
+    check('CR-13 A 시작 화면에 「무엇을 하고 싶어요?」 세 갈래 카드(인수인계를 앞두고 있어요·내 업무를 정리해 두고 싶어요·팀 업무를 한눈에 보고 싶어요)가 실제로 보임(크기 있음)', cardInfo.every((c) => c && c.w) && cardInfo[0].text.includes('인수인계를 앞두고 있어요') && cardInfo[0].text.includes('예시 업무로 인수인계 초안을 만들어 봅니다(3분)') && cardInfo[1].text.includes('내 업무를 정리해 두고 싶어요') && cardInfo[1].text.includes('업무 하나부터 작은 지도를 만듭니다') && cardInfo[2].text.includes('팀 업무를 한눈에 보고 싶어요') && cardInfo[2].text.includes('여러 업무를 묶은 팀·부서 지도를 봅니다'), JSON.stringify(cardInfo));
+    const smallInfo = await evaluate(s.cdp, "({ more: document.querySelector('[data-testid=start-more]').open, stepsVisible: document.querySelector('[data-testid=start-steps]').checkVisibility(), samplesVisible: document.querySelector('[data-testid=start-samples]').checkVisibility(), primary: document.querySelector('[data-testid=start-primary]').textContent, mine: !!document.querySelector('[data-testid=start-mine], [data-testid=start-mine-empty]') })");
+    check('CR-13 A 「처음이라면 이 순서로」와 샘플 카드 7개는 「샘플·처음 순서 더 보기」 안에 기본 접힘, 「샘플 바로 열기: 월말 정산 점검」·내 유니버스는 그대로 보임', smallInfo.more === false && !smallInfo.stepsVisible && !smallInfo.samplesVisible && smallInfo.primary === '샘플 바로 열기: 월말 정산 점검' && smallInfo.mine, JSON.stringify(smallInfo));
+    // 쉬운 말: 세 갈래 카드 문구에 유니버스·노드·꼭지가 없다
+    check('CR-13 A 세 갈래 카드에는 어려운 낱말(유니버스·노드·꼭지)을 쓰지 않음', cardInfo.every((c) => !/유니버스|노드|꼭지/.test(c.text)));
+    await evaluate(s.cdp, "(() => { const v = JSON.parse(localStorage.getItem('wu:v1:settings') || '{}'); delete v.moreTools; localStorage.setItem('wu:v1:settings', JSON.stringify(v)); })()"); // 끝 카드의 「도구 더 보기」 안내를 보려고 접힘으로(이 아래에서 다시 펼침)
+    // 재검증 N-7: 작은 단추는 강조(primary)가 아니고 세 갈래 카드가 강조되며, 접힘 제목은 「샘플·처음 순서 더 보기」
+    const emph = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=start-primary]'); const w = document.querySelector('[data-testid=start-way-handover]'); const cs = getComputedStyle(b); const wc = getComputedStyle(w); return { primaryClass: b.classList.contains('primary'), btnBg: cs.backgroundColor, wayBorder: wc.borderTopColor, wayBorderW: wc.borderTopWidth, wayBg: wc.backgroundColor, summary: document.querySelector('[data-testid=start-more] > summary').textContent, accent: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() }; })()");
+    check('N-7 시작 화면: 작은 단추 「샘플 바로 열기」는 primary(초록 채움)가 아니고, 세 갈래 카드는 accent 테두리(2px)·배경이 있으며, 접힘 제목이 「샘플·처음 순서 더 보기」', !emph.primaryClass && emph.btnBg !== 'rgb(166, 216, 107)' && emph.wayBorder === 'rgb(166, 216, 107)' && emph.wayBorderW === '2px' && emph.wayBg !== 'rgba(0, 0, 0, 0)' && emph.summary === '샘플·처음 순서 더 보기', JSON.stringify(emph));
+    await shot(s.cdp, `${browser.name}-34a-start-emphasis`);
+    // 재검증 N-3: 「새 유니버스 만들기」 대화상자는 두 모양. 작은 단추 = 예전 모양, 「내 업무를 정리해 두고 싶어요」 = 「내 업무 지도 만들기」
+    const dlgInfo = () => evaluate(s.cdp, `(() => { const d = document.getElementById('create-dialog'); const v = (id) => { const e = document.getElementById(id); const r = e.getBoundingClientRect(); return e.checkVisibility() && r.width > 0 && r.height > 0; }; const pos = (a, b) => !!(document.getElementById(a).compareDocumentPosition(document.getElementById(b)) & Node.DOCUMENT_POSITION_FOLLOWING); const info = document.getElementById('create-info'); return { open: d.open, title: document.getElementById('create-title').textContent, work: v('create-start-work'), name: v('create-name'), level: v('create-level'), owner: v('create-owner'), infoHidden: info.hidden, infoOpen: info.open, summary: info.querySelector('summary').textContent, starterBeforeMeta: pos('create-start-work', 'create-name'), metaInInfo: info.contains(document.getElementById('create-name')), focus: document.activeElement && document.activeElement.id }; })()`);
+    await evaluate(s.cdp, "document.querySelector('[data-testid=start-create]').click()");
+    await sleep(250);
+    const dNormal = await dlgInfo();
+    check('N-3 기존 「새 유니버스 만들기」(시작 화면 작은 단추)는 예전 모양: 제목, 이름·단위·작성 주체가 보이고 첫 업무 칸 위에 있으며 「지도 정보」 접힘 상자 없음', dNormal.open && dNormal.title === '새 유니버스 만들기' && dNormal.name && dNormal.level && dNormal.owner && dNormal.work && !dNormal.starterBeforeMeta && dNormal.infoHidden && !dNormal.metaInInfo, JSON.stringify(dNormal));
+    await evaluate(s.cdp, "document.getElementById('create-cancel').click()");
+    await sleep(150);
+    await evaluate(s.cdp, "document.querySelector('[data-testid=start-way-mine]').click()");
+    await sleep(250);
+    const dMine = await dlgInfo();
+    check('N-3 「내 업무를 정리해 두고 싶어요」 → 「내 업무 지도 만들기」: 첫 업무 칸이 맨 위(보임), 이름·단위·작성 주체는 접힌 「지도 정보(비우면 자동으로 채움)」 안(안 보임), 초점은 업무 이름 칸', dMine.open && dMine.title === '내 업무 지도 만들기' && dMine.work && !dMine.name && !dMine.level && !dMine.owner && !dMine.infoHidden && !dMine.infoOpen && dMine.summary === '지도 정보(비우면 자동으로 채움)' && dMine.starterBeforeMeta && dMine.metaInInfo && dMine.focus === 'create-start-work', JSON.stringify(dMine));
+    await shot(s.cdp, `${browser.name}-34b-mine-dialog`);
+    // 업무 이름이 비면 막고 그 칸에 초점, 담당자만 적어도 마찬가지
+    await evaluate(s.cdp, "(() => { document.getElementById('create-start-person').value = '김가상'; document.querySelector('#create-form button[type=submit]').click(); })()");
+    await sleep(200);
+    const mineErr = await evaluate(s.cdp, "({ code: document.getElementById('create-message').dataset.code, msg: document.getElementById('create-message').textContent, focus: document.activeElement && document.activeElement.id, open: document.getElementById('create-dialog').open })");
+    check('N-3 내 업무 모드에서 업무 이름을 비우면 만들지 않고 안내하며 업무 이름 칸에 초점', mineErr.code === 'mine-work-required' && mineErr.msg.includes('업무 이름') && mineErr.focus === 'create-start-work' && mineErr.open, JSON.stringify(mineErr));
+    await evaluate(s.cdp, "document.getElementById('create-cancel').click()");
+    await sleep(150);
+    await evaluate(s.cdp, "document.querySelector('[data-testid=start-create]').click()");
+    await sleep(250);
+    const dNormal2 = await dlgInfo();
+    check('N-3 내 업무 모드를 닫고 다시 「새 유니버스 만들기」를 열면 예전 모양으로 돌아옴(입력도 비어 있음)', dNormal2.title === '새 유니버스 만들기' && dNormal2.name && !dNormal2.starterBeforeMeta && dNormal2.infoHidden && (await evaluate(s.cdp, "document.getElementById('create-start-person').value")) === '', JSON.stringify(dNormal2));
+    // 어느 모드든 오류가 나면 해당 칸에 초점: 새 유니버스(예전 모양)에서 이름이 비면 이름 칸
+    await evaluate(s.cdp, "document.querySelector('#create-form button[type=submit]').click()");
+    await sleep(200);
+    check('N-3 기존 모양에서도 오류가 나면 해당 칸(이름)에 초점', (await evaluate(s.cdp, "document.activeElement && document.activeElement.id")) === 'create-name' && (await evaluate(s.cdp, "document.getElementById('create-message').dataset.code")) === 'E-REQUIRED');
+    await evaluate(s.cdp, "document.getElementById('create-cancel').click()");
+    await sleep(150);
+
+    const tourInfo = () => evaluate(s.cdp, 'window.__wu.tour');
+    const nameOnScreen = (name) => evaluate(s.cdp, `(() => { const n = ${JSON.stringify(name)}; const box = document.createElement('div'); for (const q of ['header', 'main']) { const c = document.querySelector(q).cloneNode(true); const slot = c.querySelector('#tour-slot'); if (slot) slot.remove(); box.append(c); } if (box.textContent.includes(n)) return true; if ([...document.querySelectorAll('[aria-label],[placeholder]')].some((e) => (e.getAttribute('aria-label') || '').includes(n) || (e.getAttribute('placeholder') || '').includes(n))) return true; return window.__wu.cy.nodes().some((x) => x.data('label') === n); })()`);
+    // 지금 단계 문구의 「…」 이름이 실제 화면에 있는지(「다음」은 따라 하기 카드의 단추)
+    const stepNamesOk = async () => {
+      const t = await text(s.cdp, '[data-testid=tour-task]');
+      const names = [...t.matchAll(/「([^」]+)」/g)].map((m) => m[1]);
+      const missing = [];
+      for (const n of names) {
+        const ok = n === '다음' ? await evaluate(s.cdp, "!!document.querySelector('[data-testid=tour-next]')") : await nameOnScreen(n);
+        if (!ok) missing.push(n);
+      }
+      return { names, missing };
+    };
+    const blankClick = async () => {
+      const b = await evaluate(s.cdp, "(() => { const r = document.getElementById('graph').getBoundingClientRect(); return { x: r.left + 12, y: r.top + 12 }; })()");
+      for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) { await s.cdp.send('Input.dispatchMouseEvent', { type, x: b.x, y: b.y, button: 'left', clickCount: 1 }); await sleep(30); }
+      await sleep(250);
+    };
+    // 깜빡임은 꺼진 순간이 있으므로, 짚은 노드는 잠시 지켜보며 한 번이라도 켜진 것을 센다
+    const blinkIds = async () => { for (let i = 0; i < 12; i += 1) { const ids = await evaluate(s.cdp, "window.__wu.cy.nodes('.tour-target').map((n) => n.id())"); if (ids.length) return ids; await sleep(150); } return []; };
+    const tourMarks = () => evaluate(s.cdp, "({ dom: document.querySelectorAll('.tour-target').length, cy: window.__wu.cy.nodes('.tour-target').length })");
+    const hashClean = () => evaluate(s.cdp, "!location.hash.includes('tour')");
+    const hasNext = () => evaluate(s.cdp, "!!document.querySelector('[data-testid=tour-next]')");
+
+    // 갈래 a: 인수인계 → 월말 정산(U-A1)이 열리고 따라 하기 1/4
+    await evaluate(s.cdp, "document.querySelector('[data-testid=start-way-handover]').click()");
     await sleep(500);
     const opened = await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
-    check('R-08 "샘플 바로 열기" 한 번으로 그래프 탐색이 시작됨', opened);
+    check('R-08 첫 화면의 세 갈래 카드 「인수인계를 앞두고 있어요」 한 번으로 월말 정산이 열려 탐색이 시작됨(CR-13 A로 확인 방법 변경)', opened);
+    await sleep(400);
+    let ti = await tourInfo();
+    check('CR-13 A 갈래 a → 따라 하기 1/4 카드: 이야기 한 줄(윤바다가 다음 달 서하늘에게…), 할 일 한 줄, 「건너뛰기」, 읽기 단계가 아니라 「다음」 없음, 주소의 ~tour 표시는 지워짐', !!ti && ti.mode === 'step' && ti.scenario === 'handover' && ti.index === 0 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 1/4' && (await text(s.cdp, '[data-testid=tour-story]')).includes('윤바다가 다음 달 서하늘에게 월말 정산을 넘깁니다') && (await text(s.cdp, '[data-testid=tour-task]')).includes('대사 확인') && (await text(s.cdp, '[data-testid=tour-skip]')) === '건너뛰기' && !(await hasNext()) && (await hashClean()), JSON.stringify(ti));
+    const sn1 = await stepNamesOk();
+    check('CR-13 A 1단계 문구의 「」 이름(대사 확인)이 실제 화면에 있고, 깜빡이는 대상은 그래프의 「대사 확인」 노드', sn1.missing.length === 0 && sn1.names.length >= 1 && (await blinkIds()).join() === 'U-A1/N-001', JSON.stringify(sn1));
+    await shot(s.cdp, `${browser.name}-36a-tour-handover-1`);
+    // 행동 없이 다른 노드를 누르면 진행하지 않는다(완료 조건은 「대사 확인」 선택)
+    await clickNode(s.cdp, 'U-A1/N-002');
+    check('CR-13 A 1단계: 다른 노드(자료 수집)를 누르면 진행하지 않음', (await tourInfo()).index === 0);
+    await clickNode(s.cdp, 'U-A1/N-001');
+    ti = await tourInfo();
+    check('CR-13 A 1단계 → 「대사 확인」을 실제로 누르면 2/4, 읽기 단계라 「다음」이 보임', ti.index === 1 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 2/4' && (await hasNext()), JSON.stringify(ti));
+    const sn2 = await stepNamesOk();
+    check('CR-13 A 2단계 문구의 「」 이름(미해결·다음)이 실제 화면에 있음', sn2.missing.length === 0 && sn2.names.includes('미해결') && sn2.names.includes('다음'), JSON.stringify(sn2));
+    await shot(s.cdp, `${browser.name}-36b-tour-handover-2`);
+    // 재검증 N-6: 선택을 풀면(Esc) 보조 문구 「대사 확인」을 다시 누르면 이력이 보입니다(그 노드를 다시 짚음), 다시 고르면 사라짐
+    const subText = () => evaluate(s.cdp, "(() => { const e = document.querySelector('[data-testid=tour-sub]'); return e && !e.hidden ? e.textContent : null; })()");
+    check('N-6 handover 2단계: 「대사 확인」을 고른 상태에서는 보조 문구가 없고 문구에 「오른쪽을 아래로 내려」가 있음', (await subText()) === null && (await text(s.cdp, '[data-testid=tour-task]')).includes('오른쪽을 아래로 내려'));
+    await evaluate(s.cdp, "window.__wu.select(null)");
+    await sleep(300);
+    check('N-6 handover 2단계에서 선택을 풀면 보조 문구 「대사 확인」을 다시 누르면 이력이 보입니다가 보이고, 깜빡이는 대상이 그래프의 「대사 확인」, 단계는 그대로(2/4)', (await subText()) === '「대사 확인」을 다시 누르면 이력이 보입니다' && (await blinkIds()).join() === 'U-A1/N-001' && (await tourInfo()).index === 1);
+    await shot(s.cdp, `${browser.name}-36b2-tour-handover-2-deselected`);
+    await clickNode(s.cdp, 'U-A1/N-001');
+    await sleep(300);
+    check('N-6 「대사 확인」을 다시 누르면 보조 문구가 사라지고 2단계 그대로', (await subText()) === null && (await tourInfo()).index === 1);
+    // 재검증 N-4·N-5: 카드는 「패널 넓게 보기」를 가리지 않고(간격 8px 이상), 패널을 내려도 카드 위에 틈이 없어 뒤 내용이 비치거나 눌리지 않는다
+    await s.cdp.send('Emulation.setDeviceMetricsOverride', { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false });
+    await sleep(400);
+    const cardGap = await evaluate(s.cdp, "(() => { const c = document.getElementById('tour-slot').getBoundingClientRect(); const w = document.getElementById('wide-toggle').getBoundingClientRect(); return { cardBottom: c.bottom, wideTop: w.top, gap: w.top - c.bottom }; })()");
+    check('N-4 따라 하기 카드와 「패널 넓게 보기」가 겹치지 않고 간격이 8px 이상', cardGap.gap >= 8, JSON.stringify(cardGap));
+    const peek = await evaluate(s.cdp, "(() => { const a = document.querySelector('aside'); a.scrollTop = 160; const ar = a.getBoundingClientRect(); const c = document.getElementById('tour-slot').getBoundingClientRect(); const x = c.left + 20; const hits = [ar.top + 1, ar.top + 8, ar.top + 15].map((y) => { const e = document.elementFromPoint(x, y); return !!(e && document.getElementById('tour-slot').contains(e)); }); return { scrolled: a.scrollTop, cardTopGap: c.top - ar.top, hits }; })()");
+    await shot(s.cdp, `${browser.name}-36b3-tour-card-scrolled`);
+    check('N-5 패널을 아래로 내려도 카드가 패널 맨 위에 붙어 있고(틈 0), 카드 위쪽 16px 안의 어느 점을 눌러도 카드(뒤 내용이 아님)', peek.scrolled > 0 && Math.abs(peek.cardTopGap) <= 1 && peek.hits.every(Boolean), JSON.stringify(peek));
+    await evaluate(s.cdp, "document.querySelector('aside').scrollTop = 0");
+    await s.cdp.send('Emulation.clearDeviceMetricsOverride');
+    await evaluate(s.cdp, "document.querySelector('[data-testid=tour-next]').click()");
+    await sleep(250);
+    ti = await tourInfo();
+    check('CR-13 A 「다음」 → 3/4(초안 만들기), 「다음」 단추는 사라짐', ti.index === 2 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 3/4' && !(await hasNext()), JSON.stringify(ti));
+    const sn3 = await stepNamesOk();
+    check('CR-13 A 3단계 문구의 「」 이름(인수인계 초안 만들기·초안 만들기)이 실제 화면에 있음', sn3.missing.length === 0 && sn3.names.length >= 2, JSON.stringify(sn3));
+    // 재검증 N-2: 「빈 곳을 누르세요」 단계에서는 그래프 안쪽 아래 가운데에 표지가 보이고(크기 있음, 눌림을 막지 않음), 테두리는 안쪽(음수 오프셋)
+    const hintInfo = () => evaluate(s.cdp, "(() => { const h = document.querySelector('[data-testid=tour-blank-hint]'); const g = document.getElementById('graph'); if (!h) return null; const r = h.getBoundingClientRect(); const gr = g.getBoundingClientRect(); const cs = getComputedStyle(h); const gs = getComputedStyle(g); return { text: h.textContent, w: r.width, h: r.height, inside: r.left >= gr.left && r.right <= gr.right && r.top >= gr.top && r.bottom <= gr.bottom, centerOff: Math.abs((r.left + r.right) / 2 - (gr.left + gr.right) / 2), nearBottom: gr.bottom - r.bottom < 60, noPointer: cs.pointerEvents === 'none', anim: cs.animationName, graphInset: g.classList.contains('tour-target') && g.classList.contains('tour-inset') && gs.outlineOffset.startsWith('-'), onTop: document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2) === g || g.contains(document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2)) }; })()");
+    const hi3 = await hintInfo();
+    check('N-2 handover 3단계(선택이 남은 상태): 그래프 안쪽 아래 가운데에 표지 「여기 빈 곳을 누르세요」가 보이고(크기 있음, pointer-events:none, 아래 그래프가 눌림), 그래프 테두리는 안쪽(outline-offset 음수)', !!hi3 && hi3.text === '여기 빈 곳을 누르세요' && hi3.w > 80 && hi3.h > 15 && hi3.inside && hi3.centerOff < 3 && hi3.nearBottom && hi3.noPointer && hi3.graphInset && hi3.onTop, JSON.stringify(hi3));
+    await shot(s.cdp, `${browser.name}-36b4-tour-blank-hint`);
+    await blankClick();
+    check('N-2 빈 곳을 누르면(단계가 바뀌면) 표지가 사라지고 그래프 테두리도 풀림', (await hintInfo()) === null && !(await evaluate(s.cdp, "document.getElementById('graph').classList.contains('tour-target') || document.getElementById('graph').classList.contains('tour-inset')")));
+    await evaluate(s.cdp, "document.querySelector('[data-testid=btn-draft-universe]').click()");
+    await sleep(300);
+    const preset = await evaluate(s.cdp, "({ from: document.querySelector('[data-testid=draft-from]').selectedOptions[0].textContent, to: document.querySelector('[data-testid=draft-to]').selectedOptions[0].textContent })");
+    check('CR-13 A 3단계 초안 화면: 보내는 사람 윤바다·받는 사람 서하늘이 미리 골라져 있고, 화면만 열어서는 진행하지 않음', preset.from === '윤바다' && preset.to === '서하늘' && (await tourInfo()).index === 2, JSON.stringify(preset));
+    await shot(s.cdp, `${browser.name}-36c-tour-handover-3`);
+    await evaluate(s.cdp, "document.querySelector('[data-testid=draft-form] button[type=submit]').click()");
+    await sleep(400);
+    ti = await tourInfo();
+    check('CR-13 A 「초안 만들기」로 초안 결과가 그려지면 4/4(근거 칩)', ti.index === 3 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 4/4' && (await evaluate(s.cdp, "document.querySelectorAll('.draft .evidence').length")) > 5, JSON.stringify(ti));
+    const sn4 = await stepNamesOk();
+    check('CR-13 A 4단계 문구의 「」 이름(근거:)이 실제 화면에 있고, 깜빡이는 대상은 근거 칩', sn4.missing.length === 0 && (await evaluate(s.cdp, "document.querySelector('.draft .evidence').classList.contains('tour-target')")), JSON.stringify(sn4));
+    await shot(s.cdp, `${browser.name}-36d-tour-handover-4`);
+    await evaluate(s.cdp, "document.querySelector('.draft .evidence').click()");
+    await sleep(400);
+    ti = await tourInfo();
+    check('CR-13 A 근거 칩을 누르면 끝 카드: 「끝! 이제 내 업무로 해 볼까요?」, 「내 업무 지도 만들기」, 「닫기」, 접힌 상태면 「도구 더 보기」 안내 한 줄(강제로 펼치지 않음)', ti.mode === 'end' && (await text(s.cdp, '[data-testid=tour-end]')) === '끝! 이제 내 업무로 해 볼까요?' && (await text(s.cdp, '[data-testid=tour-make]')) === '내 업무 지도 만들기' && (await text(s.cdp, '[data-testid=tour-skip]')) === '닫기' && (await text(s.cdp, '[data-testid=tour-tools-hint]')).includes('「도구 더 보기」에서 흐름 정렬·거르기도 써 보세요') && (await evaluate(s.cdp, 'window.__wu.toolsOpen')) === false, JSON.stringify(ti));
+    await shot(s.cdp, `${browser.name}-36e-tour-end`);
+    await evaluate(s.cdp, "document.querySelector('[data-testid=tour-make]').click()");
+    await sleep(300);
+    check('CR-13 A 끝 카드 「내 업무 지도 만들기」 → 새 유니버스 대화상자가 열리고 따라 하기 카드는 닫힘', (await evaluate(s.cdp, "document.getElementById('create-dialog').open")) && (await tourInfo()).mode === 'off' && (await evaluate(s.cdp, "document.getElementById('tour-slot').hidden")));
+    const dEnd = await dlgInfo();
+    check('N-3 끝 카드 「내 업무 지도 만들기」로 열면 「내 업무 지도 만들기」 모양(첫 업무 칸 맨 위, 지도 정보 접힘, 초점은 업무 이름)', dEnd.title === '내 업무 지도 만들기' && dEnd.work && !dEnd.name && dEnd.metaInInfo && !dEnd.infoOpen && dEnd.focus === 'create-start-work', JSON.stringify(dEnd));
+    await shot(s.cdp, `${browser.name}-36f-mine-dialog-from-end`);
+    const authorSet = await evaluate(s.cdp, "(JSON.parse(localStorage.getItem('wu:v1:settings') || '{}').authorName || '')");
+    await evaluate(s.cdp, "(() => { document.getElementById('create-start-work').value = '재검증 시험 업무'; document.querySelector('#create-form button[type=submit]').click(); })()");
+    await sleep(600);
+    const mineDoc = await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.name === '재검증 시험 업무 업무 지도'", 8000);
+    const mineU = await evaluate(s.cdp, "window.__wu.doc ? { name: window.__wu.doc.universe.name, level: window.__wu.doc.universe.level, owner: window.__wu.doc.universe.owner, nodes: window.__wu.doc.nodes.map((n) => n.core_type + ':' + n.label) } : null");
+    check('N-3 업무 이름만 넣고 만들기 → 지도가 생기고 이름 「재검증 시험 업무 업무 지도」, 단위 「업무」, 작성 주체는 작성자 이름이 있으면 「…의 팀」 없으면 「내 팀」, 업무 노드가 있음', mineDoc && mineU.level === '업무' && mineU.owner === (authorSet ? authorSet + '의 팀' : '내 팀') && mineU.nodes.includes('work:재검증 시험 업무'), JSON.stringify({ mineU, authorSet }));
+    await shot(s.cdp, `${browser.name}-36g-mine-created`);
+    await evaluate(s.cdp, "location.hash = 'U-A1'; location.reload()").catch(() => {});
+    await sleep(500);
+    await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
+    await evaluate(s.cdp, "document.getElementById('create-open').click()");
+    await sleep(250);
+    const dHead = await dlgInfo();
+    check('N-3 머리글 「새 유니버스」로 열면 예전 모양(제목·이름 칸 보임·지도 정보 상자 없음)', dHead.title === '새 유니버스 만들기' && dHead.name && dHead.work && !dHead.starterBeforeMeta && dHead.infoHidden, JSON.stringify(dHead));
+    await evaluate(s.cdp, "document.getElementById('create-cancel').click()");
+    await sleep(150);
+    // 「?」로 다시 시작(U-A1이면 handover), 「건너뛰기」로 닫기, 대상 표시도 사라짐
+    await clickTestId(s.cdp, 'tour-open');
+    await sleep(300);
+    ti = await tourInfo();
+    check('CR-13 A 머리글 「?」(title 따라 하기 다시 보기): 월말 정산 화면에서는 인수인계 따라 하기가 처음부터 다시 시작됨', ti.mode === 'step' && ti.scenario === 'handover' && ti.index === 0 && (await evaluate(s.cdp, "document.getElementById('tour-open').title")) === '따라 하기 다시 보기', JSON.stringify(ti));
+    await evaluate(s.cdp, "document.querySelector('[data-testid=tour-skip]').click()");
+    await sleep(200);
+    const marks = await tourMarks();
+    check('CR-13 A 「건너뛰기」 → 카드가 닫히고 깜빡임 표시도 모두 사라짐', (await tourInfo()).mode === 'off' && (await evaluate(s.cdp, "document.getElementById('tour-slot').hidden")) && marks.dom === 0 && marks.cy === 0, JSON.stringify(marks));
+    // 깜빡임 대신 테두리(prefers-reduced-motion): 그래프 노드 표시가 계속 켜져 있고, 화면 요소는 애니메이션이 없다
+    await s.cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+    await reloadReady();
+    await clickTestId(s.cdp, 'tour-open');
+    await sleep(200);
+    const reducedSamples = [];
+    for (let i = 0; i < 4; i += 1) { reducedSamples.push(await evaluate(s.cdp, "window.__wu.cy.nodes('.tour-target').length")); await sleep(380); }
+    await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+    await evaluate(s.cdp, "document.querySelector('[data-testid=tour-next]').click()");
+    await sleep(200);
+    await evaluate(s.cdp, "window.__wu.select(null)");
+    await sleep(200);
+    const reducedAnim = await evaluate(s.cdp, "(() => { const e = document.querySelector('.tour-target'); return e ? getComputedStyle(e).animationName : 'none-target'; })()");
+    check('CR-13 A prefers-reduced-motion: 깜빡이지 않고(노드 표시가 계속 켜져 있음) 화면 요소도 애니메이션 없는 고정 테두리', reducedSamples.every((n) => n === 1) && reducedAnim === 'none', JSON.stringify({ reducedSamples, reducedAnim }));
+    await s.cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: '' }] });
+    // 보통(깜빡임) 모드의 노드 표시는 켜졌다 꺼졌다 한다
+    await reloadReady();
+    await clickTestId(s.cdp, 'tour-open');
+    const blinkSamples = [];
+    for (let i = 0; i < 8; i += 1) { blinkSamples.push(await evaluate(s.cdp, "window.__wu.cy.nodes('.tour-target').length")); await sleep(240); }
+    check('CR-13 A 보통 모드: 짚은 노드가 깜빡임(켜짐·꺼짐이 모두 관찰됨)', blinkSamples.includes(0) && blinkSamples.includes(1), JSON.stringify(blinkSamples));
+    await evaluate(s.cdp, "document.querySelector('[data-testid=tour-skip]').click()");
+    // 「도구 더 보기」를 다시 펼친다(이 아래 점검은 펼친 상태를 전제)
+    await clickTestId(s.cdp, 'tools-toggle');
+    await sleep(200);
+
+    // 「샘플 바로 열기: 월말 정산 점검」은 따라 하기 없이 연다(실행 안내·guide-check가 누르는 단추)
+    await evaluate(s.cdp, "history.replaceState(null, '', location.pathname + location.search); location.reload()").catch(() => {});
+    await sleep(500);
+    await waitFor(s.cdp, 'window.__wu && window.__wu.start === true', 8000);
+    await evaluate(s.cdp, "document.querySelector('[data-testid=start-primary]').click()");
+    await sleep(500);
+    const openedPrimary = await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
+    await sleep(300);
+    check('R-08 「샘플 바로 열기: 월말 정산 점검」으로도 한 번에 열리고, 따라 하기는 시작하지 않음(카드·표시 없음)', openedPrimary && (await tourInfo()).mode === 'off' && (await evaluate(s.cdp, "document.getElementById('tour-slot').hidden")) && (await tourMarks()).cy === 0);
     // 제목을 누르면 시작 화면으로 돌아온다
     await evaluate(s.cdp, "document.getElementById('home').click()").catch(() => {});
     await sleep(500);
     check('머리글 제목을 누르면 시작 화면으로 돌아옴', await waitFor(s.cdp, 'window.__wu && window.__wu.start === true', 8000));
+
+    // 갈래 c: 팀 업무 → 가상 운영부(U-D1), team 시나리오 1~4
+    await evaluate(s.cdp, "document.querySelector('[data-testid=start-way-team]').click()");
+    await sleep(500);
+    const openedTeam = await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-D1' && window.__wu.cy.nodes().length > 0", 8000);
+    await sleep(400);
+    ti = await tourInfo();
+    check('CR-13 A 갈래 c 「팀 업무를 한눈에 보고 싶어요」 → 가상 운영부가 열리고 따라 하기 1/5(이야기: 75개 중 18개만 보임)', openedTeam && ti.scenario === 'team' && ti.index === 0 && (await text(s.cdp, '[data-testid=tour-story]')).includes('75개 중 18개만 보이고') && (await evaluate(s.cdp, 'window.__wu.cy.nodes().length')) === 18 && (await hashClean()), JSON.stringify(ti));
+    const collapsedId = await evaluate(s.cdp, "window.__wu.cy.nodes('[?collapsed]')[0].id()");
+    check('CR-13 A team 1단계: 깜빡이는 대상은 접힌 팀(이중 테두리) 노드', (await blinkIds()).includes(collapsedId));
+    await shot(s.cdp, `${browser.name}-37a-tour-team-1`);
+    const dbl = await evaluate(s.cdp, `(() => { const n = window.__wu.cy.getElementById(${JSON.stringify(collapsedId)}); const p = n.renderedPosition(); const r = document.getElementById('graph').getBoundingClientRect(); return { x: r.left + p.x, y: r.top + p.y }; })()`);
+    await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: dbl.x, y: dbl.y });
+    for (const c of [1, 2]) { await s.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: dbl.x, y: dbl.y, button: 'left', clickCount: c }); await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: dbl.x, y: dbl.y, button: 'left', clickCount: c }); }
+    await sleep(700);
+    ti = await tourInfo();
+    check('CR-13 A team 1단계 → 접힌 팀을 두 번 눌러 펼치면 2/5(노드 찾기)', ti.index === 1 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 2/5' && (await evaluate(s.cdp, 'window.__wu.cy.nodes().length')) > 18, JSON.stringify(ti));
+    const tn2 = await stepNamesOk();
+    check('CR-13 A team 2단계 문구의 「」 이름(노드 찾기)이 실제 화면에 있고 깜빡이는 대상은 찾기 칸', tn2.missing.length === 0 && (await evaluate(s.cdp, "document.querySelector('[data-testid=find-input]').classList.contains('tour-target')")), JSON.stringify(tn2));
+    await evaluate(s.cdp, "(() => { const i = document.querySelector('[data-testid=find-input]'); i.value = ''; i.focus(); })()");
+    await s.cdp.send('Input.insertText', { text: '대사' });
+    await sleep(250);
+    check('CR-13 A team 2단계: 찾기 칸에 글자만 넣어서는 진행하지 않음', (await tourInfo()).index === 1);
+    await evaluate(s.cdp, "document.querySelector('[data-testid=find-hit]').click()");
+    await sleep(500);
+    ti = await tourInfo();
+    check('CR-13 A team 2단계 → 찾기 결과를 고르면 3/5(주변만 보기)', ti.index === 2 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 3/5', JSON.stringify(ti));
+    const tn3 = await stepNamesOk();
+    check('CR-13 A team 3단계 문구의 「」 이름(주변만 보기)이 실제 화면에 있고 깜빡이는 대상은 그 단추', tn3.missing.length === 0 && (await evaluate(s.cdp, "document.querySelector('[data-testid=btn-nbhd]').classList.contains('tour-target')")), JSON.stringify(tn3));
+    await evaluate(s.cdp, "document.querySelector('[data-testid=btn-nbhd]').click()");
+    await sleep(600);
+    ti = await tourInfo();
+    check('CR-13 A team 3단계 → 「주변만 보기」를 누르면 4/5(전체 보기로 돌아오기), 이때 깜빡이는 대상은 「전체 보기」', ti.index === 3 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 4/5' && !!(await evaluate(s.cdp, 'window.__wu.nbhd')) && (await evaluate(s.cdp, "document.getElementById('fit').classList.contains('tour-target')")), JSON.stringify(ti));
+    const tn4 = await stepNamesOk();
+    check('CR-13 A team 4단계 문구의 「」 이름(전체 보기)이 실제 화면에 있음', tn4.missing.length === 0 && tn4.names.includes('전체 보기'), JSON.stringify(tn4));
+    await shot(s.cdp, `${browser.name}-37b-tour-team-4`);
+    await evaluate(s.cdp, "document.getElementById('fit').click()");
+    await sleep(600);
+    ti = await tourInfo();
+    check('CR-13 A team 4단계 → 「전체 보기」로 돌아오면(주변만 보기 해제) 5/5(인사이트 보기)', ti.index === 4 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 5/5' && !(await evaluate(s.cdp, 'window.__wu.nbhd')), JSON.stringify(ti));
+    const tn5 = await stepNamesOk();
+    check('CR-13 A team 5단계 문구의 「」 이름(인사이트 보기)이 실제 화면에 있고, 문구에 반복 비효율·유사 경험자 설명이 있음', tn5.missing.length === 0 && tn5.names.includes('인사이트 보기') && (await text(s.cdp, '[data-testid=tour-task]')).includes('같은 설명이 되풀이되는 곳(반복 비효율)과 비슷한 일을 해 본 사람(유사 경험자)을 근거와 함께 보여 줍니다'), JSON.stringify(tn5));
+    const hi5 = await hintInfo();
+    check('N-2 team 5단계(선택이 남은 상태)에도 그래프 안쪽 표지 「여기 빈 곳을 누르세요」(크기 있음, 안쪽 테두리)', !!hi5 && hi5.text === '여기 빈 곳을 누르세요' && hi5.w > 80 && hi5.inside && hi5.noPointer && hi5.graphInset, JSON.stringify(hi5));
+    await shot(s.cdp, `${browser.name}-37c-tour-team-5-hint`);
+    await blankClick();
+    check('CR-13 A team 5단계: 빈 곳을 누르면 표지가 사라지고 깜빡이는 대상은 「인사이트 보기」', (await hintInfo()) === null && (await evaluate(s.cdp, "document.querySelector('[data-testid=btn-insight-universe]').classList.contains('tour-target')")));
+    await evaluate(s.cdp, "document.querySelector('[data-testid=btn-insight-universe]').click()");
+    await sleep(500);
+    const insShow = await evaluate(s.cdp, "({ tab: document.querySelector('[data-testid=tab-repeat]').classList.contains('active'), len: document.querySelector('#detail').textContent.length })");
+    check('CR-13 A team 5단계 → 「인사이트 보기」로 인사이트가 열리면(첫 탭 「반복 비효율」에 내용이 보임) 끝 카드', (await tourInfo()).mode === 'end' && (await text(s.cdp, '[data-testid=tour-end]')) === '끝! 이제 내 업무로 해 볼까요?' && insShow.tab && insShow.len > 100 && (await text(s.cdp, '[data-testid=tour-card] .tour-count')) === '따라 하기 5/5 끝', JSON.stringify(insShow));
+    await shot(s.cdp, `${browser.name}-37d-tour-team-end`);
+    await evaluate(s.cdp, "document.querySelector('[data-testid=tour-skip]').click()");
+    // 「?」: 다른 유니버스(U-K1)에서는 두 시나리오 고르기 → 팀을 고르면 U-D1이 열리고 team 시작
+    await evaluate(s.cdp, "location.hash = 'U-K1'; location.reload()").catch(() => {});
+    await sleep(500);
+    await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-K1' && window.__wu.cy.nodes().length > 0", 8000);
+    await clickTestId(s.cdp, 'tour-open');
+    await sleep(250);
+    check('CR-13 A 「?」: 월말 정산·가상 운영부가 아닌 화면(U-K1)에서는 두 시나리오를 고르는 카드', (await tourInfo()).mode === 'pick' && (await text(s.cdp, '[data-testid=tour-pick-handover]')).includes('인수인계 초안 만들기') && (await text(s.cdp, '[data-testid=tour-pick-team]')).includes('팀 업무 한눈에 보기'));
+    await evaluate(s.cdp, "document.querySelector('[data-testid=tour-pick-team]').click()");
+    await sleep(500);
+    await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-D1' && window.__wu.cy.nodes().length > 0", 8000);
+    await sleep(300);
+    ti = await tourInfo();
+    check('CR-13 A 「?」에서 팀을 고르면 가상 운영부가 열리고 team 1/4부터 시작', !!ti && ti.scenario === 'team' && ti.index === 0 && (await hashClean()), JSON.stringify(ti));
+    await evaluate(s.cdp, "document.querySelector('[data-testid=tour-skip]').click()");
+    await evaluate(s.cdp, "document.getElementById('home').click()").catch(() => {});
+    await sleep(500);
+    await waitFor(s.cdp, 'window.__wu && window.__wu.start === true', 8000);
     await evaluate(s.cdp, "document.querySelector('[data-testid=open-U-D1]').click()");
     await sleep(500);
-    check('카드의 "열기"로 다른 샘플(가상 운영부)을 열 수 있음', await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-D1'", 8000));
+    check('카드의 "열기"로 다른 샘플(가상 운영부)을 열 수 있음(따라 하기는 시작하지 않음)', await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-D1'", 8000) && (await tourInfo()).mode === 'off');
   }
   await evaluate(s.cdp, "location.hash = 'U-A1'; location.reload()").catch(() => {});
   await sleep(500);
@@ -1167,7 +1475,7 @@ async function checkBrowser(browser, port) {
     // 처음 사용자 검토 2026-10-17: 1366 너비에서 넓게 보기를 켜면 그래프 위 도구줄이 겹쳤다. 도구줄 요소끼리 교차하지 않아야 한다
     await s.cdp.send('Emulation.setDeviceMetricsOverride', { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false });
     await sleep(400);
-    const overlap = await evaluate(s.cdp, "(() => { const els = [...document.querySelectorAll('.explore-row .explore-bar > *, .explore-row .graph-tools button')].filter((e) => e.offsetWidth > 0); const rs = els.map((e) => [e, e.getBoundingClientRect()]); const bad = []; for (let i = 0; i < rs.length; i++) for (let j = i + 1; j < rs.length; j++) { const [a, ra] = rs[i], [b, rb] = rs[j]; if (a.contains(b) || b.contains(a)) continue; if (ra.left < rb.right - 1 && rb.left < ra.right - 1 && ra.top < rb.bottom - 1 && rb.top < ra.bottom - 1) bad.push((a.id || a.className || a.tagName) + '/' + (b.id || b.className || b.tagName)); } return { n: els.length, bad }; })()");
+    const overlap = await evaluate(s.cdp, "(() => { const els = [...document.querySelectorAll('.explore-row .explore-bar > *, .explore-row .graph-tools button, .explore-row .tools-more > *')].filter((e) => e.offsetWidth > 0); const rs = els.map((e) => [e, e.getBoundingClientRect()]); const bad = []; for (let i = 0; i < rs.length; i++) for (let j = i + 1; j < rs.length; j++) { const [a, ra] = rs[i], [b, rb] = rs[j]; if (a.contains(b) || b.contains(a)) continue; if (ra.left < rb.right - 1 && rb.left < ra.right - 1 && ra.top < rb.bottom - 1 && rb.top < ra.bottom - 1) bad.push((a.id || a.className || a.tagName) + '/' + (b.id || b.className || b.tagName)); } return { n: els.length, bad }; })()");
     await s.cdp.send('Emulation.clearDeviceMetricsOverride');
     check('넓게 보기 1366에서 도구줄 요소끼리 겹치지 않음', overlap.n >= 5 && overlap.bad.length === 0, JSON.stringify(overlap));
     await evaluate(s.cdp, "document.getElementById('wide-toggle').click()");
@@ -1188,7 +1496,8 @@ async function checkBrowser(browser, port) {
     const shownCount = () => evaluate(s.cdp, 'window.__wu.cy.nodes().length');
     // 렌더된 글자 크기(px) = 글자 크기 × 확대 배율
     const renderedPx = (gid) => evaluate(s.cdp, `(() => { const n = window.__wu.cy.getElementById(${JSON.stringify(gid)}); return n.empty() ? -1 : n.pstyle('font-size').pfValue * window.__wu.cy.zoom(); })()`);
-    check('T-18: 그래프 위에 찾기 칸·거르기·「다시 정렬」「전체 보기」가 한 줄에 보임(크기 있음)', await evaluate(s.cdp, "(() => { const r = (s) => { const e = document.querySelector(s); if (!e) return null; const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0 ? b : null; }; const f = r('[data-testid=find-input]'), g = r('[data-testid=filter-open]'), t = r('#fit'); return !!(f && g && t) && Math.abs(f.top - t.top) < 20; })()"));
+    // 2026-10-18 CR-13 A: 거르기는 「도구 더 보기」 줄로 옮겼다. 찾기 칸·「다시 정렬」「전체 보기」「도구 더 보기」는 한 줄, 펼친 줄에 거르기가 보임(위 점검에서 펼쳐 둠)
+    check('T-18: 그래프 위에 찾기 칸(옆에 「설명·속성까지」)·「다시 정렬」「전체 보기」「도구 더 보기」가 한 줄에, 펼친 도구 줄에 거르기가 보임(크기 있음)', await evaluate(s.cdp, "(() => { const r = (s) => { const e = document.querySelector(s); if (!e) return null; const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0 ? b : null; }; const f = r('[data-testid=find-input]'), g = r('[data-testid=filter-open]'), t = r('#fit'), u = r('#tools-toggle'), q = r('#relayout'), w = r('[data-testid=find-wide]'); return !!(f && g && t && u && q && w) && Math.abs(w.top - f.top) < 20 && w.left > f.right - 2 && Math.abs(f.top - t.top) < 20 && Math.abs(u.top - t.top) < 20 && Math.abs(q.top - t.top) < 20; })()"));
 
     // ① 찾기 → ⑧ 키보드로 결과 목록 → Enter로 노드 열기(접힌 하위 유니버스 안이면 펼침)
     const collapsedBefore = await evaluate(s.cdp, "window.__wu.cy.getElementById('U-A1/N-001').empty()");
@@ -1209,7 +1518,9 @@ async function checkBrowser(browser, port) {
     check('R-17 ① 상태 줄에 「찾음」', (await text(s.cdp, '[data-testid=explore-note]')).includes('찾음'));
     const mid = await evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const p = cy.getElementById(window.__wu.selected).renderedPosition(); return { dx: Math.round(p.x - cy.width() / 2), dy: Math.round(p.y - cy.height() / 2) }; })()");
     // cytoscape의 가운데 맞춤은 동그라미와 아래 이름을 합친 상자를 가운데에 둔다: 동그라미는 이름 높이만큼 위에 있다(수렴 재검증 3번: 상태 줄을 먼저 바꿔 55px → 25px)
-    check('R-17 ① 찾은 노드가 그래프 가운데 근처로(가로 10px, 세로 30px 안)', Math.abs(mid.dx) <= 10 && Math.abs(mid.dy) <= 30, JSON.stringify(mid));
+    // 2026-10-18 CR-13 A: 거르기·「설명·속성까지」가 「도구 더 보기」 줄로 옮겨 가 찾음 상태 줄이 줄을 늘리지 않는다(예전엔 줄이 늘며 그래프가 줄어 동그라미가 25px 위로 보였다).
+    // 줄이 안 변하니 동그라미는 이름 높이만큼 더 위(-33px)로 남는다. 이름까지 합친 상자가 가운데라는 뜻은 같아서 세로 허용을 30 → 40px로 넓힘
+    check('R-17 ① 찾은 노드가 그래프 가운데 근처로(가로 10px, 세로 40px 안)', Math.abs(mid.dx) <= 10 && Math.abs(mid.dy) <= 40, JSON.stringify(mid));
     await shot(s.cdp, `${browser.name}-12-find-picked`);
     await key('Escape', 'Escape', 27);
     check('R-17 ⑧ Esc(상세 제목에 초점) → 노드 선택 해제', (await evaluate(s.cdp, 'window.__wu.selected')) === null);
@@ -1230,7 +1541,7 @@ async function checkBrowser(browser, port) {
     check('R-17 ⑧ 결과 목록 Esc → 목록 닫히고 찾기 칸으로, 찾기 칸 Esc → 목록만 닫고 글자는 남김', escList.hidden && escList.focus === 'find-input' && escList.value === '대사' && escInput.hidden && escInput.value === '대사', JSON.stringify([escList, escInput]));
     await evaluate(s.cdp, "document.querySelector('[data-testid=find-input]').blur()");
     // T-26 「설명·속성까지」(R-22 ①, D-24): 기본 켬 → 설명·속성에만 있는 낱말이 위치 표시와 함께 나옴, 끄면 이름만, 이름 일치가 먼저
-    const wideBox = await evaluate(s.cdp, "(() => { const c = document.querySelector('[data-testid=find-wide]'); if (!c) return null; const r = c.getBoundingClientRect(); const t = document.querySelector('[data-testid=find-input]').getBoundingClientRect(); return { checked: c.checked, w: r.width, h: r.height, sameRow: Math.abs(r.top - t.top) < 30 }; })()");
+    const wideBox = await evaluate(s.cdp, "(() => { const c = document.querySelector('[data-testid=find-wide]'); if (!c) return null; const r = c.getBoundingClientRect(); const t = document.querySelector('[data-testid=find-input]').getBoundingClientRect(); return { checked: c.checked, w: r.width, h: r.height, sameRow: Math.abs(r.top - t.top) < 30 }; })()"); // 재검증 R-1(2026-10-18): 「설명·속성까지」는 찾기 칸 옆(「도구 더 보기」와 상관없이 늘 보임)
     check('R-22 ① 찾기 상자 옆에 「설명·속성까지」 선택이 있고 기본으로 켜져 있음(크기 있음)', !!wideBox && wideBox.checked && wideBox.w > 0 && wideBox.h > 0 && wideBox.sameRow, JSON.stringify(wideBox));
     const hitRows = () => evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=find-hit]')].map((b) => b.dataset.gid + '|' + ((b.querySelector('[data-testid=find-where]') || {}).textContent || ''))");
     await typeFind('가상정산시스템');
@@ -1250,6 +1561,18 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, "document.querySelector('[data-testid=find-wide]').click()");
     await sleep(150);
     check('R-22 ① 다시 켜면 다시 찾음', (await hitRows()).length === 2);
+    // 재검증 R-1(2026-10-18): 결과 목록이 열린 상태에서 실제 마우스로 「설명·속성까지」를 누르면 결과가 눌리지 않고 그 칸이 바뀐다(예전에는 도구 줄 아래라 목록이 덮었음)
+    const wideCenter = () => evaluate(s.cdp, "(() => { const c = document.querySelector('[data-testid=find-wide]'); const r = c.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height / 2; const top = document.elementFromPoint(x, y); const list = document.querySelector('[data-testid=find-results]'); const lr = list.getBoundingClientRect(); return { x, y, topIsCheck: top === c || (top && top.closest('label') === c.closest('label')), listOpen: !list.hidden, overlapsList: !list.hidden && x > lr.left && x < lr.right && y > lr.top && y < lr.bottom }; })()");
+    const realClick = async (x, y) => { for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) { await s.cdp.send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 }); await sleep(30); } await sleep(150); };
+    const selBefore = await evaluate(s.cdp, 'window.__wu.selected');
+    const wc = await wideCenter();
+    await realClick(wc.x, wc.y);
+    const wideAfter = await evaluate(s.cdp, "({ checked: document.querySelector('[data-testid=find-wide]').checked, selected: window.__wu.selected, open: !document.querySelector('[data-testid=find-results]').hidden })");
+    check('R-1 재검증: 결과 목록이 열린 채로 「설명·속성까지」를 실제 마우스로 누르면 그 칸이 꺼지고(결과가 눌리지 않음, 선택 그대로), 목록이 그 칸을 덮지 않음', wc.listOpen && wc.topIsCheck && !wc.overlapsList && wideAfter.checked === false && wideAfter.selected === selBefore, JSON.stringify({ wc, wideAfter, selBefore }));
+    await shot(s.cdp, `${browser.name}-26b-find-wide-click`);
+    const wc2 = await wideCenter();
+    await realClick(wc2.x, wc2.y);
+    check('R-1 재검증: 한 번 더 누르면 다시 켜짐(목록은 다시 찾은 결과)', (await evaluate(s.cdp, "document.querySelector('[data-testid=find-wide]').checked")) === true && (await hitRows()).length === 2);
     await evaluate(s.cdp, "document.querySelector('[data-testid=find-input]').blur()");
     await typeFind('정산 담당');
     await key('Enter', 'Enter', 13);
@@ -2153,6 +2476,7 @@ async function checkBrowser(browser, port) {
     };
     const bannerInfo = () => evaluate(s.cdp, "(() => { const b = document.getElementById('embed-banner'); const r = b.getBoundingClientRect(); const btn = document.querySelector('[data-testid=embed-import]'); return { hidden: b.hidden, w: r.width, h: r.height, text: b.textContent, btnOff: btn ? btn.disabled : null, hash: location.hash, ro: window.__wu.readOnly, id: window.__wu.doc.universe.id }; })()");
     check('CR-13 B 내용 포함 파일 열기: 시작 화면 없이 그 유니버스가 보임', await openFile(fA1) && (await evaluate(s.cdp, "window.__wu.doc.universe.id")) === 'U-A1' && !(await evaluate(s.cdp, "document.body.classList.contains('start-mode')")));
+    check('CR-13 A 읽기 전용(내용 포함 파일)에서는 머리글 「?」와 따라 하기 카드를 쓰지 않음(다른 유니버스를 열 수 없으므로)', (await evaluate(s.cdp, "document.getElementById('tour-open').hidden")) === true && (await evaluate(s.cdp, 'window.__wu.tour')) === null);
     check('CR-13 B 보낸 쪽에서 추가한 노드가 보임(내용이 들어 있음)', await hasLabel(s.cdp, marker));
     const b1 = await bannerInfo();
     check('CR-13 B 읽기 전용 안내 줄(크기 있음)과 「내 유니버스로 가져오기」 단추, 읽기 전용', !b1.hidden && b1.w > 0 && b1.h > 0 && b1.text.includes('이 파일에 담긴 「') && b1.text.includes('읽기 전용') && b1.text.includes('내 유니버스로 가져오기') && b1.btnOff === false && b1.ro === true && b1.hash.startsWith('#embed/'), JSON.stringify(b1));

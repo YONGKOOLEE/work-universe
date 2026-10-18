@@ -50,7 +50,7 @@ function draftText(d, confirmed = false) {
 }
 
 /**
- * @param {{view:object, target?:string, provider?:object, onFocus:(gid)=>void, onClose:()=>void, onConfirm?:(input:object)=>object, readOnly?:boolean}} o
+ * @param {{preset?:{from:string,to:string}, onDraft?:()=>void, view:object, target?:string, provider?:object, onFocus:(gid)=>void, onClose:()=>void, onConfirm?:(input:object)=>object, readOnly?:boolean}} o
  *   onConfirm: 확정(R-03 ③, CR-8). {draft, text, date}를 받아 저장하고 결과({ok, error})를 돌려준다
  */
 export function draftPanel(o) {
@@ -74,6 +74,14 @@ export function draftPanel(o) {
   };
   target.addEventListener('change', showHolder);
   showHolder();
+  // 따라 하기(CR-13 A): 예시 보내는·받는 사람을 이름으로 미리 골라 둔다(사람이 바꿀 수 있음). 이름이 없으면 건드리지 않는다
+  if (o.preset) {
+    const byLabel = (label) => people.find((p) => p.label === label);
+    const f = byLabel(o.preset.from);
+    const t = byLabel(o.preset.to);
+    if (f) from.value = f.gid;
+    if (t) to.value = t.gid;
+  }
   const msg = el('div', { class: 'form-message', 'data-testid': 'draft-message', 'aria-live': 'polite' });
   const result = el('div', { 'data-testid': 'draft-result' });
 
@@ -113,6 +121,7 @@ export function draftPanel(o) {
       return;
     }
     renderDraft(result, refineDraft(r.draft, { provider: o.provider, exists: view.exists }), view, o.onFocus, o);
+    if (o.onDraft) o.onDraft(); // 따라 하기: 결과가 그려졌음을 알린다
   });
 
   return el('div', { class: 'draft' }, el('h2', {}, '인수인계 초안'),

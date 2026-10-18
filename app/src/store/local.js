@@ -116,6 +116,8 @@ export function loadSettings(storage, defaults, allowed = null) {
     if (author) out.authorName = author;
     if (stamp(v.lastExportAt)) out.lastExportAt = v.lastExportAt;
     if (stamp(v.backupDismissedAt)) out.backupDismissedAt = v.backupDismissedAt;
+    // 「도구 더 보기」 펼침(CR-13 A): true일 때만 펼침. 깨진 값은 접힘(기본)
+    if (v.moreTools === true) out.moreTools = true;
     return out;
   } catch {
     return { ...defaults };
@@ -131,6 +133,7 @@ export function saveSettings(storage, settings) {
     if (author) out.authorName = author;
     if (settings.lastExportAt) out.lastExportAt = settings.lastExportAt;
     if (settings.backupDismissedAt) out.backupDismissedAt = settings.backupDismissedAt;
+    if (settings.moreTools === true) out.moreTools = true;
     storage.setItem(SETTINGS_KEY, JSON.stringify(out));
     return true;
   } catch {

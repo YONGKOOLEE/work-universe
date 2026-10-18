@@ -203,6 +203,8 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
       // 화면에서 너무 작아 읽히지 않는 이름은 숨긴다(R-17 ⑦, applyTinyLabels). 고르거나 마우스를 올린 노드는 bigLabel로 크게 보인다
       { selector: '.tiny-label', style: { 'text-opacity': 0 } },
       // 찾기로 고른 노드: 노란 테두리(잠시)
+      // 따라 하기가 짚는 노드(CR-13 A, ui/tour.js가 깜빡이거나 고정으로 켠다)
+      { selector: 'node.tour-target', style: { 'border-color': '#ffd84d', 'border-width': 8, 'border-style': 'solid' } },
       { selector: 'node.found', style: { 'border-color': '#ffd84d', 'border-width': 6 } },
       // 거르기에서 빠졌어도 고른·찾은·마우스를 올린 노드는 보인다(R-17 ①⑦: 거르기 중 찾기로 고르거나 새로 추가한 노드). 'hide'여도 같다
       { selector: 'node.filtered-out:selected, node.filtered-out.found, node.filtered-out.hover', style: { display: 'element', opacity: 1, 'text-opacity': 1 } },
