@@ -7,7 +7,7 @@ import { SCHEMA_VERSION, nodeTypeLabel } from '../model/schema.js';
 import { IMPORT_MAX_CHARS, parseImportText } from '../model/import.js';
 import { METHOD_LABELS } from '../llm/connector.js';
 import { folderTab } from './folder-tab.js';
-import { docWorkLabel } from '../rules/doc-convert.js';
+import { CONVERT_RULES, docWorkLabel } from '../rules/doc-convert.js';
 
 const KIND_TEXT = {
   overview: () => '개요 → 유니버스의 중심 노드(꼭지)의 이름·목적·배경, 그리고 범위·이해관계자',
@@ -62,6 +62,7 @@ export function noteText(n) {
     case 'C-TRUNCATED': return `「${n.where}」 글이 너무 길어 ${n.max}자에서 잘랐습니다.`;
     case 'C-UNUSED': return `개요 표에서 쓰지 못한 칸이 있습니다(${n.refs.join(', ')}). 원문을 함께 보세요.`;
     case 'C-PEOPLE-PROSE': return `${n.ref}의 문장 ${n.count}줄은 사람 이름이 아니라서 역할로 만들지 않고 그 절의 주제 설명에 넣었습니다.`;
+    case 'C-ARTIFACT-PROSE': return `${n.ref}의 문장 ${n.count}줄은 문서 이름이 아니라서 산출물로 만들지 않고 그 절의 주제 설명에 넣었습니다.`;
     default: return n.code;
   }
 }
@@ -107,17 +108,19 @@ export function importDialog(o) {
   let aiLive = null; // 지금 그려진 「AI가 읽는 중」 안내 칸
   const cancelAi = () => { st.aiRun += 1; st.aiBusy = false; };
 
+  const followWork = () => !!CONVERT_RULES.cr17j.previewRenameWork; // 지도 이름을 고치면 업무가 하나뿐인 문서의 대표 업무 이름도 따라 바꿀지(CR-17 J, 기본 꺼짐)
   const setUniverse = (field, value) => {
     const d = st.result.doc;
     // 이름을 처음 고칠 때, 문서 제목으로 만든 대표 업무의 이름(제목에서 접두어를 뗀 것)을 기억해 둔다. 이름을 비웠다가 다시 써도 따라가게
-    if (field === 'name' && st.result.titleWork === undefined) st.result.titleWork = docWorkLabel(d.universe.name);
+    // CR-17 J 스위치 previewRenameWork(기본 꺼짐): 12.9.1 미리 보기에서 확인하는 것은 지도 이름·작성 주체뿐이므로, 꺼져 있으면 업무 이름은 건드리지 않는다(R12-7)
+    if (field === 'name' && followWork() && st.result.titleWork === undefined) st.result.titleWork = docWorkLabel(d.universe.name);
     d.universe[field] = value;
     if (field === 'name') {
       const root = d.nodes.find((n) => n.id === d.universe.root_node_id);
       if (root) root.label = value;
-      // 문서 제목으로 만든 대표 업무(이름이 제목에서 「업무정의서:」 같은 접두어를 뗀 것과 같은 업무)도 같이 바꾼다. 업무가 하나뿐일 때만
+      // 문서 제목으로 만든 대표 업무(이름이 제목에서 「업무정의서:」 같은 접두어를 뗀 것과 같은 업무)도 같이 바꾼다. 업무가 하나뿐일 때만(스위치가 켜졌을 때만)
       const works = d.nodes.filter((n) => n.core_type === 'work');
-      const newWork = value.trim() ? docWorkLabel(value) : '';
+      const newWork = followWork() && value.trim() ? docWorkLabel(value) : '';
       if (newWork) {
         if (works.length === 1 && works[0].label === st.result.titleWork) works[0].label = newWork;
         st.result.titleWork = newWork;
@@ -270,6 +273,11 @@ export function importDialog(o) {
         el('label', { class: 'field' }, el('span', {}, '이름'), el('input', { id: 'import-name', value: u.name || '', maxlength: '100', oninput: (e) => setUniverse('name', e.target.value) })),
         el('label', { class: 'field' }, el('span', {}, '작성 주체(필수)'), el('input', { id: 'import-owner', value: u.owner || '', placeholder: '예: 가상 시스템분석팀', oninput: (e) => setUniverse('owner', e.target.value) })),
       ));
+      // 스위치가 켜졌고 따라갈 업무(문서 제목으로 만든 업무 하나)가 있을 때만 한 줄 안내
+      const onlyWork = doc.nodes.filter((n) => n.core_type === 'work');
+      if (followWork() && onlyWork.length === 1 && onlyWork[0].label === (st.result.titleWork !== undefined ? st.result.titleWork : docWorkLabel(u.name || ''))) {
+        blocks.push(el('p', { class: 'muted small', 'data-testid': 'import-rename-work' }, '업무 이름도 함께 바뀝니다.'));
+      }
     } else {
       const dl = el('dl', {});
       for (const [k, v] of [['이름', u.name], ['단위', u.level], ['작성 주체', u.owner], ['ID', u.id]]) dl.append(el('dt', {}, k), el('dd', {}, v || '—'));

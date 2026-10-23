@@ -2,7 +2,7 @@
 // 업무정의서 한 장을 붙였을 때 담당 절·관련 문서 절·작성 줄·제목 접두어·개요의 주기/마감을 읽어 사람·산출물·작성 주체·업무 속성이 채워지는지.
 // 원문(가상)은 tests/fixtures/w8/tax-prepay.md. 읽혀야 하는 것과 읽히면 안 되는 것(지어내기)을 함께 본다.
 //
-// 두 판으로 나뉜다. CONVERT_RULES.cr17j(CR-17 J 스위치 8개)가
+// 두 판으로 나뉜다. CONVERT_RULES.cr17j(CR-17 J 스위치 9개)가
 //   - 꺼짐(기본값) = 승인된 02-design 12.9.1 v1·12.9.2 D-P3·D-P6 그대로. 담당 절은 「역할」 사람만(연결 없음), 관련 문서는 산출물(꼭지가 담음, 괄호는 설명),
 //     작성 줄은 값 그대로, 개요의 문장에서 설명·주기·마감을 고르지 않는다.
 //   - 켬(CR-17 J ①을 승인받으면 켤 값) = W8 때 동작.
@@ -17,7 +17,7 @@ import { formReport } from '../app/src/rules/form.js';
 import { noteText } from '../app/src/ui/import.js';
 
 const ctx = { now: '2026-10-24T10:00:00+09:00', random: () => 0.5 };
-const SWITCHES = ['assignPerforms', 'namedPersonPlain', 'relatedDocLink', 'pathToLocation', 'authorPickOrg', 'authorDate', 'summaryToWork', 'periodDeadline'];
+const SWITCHES = ['assignPerforms', 'namedPersonPlain', 'relatedDocLink', 'pathToLocation', 'authorPickOrg', 'authorDate', 'summaryToWork', 'periodDeadline', 'previewRenameWork'];
 const ALL_ON = Object.fromEntries(SWITCHES.map((k) => [k, true]));
 const conv = (text, cr17j) => {
   const r = convertDocument(text, cr17j ? { ...ctx, cr17j } : ctx);
@@ -35,7 +35,7 @@ const HEAD = '# 가상 업무\n- 작성 주체: 가상팀\n## 업무 범위\n- �
 
 // ── 스위치 ───────────────────────────────────────────────────────────
 
-test('W9 스위치: CR-17 J 스위치 8개가 CONVERT_RULES.cr17j 한 곳에 있고 기본값은 전부 꺼짐(= 승인된 12.9 동작)', () => {
+test('W9 스위치: CR-17 J 스위치 9개가 CONVERT_RULES.cr17j 한 곳에 있고 기본값은 전부 꺼짐(= 승인된 12.9 동작)', () => {
   assert.deepEqual(Object.keys(CONVERT_RULES.cr17j).sort(), [...SWITCHES].sort());
   for (const [k, v] of Object.entries(CONVERT_RULES.cr17j)) assert.equal(v, false, k);
   // 한 번의 호출만 덮어쓸 수 있고, 덮어쓴 값이 설정 객체를 바꾸지 않는다
@@ -95,11 +95,13 @@ test('W9 기본값 고정 사례: 법인세 중간예납 정의서 → 꼭지 1�
   assert.deepEqual(labelsOf(doc, 'artifact'), ['중간예납 계산표']);
   assert.equal(doc.nodes.filter((n) => n.core_type === 'topic').length, 0, '담당·관련 문서가 주제(규칙 밖)로 가지 않음');
   assert.ok(!codes({ report }).includes('C-TOPIC-GUESS'));
-  assert.equal(doc.universe.owner, '가상재무팀 류다온 / 2026-09-01', 'D-P6: 작성 주체는 값 그대로(조직만 고르지 않음)');
+  // R12-2: 키가 그냥 「작성」이면 작성 주체로 읽지 않는다(W8 전과 같게 입력받는다. 날짜는 예전처럼(F4) 작성일 후보)
+  assert.equal(doc.universe.owner, '', 'R12-2: 「작성: 가상재무팀 류다온 / 2026-09-01」을 통째로 작성 주체로 쓰지 않는다');
+  assert.ok(codes({ report }).includes('C-NO-OWNER'));
   assert.ok(!codes({ report }).includes('C-DATE-ASSUMED'), '키가 그냥 「작성」이면 같은 줄의 날짜는 예전처럼(F4) 작성일 후보');
-  assert.ok(!codes({ report }).includes('C-NO-OWNER'));
   assert.equal(doc.nodes.length, 5);
   assert.ok(codes({ report }).includes('C-TOO-FEW'));
+  doc.universe.owner = '가상재무팀'; // 미리 보기에서 입력한 뒤
   assert.equal(validateDocument(doc).ok, true);
 });
 
@@ -214,7 +216,7 @@ test('W8 표준 양식(스위치 켬): 변환 결과는 권장 항목이 비어 
 });
 
 test('W8 지어내지 않기(스위치 켬·꺼짐 모두): 업무가 여러 개면 설명·주기·마감·담당·관련 문서를 첫 업무에 붙이지 않는다', () => {
-  const text = ['# 가상 업무정의서', '- 작성: 가상재무팀 / 2026-09-01', '## 개요', '매월 말 가상 정산과 가상 접수를 처리한다.', '## 범위', '- 가상 정산', '- 가상 접수',
+  const text = ['# 가상 업무정의서', '- 작성 부서: 가상재무팀 / 2026-09-01', '## 개요', '매월 말 가상 정산과 가상 접수를 처리한다.', '## 범위', '- 가상 정산', '- 가상 접수',
     '## 절차', '1. 5영업일 이내 가상 접수', '## 관련 문서', '- 가상 계산표(공유 드라이브 > 재무)', '## 담당', '- 주 담당: 류다온 / 검토: 가상재무팀장', ''].join('\n');
   for (const on of [false, true]) {
     const { doc, report } = on ? convOn(text) : conv(text);
@@ -249,20 +251,31 @@ test('W8 제목 접두어: 업무 이름에서 「업무정의서:」를 떼고 
   assert.equal(docWorkLabel('업무정의서: ' + '가'.repeat(60)), '가'.repeat(39) + '…');
 });
 
-test('W9 작성 줄(기본값): 「작성:」「작성자:」「작성 부서:」는 같게 값 그대로(D-P6), 날짜는 따로 읽지 않는다', () => {
-  for (const key of ['작성', '작성자', '작성 부서']) {
+test('W9 작성 줄(기본값): 「작성자:」「작성 부서:」는 값 그대로(D-P6), 「작성:」은 작성 주체로 읽지 않는다(R12-2)', () => {
+  for (const key of ['작성자', '작성 부서']) {
     const { doc, report } = conv(`# 가상 업무\n- ${key}: 가상재무팀 류다온 / 2026-09-01\n## 업무 범위\n- 가상 접수\n`);
     assert.equal(doc.universe.owner, '가상재무팀 류다온 / 2026-09-01', key);
     assert.ok(!doc.universe.description.includes('머리말'), key);
     assert.ok(!codes({ report }).includes('C-NO-OWNER'), key);
-    if (key !== '작성') assert.ok(codes({ report }).includes('C-DATE-ASSUMED'), `${key}: 작성자·작성 부서 줄의 날짜는 읽지 않음(예전과 같음)`);
+    assert.ok(codes({ report }).includes('C-DATE-ASSUMED'), `${key}: 작성자·작성 부서 줄의 날짜는 읽지 않음(예전과 같음)`);
   }
+  // 키가 그냥 「작성」: 작성 주체는 입력받고(C-NO-OWNER), 줄은 머리말 글로 남으며, 같은 줄 날짜만 작성일 후보(F4)
+  const bare = conv('# 가상 업무\n- 작성: 가상재무팀 류다온 / 2026-09-01\n## 업무 범위\n- 가상 접수\n');
+  assert.equal(bare.doc.universe.owner, '');
+  assert.ok(codes(bare).includes('C-NO-OWNER'));
+  assert.ok(bare.doc.universe.description.includes('머리말: 작성: 가상재무팀 류다온 / 2026-09-01'));
+  assert.ok(!codes(bare).includes('C-DATE-ASSUMED'));
   // 키가 그냥 「작성」이면 같은 줄 날짜는 예전처럼(F4) 작성일 후보
   const f4 = conv('# 가상 업무\n- 작성: 가상구매팀 / 2026.09.05\n## 업무 범위\n- 가상 접수\n## 확인할 질문\n1. 가상 질문?\n');
   assert.ok(!codes(f4).includes('C-DATE-ASSUMED'));
   assert.equal(f4.doc.events.find((e) => e.type === 'memo').occurred_at, '2026-09-05');
   assert.equal(conv('# 가상 업무\n- 작성자: 류다온\n## 업무 범위\n- 가상 접수\n').doc.universe.owner, '류다온');
-  assert.equal(conv('# 가상 업무\n- 작성: 2026-09-01\n## 업무 범위\n- 가상 접수\n').doc.universe.owner, '2026-09-01', '값 그대로');
+  // 날짜뿐인 값은 어떤 키든 작성 주체가 아니다
+  for (const key of ['작성', '작성자', '작성 부서']) {
+    const d = conv(`# 가상 업무\n- ${key}: 2026-09-01\n## 업무 범위\n- 가상 접수\n`);
+    assert.equal(d.doc.universe.owner, '', key);
+    assert.ok(codes(d).includes('C-NO-OWNER'), key);
+  }
 });
 
 test('W8 작성 줄(스위치 켬): 「작성:」「작성자:」「작성 부서:」에서 조직 낱말만 작성 주체로, 날짜는 작성일로', () => {

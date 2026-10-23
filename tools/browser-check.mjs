@@ -2932,8 +2932,8 @@ async function checkBrowser(browser, port) {
   }
 
   // ── W8·W9 업무정의서 한 장 읽기(처음 사용 점검 3회차 + 재검증 R11로 승인된 12.9 범위로 되돌림 — CR-17 J 스위치 꺼짐): 법인세 중간예납 정의서(가상)를 붙여 「초벌 변환」 →
-  //    사람 2(역할)·산출물 1·작성 주체 칸에 원문 값 그대로(D-P6)·표준 양식 줄에 「권장 항목이 비어 있음」(설명·주기·마감·관련 문서·담당은 스위치를 켜야 채워짐)·담당 추정 알림 없음·노드 수 알림이 겁주지 않는 말 →
-  //    이름 칸을 고치면 꼭지와 대표 업무 이름이 함께 바뀜. 가져오지 않고 닫는다(저장소 불변) ──
+  //    사람 2(역할)·산출물 1·「작성:」 줄은 작성 주체로 읽지 않아 작성 주체 칸이 비고 안내가 나옴(R12-2)·표준 양식 줄에 「권장 항목이 비어 있음」(설명·주기·마감·관련 문서·담당은 스위치를 켜야 채워짐)·담당 추정 알림 없음·노드 수 알림이 겁주지 않는 말 →
+  //    이름 칸을 고치면 꼭지 이름만 바뀌고 대표 업무 이름은 그대로(스위치 previewRenameWork 꺼짐, R12-7). 가져오지 않고 닫는다(저장소 불변) ──
   {
     const W8_DOC = ['업무정의서: 법인세 중간예납 준비', '작성: 가상재무팀 류다온 / 2026-09-01', '1. 업무 개요', '매년 8월 법인세 중간예납 세액을 계산하고 신고서를 준비한다.', '2. 처리 절차',
       '① 상반기 손익 자료 수집(회계 시스템에서 내려받기)', '② 전년도 납부세액 기준 계산과 가결산 기준 계산 비교', '③ 신고서 초안 작성 후 팀장 검토', '④ 8월 31일까지 신고·납부', '3. 주의사항',
@@ -2945,13 +2945,13 @@ async function checkBrowser(browser, port) {
     await sleep(300);
     const w8 = await evaluate(s.cdp, "({ summary: (document.querySelector('[data-testid=import-summary]') || {}).textContent || '', owner: (document.getElementById('import-owner') || {}).value || '', form: (document.querySelector('[data-testid=import-form] summary') || {}).textContent || '', notes: (document.querySelector('[data-testid=import-notes]') || {}).textContent || '', nodes: (document.querySelector('[data-testid=import-nodes]') || {}).textContent || '', sections: (document.querySelector('[data-testid=import-sections]') || {}).textContent || '' })");
     check('W8 업무정의서 한 장: 미리 보기 규모가 사람 2·산출물 1이고 주제(규칙 밖)가 없음', /사람 2/.test(w8.summary) && /산출물 1/.test(w8.summary) && !/주제/.test(w8.summary) && !w8.notes.includes('규칙에 없는 제목'), w8.summary);
-    check('W8 작성 주체 칸에 원문 값 「가상재무팀 류다온 / 2026-09-01」이 그대로 채워지고(D-P6) 노드 목록에 업무 이름의 접두어가 없음', w8.owner === '가상재무팀 류다온 / 2026-09-01' && w8.nodes.includes('법인세 중간예납 준비') && !/(^|\s)업무정의서: 법인세 중간예납 준비 원문 §2/.test(w8.nodes), JSON.stringify([w8.owner, w8.nodes.slice(0, 160)]));
+    check('W8 「작성: 가상재무팀 류다온 / 2026-09-01」은 작성 주체로 읽지 않아(R12-2) 작성 주체 칸이 비어 있고 입력 안내가 나오며, 노드 목록에 업무 이름의 접두어가 없음', w8.owner === '' && w8.notes.includes('원문에 작성 주체가 없습니다') && w8.nodes.includes('법인세 중간예납 준비') && !/(^|\s)업무정의서: 법인세 중간예납 준비 원문 §2/.test(w8.nodes), JSON.stringify([w8.owner, w8.nodes.slice(0, 160)]));
     check('W9 표준 양식 줄이 「업무 1개 중 1개에 권장 항목이 비어 있음」(문장에서 설명·주기·마감을, 담당·관련 문서를 지어 채우지 않음) · 담당(수행) 추정 알림 없음', w8.form.includes('업무 1개 중 1개에 권장 항목이 비어 있음') && !w8.notes.includes('담당(수행) 연결') && !w8.notes.includes('주 담당'), w8.form + ' / ' + w8.notes.slice(0, 200));
     check('W8 노드 수 알림이 실패처럼 읽히지 않음(「10개 이상 목표」 없음, 「업무 하나짜리 문서라면 정상」 있음)', !w8.notes.includes('이상 목표') && w8.notes.includes('업무 하나짜리 문서라면 정상') && w8.summary.length > 0, w8.notes.slice(0, 200));
     await evaluate(s.cdp, "(() => { const e = document.getElementById('import-name'); e.value = '법인세 중간예납 신고 준비'; e.dispatchEvent(new Event('input', { bubbles: true })); })()");
     await sleep(150);
     const w8n = await text(s.cdp, '[data-testid=import-nodes]');
-    check('W8 미리 보기에서 이름을 고치면 대표 업무 이름도 같이 바뀜(꼭지만 바뀌지 않음)', (w8n.match(/법인세 중간예납 신고 준비/g) || []).length >= 2 && !w8n.includes('업무정의서: 법인세 중간예납 준비'), w8n.slice(0, 200));
+    check('R12-7 미리 보기에서 지도 이름을 고치면 꼭지 이름만 바뀌고 대표 업무 이름(법인세 중간예납 준비)은 그대로, 「업무 이름도 함께 바뀝니다」 안내 없음(스위치 꺼짐)', (w8n.match(/법인세 중간예납 신고 준비/g) || []).length === 1 && w8n.includes('법인세 중간예납 준비') && !(await text(s.cdp, '#import-dialog')).includes('업무 이름도 함께 바뀝니다'), w8n.slice(0, 200));
     await evaluate(s.cdp, "document.getElementById('import-dialog').open && document.querySelector('[data-testid=import-close]').click()");
     await sleep(100);
   }
