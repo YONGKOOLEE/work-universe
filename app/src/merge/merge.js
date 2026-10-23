@@ -71,7 +71,7 @@ export function mergePlan(view, links = []) {
         personItems.push({ type: 'no_empno', kind: 'person', a: p.gid, b: q.gid, title: `사번 없음: ${p.label}`, reason: `${p.label}(${uname(p)})은 사번이 없습니다. 이름이 같은 ${q.label}(${uname(q)}${q.emp_no ? `, ${q.emp_no}` : ''})과 같은 사람인지 확인이 필요합니다.`, evidence_ids: [p.gid, q.gid] });
       }
     } else if (!paired.has(p.gid) && !allLinks.some((l) => l.a === p.gid || l.b === p.gid)) {
-      personItems.push({ type: 'no_empno', kind: 'person', a: p.gid, b: null, title: `사번 없음: ${p.label}`, reason: `${p.label}(${uname(p)})은 사번이 없어 다른 유니버스의 사람과 자동으로 잇지 않았습니다. 같은 사람이 있다면 사번을 넣거나 직접 연결해 주세요.`, evidence_ids: [p.gid] });
+      personItems.push({ type: 'no_empno', kind: 'person', a: p.gid, b: null, title: `사번 없음: ${p.label}`, reason: `${p.label}(${uname(p)})은 사번이 없어 다른 업무 지도의 사람과 자동으로 잇지 않았습니다. 같은 사람이 있다면 사번을 넣거나 직접 연결해 주세요.`, evidence_ids: [p.gid] });
     }
   }
 

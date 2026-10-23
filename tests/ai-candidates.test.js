@@ -120,7 +120,7 @@ test('검증: 지어낸 업무·같은 업무·같은 유니버스·표시 형�
     'text',
   ]);
   assert.equal(r.pairs.length, 1);
-  assert.deepEqual(reasonsOf(r), ['보낸 목록에 없는 업무(지어낸 업무)', '같은 업무를 두 번 가리킴', '같은 유니버스 안의 쌍', '업무 표시의 형식이 맞지 않음', '항목 형식이 맞지 않음']);
+  assert.deepEqual(reasonsOf(r), ['보낸 목록에 없는 업무(지어낸 업무)', '같은 업무를 두 번 가리킴', '같은 업무 지도 안의 쌍', '업무 표시의 형식이 맞지 않음', '항목 형식이 맞지 않음']);
   assert.equal(r.counts.dropped, 5);
   assert.ok(r.dropped.every((d) => d.kind === 'invalid'));
 });
@@ -204,7 +204,7 @@ test('연결부: 가짜 candidates 모드(진짜 1 + 지어낸 노드 + 틀린 �
   assert.equal(fake.calls.length, 1);
   assert.deepEqual(r.pairs.map((p) => [p.a, p.b]), [[GOOD_A, GOOD_B]]);
   assert.deepEqual(r.counts, { pairs: 1, dropped: 3, decided: 0, merged: 1 });
-  assert.deepEqual(reasonsOf(r), ['보낸 목록에 없는 업무(지어낸 업무)', '뒤 업무 글에서 인용을 찾지 못함', '같은 유니버스 안의 쌍']);
+  assert.deepEqual(reasonsOf(r), ['보낸 목록에 없는 업무(지어낸 업무)', '뒤 업무 글에서 인용을 찾지 못함', '같은 업무 지도 안의 쌍']);
   assert.deepEqual({ method: r.method, model: r.model, fallback: r.fallback, cached: r.cached }, { method: 'llm', model: 'claude-opus-5-5', fallback: null, cached: false });
   // 요청: 구조화 출력 스키마·max_tokens·키 비포함
   const params = fake.calls[0];
@@ -254,7 +254,7 @@ test('연결부: 업무가 너무 많거나 글이 너무 길거나 부족하면
   const long = await findCandidatesAsync(mk(100, 1001), { provider });
   assert.equal(long.fallback.reason, '업무 글이 너무 깁니다(100,000자 이하)');
   const few = await findCandidatesAsync(mk(1, 10), { provider });
-  assert.equal(few.fallback.reason, '비교할 업무가 부족합니다(서로 다른 유니버스의 업무가 2개 이상 필요)');
+  assert.equal(few.fallback.reason, '비교할 업무가 부족합니다(서로 다른 업무 지도의 업무가 2개 이상 필요)');
   assert.equal(fake.calls.length, 0);
 });
 

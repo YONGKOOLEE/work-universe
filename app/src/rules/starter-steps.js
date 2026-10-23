@@ -29,7 +29,7 @@ export function starterSteps(doc, view) {
     },
     {
       key: 'more',
-      label: '업무 더 넣기(「노드 추가」 또는 「표로 추가」)',
+      label: '업무 더 넣기(「사람·업무·문서 추가」 또는 「표로 추가」)',
       done: works.length >= 2,
     },
   ];

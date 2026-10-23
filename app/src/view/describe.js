@@ -173,7 +173,7 @@ export function describeNode(view, gid, { asOf = null, past = false } = {}) {
   if (node.tags && node.tags.length) rows.push({ label: '태그', value: node.tags.join(', ') });
   rows.push({
     label: '출처',
-    value: node.origin === 'ref' ? `참조한 유니버스: ${node.universe_name}` : `이 유니버스(${node.universe_name})`,
+    value: node.origin === 'ref' ? `참조한 업무 지도: ${node.universe_name}` : `이 업무 지도(${node.universe_name})`,
   });
   const others = node.merged_from.map((g) => view.rawNode(g)).filter(Boolean);
   if (others.length) rows.push({ label: '같은 노드', value: `${others.map((n) => n.universe_name).join(', ')}의 노드와 합쳐져 있음` });

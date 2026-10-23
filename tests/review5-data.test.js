@@ -38,7 +38,7 @@ test('V-7: 사전 생성 문장 속 「라벨」·사번·날짜는 모두 데�
 });
 
 test('V-7: 시작 화면 카드 문구의 「이름」은 실제 노드·유니버스 이름이거나 화면 버튼 이름이다', () => {
-  const buttons = new Set(['인수인계 초안 만들기', '인사이트 보기', '새 유니버스 만들기', '가져오기·내보내기', '문서·파일 가져오기', '노드 추가']);
+  const buttons = new Set(['인수인계 초안 만들기', '인사이트 보기', '새 업무 지도 만들기', '가져오기·내보내기', '문서·파일 가져오기', '사람·업무·문서 추가']);
   for (const [id, g] of Object.entries(SAMPLE_GUIDE)) {
     assert.ok(SAMPLES.some((d) => d.universe.id === id), id);
     for (const m of `${g.tagline || ''} ${g.try || ''}`.matchAll(/「([^」]+)」/g)) {

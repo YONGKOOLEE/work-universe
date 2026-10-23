@@ -12,7 +12,7 @@ export const GROUP_LEVEL = '팀';
 
 export const FOLDER_TEXT = {
   unsupported: '이 브라우저에서는 폴더 연결을 쓸 수 없습니다(Chrome·Edge에서 됩니다). 내보내기·가져오기로 파일을 주고받으세요.',
-  intro: '고른 폴더에 저장할 때마다 이 유니버스 파일이 생기고, 같은 폴더의 동료 파일을 읽어 팀 지도로 묶습니다. 남의 파일은 고치지 않습니다.',
+  intro: '고른 폴더에 저장할 때마다 이 업무 지도 파일이 생기고, 같은 폴더의 동료 파일을 읽어 팀 지도로 묶습니다. 남의 파일은 고치지 않습니다.',
   changed: '폴더에 바뀐 파일이 있습니다 — 새로 고침',
   mirrorFailed: '폴더에 저장하지 못했습니다. 브라우저 저장은 끝났습니다. 「폴더 연결」 탭에서 다시 시도하세요.',
 };
@@ -212,7 +212,7 @@ export function createFolderLink(o) {
       const peers = st.plan.filter((p) => p.ok && !p.mine && !p.current && st.selected.get(p.name));
       if (!peers.length) return { ok: false, message: '묶을 동료 파일을 체크하세요.' };
       const over = peers.filter((p) => p.exists).length;
-      const ask = `동료 파일 ${peers.length}개로 이 브라우저의 사본을 바꿉니다${over ? `(같은 ID ${over}개는 덮어씁니다. 그 유니버스에 이 브라우저에서 고친 내용은 사라집니다)` : ''}. 그다음 지금 유니버스와 묶어 「${GROUP_NAME}」을 만듭니다. 계속할까요?`;
+      const ask = `동료 파일 ${peers.length}개로 이 브라우저의 사본을 바꿉니다${over ? `(같은 ID ${over}개는 덮어씁니다. 그 업무 지도에 이 브라우저에서 고친 내용은 사라집니다)` : ''}. 그다음 지금 업무 지도와 묶어 「${GROUP_NAME}」을 만듭니다. 계속할까요?`;
       if (confirm && !confirm(ask)) return { ok: false, message: '' };
       const ids = [];
       for (const p of peers) {

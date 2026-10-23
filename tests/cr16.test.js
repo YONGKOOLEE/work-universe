@@ -7,7 +7,7 @@ import { addAssignment, addEvent, addNode, createUniverse, updateNode } from '..
 import { applyStarter } from '../app/src/model/starter.js';
 import { PREVIEW_ITEMS, PREVIEW_SOURCE, PREVIEW_TEXT, previewContent, starterPreview, starterSteps } from '../app/src/rules/starter-steps.js';
 import { TOUR_IDS, emptyState, scenarioOf } from '../app/src/rules/tour-steps.js';
-import { TERM_NOTE, WHY_STEPS, WHY_TITLE } from '../app/src/ui/start.js';
+import { WHY_STEPS, WHY_TITLE } from '../app/src/ui/start.js';
 import { buildView } from '../app/src/view/view.js';
 
 const ctx = { now: '2026-10-23T10:00:00+09:00' };
@@ -16,7 +16,6 @@ const FULL = { 절차: '① a', 주기: '매월', 마감: '5일', 주의사항: 
 const viewOf = (d) => buildView(d, () => null);
 const pregenItem = (key) => PREGEN.items.find((it) => it.task === PREVIEW_SOURCE.task && it.target === PREVIEW_SOURCE.target && it.item === key);
 /** 「…」 안의 단추 이름은 빼고 남은 글 */
-const withoutQuoted = (text) => String(text).replace(/「[^」]*」/g, '');
 
 // 처음 할 일을 모두 끝낸 문서
 function allDone() {
@@ -98,16 +97,16 @@ test('따라 하기 문구(tour-steps)에 「유니버스」가 없다(「」 �
       texts.push(st.task);
       if (st.sub) for (const s of [emptyState(sc.universeId), { ...emptyState(sc.universeId), selected: `${sc.universeId}/N-001`, saved: true }]) texts.push(st.sub(s));
     }
-    for (const t of texts.filter(Boolean)) assert.ok(!withoutQuoted(t).includes('유니버스'), `${id}: ${t}`);
+    for (const t of texts.filter(Boolean)) assert.ok(!t.includes('유니버스'), `${id}: ${t}`);
   }
 });
 
 test('「처음 할 일」 문구와 샘플 카드 문구에 「유니버스」가 없다', () => {
   const d = applyStarter(fresh(), { work: '월말 점검' }, ctx).doc;
-  for (const st of starterSteps(d, viewOf(d)).steps) assert.ok(!withoutQuoted(st.label).includes('유니버스'), st.label);
+  for (const st of starterSteps(d, viewOf(d)).steps) assert.ok(!st.label.includes('유니버스'), st.label);
   for (const [id, g] of Object.entries(SAMPLE_GUIDE)) {
-    assert.ok(!withoutQuoted(g.tagline).includes('유니버스'), `${id} tagline`);
-    assert.ok(!withoutQuoted(g.try).includes('유니버스'), `${id} try`);
+    assert.ok(!g.tagline.includes('유니버스'), `${id} tagline`);
+    assert.ok(!g.try.includes('유니버스'), `${id} try`);
   }
 });
 
@@ -118,5 +117,4 @@ test('WHY_STEPS: 세 칸(전 → 기록이 쌓이는 업무 지도 → 후), 제
   assert.deepEqual(WHY_STEPS.map((s) => s.head), ['담당자가 바뀔 때', '기록이 쌓이는 업무 지도', '근거 달린 인수인계 초안 · 혼자만 아는 업무 경고']);
   assert.deepEqual(WHY_STEPS.map((s) => s.body), ['머릿속에서만 넘어가던 업무', '담당·메모·산출물을 그때그때', 'AI가 기록만 보고 쓰고, 앱이 근거를 검사합니다']); // 셋째 칸: '자동으로' → AI가 하는 일(처음 사용 점검 FU-4, 2026-10-24)
   for (const s of WHY_STEPS) assert.ok(!/유니버스|노드|꼭지/.test(`${s.head} ${s.body}`), s.head);
-  assert.ok(TERM_NOTE.includes('유니버스 = 업무 지도 하나'));
 });

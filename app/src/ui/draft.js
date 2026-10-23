@@ -48,7 +48,7 @@ const DRAFT_FIELDS = { target: '대상', from: '보내는 사람', to: '받는 �
 function draftError(err) {
   if (err.same_person) return '보내는 사람과 받는 사람이 같습니다.';
   if (err.code === 'E-REQUIRED') return `${DRAFT_FIELDS[err.field]}${josa(DRAFT_FIELDS[err.field], '을/를')} 고르세요.`;
-  if (err.field === 'target') return '대상은 꼭지(유니버스의 중심 노드)나 업무만 고를 수 있습니다.';
+  if (err.field === 'target') return '대상은 꼭지(업무 지도의 중심 노드)나 업무만 고를 수 있습니다.';
   return messageFor(err);
 }
 
@@ -210,7 +210,7 @@ export function draftPanel(o) {
   const form = el(
     'form',
     { class: 'editor', novalidate: true, 'data-testid': 'draft-form' },
-    field('대상(유니버스 또는 업무)', target),
+    field('대상(업무 지도 또는 업무)', target),
     holder,
     field('보내는 사람', from),
     field('받는 사람', to),
@@ -302,7 +302,7 @@ function confirmBox(d, view, o) {
   });
   return el('div', { class: 'confirm-box', 'data-testid': 'confirm-box' },
     el('p', { class: 'muted small' }, `내용을 확인했으면 확정하세요. 「${where}」에 인수인계서와 인수인계 이력(${date})이 남고, 다음 인수인계 초안의 「이전 인수인계」 근거가 됩니다.`),
-    elsewhere.length ? el('p', { class: 'muted small', 'data-testid': 'confirm-elsewhere' }, `이 화면(「${where}」)에만 저장됩니다. 업무 유니버스(「${elsewhere.join('」·「')}」)를 단독으로 열면 이 인수인계는 보이지 않습니다. 그 유니버스에서도 보이게 하려면 그 유니버스를 열어 업무를 대상으로 확정하세요.`) : null,
+    elsewhere.length ? el('p', { class: 'muted small', 'data-testid': 'confirm-elsewhere' }, `이 화면(「${where}」)에만 저장됩니다. 업무 지도(「${elsewhere.join('」·「')}」)를 단독으로 열면 이 인수인계는 보이지 않습니다. 그 업무 지도에서도 보이게 하려면 그 업무 지도를 열어 업무를 대상으로 확정하세요.`) : null,
     o.readOnly ? el('p', { class: 'muted small' }, '읽기 전용이라 확정할 수 없습니다.') : null,
     btn, msg);
 }

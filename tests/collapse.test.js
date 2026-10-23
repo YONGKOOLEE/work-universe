@@ -92,7 +92,7 @@ test('기본 규칙의 이유가 나온다', () => {
   const v = teamView();
   assert.equal(exposureOf(v, 'U-K1/N-202').reason, '하위 업무');
   assert.equal(exposureOf(v, 'U-K1/N-504').reason, '담당 업무 없음');
-  assert.equal(exposureOf(v, 'U-K1/N-314').reason, '다른 유니버스와 공유한 주제');
+  assert.equal(exposureOf(v, 'U-K1/N-314').reason, '다른 업무 지도와 공유한 주제');
   assert.equal(exposureOf(v, 'U-K1/N-601').reason, '세부 정보');
 });
 

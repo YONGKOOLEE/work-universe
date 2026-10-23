@@ -10,9 +10,9 @@ import { folderTab } from './folder-tab.js';
 import { CONVERT_RULES, docWorkLabel } from '../rules/doc-convert.js';
 
 const KIND_TEXT = {
-  overview: () => '개요 → 유니버스의 중심 노드(꼭지)의 이름·목적·배경, 그리고 범위·이해관계자',
+  overview: () => '개요 → 업무 지도의 중심 노드(꼭지)의 이름·목적·배경, 그리고 범위·이해관계자',
   scope: (n) => `범위 → 업무 ${n}개`,
-  scope_out: () => '범위 제외 → 유니버스 설명',
+  scope_out: () => '범위 제외 → 업무 지도 설명',
   steps: (n) => `업무 흐름 → 대표 업무의 절차 속성 ${n}단계(노드로 만들지 않음)`,
   topic: () => '주제 노드 1개(항목은 설명에)',
   people: (n) => `사람·역할 ${n}개`,
@@ -69,13 +69,13 @@ export function noteText(n) {
 
 function warningText(w, from) {
   if (w.code === 'W-SAMPLE-OVERWRITE') return `내장 샘플「${w.name}」${josa(w.name, '을/를')} 덮어씁니다. 이 창 맨 아래 「고급」을 펼쳐 「가상 데이터 초기화」를 누르면 원래 샘플로 돌아갑니다.`;
-  if (w.code === 'W-SAMPLE-FLAG') return '파일에 샘플 표시가 있지만 내장 샘플이 아니므로 「내 유니버스」로 가져옵니다.';
+  if (w.code === 'W-SAMPLE-FLAG') return '파일에 샘플 표시가 있지만 내장 샘플이 아니므로 「내 업무 지도」로 가져옵니다.';
   if (w.code === 'W-REAL-NAME-LIKE') return `실명처럼 보이는 사람 이름 ${w.count}개가 있습니다(${w.labels.join(', ')}). 이 도구는 가상 데이터용입니다. 실제 이름이면 가져오기 전에 역할 이름(예: 정산 담당)으로 바꾸세요.`;
   if (w.code === 'W-EMPNO-LIKE') return `사번·주민번호처럼 보이는 숫자(6자리 이상)가 ${w.count}곳에 있습니다. 실제 번호면 지우거나 V-0000 형식의 가상 사번으로 바꾸세요.`;
-  if (w.code === 'W-SAME-NAME' && from === 'json') return `이름·단위가 같은 유니버스「${w.name}」(${w.level})가 이미 있습니다. 가져오면 따로 하나 더 생깁니다.`;
+  if (w.code === 'W-SAME-NAME' && from === 'json') return `이름·단위가 같은 업무 지도「${w.name}」(${w.level})가 이미 있습니다. 가져오면 따로 하나 더 생깁니다.`;
   if (w.code === 'W-NO-SOURCE') return `원문 근거가 없는 노드 ${w.count}개가 있습니다(${w.ids.slice(0, 5).join(', ')}${w.ids.length > 5 ? ' …' : ''}).`;
-  if (w.code === 'W-SAME-NAME') return `이름·단위가 같은 유니버스「${w.name}」(${w.level})가 이미 있습니다. 같은 문서를 다시 가져오는 것이면 위에서 이름을 바꾸거나 취소하세요. 가져오면 따로 하나 더 생깁니다.`;
-  if (w.code === 'W-MISSING-CHILD') return `이 유니버스가 묶는 하위 유니버스가 이 브라우저에 없습니다(${w.ids.join(', ')}). 가져와도 그 부분은 비어 보입니다.`;
+  if (w.code === 'W-SAME-NAME') return `이름·단위가 같은 업무 지도「${w.name}」(${w.level})가 이미 있습니다. 같은 문서를 다시 가져오는 것이면 위에서 이름을 바꾸거나 취소하세요. 가져오면 따로 하나 더 생깁니다.`;
+  if (w.code === 'W-MISSING-CHILD') return `이 업무 지도가 묶는 하위 업무 지도가 이 브라우저에 없습니다(${w.ids.join(', ')}). 가져와도 그 부분은 비어 보입니다.`;
   return messageFor(w);
 }
 
@@ -83,7 +83,7 @@ function errorText(e) {
   if (e.path === 'universe.owner') return '작성 주체를 입력하세요.';
   if (e.path === 'universe.name') return '이름을 입력하세요(1~100자).';
   if (e.bad_id) return `${e.path} — ID에 '/'나 공백을 쓸 수 없습니다.`;
-  if (e.code === 'E-CYCLE') return `${e.path} — 묶은 유니버스를 따라가면 이 유니버스로 다시 돌아옵니다(순환). 가져올 수 없습니다.`;
+  if (e.code === 'E-CYCLE') return `${e.path} — 묶은 업무 지도를 따라가면 이 업무 지도로 다시 돌아옵니다(순환). 가져올 수 없습니다.`;
   return `${e.path} — ${messageFor({ ...e, field: e.path.split('.').pop().replace(/\[\d+\]$/, '') })}`;
 }
 
@@ -91,7 +91,7 @@ function parseErrorText(err) {
   if (err.reason === 'empty') return '가져올 내용이 비어 있습니다.';
   if (err.reason === 'too_big') return `파일이 너무 큽니다(${err.max.toLocaleString()}자 이하).`;
   if (err.reason === 'json') return 'JSON 형식이 아닙니다. 파일이 깨졌거나 다른 형식입니다. 가져오지 않았습니다.';
-  if (err.reason === 'shape') return '유니버스 문서 형식이 아닙니다. 가져오지 않았습니다.';
+  if (err.reason === 'shape') return '업무 지도 문서 형식이 아닙니다. 가져오지 않았습니다.';
   if (err.field === 'document' && err.too_long) return `문서가 너무 깁니다(${err.too_long.toLocaleString()}자 이하).`;
   if (err.field === 'document') return '변환할 문서를 붙여 넣거나 파일을 여세요.';
   return messageFor(err);
@@ -231,11 +231,11 @@ export function importDialog(o) {
   }
 
   function doImport(preview) {
-    if (preview.same_name && !window.confirm(`이름·단위가 같은 유니버스「${preview.same_name.name}」가 이미 있습니다. 그래도 하나 더 가져올까요?`)) return;
-    if (preview.conflict && !window.confirm(`같은 ID(${preview.conflict.id})의 유니버스「${preview.conflict.name}」가 이미 있습니다. 덮어쓸까요? 덮어쓰면 그 유니버스에 고친 내용은 사라집니다.`)) return;
+    if (preview.same_name && !window.confirm(`이름·단위가 같은 업무 지도「${preview.same_name.name}」가 이미 있습니다. 그래도 하나 더 가져올까요?`)) return;
+    if (preview.conflict && !window.confirm(`같은 ID(${preview.conflict.id})의 업무 지도「${preview.conflict.name}」가 이미 있습니다. 덮어쓸까요? 덮어쓰면 그 업무 지도에 고친 내용은 사라집니다.`)) return;
     const r = o.app.importUniverse(st.result.doc, { overwrite: !!preview.conflict });
     if (!r.ok) {
-      st.message = r.error.code === 'E-DUP' ? '같은 ID의 유니버스가 있어 가져오지 않았습니다.' : messageFor(r.error);
+      st.message = r.error.code === 'E-DUP' ? '같은 ID의 업무 지도가 있어 가져오지 않았습니다.' : messageFor(r.error);
       return render();
     }
     o.dialog.close();
@@ -310,14 +310,14 @@ export function importDialog(o) {
 
       // 작성 주체만 비어 있는 것은 실패가 아니라 "입력할 차례"다: 빨간 오류 대신 안내로 둔다(여섯 번째 검토 U-6). 가져오기 버튼은 그대로 막힌다
       if (st.result.from === 'doc' && p.errors.length && p.errors.every((e) => e.path === 'universe.owner')) {
-        blocks.push(el('p', { class: 'notice', 'data-testid': 'import-errors' }, '변환은 끝났습니다. 위의 「작성 주체」 칸에 이 유니버스를 책임질 팀·부서 이름을 넣으면 「가져오기」를 누를 수 있습니다.'));
+        blocks.push(el('p', { class: 'notice', 'data-testid': 'import-errors' }, '변환은 끝났습니다. 위의 「작성 주체」 칸에 이 업무 지도를 책임질 팀·부서 이름을 넣으면 「가져오기」를 누를 수 있습니다.'));
       } else if (p.errors.length) {
         blocks.push(el('div', { class: 'error-text', 'data-testid': 'import-errors' },
           el('strong', {}, `가져올 수 없습니다 — 고칠 것 ${p.errors.length}건`),
           el('ul', {}, ...p.errors.slice(0, 8).map((e) => el('li', {}, errorText(e)))),
           p.errors.length > 8 ? el('p', {}, `외 ${p.errors.length - 8}건`) : null));
       }
-      if (p.conflict) blocks.push(el('p', { class: 'notice', 'data-testid': 'import-conflict' }, `같은 ID의 유니버스「${p.conflict.name}」가 이미 있습니다. 가져오면 덮어쓸지 묻습니다.`));
+      if (p.conflict) blocks.push(el('p', { class: 'notice', 'data-testid': 'import-conflict' }, `같은 ID의 업무 지도「${p.conflict.name}」가 이미 있습니다. 가져오면 덮어쓸지 묻습니다.`));
 
       const noEmp = p.warnings.filter((w) => w.code === 'W-NO-EMPNO').length;
       const notes = [
@@ -335,7 +335,7 @@ export function importDialog(o) {
       }
 
       if (report && report.sections.length) {
-        blocks.push(el('h4', {}, '원문의 절 → 유니버스'));
+        blocks.push(el('h4', {}, '원문의 절 → 업무 지도'));
         blocks.push(el('table', { class: 'dg-table import-sections', 'data-testid': 'import-sections' },
           el('thead', {}, el('tr', {}, el('th', {}, '원문'), el('th', {}, '제목'), el('th', {}, '바뀐 것'))),
           el('tbody', {}, ...report.sections.map((s) => el('tr', {},
@@ -399,17 +399,17 @@ export function importDialog(o) {
     const tab = (key, label) => el('button', { type: 'button', class: `tab${st.tab === key ? ' active' : ''}`, 'data-testid': `import-tab-${key}`, onclick: () => { cancelAi(); keepInputs(); st.tab = key; st.result = null; st.message = ''; render(); } }, label);
     const u = o.app.doc.universe;
     const exportBody = () => el('div', { class: 'editor' },
-      el('p', { class: 'muted small' }, '지금 연 유니버스를 JSON 파일로 내려받습니다. 다른 PC에서 「JSON 파일」 탭으로 열면 그대로 이어서 쓸 수 있습니다. 브라우저 저장은 이 PC에만 남으므로, 시연 전후에 내려받아 두면 안전합니다.'),
-      el('dl', {}, el('dt', {}, '유니버스'), el('dd', { 'data-testid': 'export-name' }, `${u.name} (${u.level})`), el('dt', {}, '파일 이름'), el('dd', {}, exportFileName(u))),
+      el('p', { class: 'muted small' }, '지금 연 업무 지도를 JSON 파일로 내려받습니다. 다른 PC에서 「JSON 파일」 탭으로 열면 그대로 이어서 쓸 수 있습니다. 브라우저 저장은 이 PC에만 남으므로, 시연 전후에 내려받아 두면 안전합니다.'),
+      el('dl', {}, el('dt', {}, '업무 지도'), el('dd', { 'data-testid': 'export-name' }, `${u.name} (${u.level})`), el('dt', {}, '파일 이름'), el('dd', {}, exportFileName(u))),
       el('div', { class: 'row' }, el('button', { type: 'button', class: 'primary', 'data-testid': 'export-download', onclick: () => o.onExport() }, 'JSON 파일로 내려받기'),
         o.onExportHtml ? el('button', { type: 'button', 'data-testid': 'export-html', onclick: (e) => o.onExportHtml(e.currentTarget) }, 'HTML 파일로 내려받기(내용 포함)') : null),
-      o.onExportHtml ? el('p', { class: 'muted small', 'data-testid': 'export-html-note' }, '받는 사람은 이 파일 하나를 더블클릭하면 이 유니버스를 바로 볼 수 있습니다. 내용이 파일에 들어 있으니 보낼 사람에게만 주세요.') : null);
+      o.onExportHtml ? el('p', { class: 'muted small', 'data-testid': 'export-html-note' }, '받는 사람은 이 파일 하나를 더블클릭하면 이 업무 지도를 바로 볼 수 있습니다. 내용이 파일에 들어 있으니 보낼 사람에게만 주세요.') : null);
     // 키가 있을 때만 「AI로 변환」(단추와 안내 칸). 키가 없으면 둘 다 만들지 않아 화면이 지금과 같다
     const aiBtn = st.tab === 'doc' && aiOf() ? el('button', { type: 'button', 'data-testid': 'btn-ai-convert', disabled: st.aiBusy, title: 'Claude API로 문서를 읽어 업무가 여러 개인 문서도 나눕니다. 키가 있을 때만 보입니다', onclick: runAiConvert }, 'AI로 변환') : null;
     aiLive = aiBtn ? el('p', { class: 'muted small', 'data-testid': 'ai-convert-live', 'aria-live': 'polite' }, st.aiBusy ? AI_CONVERT_WAIT : '') : null;
     const body = st.tab === 'folder' ? folderTab(o, render) : st.tab === 'export' ? exportBody() : st.tab === 'doc'
       ? el('div', { class: 'editor' },
-        el('p', { class: 'muted small' }, '업무정의서 같은 문서를 붙여 넣으면 제목(#)·표·번호 목록을 규칙으로 읽어 유니버스 초벌을 만듭니다. 업무 흐름은 절차 속성으로, 요건·예외 같은 절은 주제 하나로 묶어 노드를 10~20개 정도로 만듭니다(월말 정산 수준).'),
+        el('p', { class: 'muted small' }, '업무정의서 같은 문서를 붙여 넣으면 제목(#)·표·번호 목록을 규칙으로 읽어 업무 지도 초벌을 만듭니다. 업무 흐름은 절차 속성으로, 요건·예외 같은 절은 주제 하나로 묶어 노드를 10~20개 정도로 만듭니다(월말 정산 수준).'),
         el('p', { class: 'muted small', 'data-testid': 'import-plain-note' }, '한글·워드에서 복사한 일반 글(1. 개요 / 가. …)도 됩니다.'),
         el('textarea', { id: 'import-doc', rows: '9', 'aria-label': '문서 원문', placeholder: '# 업무 이름\n## 1. 개요\n| 항목 | 내용 |\n…', oninput: onDocInput }, st.docText),
         el('div', { class: 'row' },
@@ -421,7 +421,7 @@ export function importDialog(o) {
           el('span', { class: 'muted small', 'data-testid': 'import-method-note' }, aiBtn ? '「초벌 변환」은 규칙으로, 「AI로 변환」은 Claude가 읽습니다(원문 인용이 확인된 항목만 담음). 결과는 미리 보기에서 사람이 확인합니다.' : '문서 변환은 규칙으로 읽습니다. 결과는 미리 보기에서 사람이 확인합니다.')),
         aiBtn ? aiLive : null)
       : el('div', { class: 'editor' },
-        el('p', { class: 'muted small' }, '「내보내기」로 저장한 유니버스 파일(.json)이나, 개발 중 변환해 둔 유니버스 파일을 엽니다.'),
+        el('p', { class: 'muted small' }, '「내보내기」로 저장한 업무 지도 파일(.json)이나, 개발 중 변환해 둔 업무 지도 파일을 엽니다.'),
         el('label', { class: 'file-pick' }, 'JSON 파일 열기 ', el('input', { type: 'file', accept: '.json,application/json', 'data-testid': 'import-json-file', onchange: (e) => readFile(e.target, 'jsonText') })),
         el('textarea', { id: 'import-json', rows: '6', 'aria-label': 'JSON 내용', placeholder: '또는 JSON 내용을 붙여 넣으세요' }, st.jsonText),
         el('div', { class: 'row' }, el('button', { type: 'button', class: 'primary', 'data-testid': 'import-check', onclick: runJson }, '확인')));
@@ -439,7 +439,7 @@ export function importDialog(o) {
       o.onReset ? el('details', { class: 'danger-zone', 'data-testid': 'import-advanced' },
         el('summary', {}, '고급'),
         el('h4', {}, '위험 구역'),
-        el('p', { class: 'muted small' }, '모든 유니버스를 처음 샘플 상태로 되돌립니다. 직접 만들거나 가져온 유니버스도 지워지므로 먼저 위에서 내보내 두세요. 누르면 한 번 더 확인합니다.'),
+        el('p', { class: 'muted small' }, '모든 업무 지도를 처음 샘플 상태로 되돌립니다. 직접 만들거나 가져온 업무 지도도 지워지므로 먼저 위에서 내보내 두세요. 누르면 한 번 더 확인합니다.'),
         el('button', { type: 'button', id: 'reset', class: 'danger', 'data-testid': 'reset-all', disabled: !o.app.canReset, onclick: () => o.onReset() }, '가상 데이터 초기화')) : null,
     );
     renderHead();

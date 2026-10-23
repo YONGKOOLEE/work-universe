@@ -87,7 +87,7 @@ function legacyExposureOf(view, gid) {
   switch (node.core_type) {
     case 'person': { const p = own.some((e) => e.core_type === 'performs' && e.source === canon); return { exposed: p, explicit: false, reason: p ? '담당자' : '담당 업무 없음' }; }
     case 'work': { const u = own.some((e) => e.core_type === 'contains' && e.target === canon && view.getNode(e.source)?.core_type === 'work'); return { exposed: !u, explicit: false, reason: u ? '하위 업무' : '최상위 업무' }; }
-    case 'topic': { const s = view.getNode(gid).merged_from.length > 0; return { exposed: s, explicit: false, reason: s ? '다른 유니버스와 공유한 주제' : '이 업무 안의 주제' }; }
+    case 'topic': { const s = view.getNode(gid).merged_from.length > 0; return { exposed: s, explicit: false, reason: s ? '다른 업무 지도와 공유한 주제' : '이 업무 안의 주제' }; }
     default: return { exposed: false, explicit: false, reason: '세부 정보' };
   }
 }

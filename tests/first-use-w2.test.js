@@ -64,10 +64,11 @@ test('시작 화면 처음 보이는 글(「…」 밖)에 유니버스·노드�
 
 test('FU-9 도움말 문구: 한 줄 설명·용어 4개·생성 방식 3개 이름과 순서', () => {
   assert.equal(HELP_INTRO, '이 앱은 업무마다 누가 언제 무엇을 했는지 기록해 두고, 담당자가 바뀔 때 근거 달린 인수인계 초안과 「혼자만 아는 업무」 경고를 만듭니다.');
-  assert.deepEqual(HELP_TERMS.map((t) => t.term), ['업무 지도(유니버스)', '노드', '꼭지', '근거 칩']);
+  assert.deepEqual(HELP_TERMS.map((t) => t.term), ['업무 지도', '노드', '꼭지', '근거 칩']);
   assert.deepEqual(HELP_GEN.map((t) => t.term), ['사전 생성', '규칙 기반', 'Claude API']);
   assert.ok(HELP_TERMS[1].desc.includes('사람·업무·산출물·주제·조직'));
   assert.ok(HELP_TERMS[2].desc.includes('업무 지도 전체'));
+  assert.ok(![...HELP_TERMS, ...HELP_GEN].some((t) => /유니버스/.test(`${t.term} ${t.desc}`)), '도움말에 「유니버스」가 없다(CR-17 A)');
   assert.ok(HELP_TERMS[3].desc.includes('「근거:」') && HELP_TERMS[3].desc.includes('빛납니다'));
   assert.ok(HELP_GEN[0].desc.includes('근거를 검사'));
   assert.ok(HELP_GEN[2].desc.includes('「설정」'));
@@ -82,7 +83,7 @@ test('FU-9 도움말 속 생성 방식 이름이 설정 화면의 이름(사전 
 test('FU-9 도움말 글의 「…」 이름이 실제 화면(도움말 파일 밖 소스·index.html)에 있는 이름이다', () => {
   const src = sourcesExcept(['ui/help.js']);
   const names = quotedNames(helpTexts());
-  assert.ok(names.length >= 4, names.join(','));
+  assert.ok(names.length >= 3, names.join(',')); // 4 → 3: 「유니버스」 이름이 도움말에서 빠짐(CR-17 A)
   for (const n of names) {
     if (n === HELP_TOUR_LABEL) continue; // 도움말 단추 자신(index.html 「?」 title에도 있음, 아래에서 따로 확인)
     assert.ok(src.includes(n), `화면에 없는 이름: 「${n}」`);

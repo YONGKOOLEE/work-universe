@@ -52,7 +52,7 @@ export function exposureOf(view, gid, index = null) {
     }
     case 'topic': {
       const shared = view.getNode(gid).merged_from.length > 0;
-      return { exposed: shared, explicit: false, reason: shared ? '다른 유니버스와 공유한 주제' : '이 업무 안의 주제' };
+      return { exposed: shared, explicit: false, reason: shared ? '다른 업무 지도와 공유한 주제' : '이 업무 안의 주제' };
     }
     default:
       return { exposed: false, explicit: false, reason: '세부 정보' };

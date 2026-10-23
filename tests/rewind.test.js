@@ -489,7 +489,7 @@ test('화면 문구: 확인 창에 숨김·되살림·되돌림 개수와 사용
   assert.equal(diffText({ added: ['a'], changed: [1, 2], hidden: [] }), '이 시점 뒤 생김 1 · 바뀜 2 · 숨김 0');
   assert.match(doneText('2026-10-23T14:05:00+09:00', counts), /되돌렸습니다/);
   assert.match(failText({ code: 'E-SCHEMA', nothing: true }), /되돌릴 것이 없습니다/);
-  assert.match(failText({ code: 'E-SCHEMA', reason: 'grouped' }), /하위 유니버스를 열어/);
+  assert.match(failText({ code: 'E-SCHEMA', reason: 'grouped' }), /하위 업무 지도를 열어/);
   assert.match(failText({ code: 'W-STORAGE' }), /아무것도 바뀌지 않았습니다/);
   assert.match(revertBlock({ baseReadOnly: true, nothing: false }), /읽기 전용/);
   assert.match(revertBlock({ baseReadOnly: false, nothing: true }), /되돌릴 것이 없습니다/);

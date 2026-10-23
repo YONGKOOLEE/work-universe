@@ -392,11 +392,11 @@
 <body>
 <header>
   <button type="button" id="home" class="home" title="시작 화면으로"><h1>업무 <b>UNIVERSE</b></h1></button>
-  <select id="universe-picker" aria-label="유니버스 선택"></select>
+  <select id="universe-picker" aria-label="업무 지도 선택"></select>
   <span class="spacer"></span>
-  <button type="button" id="create-open" class="primary">새 유니버스</button>
-  <button type="button" id="group-open">유니버스 묶기</button>
-  <button type="button" id="import-open" title="업무정의서 문서를 붙여 넣어 초벌로 바꾸거나, JSON 파일을 열거나, 지금 유니버스를 JSON 파일로 내려받습니다">가져오기·내보내기</button>
+  <button type="button" id="create-open" class="primary">새 업무 지도</button>
+  <button type="button" id="group-open">업무 지도 묶기</button>
+  <button type="button" id="import-open" title="업무정의서 문서를 붙여 넣어 초벌로 바꾸거나, JSON 파일을 열거나, 지금 업무 지도를 JSON 파일로 내려받습니다">가져오기·내보내기</button>
   <button type="button" id="tour-open" class="tour-open" data-testid="tour-open" title="도움말(용어 설명·따라 하기 다시 보기)" aria-label="도움말">?</button>
   <button type="button" id="settings-open" title="생성 방식과 작성자 이름을 정합니다">설정</button>
 </header>
@@ -423,15 +423,15 @@
     <div class="aside-tools"><button type="button" id="wide-toggle" class="small-btn" aria-pressed="false" title="오른쪽 패널을 넓혀 인수인계 초안·인사이트·통합 확인을 한 번에 더 많이 봅니다">패널 넓게 보기</button></div>
     <section id="detail" aria-live="polite"></section>
     <details class="add">
-      <summary>노드 추가</summary>
+      <summary>사람·업무·문서 추가</summary>
       <div id="add-slot"></div>
     </details>
   </aside>
 </main>
 <dialog id="create-dialog" aria-labelledby="create-title">
   <form id="create-form" novalidate>
-    <h2 id="create-title">새 유니버스 만들기</h2>
-    <p id="create-intro" class="muted small">업무 하나부터 시작하세요. 첫 업무를 적으면 업무·담당자·산출물이 이어진 작은 지도가 바로 생깁니다. 비워 두면 빈 유니버스를 만듭니다.</p>
+    <h2 id="create-title">새 업무 지도 만들기</h2>
+    <p id="create-intro" class="muted small">업무 하나부터 시작하세요. 첫 업무를 적으면 업무·담당자·산출물이 이어진 작은 지도가 바로 생깁니다. 비워 두면 빈 업무 지도를 만듭니다.</p>
     <div id="create-meta">
     <label>지도 이름 <input id="create-name" maxlength="100" autocomplete="off" placeholder="예: 가상 교육팀 업무 지도"></label>
     <label><span>단위 <span class="muted small" data-testid="create-level-hint">(업무 하나면 「업무」 그대로)</span></span> <input id="create-level" list="create-levels" value="업무" autocomplete="off"></label>
@@ -439,7 +439,7 @@
     <label><span>작성 주체 <span class="muted small" data-testid="create-owner-hint">(이 지도를 책임질 팀·부서 이름, 예: 가상영업팀)</span></span> <input id="create-owner" autocomplete="off" placeholder="팀·부서 이름 (예: 가상영업팀)"></label>
     <label>설명(선택) <textarea id="create-description" rows="3"></textarea></label>
     </div>
-    <fieldset id="create-starter"><legend id="create-starter-legend">이 유니버스에 넣을 첫 업무(선택) — 채우면 작은 지도가 바로 생깁니다</legend>
+    <fieldset id="create-starter"><legend id="create-starter-legend">이 업무 지도에 넣을 첫 업무(선택) — 채우면 작은 지도가 바로 생깁니다</legend>
       <label>업무 이름 <input id="create-start-work" maxlength="100" autocomplete="off" placeholder="예: 월말 정산 점검"></label>
       <label>담당자(내 이름) <input id="create-start-person" maxlength="100" autocomplete="off" placeholder="예: 김가상"></label>
       <label>주기 <input id="create-start-cycle" autocomplete="off" placeholder="예: 매월"></label>
@@ -453,14 +453,14 @@
 </dialog>
 <dialog id="group-dialog" aria-labelledby="group-title">
   <form id="group-form" novalidate>
-    <h2 id="group-title">유니버스 묶기</h2>
+    <h2 id="group-title">업무 지도 묶기</h2>
     <p class="muted small" data-testid="group-note">이미 이 브라우저에 있는 지도끼리 묶습니다. 동료가 만든 지도는 「폴더 연결」이나 「가져오기」로 먼저 들여오세요.</p>
-    <p class="muted small">고른 유니버스를 하위 유니버스로 묶어 상위 유니버스를 만듭니다. 원래 유니버스는 바뀌지 않습니다.</p>
+    <p class="muted small">고른 업무 지도를 하위 업무 지도로 묶어 상위 업무 지도를 만듭니다. 원래 업무 지도는 바뀌지 않습니다.</p>
     <label>이름 <input id="group-name" maxlength="100" autocomplete="off" placeholder="예: 가상 신규팀"></label>
     <label>단위 <input id="group-level" list="group-levels" value="팀" autocomplete="off"></label>
     <datalist id="group-levels"><option value="팀"><option value="부서"><option value="본부"><option value="회사"><option value="프로젝트"></datalist>
     <label>작성 주체 <input id="group-owner" autocomplete="off" placeholder="예: 가상 운영부"></label>
-    <fieldset><legend>묶을 유니버스(2개 이상)</legend><div id="group-children" class="checks"></div></fieldset>
+    <fieldset><legend>묶을 업무 지도(2개 이상)</legend><div id="group-children" class="checks"></div></fieldset>
     <div id="group-message" class="error-text" aria-live="polite"></div>
     <div class="row"><button type="submit">묶기</button><button type="button" id="group-cancel">취소</button></div>
   </form>

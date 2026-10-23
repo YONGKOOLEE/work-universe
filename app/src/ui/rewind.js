@@ -91,7 +91,7 @@ export function confirmText(preview, at, labelOf = pointLabel) {
 /** 되돌리기 실패 문구(아무것도 바뀌지 않았음을 함께 알린다) */
 export function failText(error) {
   if (error && error.nothing) return '되돌릴 것이 없습니다. 지금 모습이 이 시점과 같습니다.';
-  if (error && error.reason === 'grouped') return '다른 유니버스를 묶은 지도는 되감지 않습니다. 하위 유니버스를 열어 되감으세요.';
+  if (error && error.reason === 'grouped') return '다른 업무 지도를 묶은 지도는 되감지 않습니다. 하위 업무 지도를 열어 되감으세요.';
   if (error && error.reason === 'rewinding') return '되감기 중에는 고칠 수 없습니다.';
   return `되돌리지 못했습니다. 아무것도 바뀌지 않았습니다. ${messageFor(error)}`;
 }
@@ -108,7 +108,7 @@ export const doneText = (at, counts, skipped = 0, labelOf = pointLabel) => {
 
 /** 되돌릴 수 없는 이유(없으면 ''). baseReadOnly: 저장소·형식·내용 포함 HTML, nothing: 되돌릴 것이 없음 */
 export function revertBlock({ baseReadOnly, nothing }) {
-  if (baseReadOnly) return '읽기 전용이라 보기만 할 수 있습니다. 되돌리려면 이 유니버스를 쓸 수 있는 상태(내 유니버스)에서 여세요.';
+  if (baseReadOnly) return '읽기 전용이라 보기만 할 수 있습니다. 되돌리려면 이 업무 지도를 쓸 수 있는 상태(내 업무 지도)에서 여세요.';
   if (nothing) return '되돌릴 것이 없습니다. 지금 모습이 이 시점과 같습니다.';
   return '';
 }

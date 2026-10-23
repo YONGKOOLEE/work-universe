@@ -15,7 +15,7 @@ export function renderBackupNudge(slot, advice, { onExport, onClose }) {
     ? `바뀐 것이 ${advice.changes}건으로 ${BACKUP_CHANGES}건을 넘었습니다.`
     : `마지막 내보내기 뒤 ${advice.days}일이 지났고(${BACKUP_DAYS}일 기준) 바뀐 것이 ${advice.changes}건 있습니다.`;
   slot.replaceChildren(
-    el('strong', {}, '내보내기를 권합니다'), ` — ${why} 브라우저 저장소가 지워지면 되돌릴 수 없어, 지금 유니버스를 파일로 내려받아 두세요. `,
+    el('strong', {}, '내보내기를 권합니다'), ` — ${why} 브라우저 저장소가 지워지면 되돌릴 수 없어, 지금 업무 지도를 파일로 내려받아 두세요. `,
     el('button', { type: 'button', class: 'primary', 'data-testid': 'backup-export', onclick: onExport }, '지금 내보내기'), ' ',
     el('button', { type: 'button', 'data-testid': 'backup-close', onclick: onClose }, '닫기'),
   );

@@ -14,7 +14,7 @@ const emptyCells = () => ({ type: '', label: '', subtype: '', description: '', e
 const LINK_TYPE_NAME = { person: '사람', artifact: '산출물', work: '업무' };
 function errorText(error) {
   if (error && error.field === 'links' && error.work_only) return '담당자·산출물·다음 업무 칸은 업무 행에만 씁니다.';
-  if (error && error.field === 'links' && error.ambiguous) return `같은 이름의 ${LINK_TYPE_NAME[error.ambiguous.core_type] || '노드'}이(가) 여럿입니다(${error.ambiguous.label}): 노드 추가로 이으세요.`;
+  if (error && error.field === 'links' && error.ambiguous) return `같은 이름의 ${LINK_TYPE_NAME[error.ambiguous.core_type] || '노드'}이(가) 여럿입니다(${error.ambiguous.label}): 사람·업무·문서 추가로 이으세요.`;
   if (error && error.field === 'links' && error.too_long) return `담당자·산출물·다음 업무 칸의 이름이 너무 깁니다(최대 ${error.too_long}자).`;
   if (error && error.too_many && error.links) return `연결까지 합쳐 한 번에 ${error.links}개 명령까지 저장할 수 있습니다. 행을 나누어 저장하세요.`;
   return messageFor(error, { kind: 'node' });
@@ -132,7 +132,7 @@ export function tableDialog(o) {
     const existing = st.mode === 'edit';
     const attachBox = !existing ? el('label', { class: 'check' },
       el('input', { type: 'checkbox', 'data-testid': 'table-attach', checked: st.attach, onchange: (e) => { st.attach = e.target.checked; } }),
-      ' 업무는 유니버스의 중심 노드(꼭지)에 바로 연결하기') : null;
+      ' 업무는 업무 지도의 중심 노드(꼭지)에 바로 연결하기') : null;
     const pasteBox = !existing ? el('div', { class: 'editor' },
       el('label', { class: 'field' },
         el('span', {}, '스프레드시트에서 복사한 표 붙여 넣기(탭으로 나뉜 글)'),
@@ -150,7 +150,7 @@ export function tableDialog(o) {
         el('h2', { id: 'table-title' }, existing ? '표로 고치기' : '표로 추가'),
         el('button', { type: 'button', 'data-testid': 'table-close', onclick: () => o.dialog.close() }, '닫기')),
       el('p', { class: 'muted small' }, existing
-        ? '지금 유니버스의 노드를 표로 펼쳤습니다. 바꾼 행만 저장되고 수정 이력(바꾸기 전·후)이 남습니다. 유형은 바꿀 수 없고, 속성은 적은 키만 바뀝니다(지우려면 「키=」). 연결은 표로 추가할 때만 넣을 수 있습니다.'
+        ? '지금 업무 지도의 노드를 표로 펼쳤습니다. 바꾼 행만 저장되고 수정 이력(바꾸기 전·후)이 남습니다. 유형은 바꿀 수 없고, 속성은 적은 키만 바뀝니다(지우려면 「키=」). 연결은 표로 추가할 때만 넣을 수 있습니다.'
         : `표의 한 행이 노드 하나입니다(한 번에 ${TABLE_RULES.maxRows}행까지). 저장하면 전부 한 번에 들어가고, 한 행이라도 문제가 있으면 아무것도 저장되지 않습니다.`),
       !existing ? el('p', { class: 'muted small', 'data-testid': 'table-link-help' }, '담당자·산출물·다음 업무 칸에 이름을 적으면 그 노드를 찾아 잇고, 없으면 새로 만듭니다(이름 여러 개는 쉼표나 세미콜론으로, 업무 행에서만).') : null,
       pasteBox,
@@ -168,7 +168,7 @@ export function tableDialog(o) {
         el('div', { class: 'import-head' },
           el('h2', { id: 'table-title' }, '표로 고치기'),
           el('button', { type: 'button', 'data-testid': 'table-close', onclick: () => o.dialog.close() }, '닫기')),
-        el('p', { class: 'notice', 'data-testid': 'table-bundled' }, '이 화면은 여러 유니버스를 묶은 화면입니다. 각 유니버스를 열어 고치세요.'));
+        el('p', { class: 'notice', 'data-testid': 'table-bundled' }, '이 화면은 여러 업무 지도를 묶은 화면입니다. 각 업무 지도를 열어 고치세요.'));
       return;
     }
     o.dialog.replaceChildren(...parts.filter(Boolean));

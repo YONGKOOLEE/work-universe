@@ -28,9 +28,9 @@ export function readEmbedFromDocument(doc) {
 }
 
 export const EMBED_WARNINGS = {
-  json: '이 파일에 담긴 유니버스 데이터가 깨져 있어 읽지 못했습니다. 평소처럼 앱을 엽니다.',
-  shape: '이 파일에 담긴 유니버스 데이터 형식이 맞지 않아 읽지 못했습니다. 평소처럼 앱을 엽니다.',
-  version: '이 파일에 담긴 유니버스 데이터의 형식 버전이 이 앱과 달라 읽지 못했습니다. 평소처럼 앱을 엽니다.',
+  json: '이 파일에 담긴 업무 지도 데이터가 깨져 있어 읽지 못했습니다. 평소처럼 앱을 엽니다.',
+  shape: '이 파일에 담긴 업무 지도 데이터 형식이 맞지 않아 읽지 못했습니다. 평소처럼 앱을 엽니다.',
+  version: '이 파일에 담긴 업무 지도 데이터의 형식 버전이 이 앱과 달라 읽지 못했습니다. 평소처럼 앱을 엽니다.',
 };
 
 // 읽기 전용으로 보기용 저장소: 브라우저 저장소를 쓰지 않고 메모리(Map)에만 둔다
@@ -68,7 +68,7 @@ export function importEmbedToStorage(embed, { samples, now, confirm = (m) => win
   const bad = previews.find((x) => !x.p.ok);
   if (bad) return { ok: false, message: `「${bad.d.universe.name}」${josa(bad.d.universe.name, '은/는')} 형식 검사를 통과하지 못해 가져오지 않았습니다.` };
   const conflicts = previews.filter((x) => x.p.conflict);
-  if (conflicts.length && !confirm(`같은 ID의 유니버스가 이미 있습니다: ${conflicts.map((x) => `「${x.p.conflict.name}」`).join(', ')}. 덮어쓸까요? 덮어쓰면 그 유니버스에 고친 내용은 사라집니다.`)) {
+  if (conflicts.length && !confirm(`같은 ID의 업무 지도가 이미 있습니다: ${conflicts.map((x) => `「${x.p.conflict.name}」`).join(', ')}. 덮어쓸까요? 덮어쓰면 그 업무 지도에 고친 내용은 사라집니다.`)) {
     return { ok: false, cancelled: true, message: '가져오기를 취소했습니다.' };
   }
   for (const { d, p } of previews) {
@@ -81,9 +81,9 @@ export function importEmbedToStorage(embed, { samples, now, confirm = (m) => win
 /** 머리글 아래 안내 줄. canImport가 false면 단추를 막고 이유를 보인다 */
 export function renderEmbedBanner(slot, { name, canImport, reason, onImport }) {
   const children = [
-    el('span', { 'data-testid': 'embed-text' }, `이 파일에 담긴 「${name}」${josa(name, '을/를')} 보고 있습니다(읽기 전용). 고치려면 「내 유니버스로 가져오기」`),
+    el('span', { 'data-testid': 'embed-text' }, `이 파일에 담긴 「${name}」${josa(name, '을/를')} 보고 있습니다(읽기 전용). 고치려면 「내 업무 지도로 가져오기」`),
     ' ',
-    el('button', { type: 'button', class: 'primary', 'data-testid': 'embed-import', disabled: !canImport, onclick: onImport }, '내 유니버스로 가져오기'),
+    el('button', { type: 'button', class: 'primary', 'data-testid': 'embed-import', disabled: !canImport, onclick: onImport }, '내 업무 지도로 가져오기'),
   ];
   if (!canImport && reason) children.push(' ', el('span', { 'data-testid': 'embed-reason' }, reason));
   children.push(el('span', { 'data-testid': 'embed-message', class: 'embed-message', 'aria-live': 'polite' }));

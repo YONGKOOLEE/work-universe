@@ -34,17 +34,17 @@ export function planFolder(files, { myFiles = new Set(), existingIds = new Set()
     const base = { name, ok: false, universe: null, mine, exists: false, current: false };
     const parsed = parseImportText(f && f.text);
     if (!parsed.ok) {
-      const why = { empty: '내용이 비어 있습니다', too_big: '파일이 너무 큽니다', json: 'JSON 형식이 아닙니다(깨졌거나 다른 형식)', shape: '유니버스 문서 형식이 아닙니다' }[parsed.error.reason];
+      const why = { empty: '내용이 비어 있습니다', too_big: '파일이 너무 큽니다', json: 'JSON 형식이 아닙니다(깨졌거나 다른 형식)', shape: '업무 지도 문서 형식이 아닙니다' }[parsed.error.reason];
       return { ...base, reason: why || '읽을 수 없습니다' };
     }
     let checked;
     try {
       checked = validateDocument(parsed.doc);
     } catch {
-      return { ...base, reason: '유니버스 문서 형식이 아닙니다' };
+      return { ...base, reason: '업무 지도 문서 형식이 아닙니다' };
     }
     if (checked.readOnly) return { ...base, reason: `형식 버전이 다릅니다(파일 ${parsed.doc.schema_version ?? '없음'})` };
-    if (!checked.ok) return { ...base, reason: `유니버스 문서로 읽을 수 없습니다(고칠 것 ${checked.errors.length}건)` };
+    if (!checked.ok) return { ...base, reason: `업무 지도 문서로 읽을 수 없습니다(고칠 것 ${checked.errors.length}건)` };
     const u = parsed.doc.universe;
     return {
       ...base,

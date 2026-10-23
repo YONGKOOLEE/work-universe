@@ -200,7 +200,7 @@ export function nodeForm(o) {
 
   // 추가할 때만: 꼭지에 바로 연결(포함). 업무는 기본으로 켠다 — 연결 없이 떠 있는 노드를 줄이기 위해
   const attach = el('input', { type: 'checkbox', 'data-testid': 'node-attach', checked: type.value === 'work' });
-  const attachField = el('label', { class: 'check' }, attach, ' 유니버스의 중심 노드(꼭지)에 바로 연결하기');
+  const attachField = el('label', { class: 'check' }, attach, ' 업무 지도의 중심 노드(꼭지)에 바로 연결하기');
   if (o.mode === 'add') type.addEventListener('change', () => { attach.checked = type.value === 'work'; });
 
   // 추가할 때만(선택): 상대 노드를 골라 노드와 연결을 한 번에 저장한다. 비워 두면 연결 없이 노드만 추가한다
@@ -246,7 +246,7 @@ export function nodeForm(o) {
     o.mode === 'add' ? field('유형', type) : null,
     subtypeField,
     field('이름', label),
-    isRoot ? el('p', { class: 'muted small' }, '꼭지 이름은 유니버스 이름과 같아서 바꿀 수 없습니다.') : null,
+    isRoot ? el('p', { class: 'muted small' }, '꼭지 이름은 업무 지도 이름과 같아서 바꿀 수 없습니다.') : null,
     field('설명', description),
     empField,
     field('속성', attrs.el),

@@ -21,7 +21,7 @@ const FIELD_NAMES = {
   name: '이름',
   level: '단위',
   owner: '작성 주체',
-  child_universe_id: '하위 유니버스',
+  child_universe_id: '하위 업무 지도',
   category: '분류',
   note: '내용',
   id: '노드',
@@ -78,7 +78,7 @@ export function messageFor(err, ctx = {}) {
       if (err.period_overlap) return '이 사람의 담당 기간이 이미 있는 기간과 겹칩니다. 기간이 겹치지 않게 시작·끝 날짜를 확인하세요.';
       if (ctx.kind === 'edge') return '같은 연결이 이미 있습니다(같은 관계, 기간이 겹침). 기존 연결을 확인하세요.';
       if (err.field === 'name') return '같은 이름의 하위 유형이 이미 있습니다.';
-      if (err.field === 'child_universe_id') return '이미 묶여 있는 유니버스입니다.';
+      if (err.field === 'child_universe_id') return '이미 묶여 있는 업무 지도입니다.';
       if (err.already_active) return '이 사람은 이미 이 업무를 담당 중입니다(수행 연결이 있고 끝나지 않음). 담당이 바뀌었다면 먼저 「담당 종료」를 기록하세요.';
       if (err.with_row) return `${err.with_row}행과 같은 유형·이름입니다. 둘 중 하나를 고치세요.`;
       return '같은 노드가 이미 있습니다(같은 유형·이름, 또는 같은 사번). 기존 노드를 확인하세요.';
@@ -108,18 +108,18 @@ export function messageFor(err, ctx = {}) {
     case 'W-SAMPLE-RESET':
       return `내장 샘플「${err.name}」${josa(err.name, '이/가')} 새 판으로 바뀌어, 이 샘플에 직접 고친 내용은 처음 상태로 돌아갔습니다.`;
     case 'E-SCHEMA':
-      if (err.reason === 'version') return `이 유니버스는 다른 버전(${err.found ?? '알 수 없음'})의 형식이라 읽기 전용으로 엽니다. 고칠 수 없습니다.`;
-      if (err.reason === 'in_use' && (err.reasons || []).includes('external')) return '다른 유니버스(상위 묶음)에서 같은 사람·업무로 이어 둔 노드라 바로 지울 수 없습니다. 먼저 숨긴 뒤 「숨긴 노드」 목록에서 「완전히 삭제」하세요(자리표시로 남습니다).';
+      if (err.reason === 'version') return `이 업무 지도는 다른 버전(${err.found ?? '알 수 없음'})의 형식이라 읽기 전용으로 엽니다. 고칠 수 없습니다.`;
+      if (err.reason === 'in_use' && (err.reasons || []).includes('external')) return '다른 업무 지도(상위 묶음)에서 같은 사람·업무로 이어 둔 노드라 바로 지울 수 없습니다. 먼저 숨긴 뒤 「숨긴 노드」 목록에서 「완전히 삭제」하세요(자리표시로 남습니다).';
       if (err.reason === 'in_use') return '연결이나 다른 이력이 있는 노드는 바로 지울 수 없습니다. 먼저 숨긴 뒤 「숨긴 노드」 목록에서 「완전히 삭제」하세요.';
       if (err.reason === 'not_hidden') return '숨기지 않은 노드는 완전히 삭제할 수 없습니다. 먼저 숨기세요.';
       if (err.deleted) return '완전히 삭제한 노드는 되살릴 수 없습니다.';
-      if (err.reason === 'invalid') return `이 유니버스에 형식 오류 ${err.count}건이 있습니다. 보이는 내용이 일부 맞지 않을 수 있습니다.`;
+      if (err.reason === 'invalid') return `이 업무 지도에 형식 오류 ${err.count}건이 있습니다. 보이는 내용이 일부 맞지 않을 수 있습니다.`;
       if (err.field === 'period') return '기간을 확인하세요. 날짜는 YYYY-MM-DD(1900~2200년)이고, 끝은 시작보다 앞일 수 없습니다.';
       if (err.field === 'end_date' && err.future) return '끝 날짜는 오늘보다 뒤일 수 없습니다. 지금 담당 중이면 끝 날짜를 비우고, 끝날 때 「담당 종료」를 기록하세요.';
       if (err.field === 'end_date') return '끝 날짜를 확인하세요(YYYY-MM-DD). 끝 날짜는 담당 시작 날짜보다 앞일 수 없습니다.';
       if (err.mismatch) return '해결 표시의 대상·주제가 닫으려는 메모와 다릅니다. 아무것도 저장하지 않았습니다.';
       if (err.field === 'occurred_at') return '날짜를 확인하세요(YYYY-MM-DD, 1900~2200년의 실제 있는 날짜).';
-      if (err.field === 'label') return '꼭지 이름은 유니버스 이름과 같아서 여기서 바꿀 수 없습니다.';
+      if (err.field === 'label') return '꼭지 이름은 업무 지도 이름과 같아서 여기서 바꿀 수 없습니다.';
       if (err.unknown_type) return `알 수 없는 유형 「${err.unknown_type}」입니다. 업무·사람·산출물·조직·주제 중 하나를 쓰세요.`;
       if (err.cannot_change) return '유형은 바꿀 수 없습니다. 유형을 바꾸려면 새 노드로 추가하세요.';
       if (err.extra_cells) return '머리글보다 칸이 많습니다. 탭이 더 들어갔는지 확인하세요.';

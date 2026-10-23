@@ -23,7 +23,7 @@ test('노드 상세(R-01 ①): 속성과 연결된 노드가 함께 나온다', 
   assert.equal(row('유형'), '업무');
   assert.equal(row('주기'), '매월');
   assert.match(row('설명'), /원천 자료와 대조/);
-  assert.equal(row('출처'), '이 유니버스(월말 정산 점검)');
+  assert.equal(row('출처'), '이 업무 지도(월말 정산 점검)');
   const rels = d.links.map((l) => `${l.direction}:${l.relation}:${l.other.label}`);
   assert.ok(rels.includes('in:포함:월말 정산 점검'));
   assert.ok(rels.includes('in:수행:서하늘'));

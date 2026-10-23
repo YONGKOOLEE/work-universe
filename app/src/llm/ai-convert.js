@@ -340,7 +340,7 @@ export function aiResultToDocument(kept, ctx) {
   if (!kept.owner) notes.push({ code: 'C-NO-OWNER' });
   const descParts = [];
   if (kept.purpose) descParts.push(kept.purpose);
-  descParts.push(`문서에서 ${AI_CONVERT_LABEL}으로 만든 유니버스(원문 인용이 확인된 항목만).`);
+  descParts.push(`문서에서 ${AI_CONVERT_LABEL}으로 만든 업무 지도(원문 인용이 확인된 항목만).`);
   const universe = {
     id: newId(ID_PREFIX.universe, random),
     name,

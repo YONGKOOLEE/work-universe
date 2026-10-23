@@ -91,7 +91,7 @@ export function checkCandidatesInput(works) {
 
 /** 입력이 안 되는 이유를 사람이 읽는 글로 */
 export function candidatesInputMessage(check) {
-  if (check.reason === 'few') return '비교할 업무가 부족합니다(서로 다른 유니버스의 업무가 2개 이상 필요)';
+  if (check.reason === 'few') return '비교할 업무가 부족합니다(서로 다른 업무 지도의 업무가 2개 이상 필요)';
   if (check.reason === 'too_many') return `업무가 너무 많습니다(${check.max.toLocaleString()}개 이하)`;
   return `업무 글이 너무 깁니다(${check.max.toLocaleString()}자 이하)`;
 }
@@ -182,7 +182,7 @@ export function verifyAiCandidates(works, parsed, decided = {}) {
     if (!wa || !wb) { drop('invalid', '보낸 목록에 없는 업무(지어낸 업무)'); continue; }
     const title = titleOf(wa, wb);
     if (ga === gb) { drop('invalid', '같은 업무를 두 번 가리킴', title); continue; }
-    if (wa.universe === wb.universe) { drop('invalid', '같은 유니버스 안의 쌍', title); continue; }
+    if (wa.universe === wb.universe) { drop('invalid', '같은 업무 지도 안의 쌍', title); continue; }
     const why = quoteProblem(raw.quote_a, ga, '앞') || quoteProblem(raw.quote_b, gb, '뒤');
     if (why) { drop('invalid', why, title); continue; }
     const reason = typeof raw.reason === 'string' ? clip(oneLine(raw.reason), REASON_MAX) : '';

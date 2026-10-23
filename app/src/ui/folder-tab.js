@@ -45,7 +45,7 @@ export function folderTab(o, rerender) {
         : el('input', { type: 'checkbox', 'aria-label': `${p.name} 묶기`, 'data-testid': 'folder-check', checked: fs.selected.get(p.name) === true, onchange: (e) => f.setSelected(p.name, e.target.checked) }),
       el('strong', {}, p.name),
       p.mine ? el('span', { class: 'chip', 'data-testid': 'folder-mine' }, '내 파일') : null,
-      p.current && !p.mine ? el('span', { class: 'chip' }, '지금 연 유니버스와 같은 ID') : null,
+      p.current && !p.mine ? el('span', { class: 'chip' }, '지금 연 업무 지도와 같은 ID') : null,
       p.ok
         ? el('span', { class: 'muted small' }, ` ${p.universe.name} (${p.universe.level})${p.exists && !p.mine && !p.current ? ' · 이 브라우저에 같은 ID가 있어 덮어씀' : ''}`)
         : el('span', { class: 'error-text small', 'data-testid': 'folder-bad' }, ` 건너뜀 — ${p.reason}`)));
@@ -71,7 +71,7 @@ export function folderTab(o, rerender) {
     };
     blocks.push(el('div', { class: 'row' },
       el('button', { type: 'button', class: 'primary', 'data-testid': 'folder-bundle', disabled: !peers || o.app.readOnly, onclick: bundle }, '팀 지도로 묶기'),
-      el('span', { class: 'muted small' }, '체크한 동료 파일을 이 브라우저로 가져와 지금 유니버스와 묶습니다.')));
+      el('span', { class: 'muted small' }, '체크한 동료 파일을 이 브라우저로 가져와 지금 업무 지도와 묶습니다.')));
   }
   if (fs.message) blocks.push(el('p', { class: 'error-text', 'data-testid': 'folder-message', role: 'status' }, fs.message));
   wrap.append(...blocks.filter(Boolean));

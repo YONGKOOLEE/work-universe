@@ -1,7 +1,7 @@
 // 시작 화면(R-08, 5.3): 별도 설명 없이 첫 화면에서 탐색을 시작할 수 있게 한다.
 // 구성: 「왜」 덩어리(전·후 한 줄, CR-16 ①) + 「무엇을 하고 싶어요?」 세 갈래 카드(2026-10-18 CR-13 A) + 작은 단추들 + 내 업무 지도.
 // 처음이라면 이 순서로·샘플 카드 7개는 「샘플·처음 순서 더 보기」(기본 접힘) 안에 둔다. 작은 단추들은 강조하지 않는다(세 갈래 카드가 먼저 눈에 띄게, 재검증 N-7).
-// 용어(CR-16 ②): 처음 보이는 글에서는 「업무 지도」라고 쓴다. 단추 이름(「새 유니버스 만들기」 등)과 data-testid는 그대로다.
+// 용어(CR-16 ②): 처음 보이는 글에서는 「업무 지도」라고 쓴다. 단추 이름도 「새 업무 지도」처럼 같은 말을 쓴다(CR-17 A). data-testid는 그대로다.
 
 import { el } from './dom.js';
 
@@ -16,15 +16,13 @@ export const WHY_STEPS = [
 ];
 // FU-11 일부: 팀 카드 설명 아래 작은 글씨 한 줄(여러 사람의 지도를 모으는 길)
 export const TEAM_NOTE = '팀원 각자 만든 지도는 공유 폴더(「폴더 연결」)나 「가져오기」로 모아 묶습니다';
-// 「샘플 더 보기」 안 첫 줄: 단추 이름에 남아 있는 「유니버스」를 처음 만나는 자리에서 한 번 풀어 준다
-export const TERM_NOTE = '(유니버스 = 업무 지도 하나)';
 
 // 검토5 U-2·U-3·U-6·U-8: 순서대로 따라가면 끊기지 않게, 버튼 이름은 화면과 같게, "꼭지"는 여기서 한 번 설명한다
 const STEPS = [
   ['동그라미(노드)를 눌러 보세요 — 하늘색 동그라미(업무)부터', '오른쪽에 속성, 연결된 노드, 지금까지의 이력이 나옵니다(이력은 아래로 내리면 보입니다). 마우스를 올리면 연결된 것만 밝아집니다. 가장 큰 연두색 동그라미는 꼭지, 곧 이 업무 지도의 중심 노드입니다.'],
   ['「인수인계 초안 만들기」를 눌러 보세요', '업무나 꼭지(업무 지도의 중심 노드)를 골랐을 때, 또는 빈 곳을 눌러 선택을 풀었을 때 보입니다(사람·산출물을 고르면 보이지 않습니다). 담당자가 바뀔 때 필요한 내용을 이력에서 모아 초안으로 만들어 줍니다. 문장마다 근거를 확인할 수 있습니다.'],
   ['「인사이트 보기」를 눌러 보세요', '비슷한 일을 해 본 사람(유사 경험자), 같은 설명이 되풀이되는 패턴(반복 비효율), 일이 몰린 사람과 담당자 없는 업무(밀집·공백), 기간별 변화(흐름 변화)를 근거와 함께 보여 줍니다. 노드를 고른 뒤에도, 빈 곳을 눌러 선택을 푼 뒤에도 보입니다.'],
-  ['「새 유니버스 만들기」로 업무 하나부터 만들어 보세요', '첫 업무 이름·담당자·산출물을 적으면 작은 지도가 바로 생기고, 「노드 추가」로 하나씩 늘려 내 업무를 지도처럼 만들 수 있습니다. 업무정의서가 있으면 「문서·파일 가져오기」(업무 지도를 연 뒤에는 머리글의 「가져오기·내보내기」)에 붙여 넣어 초벌을 만들 수도 있습니다.'],
+  ['「새 업무 지도 만들기」로 업무 하나부터 만들어 보세요', '첫 업무 이름·담당자·산출물을 적으면 작은 지도가 바로 생기고, 「사람·업무·문서 추가」로 하나씩 늘려 내 업무를 지도처럼 만들 수 있습니다. 업무정의서가 있으면 「문서·파일 가져오기」(업무 지도를 연 뒤에는 머리글의 「가져오기·내보내기」)에 붙여 넣어 초벌을 만들 수도 있습니다.'],
 ];
 
 /**
@@ -72,7 +70,7 @@ export function startScreen(o) {
       el('p', { class: 'muted small' }, '아래 단추는 따라 하기 없이 바로 시작합니다.'),
       el('div', { class: 'start-small' },
         recommended ? el('button', { type: 'button', class: '', 'data-testid': 'start-primary', onclick: () => o.onOpen(recommended.id) }, `샘플 바로 열기: ${recommended.name}`) : null,
-        el('button', { type: 'button', 'data-testid': 'start-create', disabled: o.readOnly, onclick: o.onCreate }, '새 유니버스 만들기'),
+        el('button', { type: 'button', 'data-testid': 'start-create', disabled: o.readOnly, onclick: o.onCreate }, '새 업무 지도 만들기'),
         o.onImport ? el('button', { type: 'button', 'data-testid': 'start-import', disabled: o.readOnly, onclick: o.onImport }, '문서·파일 가져오기') : null,
       ),
       el('p', { class: 'muted small' }, '모든 이름과 데이터는 가상입니다. 설치나 로그인은 필요 없습니다.'),
@@ -81,10 +79,9 @@ export function startScreen(o) {
     el('section', {}, el('h2', {}, '내 업무 지도'),
       mine.length
         ? el('ul', { class: 'cards', 'data-testid': 'start-mine' }, ...mine.map(card))
-        : el('p', { class: 'muted', 'data-testid': 'start-mine-empty' }, '아직 없습니다. 「새 유니버스 만들기」로 시작하세요.')),
+        : el('p', { class: 'muted', 'data-testid': 'start-mine-empty' }, '아직 없습니다. 「새 업무 지도 만들기」로 시작하세요.')),
     // 접어 둔다(기본 접힘): 처음 보는 사람에게 목록 열한 개가 한꺼번에 보이지 않게(CR-13 A). 기능은 그대로 펼치면 있다
     el('details', { class: 'start-more', 'data-testid': 'start-more' }, el('summary', {}, '샘플·처음 순서 더 보기'),
-      el('p', { class: 'muted small', 'data-testid': 'start-term-note' }, TERM_NOTE),
       el('section', {}, el('h2', {}, '처음이라면 이 순서로'), el('ol', { class: 'steps-list', 'data-testid': 'start-steps' },
       ...STEPS.map(([t, d]) => el('li', {}, el('strong', {}, t), el('span', { class: 'muted' }, d))))),
       el('section', {}, el('h2', {}, '샘플 업무 지도'), el('ul', { class: 'cards', 'data-testid': 'start-samples' }, ...samples.map(card))),

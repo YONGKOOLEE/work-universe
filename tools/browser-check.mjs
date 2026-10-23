@@ -394,7 +394,7 @@ async function checkBrowser(browser, port) {
   await evaluate(s.cdp, "(() => { const t = document.querySelector('#add-slot [data-testid=node-type]'); t.value = 'person'; t.dispatchEvent(new Event('change')); })()");
   const hPerson = await empH();
   await evaluate(s.cdp, "(() => { const t = document.querySelector('#add-slot [data-testid=node-type]'); t.value = 'work'; t.dispatchEvent(new Event('change')); })()");
-  check('U-1: 노드 추가 양식 — 업무 유형이면 사번 칸 높이 0, 사람이면 보임', hWork === 0 && hPerson > 0, hWork + '/' + hPerson);
+  check('U-1: 사람·업무·문서 추가 양식 — 업무 유형이면 사번 칸 높이 0, 사람이면 보임', hWork === 0 && hPerson > 0, hWork + '/' + hPerson);
   check('U-14: 양식 칸 이름이 「이름」(「라벨」 아님)', (await text(s.cdp, '#add-slot')).includes('이름') && !(await text(s.cdp, '#add-slot')).includes('라벨'));
   const empty = await submitAdd(s.cdp, 'work', '   ');
   check('오류: 이름 누락 → E-REQUIRED, 받침에 맞는 조사(「이름을」)', empty.code === 'E-REQUIRED' && empty.text.includes('이름을 입력하세요'), empty.text);
@@ -555,7 +555,7 @@ async function checkBrowser(browser, port) {
   await evaluate(s.cdp, "location.hash = 'U-T1'; location.reload()").catch(() => {});
   await sleep(500);
   const teamReady = await waitFor(s.cdp, "window.__wu && window.__wu.doc.universe.id === 'U-T1' && window.__wu.cy.nodes().length > 0", 8000);
-  check('묶은 유니버스(팀)에서는 「노드 추가」를 강제로 펼치지 않는다(최종 검토)', await evaluate(s.cdp, "(() => { const d = document.querySelector('details.add'); d.open = false; window.__wu.select(null); return d.open === false; })()"));
+  check('묶은 유니버스(팀)에서는 「사람·업무·문서 추가」를 강제로 펼치지 않는다(최종 검토)', await evaluate(s.cdp, "(() => { const d = document.querySelector('details.add'); d.open = false; window.__wu.select(null); return d.open === false; })()"));
   check('팀 유니버스: 접힌 상태로 19개 노드(꼭지·담당자·최상위 업무·공유 주제)', teamReady && (await nodeCount(s.cdp)) === 19);
   if (teamReady) {
   await shot(s.cdp, `${browser.name}-4-team`);
@@ -577,7 +577,7 @@ async function checkBrowser(browser, port) {
   // 위로 드러내기: 접힌 상태에서 노드의 상세에 체크 상자가 보인다
   await evaluate(s.cdp, "window.__wu.select('U-K1/N-101')");
   check('노드 상세에 "위층에 드러내기"와 기본 규칙 이유', (await text(s.cdp, '[data-testid=layer]')).includes('최상위 업무'));
-  // 유니버스 묶기: 먼저 하나만 고르면 거부된다
+  // 업무 지도 묶기: 먼저 하나만 고르면 거부된다
   await evaluate(s.cdp, `(() => {
     document.getElementById('group-open').click();
     document.getElementById('group-name').value = '가상 점검팀';
@@ -598,7 +598,7 @@ async function checkBrowser(browser, port) {
   await sleep(400);
   await waitFor(s.cdp, "window.__wu && window.__wu.doc.universe.name === '가상 점검팀'");
   // 새로 묶은 팀에는 주제 동일성 연결이 없어 "대사" 주제가 공유되지 않으므로 샘플 팀보다 1개 적다(18)
-  check('유니버스 묶기 → 새 팀 유니버스가 열리고 두 업무가 접혀 보임(18개)', (await evaluate(s.cdp, "window.__wu.doc.universe.name")) === '가상 점검팀' && (await nodeCount(s.cdp)) === 18);
+  check('업무 지도 묶기 → 새 팀 유니버스가 열리고 두 업무가 접혀 보임(18개)', (await evaluate(s.cdp, "window.__wu.doc.universe.name")) === '가상 점검팀' && (await nodeCount(s.cdp)) === 18);
   // 묶음에서 빼기(확인 창은 자동 수락)
   await evaluate(s.cdp, "window.confirm = () => true; window.__wu.select('U-K1/N-000')");
   await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=layer] button')].find((b) => b.textContent === '묶음에서 빼기').click()");
@@ -630,7 +630,7 @@ async function checkBrowser(browser, port) {
     check('R-08 시작 화면의 제목·설명·추천 버튼이 실제로 보임', await evaluate(s.cdp, "['.start-hero h1', '[data-testid=why-block]', '[data-testid=start-primary]', '[data-testid=start-create]'].every((q) => { const r = document.querySelector(q).getBoundingClientRect(); return r.width > 0 && r.height > 0; })"));
     check('R-08 시작 화면에 이게 무엇인지(CR-16 「왜」 덩어리: 전·후 한 줄) 설명과 가상 데이터 안내', startText.includes('담당자가 바뀌어도 끊기지 않는 업무 지도') && startText.includes('머릿속에서만 넘어가던 업무') && startText.includes('근거 달린 인수인계 초안') && startText.includes('모든 이름과 데이터는 가상'));
     check('R-08 "처음이라면 이 순서로" 4단계 안내', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=start-steps] li').length")) === 4);
-    check(`샘플 카드 ${SAMPLES.length}개(내장 샘플 전부)와 추천(월말 정산) 표시, 내 유니버스 안내`, (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=start-samples] .card').length")) === SAMPLES.length && (await evaluate(s.cdp, "document.querySelector('[data-testid=card-U-A1]').classList.contains('recommended')")) && !!(await evaluate(s.cdp, "!!document.querySelector('[data-testid=start-mine], [data-testid=start-mine-empty]')")));
+    check(`샘플 카드 ${SAMPLES.length}개(내장 샘플 전부)와 추천(월말 정산) 표시, 내 업무 지도 안내`, (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=start-samples] .card').length")) === SAMPLES.length && (await evaluate(s.cdp, "document.querySelector('[data-testid=card-U-A1]').classList.contains('recommended')")) && !!(await evaluate(s.cdp, "!!document.querySelector('[data-testid=start-mine], [data-testid=start-mine-empty]')")));
     // ── CR-16 ① 「왜」 덩어리(2026-10-23): 크기 있음·칸 3개, 1366×768에서 세 갈래 카드 첫 장이 첫 화면(768px) 안 ──
     const whyInfo = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=why-block]'); if (!b) return null; const r = b.getBoundingClientRect(); const steps = [...document.querySelectorAll('[data-testid=why-step]')].map((e) => { const q = e.getBoundingClientRect(); return { w: q.width, h: q.height, left: q.left, top: q.top }; }); return { w: r.width, h: r.height, n: steps.length, steps, text: b.textContent }; })()");
     check('CR-16 ① 시작 화면 「왜」 덩어리가 그려지고(크기 있음) 칸(why-step)이 3개이며 각 칸도 크기가 있음', !!whyInfo && whyInfo.w > 0 && whyInfo.h > 0 && whyInfo.n === 3 && whyInfo.steps.every((q) => q.w > 0 && q.h > 0), JSON.stringify(whyInfo));
@@ -659,7 +659,7 @@ async function checkBrowser(browser, port) {
     const cardInfo = await evaluate(s.cdp, "(() => { const ids = ['start-way-handover', 'start-way-mine', 'start-way-team']; return ids.map((id) => { const e = document.querySelector('[data-testid=' + id + ']'); if (!e) return null; const r = e.getBoundingClientRect(); return { w: r.width > 0 && r.height > 0, text: e.textContent }; }); })()");
     check('CR-13 A 시작 화면에 「무엇을 하고 싶어요?」 세 갈래 카드(인수인계를 앞두고 있어요·내 업무를 정리해 두고 싶어요·팀 업무를 한눈에 보고 싶어요)가 실제로 보임(크기 있음)', cardInfo.every((c) => c && c.w) && cardInfo[0].text.includes('인수인계를 앞두고 있어요') && cardInfo[0].text.includes('넘기는 쪽도 받는 쪽도 — 예시 업무로 인수인계 초안을 봅니다(3분)') && cardInfo[1].text.includes('내 업무를 정리해 두고 싶어요') && cardInfo[1].text.includes('업무 하나부터 작은 지도를 만듭니다') && cardInfo[2].text.includes('팀 업무를 한눈에 보고 싶어요') && cardInfo[2].text.includes('여러 업무를 묶은 팀·부서 지도를 봅니다'), JSON.stringify(cardInfo));
     const smallInfo = await evaluate(s.cdp, "({ more: document.querySelector('[data-testid=start-more]').open, stepsVisible: document.querySelector('[data-testid=start-steps]').checkVisibility(), samplesVisible: document.querySelector('[data-testid=start-samples]').checkVisibility(), primary: document.querySelector('[data-testid=start-primary]').textContent, mine: !!document.querySelector('[data-testid=start-mine], [data-testid=start-mine-empty]') })");
-    check('CR-13 A 「처음이라면 이 순서로」와 샘플 카드 7개는 「샘플·처음 순서 더 보기」 안에 기본 접힘, 「샘플 바로 열기: 월말 정산 점검」·내 유니버스는 그대로 보임', smallInfo.more === false && !smallInfo.stepsVisible && !smallInfo.samplesVisible && smallInfo.primary === '샘플 바로 열기: 월말 정산 점검' && smallInfo.mine, JSON.stringify(smallInfo));
+    check('CR-13 A 「처음이라면 이 순서로」와 샘플 카드 7개는 「샘플·처음 순서 더 보기」 안에 기본 접힘, 「샘플 바로 열기: 월말 정산 점검」·내 업무 지도는 그대로 보임', smallInfo.more === false && !smallInfo.stepsVisible && !smallInfo.samplesVisible && smallInfo.primary === '샘플 바로 열기: 월말 정산 점검' && smallInfo.mine, JSON.stringify(smallInfo));
     // 쉬운 말: 세 갈래 카드 문구에 유니버스·노드·꼭지가 없다
     check('CR-13 A 세 갈래 카드에는 어려운 낱말(유니버스·노드·꼭지)을 쓰지 않음', cardInfo.every((c) => !/유니버스|노드|꼭지/.test(c.text)));
     await evaluate(s.cdp, "(() => { const v = JSON.parse(localStorage.getItem('wu:v1:settings') || '{}'); delete v.moreTools; localStorage.setItem('wu:v1:settings', JSON.stringify(v)); })()"); // 끝 카드의 「도구 더 보기」 안내를 보려고 접힘으로(이 아래에서 다시 펼침)
@@ -667,12 +667,12 @@ async function checkBrowser(browser, port) {
     const emph = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=start-primary]'); const w = document.querySelector('[data-testid=start-way-handover]'); const cs = getComputedStyle(b); const wc = getComputedStyle(w); return { primaryClass: b.classList.contains('primary'), btnBg: cs.backgroundColor, wayBorder: wc.borderTopColor, wayBorderW: wc.borderTopWidth, wayBg: wc.backgroundColor, summary: document.querySelector('[data-testid=start-more] > summary').textContent, accent: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() }; })()");
     check('N-7 시작 화면: 작은 단추 「샘플 바로 열기」는 primary(초록 채움)가 아니고, 세 갈래 카드는 accent 테두리(2px)·배경이 있으며, 접힘 제목이 「샘플·처음 순서 더 보기」', !emph.primaryClass && emph.btnBg !== 'rgb(166, 216, 107)' && emph.wayBorder === 'rgb(166, 216, 107)' && emph.wayBorderW === '2px' && emph.wayBg !== 'rgba(0, 0, 0, 0)' && emph.summary === '샘플·처음 순서 더 보기', JSON.stringify(emph));
     await shot(s.cdp, `${browser.name}-34a-start-emphasis`);
-    // 재검증 N-3: 「새 유니버스 만들기」 대화상자는 두 모양. 작은 단추 = 예전 모양, 「내 업무를 정리해 두고 싶어요」 = 「내 업무 지도 만들기」
+    // 재검증 N-3: 「새 업무 지도 만들기」 대화상자는 두 모양. 작은 단추 = 예전 모양, 「내 업무를 정리해 두고 싶어요」 = 「내 업무 지도 만들기」
     const dlgInfo = () => evaluate(s.cdp, `(() => { const d = document.getElementById('create-dialog'); const v = (id) => { const e = document.getElementById(id); const r = e.getBoundingClientRect(); return e.checkVisibility() && r.width > 0 && r.height > 0; }; const pos = (a, b) => !!(document.getElementById(a).compareDocumentPosition(document.getElementById(b)) & Node.DOCUMENT_POSITION_FOLLOWING); const info = document.getElementById('create-info'); return { open: d.open, title: document.getElementById('create-title').textContent, work: v('create-start-work'), name: v('create-name'), level: v('create-level'), owner: v('create-owner'), infoHidden: info.hidden, infoOpen: info.open, summary: info.querySelector('summary').textContent, starterBeforeMeta: pos('create-start-work', 'create-name'), metaInInfo: info.contains(document.getElementById('create-name')), focus: document.activeElement && document.activeElement.id }; })()`);
     await evaluate(s.cdp, "document.querySelector('[data-testid=start-create]').click()");
     await sleep(250);
     const dNormal = await dlgInfo();
-    check('N-3 기존 「새 유니버스 만들기」(시작 화면 작은 단추)는 예전 모양: 제목, 이름·단위·작성 주체가 보이고 첫 업무 칸 위에 있으며 「지도 정보」 접힘 상자 없음', dNormal.open && dNormal.title === '새 유니버스 만들기' && dNormal.name && dNormal.level && dNormal.owner && dNormal.work && !dNormal.starterBeforeMeta && dNormal.infoHidden && !dNormal.metaInInfo, JSON.stringify(dNormal));
+    check('N-3 기존 「새 업무 지도 만들기」(시작 화면 작은 단추)는 예전 모양: 제목, 이름·단위·작성 주체가 보이고 첫 업무 칸 위에 있으며 「지도 정보」 접힘 상자 없음', dNormal.open && dNormal.title === '새 업무 지도 만들기' && dNormal.name && dNormal.level && dNormal.owner && dNormal.work && !dNormal.starterBeforeMeta && dNormal.infoHidden && !dNormal.metaInInfo, JSON.stringify(dNormal));
     await evaluate(s.cdp, "document.getElementById('create-cancel').click()");
     await sleep(150);
     await evaluate(s.cdp, "document.querySelector('[data-testid=start-way-mine]').click()");
@@ -690,8 +690,8 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, "document.querySelector('[data-testid=start-create]').click()");
     await sleep(250);
     const dNormal2 = await dlgInfo();
-    check('N-3 내 업무 모드를 닫고 다시 「새 유니버스 만들기」를 열면 예전 모양으로 돌아옴(입력도 비어 있음)', dNormal2.title === '새 유니버스 만들기' && dNormal2.name && !dNormal2.starterBeforeMeta && dNormal2.infoHidden && (await evaluate(s.cdp, "document.getElementById('create-start-person').value")) === '', JSON.stringify(dNormal2));
-    // 어느 모드든 오류가 나면 해당 칸에 초점: 새 유니버스(예전 모양)에서 이름이 비면 이름 칸
+    check('N-3 내 업무 모드를 닫고 다시 「새 업무 지도 만들기」를 열면 예전 모양으로 돌아옴(입력도 비어 있음)', dNormal2.title === '새 업무 지도 만들기' && dNormal2.name && !dNormal2.starterBeforeMeta && dNormal2.infoHidden && (await evaluate(s.cdp, "document.getElementById('create-start-person').value")) === '', JSON.stringify(dNormal2));
+    // 어느 모드든 오류가 나면 해당 칸에 초점: 새 업무 지도(예전 모양)에서 이름이 비면 이름 칸
     await evaluate(s.cdp, "document.querySelector('#create-form button[type=submit]').click()");
     await sleep(200);
     check('N-3 기존 모양에서도 오류가 나면 해당 칸(이름)에 초점', (await evaluate(s.cdp, "document.activeElement && document.activeElement.id")) === 'create-name' && (await evaluate(s.cdp, "document.getElementById('create-message').dataset.code")) === 'E-REQUIRED');
@@ -831,7 +831,7 @@ async function checkBrowser(browser, port) {
     await shot(s.cdp, `${browser.name}-36e-tour-end`);
     await evaluate(s.cdp, "document.querySelector('[data-testid=tour-make]').click()");
     await sleep(300);
-    check('CR-13 A 끝 카드 「내 업무 지도 만들기」 → 새 유니버스 대화상자가 열리고 따라 하기 카드는 닫힘', (await evaluate(s.cdp, "document.getElementById('create-dialog').open")) && (await tourInfo()).mode === 'off' && (await evaluate(s.cdp, "document.getElementById('tour-slot').hidden")));
+    check('CR-13 A 끝 카드 「내 업무 지도 만들기」 → 새 업무 지도 대화상자가 열리고 따라 하기 카드는 닫힘', (await evaluate(s.cdp, "document.getElementById('create-dialog').open")) && (await tourInfo()).mode === 'off' && (await evaluate(s.cdp, "document.getElementById('tour-slot').hidden")));
     const dEnd = await dlgInfo();
     check('N-3 끝 카드 「내 업무 지도 만들기」로 열면 「내 업무 지도 만들기」 모양(첫 업무 칸 맨 위, 지도 정보 접힘, 초점은 업무 이름)', dEnd.title === '내 업무 지도 만들기' && dEnd.work && !dEnd.name && dEnd.metaInInfo && !dEnd.infoOpen && dEnd.focus === 'create-start-work', JSON.stringify(dEnd));
     await shot(s.cdp, `${browser.name}-36f-mine-dialog-from-end`);
@@ -848,7 +848,7 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, "document.getElementById('create-open').click()");
     await sleep(250);
     const dHead = await dlgInfo();
-    check('N-3 머리글 「새 유니버스」로 열면 예전 모양(제목·이름 칸 보임·지도 정보 상자 없음)', dHead.title === '새 유니버스 만들기' && dHead.name && dHead.work && !dHead.starterBeforeMeta && dHead.infoHidden, JSON.stringify(dHead));
+    check('N-3 머리글 「새 업무 지도」로 열면 예전 모양(제목·이름 칸 보임·지도 정보 상자 없음)', dHead.title === '새 업무 지도 만들기' && dHead.name && dHead.work && !dHead.starterBeforeMeta && dHead.infoHidden, JSON.stringify(dHead));
     await evaluate(s.cdp, "document.getElementById('create-cancel').click()");
     await sleep(150);
     // 「?」로 다시 시작(U-A1이면 handover), 「건너뛰기」로 닫기, 대상 표시도 사라짐
@@ -864,7 +864,7 @@ async function checkBrowser(browser, port) {
     await sleep(250);
     const hb = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=help-box]'); if (!b) return null; const r = b.getBoundingClientRect(); const q = (id) => document.querySelector('[data-testid=' + id + ']'); const t = q('help-tour'); return { open: b.open, w: r.width, h: r.height, terms: [...document.querySelectorAll('[data-testid=help-terms] dt')].map((e) => e.textContent), gen: [...document.querySelectorAll('[data-testid=help-gen] dt')].map((e) => e.textContent), intro: (q('help-intro') || {}).textContent || '', tour: t ? t.textContent : null, tourSize: t ? t.getBoundingClientRect().width > 0 : false, close: (q('help-close') || {}).textContent || '', text: b.textContent, inView: r.top >= 0 && r.bottom <= window.innerHeight }; })()");
     check('처음 사용 W2(FU-9) 「?」 → 도움말 상자가 열리고 크기가 있으며 화면 안에 들어옴(따라 하기는 아직 시작되지 않음)', !!hb && hb.open === true && hb.w > 0 && hb.h > 0 && hb.inView && (await tourInfo()).mode === 'off', JSON.stringify(hb && { ...hb, text: '' }));
-    check('처음 사용 W2(FU-9) 도움말 한 줄 설명과 용어 4개(업무 지도(유니버스)·노드·꼭지·근거 칩)·생성 방식 3개(사전 생성·규칙 기반·Claude API)', !!hb && hb.intro.includes('누가 언제 무엇을 했는지 기록해 두고') && hb.intro.includes('「혼자만 아는 업무」 경고') && JSON.stringify(hb.terms) === JSON.stringify(['업무 지도(유니버스)', '노드', '꼭지', '근거 칩']) && JSON.stringify(hb.gen) === JSON.stringify(['사전 생성', '규칙 기반', 'Claude API']), JSON.stringify(hb && { terms: hb.terms, gen: hb.gen }));
+    check('처음 사용 W2(FU-9) 도움말 한 줄 설명과 용어 4개(업무 지도·노드·꼭지·근거 칩)·생성 방식 3개(사전 생성·규칙 기반·Claude API)', !!hb && hb.intro.includes('누가 언제 무엇을 했는지 기록해 두고') && hb.intro.includes('「혼자만 아는 업무」 경고') && JSON.stringify(hb.terms) === JSON.stringify(['업무 지도', '노드', '꼭지', '근거 칩']) && JSON.stringify(hb.gen) === JSON.stringify(['사전 생성', '규칙 기반', 'Claude API']), JSON.stringify(hb && { terms: hb.terms, gen: hb.gen }));
     check('처음 사용 W2(FU-9) 도움말 상자에 「따라 하기 다시 보기」(크기 있음)와 「닫기」 단추가 있고 "null" 글자가 없음', !!hb && hb.tour === '따라 하기 다시 보기' && hb.tourSize && hb.close === '닫기' && !hb.text.includes('null'));
     await shot(s.cdp, `${browser.name}-0c-help-box`);
     await s.cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
@@ -1008,7 +1008,7 @@ async function checkBrowser(browser, port) {
   await sleep(500);
   await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1'", 8000);
 
-  // ── T-09 새 유니버스(R-12)와 하위 유형 ──
+  // ── T-09 새 업무 지도(R-12)와 하위 유형 ──
   await evaluate(s.cdp, "window.confirm = () => true; window.__wu.select(null)");
   const submitCreate = (name, level, owner) => evaluate(s.cdp, `(() => {
     document.getElementById('create-open').click();
@@ -1024,10 +1024,10 @@ async function checkBrowser(browser, port) {
   await submitCreate('연말 교육 운영', '업무', '가상 교육팀');
   await sleep(500);
   const created = await waitFor(s.cdp, "window.__wu && window.__wu.doc.universe.name === '연말 교육 운영' && window.__wu.cy.nodes().length === 1", 8000);
-  check('R-12 ① 새 유니버스를 만들면 꼭지만 있는 빈 유니버스가 열림', created);
+  check('R-12 ① 새 업무 지도를 만들면 꼭지만 있는 빈 유니버스가 열림', created);
   if (created) {
     const addR = await submitAdd(s.cdp, 'work', '교육 안내');
-    check('R-12 ① 새 유니버스에 노드를 추가할 수 있음(업무는 꼭지에 바로 연결)', addR.code === 'OK' && (await nodeCount(s.cdp)) === 2 && (await edgeCount(s.cdp)) === 1, addR.text);
+    check('R-12 ① 새 업무 지도에 노드를 추가할 수 있음(업무는 꼭지에 바로 연결)', addR.code === 'OK' && (await nodeCount(s.cdp)) === 2 && (await edgeCount(s.cdp)) === 1, addR.text);
     await evaluate(s.cdp, `(() => {
       const slot = document.getElementById('add-slot');
       const t = slot.querySelector('[data-testid=node-type]'); t.value = 'artifact'; t.dispatchEvent(new Event('change'));
@@ -1049,18 +1049,18 @@ async function checkBrowser(browser, port) {
     await sleep(200);
     check('오류: 새 하위 유형 이름을 비우면 거부', (await evaluate(s.cdp, "((document.querySelector('#add-slot [data-testid=form-message]') || {}).dataset || {}).code")) === 'E-REQUIRED' && !(await evaluate(s.cdp, "window.__wu.doc.nodes.some((n) => n.label === '11월 회의록')")));
     await shot(s.cdp, `${browser.name}-8-new-universe`);
-    // 오류(R-05 ②): 인수인계·메모 기록이 없는 새 유니버스의 반복 비효율 → 결론 없이 "데이터 부족"과 마지막 입력 시점
+    // 오류(R-05 ②): 인수인계·메모 기록이 없는 새 업무 지도의 반복 비효율 → 결론 없이 "데이터 부족"과 마지막 입력 시점
     await evaluate(s.cdp, "window.__wu.select(null)");
     await clickTestId(s.cdp, 'btn-insight-universe');
     await sleep(200);
     await clickTestId(s.cdp, 'tab-repeat'); // FU-5: 인사이트는 「인수인계 위험」 탭부터 열리므로 반복 비효율은 탭을 눌러 본다
     await sleep(150);
     const insuf = await text(s.cdp, '[data-testid=repeat-insufficient]');
-    check('오류(R-05 ②): 기록이 없는 새 유니버스 → 반복 비효율 "데이터 부족"과 "입력된 업무 이력 없음"(생성 이력은 입력이 아님)', insuf.includes('데이터 부족') && insuf.includes('입력된 업무 이력 없음') && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=repeat-patterns]')")), insuf);
+    check('오류(R-05 ②): 기록이 없는 새 업무 지도 → 반복 비효율 "데이터 부족"과 "입력된 업무 이력 없음"(생성 이력은 입력이 아님)', insuf.includes('데이터 부족') && insuf.includes('입력된 업무 이력 없음') && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=repeat-patterns]')")), insuf);
     await clickTestId(s.cdp, 'tab-density');
     await sleep(150);
     const dinsuf = await text(s.cdp, '[data-testid=density-insufficient]');
-    check('오류(R-05 ②): 담당 연결이 없는 새 유니버스 → 밀집·공백도 "데이터 부족"만(표·목록 없음)', dinsuf.includes('데이터 부족') && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=density-groups]')")), dinsuf);
+    check('오류(R-05 ②): 담당 연결이 없는 새 업무 지도 → 밀집·공백도 "데이터 부족"만(표·목록 없음)', dinsuf.includes('데이터 부족') && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=density-groups]')")), dinsuf);
   }
   const countBefore = await evaluate(s.cdp, "document.getElementById('universe-picker').options.length");
   // 페이지를 다시 열면 confirm이 원래대로 돌아가 자동화가 멈추므로 다시 자동 수락으로 바꾼다
@@ -1143,7 +1143,7 @@ async function checkBrowser(browser, port) {
   await evaluate(s.cdp, 'window.__wu.select(null)');
   await sleep(150);
   const splitText = await text(s.cdp, '[data-testid=split-hint]');
-  check('나눠 보세요: 카드승인(꼭지 포함 38개)에는 안내가 보이고 크기가 있으며 「유니버스 묶기」를 권함', splitText.includes('38개') && splitText.includes('유니버스 묶기') && await evaluate(s.cdp, "(() => { const r = document.querySelector('[data-testid=split-hint]').getBoundingClientRect(); return r.width > 0 && r.height > 0; })()"));
+  check('나눠 보세요: 카드승인(꼭지 포함 38개)에는 안내가 보이고 크기가 있으며 「업무 지도 묶기」를 권함', splitText.includes('38개') && splitText.includes('업무 지도 묶기') && await evaluate(s.cdp, "(() => { const r = document.querySelector('[data-testid=split-hint]').getBoundingClientRect(); return r.width > 0 && r.height > 0; })()"));
   await shot(s.cdp, `${browser.name}-8c-split-hint`);
   await evaluate(s.cdp, "location.hash = 'U-A1'; location.reload()").catch(() => {});
   await sleep(500);
@@ -1230,7 +1230,7 @@ async function checkBrowser(browser, port) {
   if (await goBare(s.cdp)) {
     await evaluate(s.cdp, "document.querySelector('[data-testid=start-import]').click()");
     await sleep(200);
-    check('시작 화면의 「문서·파일 가져오기」로도 가져오기 창이 열림(내보내기 탭은 없음), 가져온 유니버스는 「내 유니버스」에', (await evaluate(s.cdp, "document.getElementById('import-dialog').open && !document.querySelector('[data-testid=import-tab-export]')")) && (await text(s.cdp, '[data-testid=start-mine]')).includes('대형가맹점 A 카드승인'));
+    check('시작 화면의 「문서·파일 가져오기」로도 가져오기 창이 열림(내보내기 탭은 없음), 가져온 유니버스는 「내 업무 지도」에', (await evaluate(s.cdp, "document.getElementById('import-dialog').open && !document.querySelector('[data-testid=import-tab-export]')")) && (await text(s.cdp, '[data-testid=start-mine]')).includes('대형가맹점 A 카드승인'));
     await evaluate(s.cdp, "document.getElementById('import-dialog').close()");
   } else {
     check('시작 화면의 「문서·파일 가져오기」', false, '시작 화면이 열리지 않음');
@@ -1813,7 +1813,7 @@ async function checkBrowser(browser, port) {
     await sleep(300);
     const lonelyGid = await evaluate(s.cdp, `(window.__wu.view.nodes.find((n) => n.label === ${JSON.stringify(lonely)}) || {}).gid || ''`);
     const outAfter = await evaluate(s.cdp, "window.__wu.cy.nodes('.filtered-out').length");
-    check('R-17 ③ 거르기 중 저장(노드 추가) → 새 주제 노드는 거르기에서 빠지지만(표시 유지), 고른 노드라 또렷하게 보임(R-02 ①)', addR.code === 'OK' && !!lonelyGid && outAfter === outBefore + 1 && (await text(s.cdp, '[data-testid=filter-on]')).includes('거르기 중') && Number(await evaluate(s.cdp, `window.__wu.cy.getElementById(${JSON.stringify(lonelyGid)}).pstyle('opacity').value`)) === 1, `${outBefore} → ${outAfter}`);
+    check('R-17 ③ 거르기 중 저장(사람·업무·문서 추가) → 새 주제 노드는 거르기에서 빠지지만(표시 유지), 고른 노드라 또렷하게 보임(R-02 ①)', addR.code === 'OK' && !!lonelyGid && outAfter === outBefore + 1 && (await text(s.cdp, '[data-testid=filter-on]')).includes('거르기 중') && Number(await evaluate(s.cdp, `window.__wu.cy.getElementById(${JSON.stringify(lonelyGid)}).pstyle('opacity').value`)) === 1, `${outBefore} → ${outAfter}`);
     // 검토 A·B 중간-1: 거르기(업무) 중 찾기로 업무가 아닌 노드를 고르면 그 노드는 또렷하고 이름이 보인다
     await typeFind('정산 담당');
     await key('Enter', 'Enter', 13);
@@ -1834,7 +1834,7 @@ async function checkBrowser(browser, port) {
     await typeFind('T18 외톨이');
     check('R-17 ② 숨긴 노드는 찾기에 나오지 않음', !!(await evaluate(s.cdp, "!!document.querySelector('[data-testid=find-none]')")));
     await key('Escape', 'Escape', 27);
-    // 검토 A·B 중간-2: 주변만 보기 중 노드 추가(주변 밖) → 전체로 돌아가 새 노드가 그래프에 보이고 선택됨
+    // 검토 A·B 중간-2: 주변만 보기 중 사람·업무·문서 추가(주변 밖) → 전체로 돌아가 새 노드가 그래프에 보이고 선택됨
     await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
     await sleep(150);
     await clickTestId(s.cdp, 'btn-nbhd');
@@ -1844,7 +1844,7 @@ async function checkBrowser(browser, port) {
     const addNb = await submitAdd(s.cdp, 'work', 'T18 주변 밖 새 업무');
     await sleep(400);
     const nbAdd = await evaluate(s.cdp, "(() => { const g = window.__wu.selected; return { nbhd: window.__wu.nbhd, inGraph: !!g && !window.__wu.cy.getElementById(g).empty(), label: (window.__wu.view.getNode(g || '') || {}).label }; })()");
-    check('R-17 ④·R-02 ① 주변만 보기 중 노드 추가 → 전체로 돌아가 새 노드가 그래프에 보이고 선택됨', addNb.code === 'OK' && nbAdd.nbhd === null && nbAdd.inGraph && nbAdd.label === 'T18 주변 밖 새 업무', JSON.stringify(nbAdd));
+    check('R-17 ④·R-02 ① 주변만 보기 중 사람·업무·문서 추가 → 전체로 돌아가 새 노드가 그래프에 보이고 선택됨', addNb.code === 'OK' && nbAdd.nbhd === null && nbAdd.inGraph && nbAdd.label === 'T18 주변 밖 새 업무', JSON.stringify(nbAdd));
     // 검토 B-3: 주변만 보기 중 하위 유니버스 꼭지 펼치기(더블클릭과 같은 toggle) → 주변만 보기를 끝내고 전체에서 펼침
     await evaluate(s.cdp, "window.__wu.select('U-D1/N-000')");
     await sleep(150);
@@ -1885,7 +1885,7 @@ async function checkBrowser(browser, port) {
   await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.cy.nodes().length > 0", 8000);
   const resetMsg = (await evaluate(s.cdp, "sessionStorage.getItem('__confirmMsg')").catch(() => '')) || '';
   await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
-  check('U-9: 초기화 확인 문구가 직접 만들거나 가져온 유니버스도 지워진다고 알림', resetMsg.includes('초기 샘플로 되돌립니다') && resetMsg.includes('직접 만들거나 가져온 유니버스') && resetMsg.includes('내보내세요'), resetMsg);
+  check('U-9: 초기화 확인 문구가 직접 만들거나 가져온 업무 지도도 지워진다고 알림', resetMsg.includes('초기 샘플로 되돌립니다') && resetMsg.includes('직접 만들거나 가져온 업무 지도') && resetMsg.includes('내보내세요'), resetMsg);
   check('NFR 복구: 가상 데이터 초기화 → 샘플이 처음 상태(추가 노드 없음, 수정 되돌림, 쓰기 가능)', (await nodeCount(s.cdp)) === NODES && !(await hasLabel(s.cdp, newLabel)) && !(await evaluate(s.cdp, "window.__wu.readOnly")) && !(await evaluate(s.cdp, "(window.__wu.doc.nodes.find((n) => n.id === 'N-001').description || '').includes('(수정)')")));
 
   // ── CR-14 B 인수인계 위험(R-26): 초기화 직후 원본 월말 정산에서(앞 단계가 데이터를 고치므로 여기서) ──
@@ -1948,8 +1948,8 @@ async function checkBrowser(browser, port) {
   await sleep(150);
   await evaluate(s.cdp, 'window.__wu.select(null)');
   await sleep(150);
-  check('R7-5: 개요에 용어 한 줄(유니버스·노드·꼭지)', (await text(s.cdp, '[data-testid=term-note]')).includes('꼭지'));
-  // ── 사용자 화면 확인 의견 2026-10-17: 노드 추가 때 함께 이을 노드, 연결 수정에서 관계·상대 바꾸기 ──
+  check('R7-5: 개요에 용어 한 줄(업무 지도·노드·꼭지)', (await text(s.cdp, '[data-testid=term-note]')).includes('꼭지'));
+  // ── 사용자 화면 확인 의견 2026-10-17: 사람·업무·문서 추가 때 함께 이을 노드, 연결 수정에서 관계·상대 바꾸기 ──
   await s.cdp.send('Emulation.setDeviceMetricsOverride', { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false });
   await evaluate(s.cdp, "window.confirm = () => true; window.__wu.select(null)");
   await sleep(200);
@@ -1963,7 +1963,7 @@ async function checkBrowser(browser, port) {
   const fb17Submit = () => evaluate(s.cdp, "document.getElementById('add-slot').querySelector('button[type=submit]').click()");
   const fb17Msg = () => evaluate(s.cdp, "(() => { const m = document.querySelector('#add-slot [data-testid=form-message]'); return m ? { code: m.dataset.code || '', text: m.textContent } : null; })()");
   const fb17Counts = () => evaluate(s.cdp, "({ nodes: window.__wu.doc.nodes.length, edges: window.__wu.doc.edges.length })");
-  check('노드 추가 양식에 「함께 이을 노드(선택)」 칸이 보임(크기 있음), 비워 두면 관계·방향 칸은 숨음', await evaluate(s.cdp, "(() => { const o = document.querySelector('#add-slot [data-testid=node-link-other]'); const d = document.querySelector('#add-slot .link-detail'); const r = o.getBoundingClientRect(); return r.width > 0 && r.height > 0 && d.hidden; })()"));
+  check('사람·업무·문서 추가 양식에 「함께 이을 노드(선택)」 칸이 보임(크기 있음), 비워 두면 관계·방향 칸은 숨음', await evaluate(s.cdp, "(() => { const o = document.querySelector('#add-slot [data-testid=node-link-other]'); const d = document.querySelector('#add-slot .link-detail'); const r = o.getBoundingClientRect(); return r.width > 0 && r.height > 0 && d.hidden; })()"));
   const fb17Before = await fb17Counts();
   const fb17Reveal = () => evaluate(s.cdp, "(() => { const slot = document.getElementById('add-slot'); const d = slot.closest('details'); if (d) d.open = true; slot.scrollIntoView({ block: 'end' }); })()");
   await fb17Reveal();
@@ -2381,7 +2381,7 @@ async function checkBrowser(browser, port) {
     await delRevealSlot();
     // (가) 바로 삭제
     const addA = await submitAdd(s.cdp, 'work', '삭제 시험 노드');
-    check('삭제 시험: 노드 추가 성공', addA.code === 'OK', JSON.stringify(addA));
+    check('삭제 시험: 사람·업무·문서 추가 성공', addA.code === 'OK', JSON.stringify(addA));
     const idA = await delIdOf('삭제 시험 노드');
     const delNodes0 = await nodeCount(s.cdp);
     await delSelect(`U-A1/${idA}`);
@@ -2398,7 +2398,7 @@ async function checkBrowser(browser, port) {
     await fb17Submit();
     await sleep(300);
     const idB = await delIdOf('삭제 시험 담당자');
-    check('삭제 시험: 연결 있는 사람 노드 추가', !!idB);
+    check('삭제 시험: 연결 있는 사람 사람·업무·문서 추가', !!idB);
     await delSelect(`U-A1/${idB}`);
     check('삭제 (나) 연결이 있는 노드에는 「삭제」가 없고 「숨기기」만 있음', await evaluate(s.cdp, "!document.querySelector('#detail [data-testid=btn-delete]') && !!document.querySelector('#detail [data-testid=btn-hide]')"));
     await clickTestId(s.cdp, 'btn-event');
@@ -2593,14 +2593,14 @@ async function checkBrowser(browser, port) {
       const help0 = await evaluate(s.cdp, "(() => { const h = document.querySelector('[data-testid=draft-person-help]'); return h ? h.textContent : null; })()");
       check('처음 사용 W1(FU-7) 받는 사람 후보가 0명인 새 지도: 초안 창을 열면 안내 「후임이 목록에 없으면 사람으로 먼저 넣으세요…」와 「＋ 사람 추가」 단추가 보임(크기 있음)', !!help0 && help0.includes('후임이 목록에 없으면 사람으로 먼저 넣으세요. 연결하지 않아도 받는 사람으로 고를 수 있습니다(「수행」으로 이으면 현재 담당으로 보입니다).') && (await w1Visible('[data-testid=draft-person-help]')) && (await w1Visible('[data-testid=draft-add-person]')) && (await text(s.cdp, '[data-testid=draft-add-person]')) === '＋ 사람 추가', String(help0));
       await shot(s.cdp, `${browser.name}-w1-draft-no-person`);
-      // 처음 사용 점검 2회차 FU-36(처음 사용 W4): 「＋ 사람 추가」는 긴 노드 추가 창 대신 초안 창 안의 작은 칸(이름 필수·연락처 선택)을 연다.
+      // 처음 사용 점검 2회차 FU-36(처음 사용 W4): 「＋ 사람 추가」는 긴 사람·업무·문서 추가 창 대신 초안 창 안의 작은 칸(이름 필수·연락처 선택)을 연다.
       // 「넣기」가 wu:add-node(detail.label, attrs)를 보내면 main이 사람을 바로 만들고(연결 없음) 초안 창을 다시 그린다(계약). 알림 내용은 문서 수준 리스너로 따로 받아 본다
       await evaluate(s.cdp, "window.__w1evt = null; window.__w1evtN = 0; document.addEventListener('wu:add-node', (e) => { window.__w1evt = e.detail; window.__w1evtN += 1; })");
-      const w4AddWasOpen = await evaluate(s.cdp, "(document.querySelector('details.add') || {}).open === true"); // 새 지도는 노드 추가가 펼쳐져 있다 — 누른 뒤 달라지지 않았는지를 본다
+      const w4AddWasOpen = await evaluate(s.cdp, "(document.querySelector('details.add') || {}).open === true"); // 새 지도는 사람·업무·문서 추가가 펼쳐져 있다 — 누른 뒤 달라지지 않았는지를 본다
       await evaluate(s.cdp, "document.querySelector('[data-testid=draft-add-person]').click()");
       await sleep(250);
       const w4Box = { box: await w1Visible('[data-testid=draft-new-person]'), name: await w1Visible('[data-testid=draft-new-person-name]'), contact: await w1Visible('[data-testid=draft-new-person-contact]'), add: await w1Visible('[data-testid=draft-new-person-add]'), events: await evaluate(s.cdp, 'window.__w1evtN'), addNodeOpen: await evaluate(s.cdp, "(document.querySelector('details.add') || {}).open === true") };
-      check('처음 사용 W4(FU-36) 「＋ 사람 추가」를 누르면 초안 창 안에 이름·연락처 칸과 「넣기」가 열리고(크기 있음), 알림은 아직 없고 노드 추가 창은 열리지 않음', w4Box.box && w4Box.name && w4Box.contact && w4Box.add && w4Box.events === 0 && w4Box.addNodeOpen === w4AddWasOpen, JSON.stringify({ ...w4Box, w4AddWasOpen }));
+      check('처음 사용 W4(FU-36) 「＋ 사람 추가」를 누르면 초안 창 안에 이름·연락처 칸과 「넣기」가 열리고(크기 있음), 알림은 아직 없고 사람·업무·문서 추가 창은 열리지 않음', w4Box.box && w4Box.name && w4Box.contact && w4Box.add && w4Box.events === 0 && w4Box.addNodeOpen === w4AddWasOpen, JSON.stringify({ ...w4Box, w4AddWasOpen }));
       await shot(s.cdp, `${browser.name}-w4-new-person-box`);
       await evaluate(s.cdp, "document.querySelector('[data-testid=draft-new-person-add]').click()");
       await sleep(200);
@@ -2609,10 +2609,10 @@ async function checkBrowser(browser, port) {
       await sleep(400);
       const w4Evt = await evaluate(s.cdp, 'window.__w1evt');
       check('처음 사용 W4(FU-36) 이름·연락처를 넣고 「넣기」: wu:add-node 알림 detail이 {type: person, label: 가상갑, attrs: {연락처: 내선 1234}}', !!w4Evt && w4Evt.type === 'person' && w4Evt.label === '가상갑' && !!w4Evt.attrs && w4Evt.attrs['연락처'] === '내선 1234' && (await evaluate(s.cdp, 'window.__w1evtN')) === 1, JSON.stringify(w4Evt));
-      // main(W5 계약): label이 있으면 노드 추가 창을 열지 않고 사람 노드를 바로 만들고(연결 없음) 초안 창을 다시 그린다 → 받는 사람 목록에 그 사람이 있고 자동으로 골라짐
+      // main(W5 계약): label이 있으면 사람·업무·문서 추가 창을 열지 않고 사람 노드를 바로 만들고(연결 없음) 초안 창을 다시 그린다 → 받는 사람 목록에 그 사람이 있고 자동으로 골라짐
       const w4Made = await waitFor(s.cdp, "window.__wu.doc.nodes.some((n) => n.label === '가상갑' && n.core_type === 'person')", 3000);
       const w4After = await evaluate(s.cdp, "({ draftOpen: !!document.querySelector('[data-testid=draft-form]'), addOpen: (document.querySelector('details.add') || {}).open === true, to: (() => { const s = document.querySelector('[data-testid=draft-to]'); return s && s.selectedOptions[0] ? s.selectedOptions[0].textContent : null; })(), attr: (() => { const n = window.__wu.doc.nodes.find((x) => x.label === '가상갑'); return n && n.attrs ? n.attrs['연락처'] : null; })() })");
-      check('처음 사용 W4(FU-36) 사람 노드가 바로 만들어지고(연락처 속성 포함), 초안 창은 열려 있고 노드 추가 창 상태는 그대로이며, 받는 사람으로 그 사람이 골라져 있음', w4Made && w4After.draftOpen && w4After.addOpen === w4AddWasOpen && w4After.to === '가상갑' && w4After.attr === '내선 1234', JSON.stringify(w4After));
+      check('처음 사용 W4(FU-36) 사람 노드가 바로 만들어지고(연락처 속성 포함), 초안 창은 열려 있고 사람·업무·문서 추가 창 상태는 그대로이며, 받는 사람으로 그 사람이 골라져 있음', w4Made && w4After.draftOpen && w4After.addOpen === w4AddWasOpen && w4After.to === '가상갑' && w4After.attr === '내선 1234', JSON.stringify(w4After));
       await w1CloseDraft();
       const w1Work = await submitAdd(s.cdp, 'work', '시험 업무');
       const w1P1 = w4Made ? { code: 'OK' } : await submitAdd(s.cdp, 'person', '가상갑'); // 계약이 지켜지지 않았을 때도 뒤 점검은 이어 간다
@@ -3000,7 +3000,7 @@ async function checkBrowser(browser, port) {
     const shown = await waitFor(s.cdp, "document.querySelectorAll('[data-testid=candidate-ai-chip]').length > 0", 5000);
     const done = await evaluate(s.cdp, "(() => { const li = document.querySelector('[data-testid=merge-works] li[data-source=ai]'); const h = [...document.querySelectorAll('[data-testid=merge-panel] h3')].find((x) => x.textContent.startsWith('업무 후보')); const drop = document.querySelector('[data-testid=ai-candidates-dropped]'); return { chips: document.querySelectorAll('[data-testid=candidate-ai-chip]').length, works: document.querySelectorAll('[data-testid=merge-works] li').length, head: h ? h.textContent : '', summary: (document.querySelector('[data-testid=ai-candidates-summary]') || {}).textContent || '', live: (document.querySelector('[data-testid=ai-candidates-live]') || {}).textContent, title: li ? li.querySelector('strong').textContent : '', chipText: li ? li.querySelector('[data-testid=candidate-ai-chip]').textContent : '', quotes: li ? [...li.querySelectorAll('[data-testid=candidate-ai-quote]')].map((x) => x.textContent) : [], reason: li && li.querySelector('[data-testid=candidate-ai]') ? li.querySelector('[data-testid=candidate-ai]').textContent : '', score: li ? [...li.querySelectorAll('.who .chip')].map((x) => x.textContent) : [], btns: li ? li.querySelectorAll('[data-testid=merge-same], [data-testid=merge-diff]').length : 0, dropSummary: drop ? drop.querySelector('summary').textContent : '', dropText: drop ? drop.textContent : '', disabled: document.querySelector('[data-testid=btn-ai-candidates]').disabled, texts: JSON.stringify([...document.querySelectorAll('[data-testid=merge-works] li:not([data-source=ai])')].map((x) => x.textContent)) }; })()");
     check('CR-15 T-38 「AI 후보」 칩이 1개 붙은 후보가 목록 끝에 더해짐(제목·칩·이유·인용 두 줄·「같은 업무」/「다른 업무」 단추, 점수 칩 없음)', shown && done.chips === 1 && done.works === base + 1 && done.head === `업무 후보 ${base + 1}건` && done.chipText === 'AI 후보' && done.title.includes('참가자 모집') && done.title.includes('신입 교육 운영') && done.quotes.length === 2 && done.quotes[0].includes('참가자 모집') && done.quotes[1].includes('신입 교육 운영') && done.reason.includes('같은 일을 다른 이름으로') && done.reason.includes('Claude API') && done.score.join() === 'AI 후보' && done.btns === 2, JSON.stringify(done));
-    check('CR-15 T-38 머리에 「AI 후보 1개(확인되지 않아 뺀 쌍 3개)」와 뺀 쌍 목록(지어낸 업무·틀린 인용·같은 유니버스), 안내 문구는 지워지고 단추는 다시 켜짐', shown && done.summary === 'AI 후보 1개(확인되지 않아 뺀 쌍 3개)' && done.dropSummary === '원문 인용·업무가 확인되지 않아 뺀 쌍 3개' && done.dropText.includes('지어낸 업무') && done.dropText.includes('인용을 찾지 못함') && done.dropText.includes('같은 유니버스 안의 쌍') && done.live === '' && done.disabled === false, JSON.stringify({ summary: done.summary, dropSummary: done.dropSummary, live: done.live, disabled: done.disabled }));
+    check('CR-15 T-38 머리에 「AI 후보 1개(확인되지 않아 뺀 쌍 3개)」와 뺀 쌍 목록(지어낸 업무·틀린 인용·같은 업무 지도), 안내 문구는 지워지고 단추는 다시 켜짐', shown && done.summary === 'AI 후보 1개(확인되지 않아 뺀 쌍 3개)' && done.dropSummary === '원문 인용·업무가 확인되지 않아 뺀 쌍 3개' && done.dropText.includes('지어낸 업무') && done.dropText.includes('인용을 찾지 못함') && done.dropText.includes('같은 업무 지도 안의 쌍') && done.live === '' && done.disabled === false, JSON.stringify({ summary: done.summary, dropSummary: done.dropSummary, live: done.live, disabled: done.disabled }));
     check('CR-15 T-38 기존 후보 4건은 순서·내용 그대로이고 AI 후보는 그 뒤에만 더해짐(판정 기록 수도 그대로 — 확정·거부를 누르지 않음)', shown && done.texts === baseTexts && (await evaluate(s.cdp, 'window.__wu.doc.identity_links.length')) === linksBefore, JSON.stringify({ base: JSON.parse(baseTexts).length, now: JSON.parse(done.texts).length, diff: JSON.parse(done.texts).map((t, i) => [t.slice(0, 60), (JSON.parse(baseTexts)[i] || "").slice(0, 60)]).filter(([a, b]) => a !== b).slice(0, 2) }));
     const nullSpots = await nullTextSpots(s.cdp);
     check('CR-15 T-38 AI 후보가 보이는 목록에 "null" 글자 없음', nullSpots.length === 0, JSON.stringify(nullSpots));
@@ -3181,13 +3181,13 @@ async function checkBrowser(browser, port) {
       await evaluate(s.cdp, "document.querySelector('[data-testid=tour-skip]').click()");
       await sleep(200);
 
-      // FU-7 받는 쪽: wu:add-node 이벤트 → 「노드 추가」가 펼쳐지고 유형이 「사람」으로 골라짐 (저장하지 않음)
+      // FU-7 받는 쪽: wu:add-node 이벤트 → 「사람·업무·문서 추가」가 펼쳐지고 유형이 「사람」으로 골라짐 (저장하지 않음)
       await evaluate(s.cdp, 'window.__wu.select(null)');
       await sleep(150);
       await evaluate(s.cdp, "document.dispatchEvent(new CustomEvent('wu:add-node', { detail: { type: 'person' } }))");
       await sleep(200);
       const addEv = await evaluate(s.cdp, "({ open: document.querySelector('details.add').open, type: document.querySelector('#add-slot [data-testid=node-type]').value, focus: document.activeElement && document.activeElement.dataset.testid, emp: !document.querySelector('#add-slot [data-testid=node-empno]').closest('label').hidden })");
-      check('W3 FU-7 wu:add-node {type:person} → 「노드 추가」가 열리고 유형 「사람」(사번 칸 보임), 이름 칸에 초점', addEv.open && addEv.type === 'person' && addEv.focus === 'node-label' && addEv.emp, JSON.stringify(addEv));
+      check('W3 FU-7 wu:add-node {type:person} → 「사람·업무·문서 추가」가 열리고 유형 「사람」(사번 칸 보임), 이름 칸에 초점', addEv.open && addEv.type === 'person' && addEv.focus === 'node-label' && addEv.emp, JSON.stringify(addEv));
       await evaluate(s.cdp, "document.dispatchEvent(new CustomEvent('wu:add-node', { detail: { type: 'zzz' } }))");
       await sleep(100);
       check('W3 FU-7 모르는 유형이나 detail이 없는 요청은 무시(유형이 그대로)', (await evaluate(s.cdp, "document.querySelector('#add-slot [data-testid=node-type]').value")) === 'person');
@@ -3212,7 +3212,7 @@ async function checkBrowser(browser, port) {
       const nodesAfter = await evaluate(s.cdp, 'window.__wu.doc.nodes.length');
       check('W3 FU-7 시험으로 추가한 사람을 바로 지워 노드 수가 처음과 같음(데이터 되돌림)', nodesAfter === nodesBefore, `${nodesBefore} → ${nodesAfter}`);
 
-      // FU-11 폴더 연결 탭 세 줄 / 유니버스 묶기 안내 / FU-23 「지도 이름」
+      // FU-11 폴더 연결 탭 세 줄 / 업무 지도 묶기 안내 / FU-23 「지도 이름」
       await evaluate(s.cdp, 'window.__wu.select(null)');
       await evaluate(s.cdp, "document.getElementById('import-open').click()");
       await sleep(250);
@@ -3225,13 +3225,13 @@ async function checkBrowser(browser, port) {
       await evaluate(s.cdp, "document.getElementById('group-open').click()");
       await sleep(200);
       const groupNote = await text(s.cdp, '[data-testid=group-note]');
-      check('W3 FU-11 「유니버스 묶기」 창 위에 안내(이미 이 브라우저에 있는 지도끼리, 동료 지도는 「폴더 연결」·「가져오기」로 먼저)', groupNote.includes('이미 이 브라우저에 있는 지도끼리 묶습니다') && groupNote.includes('「폴더 연결」이나 「가져오기」로 먼저 들여오세요'), groupNote);
+      check('W3 FU-11 「업무 지도 묶기」 창 위에 안내(이미 이 브라우저에 있는 지도끼리, 동료 지도는 「폴더 연결」·「가져오기」로 먼저)', groupNote.includes('이미 이 브라우저에 있는 지도끼리 묶습니다') && groupNote.includes('「폴더 연결」이나 「가져오기」로 먼저 들여오세요'), groupNote);
       await evaluate(s.cdp, "document.getElementById('group-cancel').click()");
       await sleep(100);
       await evaluate(s.cdp, "document.getElementById('create-open').click()");
       await sleep(200);
       const nameLabel = await evaluate(s.cdp, "document.getElementById('create-name').parentElement.firstChild.textContent.trim()");
-      check('W3 FU-23 새 유니버스 창의 칸 제목이 「지도 이름」(첫 업무의 「업무 이름」과 구분, 칸 id 그대로)', nameLabel === '지도 이름' && (await evaluate(s.cdp, "document.getElementById('create-start-work').parentElement.firstChild.textContent.trim()")) === '업무 이름', nameLabel);
+      check('W3 FU-23 새 업무 지도 창의 칸 제목이 「지도 이름」(첫 업무의 「업무 이름」과 구분, 칸 id 그대로)', nameLabel === '지도 이름' && (await evaluate(s.cdp, "document.getElementById('create-start-work').parentElement.firstChild.textContent.trim()")) === '업무 이름', nameLabel);
       await evaluate(s.cdp, "document.getElementById('create-cancel').click()");
       await sleep(100);
     } else {
@@ -3293,7 +3293,7 @@ async function checkBrowser(browser, port) {
       await clickTestId(s.cdp, 'insight-close');
       await sleep(150);
 
-      // FU-36 wu:add-node + label: 노드 추가 창을 열지 않고 사람을 바로 만들고 초안 창이 유지된다. 끝에 「삭제」로 되돌림
+      // FU-36 wu:add-node + label: 사람·업무·문서 추가 창을 열지 않고 사람을 바로 만들고 초안 창이 유지된다. 끝에 「삭제」로 되돌림
       const nBefore = await evaluate(s.cdp, 'window.__wu.doc.nodes.length');
       const w5Person = '처음사용W5 시험 후임';
       await evaluate(s.cdp, 'window.__wu.select(null)');
@@ -3304,7 +3304,7 @@ async function checkBrowser(browser, port) {
       await evaluate(s.cdp, `document.dispatchEvent(new CustomEvent('wu:add-node', { detail: { type: 'person', label: ${JSON.stringify(w5Person)}, attrs: { 연락처: '내선 0000' } } }))`);
       await sleep(300);
       const direct = await evaluate(s.cdp, `(() => ({ nodes: window.__wu.doc.nodes.length, draft: !!document.querySelector('[data-testid=draft-form]'), inTo: [...document.querySelectorAll('[data-testid=draft-to] option')].some((o) => o.textContent.includes(${JSON.stringify(w5Person)})), addOpen: document.querySelector('details.add').open, target: (document.querySelector('[data-testid=draft-target]') || {}).value, from: (document.querySelector('[data-testid=draft-from]') || {}).value }))()`);
-      check('W5 FU-36 wu:add-node {label}: 노드 추가 창은 안 열리고 노드 +1, 초안 창 유지·받는 사람 목록에 그 이름, 고른 대상·보내는 사람 유지', direct.nodes === nBefore + 1 && direct.draft && direct.inTo && direct.addOpen === false && direct.target === picked.target && direct.from === picked.from, JSON.stringify({ nBefore, picked, direct }));
+      check('W5 FU-36 wu:add-node {label}: 사람·업무·문서 추가 창은 안 열리고 노드 +1, 초안 창 유지·받는 사람 목록에 그 이름, 고른 대상·보내는 사람 유지', direct.nodes === nBefore + 1 && direct.draft && direct.inTo && direct.addOpen === false && direct.target === picked.target && direct.from === picked.from, JSON.stringify({ nBefore, picked, direct }));
       const newNode = await evaluate(s.cdp, `(() => { const p = window.__wu.view.nodes.find((n) => n.label === ${JSON.stringify(w5Person)}); return p ? { gid: p.gid, links: window.__wu.view.edges.filter((e) => !e.hidden && (e.source === p.gid || e.target === p.gid)).length } : null; })()`);
       check('W5 FU-36 새 사람은 연결 없이 만들어짐', !!newNode && newNode.links === 0, JSON.stringify(newNode));
       // 오류: 이름이 공백뿐이면 → 초안 창의 메시지 자리에 오류 문구, 노드 수는 그대로
@@ -3362,17 +3362,17 @@ async function checkBrowser(browser, port) {
         !!hint && hint.visible && hint.text === '분류에 따라 인수인계 초안의 칸이 정해집니다: 이슈 → 「최근 이슈」, 진행 중 → 「진행 중인 일」, 주의사항 → 「주의사항·노하우」' && ['이슈', '진행 중', '주의사항'].every((x) => hint.options.includes(x)), JSON.stringify(hint));
       await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=event-form] button')].find((b) => b.textContent === '취소').click()");
       await sleep(150);
-      // FU-35 노드 추가: 새 노드 유형과 함께 이을 노드로 못 쓰는 관계가 흐려지고, 실패 오류가 「추가」 단추 바로 위
+      // FU-35 사람·업무·문서 추가: 새 노드 유형과 함께 이을 노드로 못 쓰는 관계가 흐려지고, 실패 오류가 「추가」 단추 바로 위
       await evaluate(s.cdp, "window.__wu.select(null)");
       await sleep(150);
       const nBefore2 = await evaluate(s.cdp, 'window.__wu.doc.nodes.length');
       await evaluate(s.cdp, "document.querySelector('details.add').open = true");
       const addRel = await evaluate(s.cdp, "(() => { const slot = document.getElementById('add-slot'); const t = slot.querySelector('[data-testid=node-type]'); t.value = 'person'; t.dispatchEvent(new Event('change')); const o = slot.querySelector('[data-testid=node-link-other]'); const w = [...o.options].find((x) => x.textContent.includes('(업무)')); o.value = w.value; o.dispatchEvent(new Event('change')); const r = slot.querySelector('[data-testid=node-link-type]'); return Object.fromEntries([...r.options].map((x) => [x.value, { disabled: x.disabled, text: x.textContent }])); })()");
-      check('W5 FU-35 노드 추가: 사람 + 업무를 고르면 「관련」은 disabled + 「(이 조합에는 못 씀)」, 추천된 「수행」은 켜짐', addRel.relates_to.disabled === true && addRel.relates_to.text === '관련 (이 조합에는 못 씀)' && addRel.performs.disabled === false, JSON.stringify(addRel));
+      check('W5 FU-35 사람·업무·문서 추가: 사람 + 업무를 고르면 「관련」은 disabled + 「(이 조합에는 못 씀)」, 추천된 「수행」은 켜짐', addRel.relates_to.disabled === true && addRel.relates_to.text === '관련 (이 조합에는 못 씀)' && addRel.performs.disabled === false, JSON.stringify(addRel));
       await evaluate(s.cdp, "(() => { const slot = document.getElementById('add-slot'); slot.querySelector('[data-testid=node-label]').value = 'W5 시험'; const r = slot.querySelector('[data-testid=node-link-type]'); r.value = 'relates_to'; r.dispatchEvent(new Event('change')); slot.querySelector('button[type=submit]').click(); })()");
       await sleep(250);
       const addErr = await evaluate(s.cdp, "(() => { const slot = document.getElementById('add-slot'); const m = slot.querySelector('[data-testid=form-message]'); const btn = slot.querySelector('button[type=submit]'); const r = m.getBoundingClientRect(); const br = btn.getBoundingClientRect(); return { code: m.dataset.code, above: r.bottom <= br.top + 1, inView: r.top >= 0 && r.bottom <= window.innerHeight, nodes: window.__wu.doc.nodes.length }; })()");
-      check('W5 FU-35 노드 추가 실패(E-PAIR): 오류가 「추가」 단추 바로 위에 있고 화면 안에 보이며 아무것도 저장되지 않음', addErr.code === 'E-PAIR' && addErr.above && addErr.inView && addErr.nodes === nBefore2, JSON.stringify(addErr));
+      check('W5 FU-35 사람·업무·문서 추가 실패(E-PAIR): 오류가 「추가」 단추 바로 위에 있고 화면 안에 보이며 아무것도 저장되지 않음', addErr.code === 'E-PAIR' && addErr.above && addErr.inView && addErr.nodes === nBefore2, JSON.stringify(addErr));
       await shot(s.cdp, `${browser.name}-w5-add-error`);
     } else {
       check('W5 월말 정산(U-A1) 열기', false, 'U-A1이 열리지 않음');
@@ -3605,7 +3605,7 @@ async function checkBrowser(browser, port) {
   const rwNull = await nullTextSpots(s.cdp);
   check('CR-14 A 되감기 화면(띠·패널)에 "null" 글자 없음(빈 값을 replaceChildren에 넘긴 실수)', rwNull.length === 0, JSON.stringify(rwNull));
   const rwPast = await evaluate(s.cdp, "({ cy: window.__wu.cy.getElementById('U-A1/N-002').data('label'), ro: window.__wu.readOnly, rw: !!window.__wu.rewind, add: document.getElementById('add-slot').textContent, create: document.getElementById('create-open').disabled, group: document.getElementById('group-open').disabled })");
-  check('CR-14 A 이전 시점의 지도: 그 노드 이름이 옛 이름, 읽기 전용, 노드 추가·새 유니버스·묶기 막힘', rwPast.cy === rwOld && rwPast.ro === true && rwPast.rw && rwPast.add.includes('읽기 전용') && rwPast.create && rwPast.group, JSON.stringify(rwPast));
+  check('CR-14 A 이전 시점의 지도: 그 노드 이름이 옛 이름, 읽기 전용, 사람·업무·문서 추가·새 업무 지도·묶기 막힘', rwPast.cy === rwOld && rwPast.ro === true && rwPast.rw && rwPast.add.includes('읽기 전용') && rwPast.create && rwPast.group, JSON.stringify(rwPast));
   // R11-13 ②: 편집 되감기 중(읽기 전용)에도 wu:add-node(label 포함)는 무시된다 — 지금 문서의 노드 수 불변
   const rwNodes0 = await evaluate(s.cdp, 'window.__wu.doc.nodes.length');
   await evaluate(s.cdp, "document.dispatchEvent(new CustomEvent('wu:add-node', { detail: { type: 'person', label: 'W10 읽기전용 시험', attrs: { 연락처: 'x' } } }))");
@@ -3723,14 +3723,14 @@ async function checkBrowser(browser, port) {
   check('R-21 저장소 차단(읽기 전용)에서는 백업 권유 줄이 없음', await evaluate(s.cdp, "document.getElementById('backup-nudge').hidden"));
   check(`저장소 차단 시 샘플 읽기 전용 표시(노드 ${NODES}, 추가 비활성)`, s.ready && (await nodeCount(s.cdp)) === NODES && (await text(s.cdp, '#add-slot')).includes('읽기 전용'));
   if (await goBare(s.cdp)) {
-    check('오류: 저장소 차단 시 시작 화면에도 경고가 보이고 새 유니버스는 막힘', (await text(s.cdp, '[data-testid=start-warning]')).includes('저장소를 쓸 수 없습니다') && (await evaluate(s.cdp, "document.querySelector('[data-testid=start-create]').disabled")));
+    check('오류: 저장소 차단 시 시작 화면에도 경고가 보이고 새 업무 지도는 막힘', (await text(s.cdp, '[data-testid=start-warning]')).includes('저장소를 쓸 수 없습니다') && (await evaluate(s.cdp, "document.querySelector('[data-testid=start-create]').disabled")));
   } else {
-    check('오류: 저장소 차단 시 시작 화면에도 경고가 보이고 새 유니버스는 막힘', false, '시작 화면이 열리지 않음');
+    check('오류: 저장소 차단 시 시작 화면에도 경고가 보이고 새 업무 지도는 막힘', false, '시작 화면이 열리지 않음');
   }
   s.cdp.close();
   await close(s);
 
-  // 4) 내용 포함 HTML(CR-13 B): 내려받기 → 새 프로필로 열기(읽기 전용) → 다시 내려받기(왕복) → 내 유니버스로 가져오기
+  // 4) 내용 포함 HTML(CR-13 B): 내려받기 → 새 프로필로 열기(읽기 전용) → 다시 내려받기(왕복) → 내 업무 지도로 가져오기
   {
     const grabHtml = async (cdp) => {
       await evaluate(cdp, "(() => { window.__dl = null; window.__blob = null; if (!window.__patched) { window.__patched = true; const orig = URL.createObjectURL; URL.createObjectURL = (b) => { window.__blob = b; return orig.call(URL, b); }; HTMLAnchorElement.prototype.click = function () { window.__dl = this.getAttribute('download'); }; } document.getElementById('import-open').click(); document.querySelector('[data-testid=import-tab-export]').click(); window.__btnBox = (() => { const r = document.querySelector('[data-testid=export-html]').getBoundingClientRect(); return [r.width, r.height]; })(); document.querySelector('[data-testid=export-html]').click(); })()");
@@ -3787,8 +3787,8 @@ async function checkBrowser(browser, port) {
     check('CR-13 A 읽기 전용(내용 포함 파일)에서는 머리글 「?」와 따라 하기 카드를 쓰지 않음(다른 유니버스를 열 수 없으므로)', (await evaluate(s.cdp, "document.getElementById('tour-open').hidden")) === true && (await evaluate(s.cdp, 'window.__wu.tour')) === null);
     check('CR-13 B 보낸 쪽에서 추가한 노드가 보임(내용이 들어 있음)', await hasLabel(s.cdp, marker));
     const b1 = await bannerInfo();
-    check('CR-13 B 읽기 전용 안내 줄(크기 있음)과 「내 유니버스로 가져오기」 단추, 읽기 전용', !b1.hidden && b1.w > 0 && b1.h > 0 && b1.text.includes('이 파일에 담긴 「') && b1.text.includes('읽기 전용') && b1.text.includes('내 유니버스로 가져오기') && b1.btnOff === false && b1.ro === true && b1.hash.startsWith('#embed/'), JSON.stringify(b1));
-    check('CR-13 B 읽기 전용이라 노드 추가가 막힘', (await text(s.cdp, '#add-slot')).includes('읽기 전용'));
+    check('CR-13 B 읽기 전용 안내 줄(크기 있음)과 「내 업무 지도로 가져오기」 단추, 읽기 전용', !b1.hidden && b1.w > 0 && b1.h > 0 && b1.text.includes('이 파일에 담긴 「') && b1.text.includes('읽기 전용') && b1.text.includes('내 업무 지도로 가져오기') && b1.btnOff === false && b1.ro === true && b1.hash.startsWith('#embed/'), JSON.stringify(b1));
+    check('CR-13 B 읽기 전용이라 사람·업무·문서 추가가 막힘', (await text(s.cdp, '#add-slot')).includes('읽기 전용'));
     // R11-13 ②: 읽기 전용(보기 모드)에서 wu:add-node(label 포함)를 보내도 노드가 만들어지지 않는다(데이터 불변)
     const roNodes0 = await evaluate(s.cdp, 'window.__wu.doc.nodes.length');
     await evaluate(s.cdp, "document.dispatchEvent(new CustomEvent('wu:add-node', { detail: { type: 'person', label: 'W10 읽기전용 시험', attrs: { 연락처: 'x' } } }))");
@@ -3805,9 +3805,9 @@ async function checkBrowser(browser, port) {
     await sleep(600);
     const imported1 = await waitFor(s.cdp, `window.__wu && window.__wu.readOnly === false && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().some(n => n.data('label') === ${JSON.stringify(marker)})`, 8000);
     const b1b = await evaluate(s.cdp, "({ hash: location.hash, banner: document.getElementById('embed-banner').hidden })");
-    check('CR-13 B 「내 유니버스로 가져오기」 → 일반 모드(읽기 전용 아님, 안내 줄 없음)로 열리고 보낸 노드가 있음', imported1 && b1b.banner === true && b1b.hash === '#U-A1', JSON.stringify(b1b));
+    check('CR-13 B 「내 업무 지도로 가져오기」 → 일반 모드(읽기 전용 아님, 안내 줄 없음)로 열리고 보낸 노드가 있음', imported1 && b1b.banner === true && b1b.hash === '#U-A1', JSON.stringify(b1b));
     check('CR-13 B 가져온 뒤 저장소에 보낸 노드가 저장됨', await evaluate(s.cdp, `(localStorage.getItem('wu:v1:u:U-A1') || '').includes(${JSON.stringify(marker)})`));
-    check('CR-13 B 일반 모드에서는 노드 추가가 다시 가능', !(await text(s.cdp, '#add-slot')).includes('읽기 전용'));
+    check('CR-13 B 일반 모드에서는 사람·업무·문서 추가가 다시 가능', !(await text(s.cdp, '#add-slot')).includes('읽기 전용'));
     // 묶음
     check('CR-13 B 부서 묶음 파일 열기: 하위 유니버스까지 보임(고르기 목록에 하위 모두)', await openFile(fD1) && await evaluate(s.cdp, "(() => { const ids = [...document.getElementById('universe-picker').options].map((o) => o.value); return window.__wu.doc.universe.id === 'U-D1' && window.__wu.doc.refs.filter((r) => !r.hidden).every((r) => ids.includes(r.child_universe_id)); })()"));
     await shot(s.cdp, `${browser.name}-32-embed-view-D1`);

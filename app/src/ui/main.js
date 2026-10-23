@@ -81,9 +81,9 @@ function wireCreateDialog(app, $, getAuthorName = () => undefined) {
   const starterBox = $('create-starter');
   const info = $('create-info');
   const NORMAL = {
-    title: '새 유니버스 만들기',
-    legend: '이 유니버스에 넣을 첫 업무(선택) — 채우면 작은 지도가 바로 생깁니다',
-    intro: '업무 하나부터 시작하세요. 첫 업무를 적으면 업무·담당자·산출물이 이어진 작은 지도가 바로 생깁니다. 비워 두면 빈 유니버스를 만듭니다.',
+    title: '새 업무 지도 만들기',
+    legend: '이 업무 지도에 넣을 첫 업무(선택) — 채우면 작은 지도가 바로 생깁니다',
+    intro: '업무 하나부터 시작하세요. 첫 업무를 적으면 업무·담당자·산출물이 이어진 작은 지도가 바로 생깁니다. 비워 두면 빈 업무 지도를 만듭니다.',
     namePh: '예: 가상 교육팀 업무 지도',
     ownerPh: '팀·부서 이름 (예: 가상영업팀)',
   };
@@ -153,7 +153,7 @@ function wireCreateDialog(app, $, getAuthorName = () => undefined) {
     }
     if (starter.work.trim()) input.starter = starter;
     const same = input.name.trim() && input.level.trim() ? app.findSameUniverse(input.name, input.level) : null;
-    if (same && !window.confirm(`같은 이름·단위의 유니버스「${same.name}」(${same.level})가 이미 있습니다. 그래도 새로 만들까요?`)) return;
+    if (same && !window.confirm(`같은 이름·단위의 업무 지도「${same.name}」(${same.level})가 이미 있습니다. 그래도 새로 만들까요?`)) return;
     const r = app.createUniverse(input);
     if (!r.ok) {
       // 작성 주체가 비면 쓸 말을 알려 준다(점검 3회차). 오류 코드(E-REQUIRED)와 만들지 않는 동작은 그대로(R-12 ②)
@@ -447,7 +447,7 @@ function start() {
         el('p', { class: 'muted small' }, infoText),
         el('div', { class: 'row' },
           el('button', { type: 'button', 'data-testid': 'toggle', onclick: () => toggle(node.universe_id) }, info ? '펼치기' : '접기'),
-          el('button', { type: 'button', onclick: () => openUniverse(node.universe_id) }, '이 유니버스 열기'),
+          el('button', { type: 'button', onclick: () => openUniverse(node.universe_id) }, '이 업무 지도 열기'),
           app.hasChild(node.universe_id)
             ? el('button', { type: 'button', disabled: app.readOnly, onclick: () => removeChild(node.universe_id, node.label) }, '묶음에서 빼기')
             : null,
@@ -471,13 +471,13 @@ function start() {
     });
     // 다른 유니버스의 노드면 바꾼 값이 그 노드의 원래 유니버스에 저장된다(CR-4, D2-4 가)
     const owner = own ? null : (view.universes.get(uid) || { name: uid }).name;
-    const where = own ? `「${parents.map((p) => p.name).join('」·「')}」` : '상위 유니버스';
+    const where = own ? `「${parents.map((p) => p.name).join('」·「')}」` : '상위 업무 지도';
     // el()은 null 자식을 걸러 내므로 box.append(…, null)처럼 "null" 글자가 들어가지 않는다(검토5 U-1)
     box.append(el('div', {},
       el('label', { class: 'check' }, cb, ` ${where} 화면에서도 이 노드 보이기`),
       el('div', { class: 'muted small' }, `지금 적용: ${exp.explicit ? '직접 지정' : '기본 규칙'}(${exp.reason})`),
-      own ? el('div', { class: 'muted small' }, `${where}${josa(where, '은/는')} 이 유니버스를 묶은 상위 유니버스입니다.`) : null,
-      owner ? el('div', { class: 'muted small', 'data-testid': 'exposed-owner' }, `바꾸면 원본 유니버스 「${owner}」에 저장됩니다.`) : null,
+      own ? el('div', { class: 'muted small' }, `${where}${josa(where, '은/는')} 이 업무 지도를 묶은 상위 업무 지도입니다.`) : null,
+      owner ? el('div', { class: 'muted small', 'data-testid': 'exposed-owner' }, `바꾸면 원본 업무 지도 「${owner}」에 저장됩니다.`) : null,
     ));
     return box;
   }
@@ -612,7 +612,7 @@ function start() {
     const canEdit = isOwn(gid) && !app.readOnly && !rw;
     const box = canEdit && missing.includes('담당') ? assignBox(gid) : null;
     const items = missing.flatMap((m, i) => [i ? ', ' : null, canEdit
-      ? el('button', { type: 'button', class: 'link', 'data-testid': 'form-missing-item', 'data-field': m, title: m === '담당' ? '이 업무의 담당자 이름을 넣는 칸을 엽니다' : m === RELATED_DOC_ITEM ? '「노드 추가」를 유형 「산출물」로 열고, 이 업무와 「산출」로 잇도록 미리 골라 둡니다(초안의 「산출물·문서 위치」는 이 연결을 읽습니다)' : `「${m}」 칸을 채우는 수정 화면을 엽니다`,
+      ? el('button', { type: 'button', class: 'link', 'data-testid': 'form-missing-item', 'data-field': m, title: m === '담당' ? '이 업무의 담당자 이름을 넣는 칸을 엽니다' : m === RELATED_DOC_ITEM ? '「사람·업무·문서 추가」를 유형 「산출물」로 열고, 이 업무와 「산출」로 잇도록 미리 골라 둡니다(초안의 「산출물·문서 위치」는 이 연결을 읽습니다)' : `「${m}」 칸을 채우는 수정 화면을 엽니다`,
         onclick: () => {
           if (m === RELATED_DOC_ITEM) { openRelatedDocForm(gid); return; }
           if (m !== '담당') { editing = { kind: 'node', focus: m }; renderPanel(); return; }
@@ -771,7 +771,7 @@ function start() {
     if (!isOwn(gid)) {
       return el('div', {}, el('div', { class: 'row toolbar' }, draftButton(gid), historyJumpButton(), ...first),
         moreTools([insightButton(gid), insightAllButton(), ...nbMore]),
-        el('p', { class: 'muted small' }, '다른 유니버스의 노드입니다. 고치려면 ',
+        el('p', { class: 'muted small' }, '다른 업무 지도의 노드입니다. 고치려면 ',
           el('button', { type: 'button', class: 'link', onclick: () => openUniverse(node.universe_id) }, `「${node.universe_name}」 열기`), '.'));
     }
     if (app.readOnly) {
@@ -797,7 +797,7 @@ function start() {
   }
 
   function hideSelected(node) {
-    if (!window.confirm(`「${node.label}」${josa(node.label, '을/를')} 숨깁니다. 그래프에서 사라지지만 이력과 근거로서의 내용은 남습니다. 다시 보이게 하려면 유니버스 개요(아무것도 고르지 않은 화면)의 「숨긴 노드」에서 「되살리기」를 누르세요.`)) return;
+    if (!window.confirm(`「${node.label}」${josa(node.label, '을/를')} 숨깁니다. 그래프에서 사라지지만 이력과 근거로서의 내용은 남습니다. 다시 보이게 하려면 업무 지도 개요(아무것도 고르지 않은 화면)의 「숨긴 노드」에서 「되살리기」를 누르세요.`)) return;
     const r = app.hideNode(node.id);
     if (!r.ok) return window.alert(messageFor(r.error));
     afterSave(r, null);
@@ -1447,7 +1447,7 @@ function start() {
   }
 
   function removeChild(childId, label) {
-    if (!window.confirm(`「${label}」${josa(label, '을/를')} 이 묶음에서 뺍니다. 원래 유니버스는 그대로 남습니다.`)) return;
+    if (!window.confirm(`「${label}」${josa(label, '을/를')} 이 묶음에서 뺍니다. 원래 업무 지도는 그대로 남습니다.`)) return;
     const r = app.removeChild(childId);
     if (!r.ok) return window.alert(messageFor(r.error));
     expanded.delete(childId);
@@ -1615,7 +1615,7 @@ function start() {
     const r = app.groupUniverses({ name: $('group-name').value, level: $('group-level').value, owner: $('group-owner').value, childIds });
     if (!r.ok) {
       $('group-message').textContent =
-        r.error.field === 'child_universe_ids' ? '유니버스를 2개 이상 고르세요.' : messageFor(r.error);
+        r.error.field === 'child_universe_ids' ? '업무 지도를 2개 이상 고르세요.' : messageFor(r.error);
       return;
     }
     openUniverse(r.doc.universe.id);
@@ -1646,7 +1646,7 @@ function start() {
       ...(doneText ? [el('p', { class: 'ok-text', 'data-testid': 'add-done' }, doneText)] : []),
       el('div', { class: 'row' },
         el('button', { type: 'button', 'data-testid': 'btn-table-add', title: '스프레드시트에서 복사한 표를 붙여 넣거나 칸에 써서 노드 여러 개를 한 번에 추가합니다', onclick: () => openTable('add') }, '표로 추가'),
-        el('button', { type: 'button', 'data-testid': 'btn-table-edit', title: '지금 유니버스의 노드를 표로 펼쳐 한꺼번에 고칩니다', onclick: () => openTable('edit') }, '표로 고치기')),
+        el('button', { type: 'button', 'data-testid': 'btn-table-edit', title: '지금 업무 지도의 노드를 표로 펼쳐 한꺼번에 고칩니다', onclick: () => openTable('edit') }, '표로 고치기')),
       nodeForm({
         mode: 'add',
         subtypes: app.subtypes(),
@@ -1731,8 +1731,8 @@ function start() {
     const mine = app.universes().filter((u) => !SAMPLES.some((s) => s.universe.id === u.id));
     const mineText = mine.length ? `
 
-직접 만들거나 가져온 유니버스 ${mine.length}개(${mine.map((u) => `「${u.name}」`).join(', ')})도 지워집니다. 남기려면 먼저 「가져오기·내보내기」에서 내보내세요.` : '';
-    if (!window.confirm(`모든 가상 데이터를 초기 샘플로 되돌립니다. 샘플에 추가한 노드와 직접 묶은 유니버스는 사라집니다.${mineText}`)) return;
+직접 만들거나 가져온 업무 지도 ${mine.length}개(${mine.map((u) => `「${u.name}」`).join(', ')})도 지워집니다. 남기려면 먼저 「가져오기·내보내기」에서 내보내세요.` : '';
+    if (!window.confirm(`모든 가상 데이터를 초기 샘플로 되돌립니다. 샘플에 추가한 노드와 직접 묶은 업무 지도는 사라집니다.${mineText}`)) return;
     const r = app.resetAll();
     if (r && !r.ok) return window.alert(messageFor(r.error));
     $('import-dialog').close();

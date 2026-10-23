@@ -1187,13 +1187,13 @@ export function convertDocument(text, ctx) {
   if (info.purpose) descParts.push(info.purpose);
   if (info.scope_out.length) descParts.push(`범위 제외: ${info.scope_out.join(', ')}`);
   if (intro.length) descParts.push(`머리말: ${intro.join(' ')}`);
-  descParts.push('문서에서 규칙 기반으로 초벌 변환한 유니버스.');
+  descParts.push('문서에서 규칙 기반으로 초벌 변환한 업무 지도.');
   const universe = {
     id: newId(ID_PREFIX.universe, random),
     name,
     level: '업무',
     owner: info.owner ? truncate(info.owner, LABEL_MAX, notes, '작성 주체') : '',
-    description: truncate(descParts.join(' '), TEXT_MAX, notes, '유니버스 설명'),
+    description: truncate(descParts.join(' '), TEXT_MAX, notes, '업무 지도 설명'),
     root_node_id: rootId,
     subtypes: [...subtypes.values()],
     tags: ['문서 변환'],

@@ -125,7 +125,7 @@ export function mergePanel(o) {
     const skip = (a, b) => a === b || now.rejected.has(pairKey(a, b)) || now.confirmed.has(pairKey(a, b));
     const plan = st.result ? withAiCandidates(o.plan, st.result.pairs, { canon: now.canon, skip }) : o.plan;
     const head = [
-      el('div', { class: 'row' }, el('button', { type: 'button', class: 'small-btn', 'data-testid': 'btn-ai-candidates', disabled: st.busy, title: 'Claude API로 하위 유니버스의 업무 글을 비교해 뜻이 같은 업무 쌍을 찾습니다. 키가 있을 때만 보입니다. 확정은 사람이 합니다', onclick: press }, 'AI로 연관 찾기')),
+      el('div', { class: 'row' }, el('button', { type: 'button', class: 'small-btn', 'data-testid': 'btn-ai-candidates', disabled: st.busy, title: 'Claude API로 하위 업무 지도의 업무 글을 비교해 뜻이 같은 업무 쌍을 찾습니다. 키가 있을 때만 보입니다. 확정은 사람이 합니다', onclick: press }, 'AI로 연관 찾기')),
       el('p', { class: 'muted small', 'data-testid': 'ai-candidates-live', 'aria-live': 'polite' }, st.busy ? AI_CANDIDATES_WAIT : ''),
       st.error ? el('p', { class: 'notice', 'data-testid': 'ai-candidates-fallback' }, `AI 연관 찾기 실패: ${st.error} — 기존 후보만 보여 줍니다`) : null,
       ...aiSummary(st.result, plan),
@@ -154,7 +154,7 @@ function renderMerge(o, plan, aiHead) {
       el('div', { class: 'muted small' }, p.reason),
       chips(view, p.evidence_ids, o.onFocus),
       // 같은 사람이 있는지 비교할 상대가 없는 "사번 없음" 카드는 누를 것이 없으므로 고치는 길을 적는다(여섯 번째 검토 U-12)
-      p.b ? null : el('div', { class: 'muted small', 'data-testid': 'merge-howto' }, `고치는 방법: 「${(view.rawNode(p.a) || {}).universe_name || '그 사람이 있는'}」 유니버스를 열어 그 사람을 고르고 「수정」에서 사번을 넣으세요. 다음에 이 목록을 열 때 같은 사번이면 자동으로 잇습니다.`),
+      p.b ? null : el('div', { class: 'muted small', 'data-testid': 'merge-howto' }, `고치는 방법: 「${(view.rawNode(p.a) || {}).universe_name || '그 사람이 있는'}」 업무 지도를 열어 그 사람을 고르고 「수정」에서 사번을 넣으세요. 다음에 이 목록을 열 때 같은 사번이면 자동으로 잇습니다.`),
       decideButtons(p, '같은 사람', '다른 사람'))))
     : el('p', { class: 'muted small' }, '확인할 사람이 없습니다.');
 
@@ -182,14 +182,14 @@ function renderMerge(o, plan, aiHead) {
 
   return el('div', { class: 'insight', 'data-testid': 'merge-panel' },
     el('h2', {}, '통합 확인'),
-    el('p', { class: 'muted small' }, '같은 사번·이름의 사람은 자동으로 하나로 이었습니다. 아래는 사람이 확인할 항목입니다. 확인하지 않아도 이 유니버스는 그대로 볼 수 있고, 원래 유니버스는 바뀌지 않습니다.'),
+    el('p', { class: 'muted small' }, '같은 사번·이름의 사람은 자동으로 하나로 이었습니다. 아래는 사람이 확인할 항목입니다. 확인하지 않아도 이 업무 지도는 그대로 볼 수 있고, 원래 업무 지도는 바뀌지 않습니다.'),
     plan.auto.length && !o.readOnly ? el('p', { class: 'notice', 'data-testid': 'merge-auto' }, `사번·이름이 같은 사람 ${plan.auto.length}명을 아직 잇지 않았습니다. `,
       el('button', { type: 'button', class: 'link', onclick: o.onApplyAuto }, '사번 자동 연결 적용')) : null,
     el('h3', {}, `사람 확인 ${plan.persons.length}건`),
     personList,
     el('h3', {}, `업무 후보 ${plan.works.length}건`),
     ...aiHead,
-    plan.works.length ? el('p', { class: 'muted small' }, '서로 다른 유니버스에서 같은 일로 보이는 업무 쌍입니다. 점수는 겹친 수(주제 3, 산출물 유형 2, 이름 낱말 1)를 더한 것으로, 높을수록 비슷합니다.') : null,
+    plan.works.length ? el('p', { class: 'muted small' }, '서로 다른 업무 지도에서 같은 일로 보이는 업무 쌍입니다. 점수는 겹친 수(주제 3, 산출물 유형 2, 이름 낱말 1)를 더한 것으로, 높을수록 비슷합니다.') : null,
     plan.hidden_candidates ? el('p', { class: 'muted small' }, `점수가 낮은 후보 ${plan.hidden_candidates}건은 목록에서 뺐습니다.`) : null,
     workList,
     el('h3', {}, `판정 기록 ${decided.length}건`),
