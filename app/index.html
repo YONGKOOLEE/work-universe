@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- 외부 요청 차단(D2-9, 사용자 결정 2026-10-03). 스크립트·스타일은 이 파일 안에만 있다. blob:은 내보내기 파일용 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://api.anthropic.com; base-uri 'none'; form-action 'none'">
 <title>업무 유니버스</title>
 <style>
   /* 어두운 녹색 배경 + 파스텔 노드 색. 그래프 색은 app/src/ui/graph.js의 TYPE_COLORS */
@@ -126,6 +126,9 @@
   #create-starter { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; } /* 첫 업무 칸: 두 줄로 놓아 대화상자 높이를 줄임 */
   #create-starter label:first-of-type { grid-column: 1 / -1; }
   #create-starter input { width: 100%; box-sizing: border-box; }
+  .starter-preview { margin-top: 8px; } /* CR-16 ③: 「처음 할 일」 아래 접힌 미리 보기 */
+  .starter-preview > summary { cursor: pointer; color: var(--accent); font-size: 14px; }
+  .starter-preview .preview-item p { margin: 2px 0 8px; color: var(--text); line-height: 1.5; }
   .starter-list { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 4px; }
   .starter-list li { display: flex; gap: 4px; align-items: baseline; } /* ○와 누르는 글을 한 줄에(검토8 재검증) */
   .starter-list li.done { color: var(--muted); text-decoration: line-through; }
@@ -282,6 +285,19 @@
   .start-hero h1 b { color: var(--accent); }
   .lead { font-size: 17px; margin: 0 0 16px; line-height: 1.6; }
   button.big { padding: 10px 22px; font-size: 16px; }
+  /* CR-16 ①: 「왜」 덩어리 — 세 칸을 화살표로 이은 한 줄(넓을 때) / 세로(좁을 때). 1366×768에서 세 갈래 카드가 첫 화면에 남게 낮게 둔다 */
+  .why-block { margin: 0 0 18px; }
+  .why-title { font-size: 17px; font-weight: 700; margin: 0 0 8px; line-height: 1.4; }
+  .why-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr; gap: 22px; }
+  .why-step { position: relative; display: grid; gap: 2px; align-content: start; min-width: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); font-size: 13px; line-height: 1.4; word-break: keep-all; }
+  .why-step strong { font-size: 14px; color: var(--text); }
+  .why-step span { color: var(--muted); }
+  .why-step:last-child { border-color: var(--accent); background: var(--panel-2); background: color-mix(in srgb, var(--accent) 9%, var(--panel)); }
+  .why-step:not(:last-child)::after { content: "↓"; position: absolute; left: 50%; bottom: -20px; transform: translateX(-50%); color: var(--accent); font-size: 18px; font-weight: 700; line-height: 1; }
+  @media (min-width: 900px) {
+    .why-steps { grid-template-columns: repeat(3, 1fr); gap: 28px; }
+    .why-step:not(:last-child)::after { content: "→"; left: auto; right: -22px; bottom: auto; top: 50%; transform: translateY(-50%); }
+  }
   .start-inner h2 { font-size: 18px; margin: 0 0 10px; color: var(--accent); }
   .steps-list { display: grid; gap: 10px; padding: 0; counter-reset: s; }
   .steps-list li { display: grid; gap: 2px; padding-left: 36px; position: relative; counter-increment: s; }

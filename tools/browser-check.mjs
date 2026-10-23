@@ -625,10 +625,24 @@ async function checkBrowser(browser, port) {
   if (onStart) {
     const startText = await text(s.cdp, '#start-screen');
     // 눌러지는 것과 눈에 보이는 것은 다르다: 핵심 요소가 실제로 화면에 그려지는지(크기가 있는지) 확인한다
-    check('R-08 시작 화면의 제목·설명·추천 버튼이 실제로 보임', await evaluate(s.cdp, "['.start-hero h1', '.start-hero .lead', '[data-testid=start-primary]', '[data-testid=start-create]'].every((q) => { const r = document.querySelector(q).getBoundingClientRect(); return r.width > 0 && r.height > 0; })"));
-    check('R-08 시작 화면에 이게 무엇인지 한 줄 설명과 가상 데이터 안내', startText.includes('흩어진 업무 지식을 업무별 지도로 모아') && startText.includes('인수인계 초안과 인사이트(비슷한 경험자·일 쏠림·빈 자리)를 근거와 함께 얻는 도구') &&startText.includes('모든 이름과 데이터는 가상'));
+    check('R-08 시작 화면의 제목·설명·추천 버튼이 실제로 보임', await evaluate(s.cdp, "['.start-hero h1', '[data-testid=why-block]', '[data-testid=start-primary]', '[data-testid=start-create]'].every((q) => { const r = document.querySelector(q).getBoundingClientRect(); return r.width > 0 && r.height > 0; })"));
+    check('R-08 시작 화면에 이게 무엇인지(CR-16 「왜」 덩어리: 전·후 한 줄) 설명과 가상 데이터 안내', startText.includes('담당자가 바뀌어도 끊기지 않는 업무 지도') && startText.includes('머릿속에서만 넘어가던 업무') && startText.includes('근거 달린 인수인계 초안') && startText.includes('모든 이름과 데이터는 가상'));
     check('R-08 "처음이라면 이 순서로" 4단계 안내', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=start-steps] li').length")) === 4);
     check(`샘플 카드 ${SAMPLES.length}개(내장 샘플 전부)와 추천(월말 정산) 표시, 내 유니버스 안내`, (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=start-samples] .card').length")) === SAMPLES.length && (await evaluate(s.cdp, "document.querySelector('[data-testid=card-U-A1]').classList.contains('recommended')")) && !!(await evaluate(s.cdp, "!!document.querySelector('[data-testid=start-mine], [data-testid=start-mine-empty]')")));
+    // ── CR-16 ① 「왜」 덩어리(2026-10-23): 크기 있음·칸 3개, 1366×768에서 세 갈래 카드 첫 장이 첫 화면(768px) 안 ──
+    const whyInfo = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=why-block]'); if (!b) return null; const r = b.getBoundingClientRect(); const steps = [...document.querySelectorAll('[data-testid=why-step]')].map((e) => { const q = e.getBoundingClientRect(); return { w: q.width, h: q.height, left: q.left, top: q.top }; }); return { w: r.width, h: r.height, n: steps.length, steps, text: b.textContent }; })()");
+    check('CR-16 ① 시작 화면 「왜」 덩어리가 그려지고(크기 있음) 칸(why-step)이 3개이며 각 칸도 크기가 있음', !!whyInfo && whyInfo.w > 0 && whyInfo.h > 0 && whyInfo.n === 3 && whyInfo.steps.every((q) => q.w > 0 && q.h > 0), JSON.stringify(whyInfo));
+    check('CR-16 ① 「왜」 덩어리: 제목과 세 칸 글(전 → 기록이 쌓이는 업무 지도 → 근거 달린 초안·경고)이 있음', !!whyInfo && whyInfo.text.includes('담당자가 바뀌어도 끊기지 않는 업무 지도') && whyInfo.text.includes('담당자가 바뀔 때') && whyInfo.text.includes('기록이 쌓이는 업무 지도') && whyInfo.text.includes('혼자만 아는 업무 경고'), whyInfo && whyInfo.text);
+    check('CR-16 ① 현재 창 너비(900 이상)에서는 세 칸이 한 줄(top이 같음), 왼쪽부터 순서대로', !!whyInfo && ((await evaluate(s.cdp, 'window.innerWidth')) < 900 || (whyInfo.steps.every((q) => Math.abs(q.top - whyInfo.steps[0].top) < 2) && whyInfo.steps[0].left < whyInfo.steps[1].left && whyInfo.steps[1].left < whyInfo.steps[2].left)), JSON.stringify(whyInfo && whyInfo.steps));
+    await s.cdp.send('Emulation.setDeviceMetricsOverride', { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false });
+    await sleep(300);
+    await evaluate(s.cdp, 'window.scrollTo(0, 0)');
+    const whyFold = await evaluate(s.cdp, "(() => ['start-way-handover', 'start-way-mine', 'start-way-team'].map((id) => { const r = document.querySelector('[data-testid=' + id + ']').getBoundingClientRect(); return { id, top: Math.round(r.top), bottom: Math.round(r.bottom), w: Math.round(r.width) }; }))()");
+    check('CR-16 ① 1366×768 시작 화면: 세 갈래 카드 세 장의 아래가 모두 768px 안(스크롤 없이 첫 화면)', whyFold.every((c) => c.w > 0 && c.bottom <= 768), JSON.stringify(whyFold));
+    await shot(s.cdp, `${browser.name}-0b-start-why-1366`);
+    await s.cdp.send('Emulation.clearDeviceMetricsOverride');
+    await sleep(200);
+    check('CR-16 ② 시작 화면 처음 보이는 글에 「유니버스」가 없음(단추 이름 「…」·접힌 「샘플·처음 순서 더 보기」 안은 제외)', await evaluate(s.cdp, "(() => { const c = document.getElementById('start-screen').cloneNode(true); c.querySelectorAll('button, summary, details, [data-testid=start-mine]').forEach((e) => e.remove()); return !c.textContent.replace(/「[^」]*」/g, '').includes('유니버스'); })()"));
     check('시작 화면에 "null" 글자 없음', await evaluate(s.cdp, "(() => { const w = document.createTreeWalker(document.getElementById('start-screen'), NodeFilter.SHOW_TEXT); while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') return false; return true; })()"));
     await evaluate(s.cdp, 'window.scrollTo(0, 0)');
     await shot(s.cdp, `${browser.name}-0-start`);
@@ -1033,6 +1047,17 @@ async function checkBrowser(browser, port) {
     await sleep(150);
     check('첫 업무: 개요에 「처음 할 일」 상자가 보이고 크기가 있음(3단계, 완료 표시 없음)', await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=starter-steps]'); if (!b) return false; const r = b.getBoundingClientRect(); return r.width > 0 && r.height > 0 && b.textContent.includes('처음 할 일') && b.querySelectorAll('li').length === 3 && b.querySelectorAll('li[data-done=\"1\"]').length === 0; })()"));
     check('첫 업무: 업무 개수 노드가 하나라 「업무 더 넣기」가 남아 있음, 나눠 보세요 안내는 없음', (await text(s.cdp, '[data-testid=starter-steps]')).includes('업무 더 넣기') && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=split-hint]')")));
+    // ── CR-16 ③ 빈 출발 미리 보기(2026-10-23): 「처음 할 일」 아래 접힌 상자 → 펼치면 「샘플」·월말 정산 사전 생성 문장 ──
+    const pvInfo = () => evaluate(s.cdp, "(() => { const d = document.querySelector('[data-testid=starter-preview]'); if (!d) return null; const r = d.getBoundingClientRect(); const st = document.querySelector('[data-testid=starter-steps]').getBoundingClientRect(); return { open: d.open, w: r.width, h: r.height, below: r.top >= st.bottom - 1, summary: d.querySelector('summary').textContent, items: d.querySelectorAll('[data-testid=starter-preview-item]').length, text: d.textContent }; })()");
+    const pv1 = await pvInfo();
+    check('CR-16 ③ 「처음 할 일」 아래에 접힌 「기록이 이렇게 쌓이면 →」 미리 보기가 크기 있게 보임', !!pv1 && pv1.open === false && pv1.w > 0 && pv1.h > 0 && pv1.below && pv1.summary === '기록이 이렇게 쌓이면 →', JSON.stringify(pv1 && { ...pv1, text: '' }));
+    await evaluate(s.cdp, "document.querySelector('[data-testid=starter-preview] summary').click()");
+    await sleep(200);
+    const pv2 = await pvInfo();
+    check('CR-16 ③ 펼치면 「샘플」 표시와 「월말 정산」 안내, 항목 3개(업무 개요·세부 업무 절차·주의사항·노하우)와 인수인계 위험 한 줄·만드는 방법 안내', !!pv2 && pv2.open === true && pv2.items === 3 && pv2.text.includes('샘플') && pv2.text.includes('월말 정산') && pv2.text.includes('인수인계 위험') && pv2.text.includes('「인수인계 초안 만들기」') && pv2.text.includes('월말 정산 점검은 매월 말 정산 결과를'), JSON.stringify(pv2 && { ...pv2, text: pv2.text.slice(0, 80) }));
+    check('CR-16 시작 화면·개요(미리 보기 포함)에 "null" 글자 없음', await evaluate(s.cdp, "(() => { const w = document.createTreeWalker(document.getElementById('detail'), NodeFilter.SHOW_TEXT); while (w.nextNode()) if (w.currentNode.textContent.includes('null')) return false; return true; })()"));
+    await shot(s.cdp, `${browser.name}-8b2-starter-preview-open`);
+    await evaluate(s.cdp, "document.querySelector('[data-testid=starter-preview] summary').click()");
     await shot(s.cdp, `${browser.name}-8b-starter-universe`);
     await evaluate(s.cdp, "window.__wu.select(window.__wu.doc.universe.id + '/' + window.__wu.doc.nodes.find((n) => n.core_type === 'work').id)");
     await sleep(150);
@@ -1162,7 +1187,9 @@ async function checkBrowser(browser, port) {
   // ── T-11 반복 비효율(R-05 ⑤) ──
   await evaluate(s.cdp, "location.hash = 'U-A1'; location.reload()").catch(() => {});
   await sleep(500);
-  if (await waitFor(s.cdp, "window.__wu && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000)) {
+  const repeatReady = await waitFor(s.cdp, "window.__wu && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
+  if (!repeatReady) console.log('DIAG T-11 U-A1 열기 실패:', JSON.stringify(await evaluate(s.cdp, "({ href: location.href, wu: typeof window.__wu, start: window.__wu && window.__wu.start, doc: window.__wu && window.__wu.doc ? window.__wu.doc.universe.id : null, nodes: window.__wu && window.__wu.cy ? window.__wu.cy.nodes().length : null, dialogs: [...document.querySelectorAll('dialog[open]')].map((d) => d.id || d.className), warn: (document.querySelector('[data-testid=start-warning]') || {}).textContent || '' })").catch((e) => String(e))));
+  if (repeatReady) {
     await evaluate(s.cdp, "window.__wu.select(null)");
     await clickTestId(s.cdp, 'btn-insight-universe');
     await sleep(200);
@@ -1282,7 +1309,7 @@ async function checkBrowser(browser, port) {
   await evaluate(s.cdp, "location.hash = 'U-D1'; location.reload()").catch(() => {});
   await sleep(500);
   const deptReady = await waitFor(s.cdp, "window.__wu && window.__wu.doc.universe.id === 'U-D1' && window.__wu.cy.nodes().length > 0", 8000);
-  check('부서 유니버스(부서 → 팀 → 업무 여러 단계)가 열림', deptReady);
+  check('부서 유니버스(부서 → 팀 → 업무 여러 단계)가 열림', deptReady, deptReady ? undefined : JSON.stringify(await evaluate(s.cdp, "({ href: location.href, wu: typeof window.__wu, start: window.__wu && window.__wu.start, doc: window.__wu && window.__wu.doc ? window.__wu.doc.universe.id : null, nodes: window.__wu && window.__wu.cy ? window.__wu.cy.nodes().length : null, dialogs: [...document.querySelectorAll('dialog[open]')].map((d) => d.id || d.className), warn: (document.querySelector('[data-testid=start-warning]') || {}).textContent || '' })").catch((e) => String(e))));
   if (deptReady) {
     // 접힌 팀 꼭지를 펼쳐 대사 확인을 고를 수 있게 한다
     await evaluate(s.cdp, "window.__wu.toggle('U-T1')");
@@ -2465,6 +2492,215 @@ async function checkBrowser(browser, port) {
   await clickTestId(s.cdp, 'issue-close');
   await sleep(100);
 
+  // ── CR-15 T-36 실시간 Claude API(가짜 클라이언트, 실제 호출 없음): 키 없으면 평소와 같고, 키를 넣으면 「생성 중…」 → 교체(칩 「Claude API」) → 실패하면 「규칙 기반으로 대체함」 → 키 지우기 → 칩 없음.
+  //    데이터를 바꾸지 않는다(설정과 응답 캐시만). 가짜 키는 조각을 이어 붙여 비밀값 패턴에 걸리지 않게 한다 ──
+  {
+    const fakeKey = ['sk', 'ant', 'x'.repeat(8), 'FAKEKEY', 'y'.repeat(12)].join('-');
+    const settingsOpen = async () => { await evaluate(s.cdp, "document.getElementById('settings-open').click()"); await sleep(150); };
+    const settingsClose = async () => { await clickTestId(s.cdp, 'settings-close'); await sleep(100); };
+    const typeInto = (testid, value) => evaluate(s.cdp, `(() => { const e = document.querySelector('[data-testid=${testid}]'); e.value = ${JSON.stringify(value)}; e.dispatchEvent(new Event('input')); e.dispatchEvent(new Event('change')); })()`);
+    const openDraft = async () => {
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await clickTestId(s.cdp, 'btn-draft-universe');
+      await sleep(150);
+    };
+    const submitDraft = () => evaluate(s.cdp, `(() => { const set = (id, v) => { const e = document.querySelector('[data-testid=' + id + ']'); e.value = v; e.dispatchEvent(new Event('change')); }; set('draft-target', 'U-A1/N-000'); set('draft-from', 'U-A1/N-011'); set('draft-to', 'U-A1/N-012'); document.querySelector('[data-testid=draft-form] button[type=submit]').click(); })()`);
+    const liveDone = (extra = '') => waitFor(s.cdp, `(() => { const n = document.querySelector('[data-testid=draft-live]'); return !!n && n.textContent === ''${extra}; })()`, 5000);
+    const chipCount = () => evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=draft-result] [data-testid=item-method]')].filter((c) => c.textContent === 'Claude API').length");
+    const calls = () => evaluate(s.cdp, 'window.__wu.fakeLlm.calls.length');
+    await reloadApp();
+    await evaluate(s.cdp, "window.__wu.useFakeLlm('ok')");
+    // 1) 「Claude API」를 골랐지만 키가 없다: 키 칸은 보이고, 초안에는 「생성 중…」도 칩도 없고 가짜 클라이언트는 한 번도 불리지 않는다
+    await settingsOpen();
+    await evaluate(s.cdp, "(() => { const r = document.querySelector('[data-testid=provider-claude_api]'); r.checked = true; r.dispatchEvent(new Event('change')); })()");
+    await sleep(100);
+    const keyUi = await evaluate(s.cdp, "(() => { const k = document.querySelector('[data-testid=settings-apikey]'); const m = document.querySelector('[data-testid=settings-model]'); const c = document.querySelector('[data-testid=settings-clear-key]'); const box = document.querySelector('[data-testid=settings-key-box]'); const r = k ? k.getBoundingClientRect() : { width: 0, height: 0 }; return { type: k && k.type, model: m && m.placeholder, clear: !!c, size: r.width > 0 && r.height > 0, note: box ? box.textContent : '', status: (document.querySelector('[data-testid=settings-key-status]') || {}).textContent || '' }; })()");
+    check('CR-15 설정에서 「Claude API」를 고르면 「API 키」(비밀번호 칸)·「모델」(기본 claude-opus-5-5)·「키 지우기」와 안내가 나타남(크기 있음)', keyUi.type === 'password' && keyUi.model === 'claude-opus-5-5' && keyUi.clear && keyUi.size && keyUi.note.includes('이 브라우저에만 저장') && keyUi.note.includes('공용 PC') && keyUi.note.includes('과금') && keyUi.status.includes('키가 없습니다'), JSON.stringify(keyUi));
+    await settingsClose();
+    await openDraft();
+    await submitDraft();
+    await sleep(300);
+    const noKey = await evaluate(s.cdp, "({ live: !!document.querySelector('[data-testid=draft-live]'), calls: window.__wu.fakeLlm.calls.length, items: document.querySelectorAll('[data-testid^=draft-item-]').length, fb: (document.querySelector('[data-testid=draft-fallback]') || {}).textContent || '' })");
+    check('CR-15 키가 없으면 「생성 중…」 표시도 호출도 없고 규칙 기반 + 연결 전 이유(기존 동작 그대로)', !noKey.live && noKey.calls === 0 && noKey.items === 10 && noKey.fb.includes('규칙 기반으로 대체함'), JSON.stringify(noKey));
+    // 2) 키를 넣는다: 머리글 설명에 「(실시간)」, 저장은 이 브라우저 설정에만
+    await settingsOpen();
+    await typeInto('settings-apikey', fakeKey);
+    await sleep(100);
+    const keyOn = await evaluate(s.cdp, "({ status: (document.querySelector('[data-testid=settings-key-status]') || {}).textContent || '', title: document.getElementById('settings-open').getAttribute('title') || '' })");
+    check('CR-15 키를 넣으면 상태 문구가 바뀌고 머리글 「설정」 설명에 Claude API(실시간)', keyOn.status.includes('키가 입력되어 있습니다') && keyOn.title.includes('Claude API(실시간)'), JSON.stringify(keyOn));
+    await settingsClose();
+    // 3) 초안: 먼저 그리고(10항목) 「생성 중…」 → 응답이 오면 항목 단위로 교체하고 칩 「Claude API」
+    await evaluate(s.cdp, 'window.__wu.fakeLlm.delayMs = 700');
+    await openDraft();
+    await submitDraft();
+    await sleep(150);
+    const during = await evaluate(s.cdp, "({ note: (document.querySelector('[data-testid=draft-live]') || {}).textContent || '', aria: (document.querySelector('[data-testid=draft-live]') || {}).getAttribute && document.querySelector('[data-testid=draft-live]').getAttribute('aria-live'), items: document.querySelectorAll('[data-testid^=draft-item-]').length, claude: [...document.querySelectorAll('[data-testid=item-method]')].filter((c) => c.textContent === 'Claude API').length })");
+    check('CR-15 초안: 먼저 규칙 기반(사전 생성) 10항목이 그려지고 「생성 중…」(aria-live=polite)이 보임, 아직 Claude API 칩은 없음', during.note === '생성 중…' && during.aria === 'polite' && during.items === 10 && during.claude === 0, JSON.stringify(during));
+    check('CR-15 초안: 응답이 오면 「생성 중…」이 사라지고 항목이 교체됨(칩 「Claude API」), 생성 방식 표시도 바뀜', (await liveDone()) && (await chipCount()) >= 3 && (await text(s.cdp, '[data-testid=draft-method]')).includes('Claude API') && (await text(s.cdp, '[data-testid=draft-method-note]')).includes('원문 인용'), `칩 ${await chipCount()}`);
+    await shot(s.cdp, `${browser.name}-41-llm-draft`);
+    // 4) 같은 초안을 다시: 응답 캐시로 호출이 늘지 않는다
+    const calls1 = await calls();
+    await openDraft();
+    await submitDraft();
+    check('CR-15 초안: 같은 근거로 다시 만들면 응답 캐시를 써서 호출이 늘지 않음', (await liveDone()) && (await calls()) === calls1 && calls1 === 1 && (await chipCount()) >= 3, `호출 ${calls1}→${await calls()}`);
+    // 5) 실패: 모델을 바꿔(캐시 키가 달라져) 시간 초과 / 지어낸 quote
+    const setModel = async (m) => { await settingsOpen(); await typeInto('settings-model', m); await sleep(100); await settingsClose(); };
+    await setModel('claude-test-timeout');
+    await evaluate(s.cdp, "window.__wu.fakeLlm.mode = 'timeout'; window.__wu.fakeLlm.delayMs = 100");
+    await openDraft();
+    await submitDraft();
+    const failed = (await liveDone()) && (await evaluate(s.cdp, "({ fb: (document.querySelector('[data-testid=draft-fallback]') || {}).textContent || '', chips: [...document.querySelectorAll('[data-testid=item-method]')].filter((c) => c.textContent === 'Claude API').length, items: document.querySelectorAll('[data-testid^=draft-item-]').length })"));
+    check('CR-15 초안: 시간 초과면 「규칙 기반으로 대체함: …연결 실패·시간 초과」 + 규칙 기반 10항목, Claude API 칩 없음', !!failed && failed.fb.includes('규칙 기반으로 대체함') && failed.fb.includes('연결 실패·시간 초과') && failed.chips === 0 && failed.items === 10, JSON.stringify(failed));
+    await setModel('claude-test-quote');
+    await evaluate(s.cdp, "window.__wu.fakeLlm.mode = 'badquote'");
+    await openDraft();
+    await submitDraft();
+    const badQuote = (await liveDone()) && (await evaluate(s.cdp, "({ fb: (document.querySelector('[data-testid=draft-fallback]') || {}).textContent || '', chips: [...document.querySelectorAll('[data-testid=item-method]')].filter((c) => c.textContent === 'Claude API').length })"));
+    check('CR-15 초안: 지어낸 인용(quote)은 항목이 규칙 기반으로 남고 사유에 「원문 인용」이 보임', !!badQuote && badQuote.fb.includes('원문 인용') && badQuote.chips === 0, JSON.stringify(badQuote));
+    // 6) 화면을 떠나면 응답을 버린다: 응답을 기다리는 중 패널을 닫으면 오류 없이 끝난다
+    await setModel('claude-test-leave');
+    await evaluate(s.cdp, "window.__wu.fakeLlm.mode = 'ok'; window.__wu.fakeLlm.delayMs = 500; window.__llmErr = []; window.addEventListener('error', (e) => window.__llmErr.push(String(e.message))); window.addEventListener('unhandledrejection', (e) => window.__llmErr.push(String(e.reason)))");
+    await openDraft();
+    await submitDraft();
+    await sleep(100);
+    await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=draft-form] button')].find((b) => b.textContent === '닫기').click()");
+    await sleep(900);
+    const left = await evaluate(s.cdp, "({ err: window.__llmErr, draftOpen: !!document.querySelector('[data-testid=draft-form]') })");
+    check('CR-15 응답을 기다리다 초안을 닫으면 응답은 버려지고 오류가 나지 않음', left.err.length === 0 && !left.draftOpen, JSON.stringify(left));
+    // 7) 인사이트 설명도 같은 방식(「인수인계 위험」 탭의 설명 상자)
+    await setModel('claude-test-insight');
+    await evaluate(s.cdp, "window.__wu.fakeLlm.delayMs = 400");
+    await evaluate(s.cdp, 'window.__wu.select(null)');
+    await clickTestId(s.cdp, 'btn-insight-universe');
+    await sleep(100);
+    await clickTestId(s.cdp, 'tab-risk');
+    await sleep(100);
+    const insightDuring = await evaluate(s.cdp, "({ boxes: document.querySelectorAll('[data-testid=insight-explain]').length, live: document.querySelectorAll('[data-testid=explain-live]').length })");
+    const insightReplaced = await waitFor(s.cdp, "[...document.querySelectorAll('[data-testid=insight-explain]')].some((b) => b.dataset.method === 'llm')", 5000);
+    const insightChip = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=insight-explain] .method-chip')].map((c) => c.textContent).join()");
+    check('CR-15 인사이트 설명: 상자가 먼저 그려지고(생성 중… 표시) 응답이 오면 같은 상자가 Claude API 문장으로 교체됨', insightDuring.boxes >= 1 && insightDuring.live >= 1 && insightReplaced && insightChip.includes('Claude API'), JSON.stringify({ insightDuring, insightChip }));
+    await clickTestId(s.cdp, 'insight-close');
+    await sleep(100);
+    // 8) 키는 문서·내보내기에 들어가지 않는다(설정에만)
+    const leak = await evaluate(s.cdp, `(() => { const key = ${JSON.stringify(fakeKey)}; const doc = JSON.stringify(window.__wu.doc); const keys = Object.keys(localStorage).filter((k) => localStorage.getItem(k).includes(key)); return { doc: doc.includes(key), keys }; })()`);
+    check('CR-15 키 문자열은 문서(내보내기 JSON의 재료)에 없고 저장소에는 설정 한 곳에만 있음', !leak.doc && leak.keys.length === 1 && leak.keys[0] === 'wu:v1:settings', JSON.stringify(leak));
+    // 9) 키 지우기 → 설정과 응답 캐시에서 사라지고, 초안은 다시 평소와 같음
+    await settingsOpen();
+    await typeInto('settings-model', ''); // 모델 칸도 비운다(다음 단계에 남기지 않음)
+    await clickTestId(s.cdp, 'settings-clear-key');
+    await sleep(100);
+    const cleared = await evaluate(s.cdp, "({ settings: JSON.parse(localStorage.getItem('wu:v1:settings') || '{}'), cache: localStorage.getItem('wu:v1:llm-cache'), field: document.querySelector('[data-testid=settings-apikey]').value, status: (document.querySelector('[data-testid=settings-key-status]') || {}).textContent || '', title: document.getElementById('settings-open').getAttribute('title') || '' })");
+    check('CR-15 「키 지우기」: 설정에서 키가 사라지고 응답 캐시도 지워지며 머리글에서 (실시간)이 빠짐', !('apiKey' in cleared.settings) && cleared.cache === null && cleared.field === '' && cleared.status.includes('키가 없습니다') && !cleared.title.includes('실시간'), JSON.stringify(cleared));
+    await settingsClose();
+    const callsBefore = await calls();
+    await openDraft();
+    await submitDraft();
+    await sleep(900);
+    const afterClear = await evaluate(s.cdp, "({ live: !!document.querySelector('[data-testid=draft-live]'), chips: [...document.querySelectorAll('[data-testid=item-method]')].filter((c) => c.textContent === 'Claude API').length })");
+    check('CR-15 키를 지운 뒤 초안: 「생성 중…」도 칩도 호출도 없음', !afterClear.live && afterClear.chips === 0 && (await calls()) === callsBefore, JSON.stringify({ afterClear, callsBefore }));
+    await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=draft-form] button')].find((b) => b.textContent === '닫기').click()");
+    await pickProvider('pregen'); // 이후 단계는 기본 생성 방식으로
+    await evaluate(s.cdp, "localStorage.removeItem('wu:v1:llm-cache')");
+  }
+
+  // ── CR-15 T-37 A 문서 AI 변환(가짜 클라이언트, 실제 호출 없음): 키 없으면 단추 없음 → 키를 넣으면 「AI로 변환」 → 「AI가 읽는 중」 → 미리 보기(칩 「AI 변환」·노드 표·뺀 항목) →
+  //    같은 글 다시 누르면 호출 없음 → 가져오기 → 유니버스 열림·tags 「AI 변환」 → 실패하면 규칙 변환 결과 + 안내 → 글을 바꾸거나 창을 닫으면 응답 버림 → 키 지우기 → 단추 없음.
+  //    가져오기가 저장소를 바꾸므로 시작 때 저장소를 통째로 찍어 두었다가 끝에 되돌린다 ──
+  {
+    const fakeKey = ['sk', 'ant', 'x'.repeat(8), 'FAKEKEY', 'y'.repeat(12)].join('-');
+    const settingsOpen = async () => { await evaluate(s.cdp, "document.getElementById('settings-open').click()"); await sleep(150); };
+    const settingsClose = async () => { await clickTestId(s.cdp, 'settings-close'); await sleep(100); };
+    const typeInto = (testid, value) => evaluate(s.cdp, `(() => { const e = document.querySelector('[data-testid=${testid}]'); e.value = ${JSON.stringify(value)}; e.dispatchEvent(new Event('input')); e.dispatchEvent(new Event('change')); })()`);
+    const importOpen = async () => { await evaluate(s.cdp, "window.confirm = () => true; document.getElementById('import-open').click()"); await sleep(200); };
+    const importClose = async () => { await evaluate(s.cdp, "document.getElementById('import-dialog').open && document.querySelector('[data-testid=import-close]').click()"); await sleep(100); };
+    const aiUi = () => evaluate(s.cdp, "({ btn: !!document.querySelector('[data-testid=btn-ai-convert]'), convert: !!document.querySelector('[data-testid=import-convert]'), note: (document.querySelector('[data-testid=import-method-note]') || {}).textContent || '' })");
+    const pressAi = async () => { await clickTestId(s.cdp, 'import-example'); await sleep(100); await clickTestId(s.cdp, 'btn-ai-convert'); };
+    const calls = () => evaluate(s.cdp, 'window.__wu.fakeLlm.calls.length');
+    const aiChip = "document.querySelector('[data-testid=import-ai-chip]')";
+    await reloadApp();
+    const snap = await evaluate(s.cdp, 'JSON.stringify(Object.entries(localStorage))');
+    await evaluate(s.cdp, "window.__wu.useFakeLlm('convert')");
+    // 1) 키가 없다: 「초벌 변환」만 있고 안내 문구도 지금과 같다
+    await importOpen();
+    const noKey = await aiUi();
+    check('CR-15 T-37 키가 없으면 문서 탭에 「AI로 변환」이 없고(초벌 변환만) 안내 문구가 지금과 같음', !noKey.btn && noKey.convert && noKey.note.includes('문서 변환은 규칙으로 읽습니다'), JSON.stringify(noKey));
+    await importClose();
+    // 2) 키를 넣는다: 「Claude API」 + 키 → 문서 탭에 「AI로 변환」(초벌 변환 옆)
+    await settingsOpen();
+    await evaluate(s.cdp, "(() => { const r = document.querySelector('[data-testid=provider-claude_api]'); r.checked = true; r.dispatchEvent(new Event('change')); })()");
+    await sleep(100);
+    await typeInto('settings-apikey', fakeKey);
+    await sleep(100);
+    await settingsClose();
+    await importOpen();
+    const withKey = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=btn-ai-convert]'); const c = document.querySelector('[data-testid=import-convert]'); const r = b ? b.getBoundingClientRect() : { width: 0, height: 0 }; return { text: b ? b.textContent : '', size: r.width > 0 && r.height > 0, next: !!b && b.previousElementSibling === c, live: !!document.querySelector('[data-testid=ai-convert-live]'), note: (document.querySelector('[data-testid=import-method-note]') || {}).textContent || '' }; })()");
+    check('CR-15 T-37 키를 넣으면 「초벌 변환」 옆에 「AI로 변환」이 보이고(크기 있음) 규칙 변환 단추도 그대로', withKey.text === 'AI로 변환' && withKey.size && withKey.next && withKey.live && withKey.note.includes('Claude가 읽습니다'), JSON.stringify(withKey));
+    // 3) 누르면 「AI가 읽는 중…」 → 미리 보기
+    await evaluate(s.cdp, 'window.__wu.fakeLlm.delayMs = 700');
+    await pressAi();
+    await sleep(250);
+    const during = await evaluate(s.cdp, "(() => { const n = document.querySelector('[data-testid=ai-convert-live]'); const b = document.querySelector('[data-testid=btn-ai-convert]'); return { note: n ? n.textContent : '', aria: n ? n.getAttribute('aria-live') : '', disabled: b ? b.disabled : null, preview: !!document.querySelector('[data-testid=import-confirm]'), calls: window.__wu.fakeLlm.calls.length }; })()");
+    check('CR-15 T-37 누르면 「AI가 읽는 중… (최대 90초)」(aria-live=polite)가 보이고 단추가 잠기며 아직 미리 보기는 없음, 호출 1회', during.note === 'AI가 읽는 중… (최대 90초)' && during.aria === 'polite' && during.disabled === true && !during.preview && during.calls === 1, JSON.stringify(during));
+    const shown = await waitFor(s.cdp, `!!${aiChip}`, 5000);
+    const done = await evaluate(s.cdp, `(() => ({ chip: ${aiChip} ? ${aiChip}.textContent : '', method: (document.querySelector('[data-testid=import-method]') || {}).textContent || '', dropped: (document.querySelector('[data-testid=import-ai-dropped] summary') || {}).textContent || '', droppedList: (document.querySelector('[data-testid=import-ai-dropped]') || {}).textContent || '', summary: (document.querySelector('[data-testid=import-summary]') || {}).textContent || '', gran: !!document.querySelector('[data-testid=import-granularity]'), source: (document.querySelector('[data-testid=import-source]') || {}).textContent || '', rows: document.querySelectorAll('[data-testid=import-sections] tbody tr').length, nodes: (document.querySelector('[data-testid=import-nodes]') || {}).textContent || '', live: (document.querySelector('[data-testid=ai-convert-live]') || {}).textContent, aiTag: !!document.querySelector('.error-text[data-testid=import-errors]') }))()`);
+    check('CR-15 T-37 미리 보기 머리에 칩 「AI 변환 · 모델명」과 Claude API(실시간) 방식 안내가 보이고 규칙 방식 문구는 없음', shown && done.chip === 'AI 변환 · claude-opus-5-5' && done.method.includes('Claude API(실시간)') && !done.method.includes('규칙 v1') && done.live === '', JSON.stringify(done));
+    check('CR-15 T-37 미리 보기: 노드 표(업무 5·사람 3·산출물 3·주제 3)와 원문 근거 15/15, 세분화 줄(월말 정산 수준)은 없음', shown && done.summary.includes('노드 15개') && done.summary.includes('업무 5') && done.summary.includes('사람 3') && done.summary.includes('산출물 3') && done.summary.includes('주제 3') && done.source === '노드 15/15개' && !done.gran && done.rows === 6 && done.nodes.includes('승인취소') && done.nodes.includes('절차: ①'), JSON.stringify({ summary: done.summary, source: done.source, rows: done.rows, gran: done.gran }));
+    check('CR-15 T-37 「원문 인용이 확인되지 않아 뺀 항목 1개」(펼치면 지어낸 업무 사유)가 보임', done.dropped === '원문 인용이 확인되지 않아 뺀 항목 1개' && done.droppedList.includes('지어낸 업무') && done.droppedList.includes('원문에서 인용을 찾지 못함') && !done.nodes.includes('지어낸 업무'), JSON.stringify({ dropped: done.dropped, list: done.droppedList }));
+    await shot(s.cdp, `${browser.name}-42-ai-convert-preview`);
+    // 4) 같은 글로 다시 누르면 호출이 늘지 않는다(메모리 캐시)
+    const calls1 = await calls();
+    await clickTestId(s.cdp, 'btn-ai-convert');
+    await waitFor(s.cdp, "(document.querySelector('[data-testid=ai-convert-live]') || {}).textContent === '' && !!document.querySelector('[data-testid=import-ai-chip]')", 3000);
+    check('CR-15 T-37 같은 글로 다시 「AI로 변환」을 눌러도 호출이 늘지 않음', calls1 === 1 && (await calls()) === calls1, `호출 ${calls1}→${await calls()}`);
+    // 5) 작성 주체를 넣고 가져오기 → 유니버스가 열리고 tags에 「AI 변환」
+    await evaluate(s.cdp, "(() => { const i = document.getElementById('import-owner'); i.value = '가상 시스템분석팀'; i.dispatchEvent(new Event('input', { bubbles: true })); })()");
+    await sleep(150);
+    await clickTestId(s.cdp, 'import-confirm');
+    const opened = await waitFor(s.cdp, "window.__wu && window.__wu.doc && (window.__wu.doc.universe.tags || []).includes('AI 변환') && window.__wu.cy.nodes().length === 15", 8000);
+    const imp = opened ? await evaluate(s.cdp, "({ tags: window.__wu.doc.universe.tags, works: window.__wu.doc.nodes.filter((n) => n.core_type === 'work').length, conv: window.__wu.doc.nodes.filter((n) => n.attrs && String(n.attrs.변환 || '').startsWith('AI 변환(')).length, key: JSON.stringify(window.__wu.doc).includes(" + JSON.stringify(fakeKey) + ") })") : null;
+    check('CR-15 T-37 「가져오기」 → 유니버스가 열리고(노드 15) tags에 「AI 변환」, 업무 5개, 모든 노드에 변환 속성, 키는 문서에 없음', opened && imp.tags.includes('AI 변환') && imp.works === 5 && imp.conv === 15 && imp.key === false, JSON.stringify(imp));
+    // 6) 실패(시간 초과): 규칙 변환 결과 + 「AI 변환 실패: … — 규칙 변환 결과를 보여 줍니다」
+    // 가져오기가 페이지를 다시 읽으므로 가짜 클라이언트를 다시 넣는다(넣기 전에는 단추를 누르지 않는다: 실제 호출 방지)
+    await evaluate(s.cdp, "window.__wu.useFakeLlm('timeout').delayMs = 100");
+    await importOpen();
+    await pressAi();
+    const failedShown = await waitFor(s.cdp, "!!document.querySelector('[data-testid=import-fallback]')", 5000);
+    const failed = await evaluate(s.cdp, "({ fb: (document.querySelector('[data-testid=import-fallback]') || {}).textContent || '', chip: !!document.querySelector('[data-testid=import-ai-chip]'), nodes: (document.querySelector('[data-testid=import-summary]') || {}).textContent || '', method: (document.querySelector('[data-testid=import-method]') || {}).textContent || '', live: (document.querySelector('[data-testid=ai-convert-live]') || {}).textContent })");
+    check('CR-15 T-37 실패(시간 초과) → 「AI 변환 실패: 연결 실패·시간 초과 — 규칙 변환 결과를 보여 줍니다」 + 규칙 변환 미리 보기(노드 18), AI 칩 없음', failedShown && failed.fb === 'AI 변환 실패: 연결 실패·시간 초과 — 규칙 변환 결과를 보여 줍니다' && !failed.chip && failed.nodes.includes('노드 18개') && failed.method.includes('규칙 v1') && failed.live === '', JSON.stringify(failed));
+    // 7) 응답을 기다리다 글을 바꾸면 응답은 버려진다
+    await evaluate(s.cdp, "window.__wu.fakeLlm.mode = 'convert'; window.__wu.fakeLlm.delayMs = 600; window.__aiErr = []; window.addEventListener('error', (e) => window.__aiErr.push(String(e.message))); window.addEventListener('unhandledrejection', (e) => window.__aiErr.push(String(e.reason)))");
+    await clickTestId(s.cdp, 'import-tab-doc');
+    await sleep(100);
+    await pressAi();
+    await sleep(150);
+    await evaluate(s.cdp, "(() => { const t = document.getElementById('import-doc'); t.value = t.value + '\\n한 줄 더'; t.dispatchEvent(new Event('input', { bubbles: true })); })()");
+    await sleep(1000);
+    const edited = await evaluate(s.cdp, "({ chip: !!document.querySelector('[data-testid=import-ai-chip]'), preview: !!document.querySelector('[data-testid=import-confirm]'), live: (document.querySelector('[data-testid=ai-convert-live]') || {}).textContent, disabled: document.querySelector('[data-testid=btn-ai-convert]').disabled, err: window.__aiErr })");
+    check('CR-15 T-37 응답을 기다리다 글을 바꾸면 응답이 버려짐(미리 보기·칩 없음, 안내 지워짐, 단추 다시 켜짐, 오류 없음)', !edited.chip && !edited.preview && edited.live === '' && edited.disabled === false && edited.err.length === 0, JSON.stringify(edited));
+    // 8) 응답을 기다리다 창을 닫으면 응답이 버려진다
+    await pressAi();
+    await sleep(150);
+    await importClose();
+    await sleep(900);
+    await importOpen();
+    const closed = await evaluate(s.cdp, "({ chip: !!document.querySelector('[data-testid=import-ai-chip]'), preview: !!document.querySelector('[data-testid=import-confirm]'), err: window.__aiErr })");
+    check('CR-15 T-37 응답을 기다리다 창을 닫으면 응답이 버려지고 다시 열면 미리 보기가 없음, 오류 없음', !closed.chip && !closed.preview && closed.err.length === 0, JSON.stringify(closed));
+    await importClose();
+    // 9) 키 지우기 → 「AI로 변환」이 사라진다
+    await settingsOpen();
+    await clickTestId(s.cdp, 'settings-clear-key');
+    await sleep(100);
+    await settingsClose();
+    await importOpen();
+    const cleared = await aiUi();
+    check('CR-15 T-37 키를 지우면 「AI로 변환」이 사라지고 안내 문구가 지금과 같음', !cleared.btn && cleared.convert && cleared.note.includes('문서 변환은 규칙으로 읽습니다'), JSON.stringify(cleared));
+    await importClose();
+    // 저장소를 시작 때로 되돌리고 U-A1로 돌아간다(가져온 유니버스·설정이 뒤 단계에 남지 않게)
+    await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(snap)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); location.hash = 'U-A1'; location.reload(); })()`).catch(() => {});
+    await sleep(500);
+    await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1'", 8000);
+  }
+
   // ── CR-14 A 편집 되감기(R-25, D-30): 이름 수정 → 개요 「편집 되감기」 → 이전 시점 → 읽기 전용 확인 → 지금으로 → 다시 → 되돌리기. 데이터를 바꾸므로 끝부분 ──
   await reloadApp();
   const rwOld = await evaluate(s.cdp, "window.__wu.doc.nodes.find((n) => n.id === 'N-002').label");
@@ -2623,7 +2859,7 @@ async function checkBrowser(browser, port) {
     const distHtml = await readFile(join(root, 'dist/index.html'), 'utf8');
     // 파서가 줄바꿈(CRLF→LF)·태그 사이 공백을 다듬으므로 글자 단위 완전 일치 대신 앱 스크립트·스타일 본문과 라이선스 주석이 같은지 본다
     const between = (h, a, b) => { const i = h.indexOf(a); return i < 0 ? null : h.slice(i + a.length, h.lastIndexOf(b)); };
-    const sameApp = (h) => { const x = stripEmbed(h); const lf = distHtml.replace(/\r\n/g, '\n'); return between(x, '<script>', '</script>') === between(lf, '<script>', '</script>') && x.includes('Cytoscape.js') && x.startsWith('<!doctype html>\n<!--') && x.includes("connect-src 'none'"); };
+    const sameApp = (h) => { const x = stripEmbed(h); const lf = distHtml.replace(/\r\n/g, '\n'); return between(x, '<script>', '</script>') === between(lf, '<script>', '</script>') && x.includes('Cytoscape.js') && x.startsWith('<!doctype html>\n<!--') && x.includes('connect-src https://api.anthropic.com;'); };
     const embedProfile = `${profile}-embed`;
     await rm(embedProfile, { recursive: true, force: true });
     s = await openSession(exe, embedProfile, port);

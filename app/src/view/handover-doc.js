@@ -1,8 +1,8 @@
 // 인수인계서 내려받기·인쇄용 HTML 만들기(R-19 CR-12 A, D-21). DOM·저장소를 쓰지 않는 순수 함수.
 // 파일 하나(외부 파일·스크립트 없음). 사용자 입력 글은 모두 이스케이프한다.
 
-const METHOD_LABELS = { rule: '규칙 기반', pregen: '사전 생성(개발 시 Claude로 작성)', llm: 'LLM' };
-const ITEM_METHOD = { rule: '규칙 기반', pregen: '사전 생성', llm: 'LLM' };
+const METHOD_LABELS = { rule: '규칙 기반', pregen: '사전 생성(개발 시 Claude로 작성)', llm: 'Claude API(실시간)' };
+const ITEM_METHOD = { rule: '규칙 기반', pregen: '사전 생성', llm: 'Claude API' };
 export const DOC_SUFFIX = '인수인계서';
 
 export const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

@@ -208,6 +208,30 @@ implementation:
   scope_change: CR-12 승인(docs/CR-12-초안.md v0.2, 2026-10-13). 날짜 일정·동결 날짜는 폐기, 동결은 진행에 따라 사용자가 정함
   current_task: (2026-10-13 저녁) CR-12 T-23~T-26·C12-8·일곱 번째 검토(T-28)·가·나 묶음 완료, push됨 9b56b0c. 남은 것: 사용자 화면 확인 체크리스트, T-27 E는 ①로 결정됨(구현 끝), T-21(F)은 조력자 샘플 도착 시, 사람 몫(T-14·T-15·T-16), 기능 동결 선언·제출
   tasks:
+    - id: T-39
+      status: 구현·검증 완료(CR-16 처음 10초 — ① 시작 화면 "왜" 덩어리, ② 용어 「업무 지도」(처음 보이는 곳만), ③ 빈 출발 미리 보기. R-08 ⑤, D-34). 대리 관찰(R-08 ④)은 사용자 몫(미확인)
+      date: 2026-10-23
+      model: 구현 Sonnet 하위 에이전트 / 스크린샷 확인·문서·커밋 Opus 메인
+      result: ui/start.js(why-block 제목+세 칸, CSS 화살표 900px 기준 가로/세로, 용어 치환, 「샘플·처음 순서 더 보기」 첫 줄 "(유니버스 = 업무 지도 하나)"), rules/starter-steps.js starterPreview(pregen U-A1/N-000 handover 문장 재사용: 업무 개요 전부·세부 절차 첫 문장·주의사항 전부), ui/detail.js 미리 보기 details(접힘 기본, 「샘플」 칩, 「처음 할 일」과 함께 사라짐), data/index.js U-K1 tagline, index.html CSS, tests/cr16.test.js 8개. tour-steps·starter-steps 문구에는 "유니버스"가 이미 없었음. 문서: 01 R-08 ⑤·상태 줄, 02 5.3 행·D-34·상태 줄, 03 T-39·상태 줄, limits L-51, 실행안내 1·2절, decisions-pending 18절 C16-1~4
+      normal_checks: 통과 (단위 846→875 전체, check:chrome 500 — why-block 크기·칸 3·한 줄 순서, 1366×768에서 세 갈래 카드 bottom≤768(스크린샷 0b 확인: 덩어리 아래 카드 세 장이 첫 화면 안), 처음 글에 「유니버스」 없음, 미리 보기 접힘→펼침 「샘플」·월말 정산·항목 3·위험 한 줄(스크린샷 8b2 확인), "null" 없음, 지문 36 일치)
+      error_checks: 통과 (단위: 샘플 7개·묶음·업무 0개·처음 할 일 완료 → 미리 보기 null, pregen 항목 없으면 그 항목만 빠짐; 결함 주입 2종(완료 판정 뒤집기·샘플 제외 제거) 잡힘)
+      unverified: [대리 관찰 1명(설명 없이 3분 뒤 "이게 뭐 하는 건지 한 문장"), 칸 3 머리 글자가 900~1000px에서 두세 줄로 접히는 모양(사람), Edge]
+    - id: T-37
+      status: 구현·검증 완료(CR-15 A 업무정의서 AI 변환 — 원문 인용 검증, R-28, D-33). 실제 모델 응답 품질은 미확인(사용자 키로 1회)
+      date: 2026-10-23
+      model: 구현 Sonnet 하위 에이전트 / 점검 실행·문서·커밋 Opus 메인
+      result: llm/ai-convert.js(스키마·프롬프트·verifyAiConvert·aiResultToDocument), prompts.js CONVERT_SYSTEM_PROMPT, providers.js convert()(max_tokens 32000·90초·재시도 0, stop_reason max_tokens 거부), connector.js convertDocumentAsync(메모리 캐시 1건), fake-client.js convert 모드 3종, ui/import.js 「AI로 변환」(키 있을 때만) → 「AI가 읽는 중…」 → 미리 보기 칩 「AI 변환 · 모델」·뺀 항목 n개 → 가져오기, doc-convert.js export 3개만, tests/ai-convert.test.js 29개. tech-record 54절, limits L-52, decisions-pending C15-4~9, 실행안내 2·3절
+      normal_checks: 통과 (단위 875, 빌드 1246KB, 규칙 변환 스냅숏 108 차이 0, 비밀값 0건, check:chrome 500 — 키 없으면 단추 없음, 키 넣으면 단추, 예시 문서 → 칩·노드 표 15개·원문 근거 15/15·뺀 항목 1개(지어낸 업무)(스크린샷 42 확인), 같은 글 재호출 없음, 가져오기 → tags 'AI 변환'·키 비포함, 시간 초과 → 규칙 변환 18노드+안내, 글 바꾸기·창 닫기 → 응답 버림, 키 지우기 → 단추 사라짐)
+      error_checks: 통과 (단위: 지어낸 quote 항목만 버림 C-AI-DROPPED 1, 8자 미만 버림, 공백·대소문자 차이 통과, 스키마 깨짐 실패, 20만 자 초과·빈 글 호출 0 거부, 끝 노드 버려지면 연결도 버림, 키 없음 null; 결함 주입 7종 모두 잡힘)
+      unverified: [실제 모델의 인용 충실도·긴 문서 90초 응답(사용자 키로 사용자가 1회), 구조화 출력 스키마 제약(선택 칸 수) 공식 문서, Edge]
+    - id: T-36
+      status: 구현·검증 완료(CR-15 연결부·공급자·설정 키·B 문장 다듬기, R-28, D-33). 실제 API 호출·CORS는 사용자 키로 사용자가 1회(미확인)
+      date: 2026-10-23
+      model: 구현 Sonnet 하위 에이전트 / 라벨 통일·문서·검증·커밋 Opus 메인
+      result: llm/providers.js claude_api(공식 SDK 1.1.0 번들, dangerouslyAllowBrowser, messages.parse+jsonSchemaOutputFormat), llm/connector.js refineDraftAsync·explainInsightAsync·캐시(wu:v1:llm-cache 200건), llm/prompts.js·evidence-text.js·fake-client.js, settings.js 키·모델·「키 지우기」, draft.js·insight.js 「생성 중…」→교체·「Claude API」 칩, index.html CSP connect-src api.anthropic.com, build.mjs(앱 소스 fetch 금지·SDK 라이선스 고지), tests/llm-live.test.js 32개. 번들 +342KB. tech-record 54절
+      normal_checks: 통과 (단위 838→875 전체, 빌드, 지문 36 일치, 비밀값 0건, check:chrome 500 — 설정 「Claude API」 키·모델·「키 지우기」 칸, 키 없으면 「생성 중…」도 호출도 없음, 키 넣으면 「생성 중…」(aria-live) → 항목 교체·칩 「Claude API」(스크린샷 41 확인), 캐시로 재호출 없음, 실패·시간 초과 → 「규칙 기반으로 대체함」, 키 지우면 칩 없음, 내보내기·HTML·폴더 파일에 키 비포함. 첫 실행 1회는 「부서 유니버스가 열림」 8초 대기 실패로 뒤 블록이 건너뛰어졌으나(440/1 실패) 재실행에서 재현 안 됨 — 앞선 점검이 남긴 Chrome 2개 정리 직후의 시간 초과로 봄, 실패 지점에 진단 줄 추가)
+      error_checks: 단위(가짜 client — 지연·실패·시간 초과·스키마 오류·quote 없음·키 없음 → 규칙 기반 + 원인) 통과
+      unverified: [실제 API 호출·CORS·output_config.format 수용(사용자 키로 사용자가 1회), Edge]
     - id: PANEL-PAN-2026-10-23
       status: 패널 폭 조절 결함 수정(사용자 지적 "늘리면 가려지니까 — 껐다 키면 왼쪽 창이 맞춰서 이동", 2026-10-23)
       date: 2026-10-23

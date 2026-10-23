@@ -12,7 +12,7 @@ import { buildView, refGid, toGid } from '../view/view.js';
 
 // 확정한 인수인계서에 남기는 초안 생성 방식의 표시 이름(llm/connector.js METHOD_LABELS의 짧은 꼴)
 const DEFAULT_AUTHOR = '사용자(이 브라우저)'; // 작성자 이름이 비었을 때의 기록 주체(R-22)
-const METHOD_NAMES = { rule: '규칙 기반', pregen: '사전 생성', llm: 'LLM' };
+const METHOD_NAMES = { rule: '규칙 기반', pregen: '사전 생성', llm: 'Claude API(실시간)' };
 import { scopeWorks } from '../rules/handover.js';
 import { openMemos, resolveMemoInput } from '../rules/issues.js';
 import { cleanAuthorName } from '../store/local.js';

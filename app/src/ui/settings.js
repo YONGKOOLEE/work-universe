@@ -1,23 +1,62 @@
-// 생성 방식 설정(R-15, 12.4 wu:v1:settings). 공급자를 고른다. 키 입력은 없다(Claude API는 다음 단계).
-import { PROVIDERS } from '../llm/providers.js';
+// 생성 방식 설정(R-15, 12.4 wu:v1:settings). 공급자를 고른다. 「Claude API」를 고르면 키·모델 칸이 나타난다(CR-15, 키는 이 브라우저에만).
+import { DEFAULT_LLM_MODEL, PROVIDERS } from '../llm/providers.js';
 import { LABEL_MAX } from '../model/schema.js';
+import { API_KEY_MAX, LLM_MODEL_MAX } from '../store/local.js';
 import { el } from './dom.js';
 
 /**
- * @param {{current:string, authorName?:string, onAuthorName:(v:string)=>void, persisted:boolean, showCheckTools?:boolean, onChange:(name:string)=>void, onClose:()=>void}} o
+ * @param {{current:string, authorName?:string, onAuthorName:(v:string)=>void, persisted:boolean, showCheckTools?:boolean, onChange:(name:string)=>void, onClose:()=>void,
+ *   apiKey?:string, llmModel?:string, onApiKey?:(v:string)=>void, onLlmModel?:(v:string)=>void, onClearKey?:()=>void}} o
  *   persisted: 저장소를 쓸 수 있는지(없으면 이번 화면에서만 유지)
+ *   apiKey·llmModel·onApiKey·onLlmModel·onClearKey: 「Claude API」를 골랐을 때 보이는 키·모델 칸(CR-15)
  */
 export function settingsPanel(o) {
   const list = el('div', { class: 'settings-list', role: 'radiogroup', 'data-testid': 'settings-providers' },
     // 「실패 흉내」는 개발 점검용이라 점검 주소(?check)에서만 보인다(여섯 번째 검토 U-13)
     ...PROVIDERS.filter((p) => p.name !== 'fail' || o.showCheckTools).map((p) => {
       const input = el('input', { type: 'radio', name: 'provider', value: p.name, checked: p.name === o.current, 'data-testid': `provider-${p.name}` });
-      input.addEventListener('change', () => o.onChange(p.name));
+      input.addEventListener('change', () => { o.onChange(p.name); syncKeyBox(p.name); });
       return el('label', { class: 'setting' }, input, el('span', {}, el('strong', {}, p.label), el('span', { class: 'muted small' }, p.help)));
     }));
   const authorInput = el('input', { type: 'text', maxlength: String(LABEL_MAX), value: o.authorName || '', placeholder: '사용자(이 브라우저)', 'aria-label': '작성자 이름', 'data-testid': 'settings-author' });
   authorInput.addEventListener('change', () => o.onAuthorName(authorInput.value));
-  return el('div', { class: 'settings', 'data-testid': 'settings' },
+  // 「Claude API」를 고를 때만 키·모델 칸을 만든다(다른 방식에서는 화면에 아무것도 없다)
+  let keyBox = null;
+  const keyBoxFor = () => {
+    const keyInput = el('input', { type: 'password', autocomplete: 'off', spellcheck: 'false', maxlength: String(API_KEY_MAX), value: o.apiKey || '', placeholder: '키를 붙여 넣으세요', 'aria-label': 'API 키', 'data-testid': 'settings-apikey' });
+    const modelInput = el('input', { type: 'text', autocomplete: 'off', spellcheck: 'false', maxlength: String(LLM_MODEL_MAX), value: o.llmModel || '', placeholder: DEFAULT_LLM_MODEL, 'aria-label': '모델', 'data-testid': 'settings-model' });
+    const status = el('p', { class: 'muted small', 'aria-live': 'polite', 'data-testid': 'settings-key-status' });
+    const showStatus = (hasKey) => { status.textContent = hasKey ? '키가 입력되어 있습니다. 초안과 인사이트 설명을 실시간으로 다듬습니다.' : '키가 없습니다. 규칙 기반(또는 사전 생성)으로 동작합니다.'; };
+    showStatus(!!(o.apiKey && o.apiKey.trim()));
+    const sendKey = () => { if (o.onApiKey) o.onApiKey(keyInput.value); showStatus(!!keyInput.value.trim()); };
+    keyInput.addEventListener('input', sendKey);
+    keyInput.addEventListener('change', sendKey);
+    modelInput.addEventListener('change', () => { if (o.onLlmModel) o.onLlmModel(modelInput.value); });
+    const clear = el('button', { type: 'button', 'data-testid': 'settings-clear-key' }, '키 지우기');
+    clear.addEventListener('click', () => {
+      keyInput.value = '';
+      if (o.onClearKey) o.onClearKey();
+      showStatus(false);
+    });
+    return el('div', { class: 'settings-key', 'data-testid': 'settings-key-box' },
+      el('h3', {}, 'Claude API'),
+      el('p', { class: 'muted small' }, '키는 이 브라우저에만 저장되고 어떤 파일에도 들어가지 않습니다. 공용 PC에서는 쓰지 마세요. 과금은 키 소유자에게 갑니다.'),
+      el('label', { class: 'field' }, el('span', {}, 'API 키'), keyInput),
+      el('label', { class: 'field' }, el('span', {}, '모델'), modelInput),
+      el('p', { class: 'muted small' }, `비워 두면 ${DEFAULT_LLM_MODEL}을(를) 씁니다.`),
+      el('div', { class: 'row' }, clear),
+      status);
+  };
+  const syncKeyBox = (name) => {
+    if (name === 'claude_api' && !keyBox) {
+      keyBox = keyBoxFor();
+      list.after(keyBox);
+    } else if (name !== 'claude_api' && keyBox) {
+      keyBox.remove();
+      keyBox = null;
+    }
+  };
+  const root = el('div', { class: 'settings', 'data-testid': 'settings' },
     el('h2', {}, '설정'),
     el('h3', {}, '생성 방식'),
     el('p', { class: 'muted small' }, '인수인계 초안 문장과 인사이트 설명을 어떻게 만들지 고릅니다. 어느 방식이든 계산(근거 찾기)은 규칙으로 하고, 근거가 확인되지 않는 문장은 쓰지 않습니다.'),
@@ -28,4 +67,6 @@ export function settingsPanel(o) {
     o.persisted ? null : el('p', { class: 'notice' }, '브라우저 저장소를 쓸 수 없어 이 설정은 새로고침하면 사라집니다.'),
     el('div', { class: 'row' }, el('button', { type: 'button', onclick: o.onClose, 'data-testid': 'settings-close' }, '닫기')),
   );
+  syncKeyBox(o.current);
+  return root;
 }

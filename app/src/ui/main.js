@@ -1,7 +1,8 @@
 // 화면 진입점. 빌드하면 모듈 없는 단일 스크립트(IIFE)가 된다(P-1).
 
 import { createApp } from '../app/app.js';
-import { cleanAuthorName, createStore, loadSettings, openStorage, saveSettings } from '../store/local.js';
+import { cleanApiKey, cleanAuthorName, cleanLlmModel, createLlmCache, createStore, loadSettings, openStorage, saveSettings } from '../store/local.js';
+import { createFakeClient } from '../llm/fake-client.js';
 import { PREGEN } from '../../data/pregen.js';
 import { DEFAULT_PROVIDER, PROVIDERS, createProvider } from '../llm/providers.js';
 import { settingsPanel } from './settings.js';
@@ -233,7 +234,11 @@ function start() {
 
   // 생성 방식(R-15): 설정에서 고른 공급자. 기본은 사전 생성(12.4)
   const settings = loadSettings(storage, { provider: DEFAULT_PROVIDER }, PROVIDERS.map((p) => p.name));
-  let provider = createProvider(settings.provider, { pregen: PREGEN });
+  // 실시간 Claude API(CR-15): 키는 이 브라우저 설정에만 있고, 키가 있을 때만 실시간 공급자가 만들어진다. fakeLlmClient는 ?check 점검용
+  const llmCache = createLlmCache(storage);
+  let fakeLlmClient = null;
+  const makeProvider = () => createProvider(settings.provider, { pregen: PREGEN, apiKey: settings.apiKey, model: settings.llmModel, client: fakeLlmClient, cache: llmCache });
+  let provider = makeProvider();
   const providerLabel = () => (PROVIDERS.find((p) => p.name === settings.provider) || PROVIDERS[0]).label;
   // 내보내기: 파일을 내려받고 마지막 내보내기 시각을 설정에 남긴다(백업 권유 기준, R-21). 저장소가 없으면 시각은 남기지 않는다
   const backupSlot = $('backup-nudge');
@@ -846,7 +851,31 @@ function start() {
         showCheckTools: CHECK_MODE,
         onChange: (name) => {
           settings.provider = name;
-          provider = createProvider(name, { pregen: PREGEN });
+          provider = makeProvider();
+          saveSettings(storage, settings);
+          renderSettingsButton();
+        },
+        apiKey: settings.apiKey || '',
+        llmModel: settings.llmModel || '',
+        onApiKey: (v) => {
+          const key = cleanApiKey(v);
+          if (key) settings.apiKey = key;
+          else delete settings.apiKey;
+          provider = makeProvider();
+          saveSettings(storage, settings);
+          renderSettingsButton();
+        },
+        onLlmModel: (v) => {
+          const model = cleanLlmModel(v);
+          if (model) settings.llmModel = model;
+          else delete settings.llmModel;
+          provider = makeProvider();
+          saveSettings(storage, settings);
+        },
+        onClearKey: () => {
+          delete settings.apiKey;
+          llmCache.clear();
+          provider = makeProvider();
           saveSettings(storage, settings);
           renderSettingsButton();
         },
@@ -1406,7 +1435,7 @@ function start() {
   const dialog = $('group-dialog');
   // 생성 방식 버튼: 지금 방식을 이름에 보인다(R-15 "생성 방식 표시")
   function renderSettingsButton() {
-    $('settings-open').title = `생성 방식(지금: ${providerLabel().replace(/\s*\(.*\)$/, '')})과 작성자 이름을 정합니다`;
+    $('settings-open').title = `생성 방식(지금: ${providerLabel().replace(/\s*\(.*\)$/, '')}${provider && provider.live ? '(실시간)' : ''})과 작성자 이름을 정합니다`;
   }
   renderSettingsButton();
   $('settings-open').addEventListener('click', () => {
@@ -1587,6 +1616,17 @@ function start() {
     },
     get toolsOpen() {
       return toolsOpen;
+    },
+    // CR-15 점검용: 가짜 Claude 클라이언트 주입. 'ok'·'badquote'·'garbage'·'auth'·'timeout' 같은 모드 이름이면 llm/fake-client.js의 가짜를 만들고,
+    // 객체면 그것을 그대로 쓴다. 키를 설정에 넣어야 실시간 경로가 켜진다. 만든 가짜(mode·delayMs·calls를 바꿀 수 있음)를 돌려준다
+    useFakeLlm(fake = 'ok') {
+      fakeLlmClient = typeof fake === 'string' ? createFakeClient({ mode: fake }) : fake;
+      provider = makeProvider();
+      renderSettingsButton();
+      return fakeLlmClient;
+    },
+    get fakeLlm() {
+      return fakeLlmClient;
     },
     // T-18 점검용: 주변만 보기·거르기 상태
     get nbhd() {

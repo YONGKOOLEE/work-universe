@@ -5,7 +5,7 @@
 //   --check-fp  pregen.js의 FP가 지금 규칙 기반 문장과 같은지 검사(다르면 종료 코드 1)
 //   --write-fp  pregen.js의 FP 표를 다시 만든다(샘플을 고치고 사전 생성 문장을 새로 쓴 뒤)
 import { EXPLAIN_SCENARIOS, HANDOVER_SCENARIOS, explainRequestOf, handoverDraftOf } from './pregen-scenarios.mjs';
-import { eventText } from '../app/src/view/describe.js';
+import { describeEvidence } from '../app/src/llm/evidence-text.js';
 import { itemEvidence, fingerprint } from '../app/src/llm/providers.js';
 import { PREGEN } from '../app/data/pregen.js';
 import { CANDIDATE_VIEWS, candidateRequestsOf } from './pregen-scenarios.mjs';
@@ -57,16 +57,8 @@ if (mode) {
   process.exit(missing.length ? 1 : 0);
 }
 
-function describe(view, gid) {
-  const hit = view.lookup(gid);
-  if (hit.found) {
-    const n = hit.node;
-    const attrs = Object.entries(n.attrs || {}).map(([k, v]) => `${k}=${v}`).join('; ');
-    return `${gid} [${n.type_label}${n.subtype ? `·${n.subtype}` : ''}] ${n.label}${n.emp_no ? ` (${n.emp_no})` : ''}${n.description ? ` — ${n.description}` : ''}${attrs ? ` {${attrs}}` : ''}`;
-  }
-  const ev = view.events.find((e) => e.gid === gid);
-  return ev ? `${gid} [이력 ${ev.occurred_at}] ${eventText(view, ev)}` : `${gid} (없음)`;
-}
+// 근거 글 만들기는 llm/evidence-text.js 한 곳(실시간 프롬프트·quote 검증과 같은 글)
+const describe = describeEvidence;
 
 for (const s of HANDOVER_SCENARIOS) {
   const { view, draft } = handoverDraftOf(s);

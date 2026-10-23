@@ -106,7 +106,19 @@ function validPanelWidth(v) {
   return Number.isInteger(v) && v >= 200 && v <= 4000;
 }
 
-/** 설정(12.4 wu:v1:settings): 공급자 선택. 저장소가 없거나 값이 깨졌으면 기본값. 키는 저장하지 않는다(Claude API는 P2) */
+// 실시간 Claude API(CR-15, 12.4): 키·모델은 이 브라우저 설정에만 둔다. 내보내기·내용 포함 HTML·폴더 파일·되감기 이력에는 들어가지 않는다
+export const API_KEY_MAX = 200;
+export const LLM_MODEL_MAX = 100;
+/** 키/모델 입력값: 문자열이고 앞뒤 공백을 뗀 뒤 비지 않고 상한 이하일 때만 받는다. 넘으면 잘라 쓰지 않고 버린다(잘린 키는 틀린 키) */
+const cleanLimited = (v, max) => {
+  if (typeof v !== 'string') return '';
+  const t = v.trim();
+  return t && t.length <= max ? t : '';
+};
+export const cleanApiKey = (v) => cleanLimited(v, API_KEY_MAX);
+export const cleanLlmModel = (v) => cleanLimited(v, LLM_MODEL_MAX);
+
+/** 설정(12.4 wu:v1:settings): 공급자 선택·작성자 이름 등. 저장소가 없거나 값이 깨졌으면 기본값. apiKey·llmModel은 실시간 Claude API용(CR-15) */
 export function loadSettings(storage, defaults, allowed = null) {
   if (!storage) return { ...defaults };
   try {
@@ -124,6 +136,8 @@ export function loadSettings(storage, defaults, allowed = null) {
     // 「도구 더 보기」 펼침(CR-13 A): true일 때만 펼침. 깨진 값은 접힘(기본)
     if (v.moreTools === true) out.moreTools = true;
     if (validPanelWidth(v.panelWidth)) out.panelWidth = v.panelWidth;
+    if (cleanApiKey(v.apiKey)) out.apiKey = cleanApiKey(v.apiKey);
+    if (cleanLlmModel(v.llmModel)) out.llmModel = cleanLlmModel(v.llmModel);
     return out;
   } catch {
     return { ...defaults };
@@ -141,6 +155,8 @@ export function saveSettings(storage, settings) {
     if (settings.backupDismissedAt) out.backupDismissedAt = settings.backupDismissedAt;
     if (settings.moreTools === true) out.moreTools = true;
     if (validPanelWidth(settings.panelWidth)) out.panelWidth = settings.panelWidth;
+    if (cleanApiKey(settings.apiKey)) out.apiKey = cleanApiKey(settings.apiKey);
+    if (cleanLlmModel(settings.llmModel)) out.llmModel = cleanLlmModel(settings.llmModel);
     storage.setItem(SETTINGS_KEY, JSON.stringify(out));
     return true;
   } catch {
@@ -148,3 +164,60 @@ export function saveSettings(storage, settings) {
   }
 }
 
+
+// ── 실시간 응답 캐시(CR-15, 12.4 wu:v1:llm-cache) ─────────────────────────
+const LLM_CACHE_KEY = 'wu:v1:llm-cache';
+export const LLM_CACHE_MAX = 200;
+
+/**
+ * 응답 캐시: 조회 키 → 검증을 통과한 문장. 최대 max건, 넘으면 오래된 것부터 버린다.
+ * storage가 없거나 쓰기가 실패하면 이 세션 메모리에서만 유지한다. 키 지우기 때 clear()로 함께 지운다.
+ * 읽기는 처음 쓸 때 한 번(키가 없는 브라우저는 저장소를 건드리지 않는다)
+ */
+export function createLlmCache(storage, { max = LLM_CACHE_MAX } = {}) {
+  let map = null;
+  const load = () => {
+    if (map) return map;
+    map = new Map();
+    try {
+      const v = JSON.parse((storage && storage.getItem(LLM_CACHE_KEY)) || 'null');
+      const list = v && Array.isArray(v.entries) ? v.entries : [];
+      for (const e of list) if (Array.isArray(e) && typeof e[0] === 'string' && e[1] && typeof e[1] === 'object') map.set(e[0], e[1]);
+    } catch {
+      map = new Map();
+    }
+    while (map.size > max) map.delete(map.keys().next().value);
+    return map;
+  };
+  const persist = () => {
+    if (!storage) return;
+    try {
+      storage.setItem(LLM_CACHE_KEY, JSON.stringify({ v: 1, entries: [...map] }));
+    } catch {
+      // 저장소가 가득 찼거나 막혔으면 이 세션 메모리에서만 유지
+    }
+  };
+  return {
+    get(key) {
+      return load().get(key) || null;
+    },
+    set(key, value) {
+      const m = load();
+      m.delete(key); // 다시 쓰면 가장 새것으로
+      m.set(key, value);
+      while (m.size > max) m.delete(m.keys().next().value);
+      persist();
+    },
+    clear() {
+      map = new Map();
+      try {
+        if (storage) storage.removeItem(LLM_CACHE_KEY);
+      } catch {
+        // 지우지 못해도 메모리는 비었다
+      }
+    },
+    get size() {
+      return load().size;
+    },
+  };
+}

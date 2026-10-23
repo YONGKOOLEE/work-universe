@@ -5,7 +5,7 @@ import { DENSE_DEFAULT_N, denseLimit, densityGaps, repeatInefficiency, similarEx
 import { flowChange } from '../rules/flow.js';
 import { RISK, concentrationExplain, handoverReadiness, knowledgeConcentration, readinessExplain, ripple, rippleExplain } from '../rules/insight-risk.js';
 import { densityExplain, flowExplain, repeatExplain, similarExplain } from '../rules/explain.js';
-import { METHOD_LABELS, explainInsight } from '../llm/connector.js';
+import { METHOD_LABELS, explainInsight, explainInsightAsync, isLive, syncProvider } from '../llm/connector.js';
 import { el } from './dom.js';
 import { evidenceChips } from './evidence.js';
 import { todayLocal } from './time.js';
@@ -21,14 +21,36 @@ const chips = (view, ids, onFocus) => evidenceChips(view, ids, onFocus, { tag: '
 // 인사이트 설명(역할 b): 공급자 결과(사전 생성)가 있으면 그 문장, 없으면 규칙 기반 문장. 문장마다 근거 버튼
 function explainBox(view, req, o) {
   if (!req) return null;
-  const r = explainInsight(req, { provider: o.provider, exists: view.exists });
-  return el('div', { class: 'explain', 'data-testid': 'insight-explain', 'data-method': r.method },
-    el('h4', {}, '설명', el('span', { class: `method-chip ${r.method}`, title: r.method === 'pregen' ? '개발 중 Claude가 이 근거만 보고 쓴 문장 — 앱이 열 때마다 근거 ID를 검증하고, 맞지 않으면 규칙 기반 문장으로 바꿉니다' : METHOD_LABELS[r.method] }, METHOD_LABELS[r.method].replace(/\(.*\)$/, ''))),
+  // 실시간 공급자(CR-15)면 먼저 사전 생성(없으면 규칙 기반) 설명을 그리고, 응답이 오면 같은 상자 안을 교체한다
+  const live = isLive(o.provider);
+  const r = explainInsight(req, { provider: syncProvider(o.provider), exists: view.exists });
+  const box = el('div', { class: 'explain', 'data-testid': 'insight-explain', 'data-method': r.method });
+  const note = live ? el('span', { class: 'muted small', 'aria-live': 'polite', 'data-testid': 'explain-live' }, ' 생성 중…') : null;
+  fillExplain(box, view, r, o, note);
+  if (live) {
+    explainInsightAsync(req, { provider: o.provider, exists: view.exists, view })
+      .then((r2) => {
+        if (!box.isConnected) return; // 다른 화면·탭·업무로 옮겨 갔으면 응답을 버린다
+        note.textContent = '';
+        if (r2) {
+          box.dataset.method = r2.method;
+          fillExplain(box, view, r2, o, note);
+        }
+      })
+      .catch(() => { if (box.isConnected) note.textContent = ''; });
+  }
+  return box;
+}
+
+function fillExplain(box, view, r, o, note) {
+  box.replaceChildren(...[
+    el('h4', {}, '설명', el('span', { class: `method-chip ${r.method}`, title: r.method === 'pregen' ? '개발 중 Claude가 이 근거만 보고 쓴 문장 — 앱이 열 때마다 근거 ID를 검증하고, 맞지 않으면 규칙 기반 문장으로 바꿉니다' : r.method === 'llm' ? 'Claude API가 실시간으로 이 근거만 보고 쓴 문장 — 앱이 근거 ID와 원문 인용(quote)을 검증했습니다' : METHOD_LABELS[r.method] }, METHOD_LABELS[r.method].replace(/\(.*\)$/, '')), note),
     // 근거가 많으면 접어 둔다(표를 밀어내지 않게)
     el('ul', {}, ...r.sentences.map((s) => el('li', {}, s.text, ' ', s.evidence_ids.length > 4
       ? el('details', { class: 'evidence-fold' }, el('summary', { class: 'muted small' }, `근거 ${s.evidence_ids.length}건`), chips(view, s.evidence_ids, o.onFocus))
       : chips(view, s.evidence_ids, o.onFocus)))),
-    r.fallback ? el('p', { class: 'muted small', 'data-testid': 'explain-fallback' }, `규칙 기반으로 대체함: ${r.fallback.reason}`) : null);
+    r.fallback ? el('p', { class: 'muted small', 'data-testid': 'explain-fallback' }, `규칙 기반으로 대체함: ${r.fallback.reason}`) : null,
+  ].filter(Boolean));
 }
 
 /**

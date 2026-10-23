@@ -5,13 +5,20 @@
 //   - 근거가 없는 항목(이력 부족)에는 문장을 지어내지 않는다.
 //   - 공급자가 실패하거나 형식이 깨지면 전체를 규칙 기반으로 두고 원인을 남긴다(R-04 ③).
 //   - 사전 생성 결과가 없는 항목(새로 입력한 데이터 등)은 규칙 기반 문장이 그대로 남는다(CR-1).
+// 실시간 경로(CR-15, D-33): 위 동기 함수는 그대로 두고, 같은 검증에 원문 인용(quote) 검증을 더한 비동기 함수
+//   refineDraftAsync·explainInsightAsync를 따로 둔다. 화면은 동기 결과를 먼저 그리고 비동기 결과가 오면 교체한다(R-04 ③).
+//   공급자가 live가 아니면(키 없음 등) 비동기 함수는 아무것도 부르지 않고 null을 돌려준다.
 // 브라우저 기능을 쓰지 않는다.
 
-import { itemEvidence } from './providers.js';
+import { fingerprint, itemEvidence } from './providers.js';
 import { validateDocument } from '../model/validate.js';
+import { describeEvidence, quoteInEvidence } from './evidence-text.js';
+import { buildDraftPrompt, buildExplainPrompt } from './prompts.js';
+import { aiResultToDocument, checkConvertInput, textFingerprint, verifyAiConvert } from './ai-convert.js';
 
-export const METHOD_LABELS = { rule: '규칙 기반', pregen: '사전 생성(개발 시 Claude로 작성)', llm: 'LLM' };
+export const METHOD_LABELS = { rule: '규칙 기반', pregen: '사전 생성(개발 시 Claude로 작성)', llm: 'Claude API(실시간)' };
 const FALLBACK = 'W-LLM-FALLBACK';
+export const QUOTE_FAIL = 'W-LLM-QUOTE';
 
 const validSentences = (sentences, allowed, exists) =>
   Array.isArray(sentences) && sentences.length > 0 &&
@@ -91,7 +98,11 @@ export function explainInsight(req, { provider = null, exists }) {
  *   fallback: 공급자가 실패해 규칙 기반으로 바꾼 원인. note: 실패는 아니지만 알릴 것(사전 생성)
  */
 export function convertDocumentWith(text, { provider = null, ruleConvert }) {
-  const rule = (fallback, note = null) => ({ ...ruleConvert(text), method: 'rule', fallback, note });
+  // 실시간 공급자(키 있음)면 결과에 「AI로 변환」 손잡이(ai)를 붙인다. 동기 결과는 그대로 규칙 기반이고, 화면이 단추를 눌렀을 때만 ai.run을 부른다(T-37).
+  // 키가 없으면 ai가 없어 화면에 단추도 없다
+  const aiHook = isLive(provider) ? { model: provider.model, run: (t) => convertDocumentAsync(t, { provider }) } : null;
+  const rule = (fallback, note = null) => ({ ...ruleConvert(text), method: 'rule', fallback, note, ...(aiHook ? { ai: aiHook } : {}) });
+  if (aiHook) return rule(null);
   if (!provider || provider.name === 'none') return rule(null);
   if (typeof provider.convert !== 'function') return rule(null, '사전 생성 결과는 내장 샘플용이라, 새 문서는 규칙 기반으로 변환했습니다');
   let got;
@@ -110,4 +121,201 @@ export function convertDocumentWith(text, { provider = null, ruleConvert }) {
     return rule({ code: FALLBACK, reason: '원문 근거가 없는 노드가 있어 규칙 기반으로 변환했습니다' });
   }
   return { ok: true, doc: d, report: got.report || null, method: provider.method, fallback: null, note: null };
+}
+
+// ── 실시간 경로(CR-15) ─────────────────────────────────────────────────────
+
+/** 먼저 그릴 때 쓰는 동기 공급자. 실시간 공급자면 그 base(사전 생성), 아니면 그대로 */
+export const syncProvider = (provider) => (provider && provider.live ? provider.base || null : provider);
+/** 비동기 경로를 쓸 수 있는 공급자인가(키가 있어 만들어진 실시간 공급자만 true) */
+export const isLive = (provider) => !!(provider && provider.live === true && typeof provider.refine === 'function');
+
+const reasonOf = (err) => `공급자 오류: ${err && err.message ? err.message : err}`;
+
+// 캐시 키(task, target, item, 규칙 기반 문장 지문, 모델): 근거가 바뀌면 지문이 달라져 다시 호출한다(K-9)
+export const llmCacheKey = (task, target, item, ruleSentences, model) => [task, target, item || '', fingerprint(ruleSentences), model || ''].join('|');
+
+/**
+ * 한 항목의 문장 검증. 근거 ID(비어 있지 않고, 허용 목록 안이고, 데이터에 있음)를 먼저, 그다음 quote를 본다.
+ * quote: 문장마다 1개 이상, 각 quote가 그 문장의 근거 글 안에 공백·대소문자 무시 부분 문자열로 있어야 한다.
+ * @returns {{ok:true, sentences:object[]}|{ok:false, quote:boolean}} quote: 근거 ID는 맞는데 quote만 틀렸는가
+ */
+function checkLive(sentences, allowed, exists, textOf) {
+  const structural = Array.isArray(sentences) && sentences.length > 0 && sentences.every((s) => s && typeof s.text === 'string' && s.text.trim() &&
+    Array.isArray(s.evidence_ids) && s.evidence_ids.length > 0 && s.evidence_ids.every((g) => allowed.has(g) && exists(g)));
+  if (!structural) return { ok: false, quote: false };
+  for (const s of sentences) {
+    const texts = s.evidence_ids.map(textOf);
+    if (!Array.isArray(s.quotes) || s.quotes.length === 0 || !s.quotes.every((q) => quoteInEvidence(q, texts))) return { ok: false, quote: true };
+  }
+  return { ok: true, sentences: sentences.map((s) => ({ text: s.text, evidence_ids: [...s.evidence_ids], quotes: [...s.quotes] })) };
+}
+
+const withoutQuotes = (sentences) => sentences.map((s) => ({ text: s.text, evidence_ids: s.evidence_ids }));
+const memo = (fn) => {
+  const m = new Map();
+  return (x) => {
+    if (!m.has(x)) m.set(x, fn(x));
+    return m.get(x);
+  };
+};
+const cacheGet = (cache, key) => {
+  try {
+    return cache ? cache.get(key) : null;
+  } catch {
+    return null;
+  }
+};
+const cacheSet = (cache, key, value) => {
+  try {
+    if (cache) cache.set(key, value);
+  } catch {
+    // 캐시를 못 써도 결과는 쓴다
+  }
+};
+
+/**
+ * refineDraft의 실시간 판. 캐시에 있는 항목은 호출 없이 쓰고, 없는 항목만 한 번에 요청한다.
+ * 전체 실패(오류·시간 초과·형식)는 규칙 기반 + 원인(W-LLM-FALLBACK), quote만 틀린 항목은 규칙 기반 + replaced + 사유 W-LLM-QUOTE.
+ * @param {object} draft 규칙 기반 결과
+ * @param {{provider:object|null, exists:(gid:string)=>boolean, view:object}} opts view: 근거 글을 만들 buildView 결과
+ * @returns {Promise<object|null>} refineDraft와 같은 모양(method는 쓴 항목이 있으면 'llm') + live({called, cached}). 실시간 공급자가 아니면 null
+ */
+export async function refineDraftAsync(draft, { provider = null, exists, view }) {
+  if (!isLive(provider)) return null;
+  const textOf = memo((g) => describeEvidence(view, g));
+  const targets = draft.items.filter((i) => !i.insufficient && Array.isArray(i.sentences));
+  const asRule = (fallback, called) => ({ ...draft, items: draft.items.map((i) => ({ ...i, method: 'rule' })), method: 'rule', fallback, counts: { provider: 0, rule: targets.length }, live: { called, cached: 0 } });
+
+  const keyOf = (i) => llmCacheKey('handover', draft.target, i.key, i.sentences, provider.model);
+  const done = new Map(); // 항목 key → 검증을 통과한 문장(quotes 포함)
+  const need = [];
+  for (const item of targets) {
+    const hit = cacheGet(provider.cache, keyOf(item));
+    const checked = hit && Array.isArray(hit.sentences) ? checkLive(hit.sentences, new Set(itemEvidence(item)), exists, textOf) : null;
+    if (checked && checked.ok) done.set(item.key, checked.sentences);
+    else need.push(item);
+  }
+  const cached = done.size;
+
+  let failure = null;
+  let badQuote = 0;
+  let badOther = 0;
+  if (need.length) {
+    try {
+      const result = await provider.refine('handover', buildDraftPrompt({ draft, items: need, textOf }));
+      if (!result || !Array.isArray(result.items)) throw new Error('응답 형식 오류');
+      for (const item of need) {
+        const got = result.items.find((i) => i && i.key === item.key);
+        const checked = got ? checkLive(got.sentences, new Set(itemEvidence(item)), exists, textOf) : { ok: false, quote: false };
+        if (checked.ok) {
+          done.set(item.key, checked.sentences);
+          cacheSet(provider.cache, keyOf(item), { sentences: checked.sentences });
+        } else if (checked.quote) badQuote += 1;
+        else badOther += 1;
+      }
+    } catch (err) {
+      failure = reasonOf(err);
+    }
+  }
+  if (failure && done.size === 0) return asRule({ code: FALLBACK, reason: failure }, true);
+
+  const items = draft.items.map((ruleItem) => {
+    const got = done.get(ruleItem.key);
+    if (ruleItem.insufficient || !Array.isArray(ruleItem.sentences)) return { ...ruleItem, method: 'rule' };
+    if (got) return { ...ruleItem, sentences: withoutQuotes(got), method: 'llm' };
+    return failure ? { ...ruleItem, method: 'rule' } : { ...ruleItem, method: 'rule', replaced: true };
+  });
+  const parts = [];
+  if (failure) parts.push(`${failure}(저장된 응답이 있는 항목만 쓰고 나머지는 규칙 기반)`);
+  if (badQuote) parts.push(`원문 인용(quote)이 근거 글에서 확인되지 않은 항목 ${badQuote}개는 규칙 기반 문장으로 대체`);
+  if (badOther) parts.push(`근거가 확인되지 않은 항목 ${badOther}개는 규칙 기반 문장으로 대체`);
+  const used = done.size;
+  return {
+    ...draft,
+    items,
+    method: used ? 'llm' : 'rule',
+    fallback: parts.length ? { code: badQuote ? QUOTE_FAIL : FALLBACK, reason: parts.join(', ') } : null,
+    counts: { provider: used, rule: targets.length - used },
+    live: { called: need.length > 0, cached },
+  };
+}
+
+/**
+ * explainInsight의 실시간 판(인사이트 설명 7종). 캐시 → 호출 → 검증(근거 ID + quote), 실패하면 규칙 기반 문장 + 원인.
+ * @param {{task?:string, target:string, evidence_ids:string[], rule:object[]}} req
+ * @param {{provider:object|null, exists:(gid:string)=>boolean, view:object}} opts
+ * @returns {Promise<{sentences:object[], method:string, fallback:object|null, live:{called:boolean, cached:boolean}}|null>} 실시간 공급자가 아니면 null
+ */
+export async function explainInsightAsync(req, { provider = null, exists, view }) {
+  if (!isLive(provider)) return null;
+  const rule = (fallback, called) => ({ sentences: req.rule, method: 'rule', fallback, live: { called, cached: false } });
+  if (!Array.isArray(req.evidence_ids) || req.evidence_ids.length === 0) return rule(null, false);
+  const textOf = memo((g) => describeEvidence(view, g));
+  const task = req.task || 'insight_explain';
+  const key = llmCacheKey(task, req.target, '', req.rule, provider.model);
+  const allowed = new Set(req.evidence_ids);
+
+  const hit = cacheGet(provider.cache, key);
+  const fromCache = hit && Array.isArray(hit.sentences) ? checkLive(hit.sentences, allowed, exists, textOf) : null;
+  if (fromCache && fromCache.ok) return { sentences: withoutQuotes(fromCache.sentences), method: 'llm', fallback: null, live: { called: false, cached: true } };
+
+  let result;
+  try {
+    result = await provider.refine(task, buildExplainPrompt({ req, textOf }));
+    if (!result || !Array.isArray(result.sentences)) throw new Error('응답 형식 오류');
+  } catch (err) {
+    return rule({ code: FALLBACK, reason: reasonOf(err) }, true);
+  }
+  const checked = checkLive(result.sentences, allowed, exists, textOf);
+  if (!checked.ok) {
+    return rule(checked.quote
+      ? { code: QUOTE_FAIL, reason: '원문 인용(quote)이 근거 글에서 확인되지 않아 규칙 기반 설명으로 대체' }
+      : { code: FALLBACK, reason: '근거가 확인되지 않아 규칙 기반 설명으로 대체' }, true);
+  }
+  cacheSet(provider.cache, key, { sentences: checked.sentences });
+  return { sentences: withoutQuotes(checked.sentences), method: 'llm', fallback: null, live: { called: true, cached: false } };
+}
+
+// ── 문서 AI 변환(CR-15 A, T-37) ──────────────────────────────────────────────
+// 캐시: 공급자 하나당 마지막 1건만, 메모리에만 둔다(공급자는 설정이 바뀌면 새로 만들어지므로 키를 지우면 함께 사라진다).
+// 이유: 문서는 크고(최대 20만 자) 응답도 커서 200건짜리 응답 캐시(localStorage, wu:v1:llm-cache)에 넣으면 저장 용량을 먹고,
+//   문서 내용이 브라우저 저장소에 남는다(R-28 ⑤: 응답 본문은 저장·내보내기에 넣지 않는다). 같은 문서를 다시 누를 때 호출을 아끼는 것이 목적이라 1건이면 충분하다.
+const convertMemo = new WeakMap();
+
+/**
+ * 문서 → 유니버스 변환의 실시간 판. 모델 응답에서 원문 인용(quote)이 원문에 있는 항목만 남긴 뒤 12.2 문서로 만든다(llm/ai-convert.js).
+ * 호출은 공급자의 convert(text) 하나뿐이다. 응답 검증(스키마·인용·연결 끝)은 여기서 하고, 사람 확인은 가져오기 미리 보기가 한다.
+ * @param {string} text 문서 원문
+ * @param {{provider:object|null, now?:()=>string, random?:()=>number}} opts
+ * @returns {Promise<null | {ok:true, doc:object, report:object, method:'llm', model:string, fallback:null, cached:boolean, dropped:object[]} | {ok:false, fallback:{code:string, reason:string}}>}
+ *   null: 실시간 공급자가 아님(키 없음). ok:false: 실패 — 화면이 규칙 변환 결과를 대신 보여 준다(R-04 ③)
+ */
+export async function convertDocumentAsync(text, { provider = null, now = () => new Date().toISOString(), random } = {}) {
+  if (!isLive(provider) || typeof provider.convert !== 'function') return null;
+  const fail = (reason, code = FALLBACK) => ({ ok: false, fallback: { code, reason } });
+  const input = checkConvertInput(text);
+  if (!input.ok) return fail(input.reason === 'empty' ? '변환할 문서가 비어 있습니다' : `문서가 너무 깁니다(${input.max.toLocaleString()}자 이하)`);
+
+  const key = `${textFingerprint(text)}|${provider.model || ''}`;
+  const memo = convertMemo.get(provider);
+  let parsed = memo && memo.key === key ? memo.parsed : null;
+  const cached = parsed !== null;
+  if (!cached) {
+    try {
+      parsed = await provider.convert(text);
+    } catch (err) {
+      return fail(err && err.message ? err.message : '알 수 없는 오류');
+    }
+  }
+  const checked = verifyAiConvert(text, parsed);
+  if (!checked.ok) {
+    return fail(checked.reason === 'empty'
+      ? `원문 인용이 확인된 항목이 하나도 없습니다(뺀 항목 ${checked.dropped.length}개)`
+      : '응답 형식 오류', checked.reason === 'empty' ? QUOTE_FAIL : FALLBACK);
+  }
+  if (!cached) convertMemo.set(provider, { key, parsed });
+  const built = aiResultToDocument(checked.kept, { now: now(), model: provider.model || '', dropped: checked.dropped, random });
+  if (!built.ok) return fail('변환 결과가 형식 검증을 통과하지 못했습니다');
+  return { ok: true, doc: built.doc, report: built.report, method: 'llm', model: provider.model || '', fallback: null, cached, dropped: checked.dropped };
 }

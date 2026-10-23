@@ -4,7 +4,7 @@
 import { buildHandoverDraft, scopeWorks } from '../rules/handover.js';
 import { similarExperts, similarSentences, workLoad } from '../rules/insight.js';
 import { todayLocal } from './time.js';
-import { METHOD_LABELS, refineDraft } from '../llm/connector.js';
+import { METHOD_LABELS, isLive, refineDraft, refineDraftAsync, syncProvider } from '../llm/connector.js';
 import { el } from './dom.js';
 import { downloadWithNotice, draftDoc, printHtml } from './doc-output.js';
 import { evidenceChips } from './evidence.js';
@@ -85,6 +85,23 @@ export function draftPanel(o) {
   }
   const msg = el('div', { class: 'form-message', 'data-testid': 'draft-message', 'aria-live': 'polite' });
   const result = el('div', { 'data-testid': 'draft-result' });
+  // 실시간 Claude API(CR-15): 키가 있을 때만 「생성 중…」 표시를 만든다. 키가 없으면 화면에 아무것도 더해지지 않는다
+  const live = isLive(o.provider);
+  const liveNote = live ? el('p', { class: 'muted small', 'aria-live': 'polite', 'data-testid': 'draft-live' }) : null;
+  let liveSeq = 0; // 요청 번호: 새 초안을 만들거나 이 화면을 떠나면(result가 화면에서 빠짐) 이전 응답을 버린다
+  const runLive = (draft) => {
+    liveSeq += 1;
+    const mine = liveSeq;
+    const stale = () => mine !== liveSeq || !result.isConnected;
+    liveNote.textContent = '생성 중…';
+    refineDraftAsync(draft, { provider: o.provider, exists: view.exists, view })
+      .then((d) => {
+        if (stale()) return;
+        liveNote.textContent = '';
+        if (d) renderDraft(result, d, view, o.onFocus, o);
+      })
+      .catch(() => { if (!stale()) liveNote.textContent = ''; });
+  };
 
   const field = (label, input) => el('label', { class: 'field' }, el('span', {}, label), input);
   const form = el(
@@ -119,15 +136,18 @@ export function draftPanel(o) {
       msg.dataset.code = r.error.code;
       msg.append(draftError(r.error));
       result.replaceChildren();
+      if (live) { liveSeq += 1; liveNote.textContent = ''; }
       return;
     }
-    renderDraft(result, refineDraft(r.draft, { provider: o.provider, exists: view.exists }), view, o.onFocus, o);
+    // 실시간 공급자면 먼저 사전 생성(없으면 규칙 기반) 결과를 그리고, 응답이 오면 교체한다(R-04 ③)
+    renderDraft(result, refineDraft(r.draft, { provider: syncProvider(o.provider), exists: view.exists }), view, o.onFocus, o);
     if (o.onDraft) o.onDraft(); // 따라 하기: 결과가 그려졌음을 알린다
+    if (live) runLive(r.draft);
   });
 
   return el('div', { class: 'draft' }, el('h2', {}, '인수인계 초안'),
     o.viewDate ? el('p', { class: 'notice', 'data-testid': 'draft-today' }, `초안은 오늘(${o.asOf}) 기준으로 만듭니다. 시간 보기의 기준일(${o.viewDate})과 상관없습니다.`) : null,
-    form, result);
+    form, liveNote, result);
 }
 
 function confirmError(err) {
@@ -201,13 +221,14 @@ function renderDraft(box, d, view, onFocus, o = {}) {
       copyBtn, downBtn, printBtn),
     el('h3', { class: 'draft-title' }, d.title),
     d.method === 'pregen' ? el('p', { class: 'muted small', 'data-testid': 'draft-method-note' }, '문장은 개발 중 Claude가 이 근거만 보고 썼고, 앱이 근거를 검증합니다. 근거가 맞지 않거나 미리 쓴 문장이 없으면 규칙 기반으로 만듭니다.') : null,
+    d.method === 'llm' ? el('p', { class: 'muted small', 'data-testid': 'draft-method-note' }, '문장은 Claude API가 실시간으로 이 근거만 보고 썼고, 앱이 근거 ID와 원문 인용(quote)을 검증합니다. 확인되지 않은 항목은 규칙 기반 문장으로 바꿉니다.') : null,
     d.fallback ? el('p', { class: 'notice', 'data-testid': 'draft-fallback' }, `규칙 기반으로 대체함: ${d.fallback.reason}`) : null,
-    d.method !== 'rule' && d.counts && d.counts.rule ? el('p', { class: 'muted small', 'data-testid': 'draft-counts' }, `${METHOD_LABELS[d.method]} ${d.counts.provider}개 항목, 나머지 ${d.counts.rule}개는 규칙 기반(사전 생성 결과가 없거나 데이터가 바뀐 항목)`) : null,
+    d.method !== 'rule' && d.counts && d.counts.rule ? el('p', { class: 'muted small', 'data-testid': 'draft-counts' }, `${METHOD_LABELS[d.method]} ${d.counts.provider}개 항목, 나머지 ${d.counts.rule}개는 규칙 기반(${d.method === 'llm' ? '응답에 없거나 검증을 통과하지 못한 항목' : '사전 생성 결과가 없거나 데이터가 바뀐 항목'})`) : null,
     // 사전 생성을 골랐는데 이 조합에 미리 써 둔 문장이 없어 전부 규칙 기반이면 이유를 한 줄로 알린다(재검증 5-4)
     d.method === 'rule' && !d.fallback && o.provider && o.provider.name === 'pregen' ? el('p', { class: 'muted small', 'data-testid': 'draft-rule-reason' }, '이 대상·사람 조합은 미리 써 둔 문장이 없어 규칙 기반으로 만들었습니다(기록을 그대로 옮겨 적은 문장).') : null,
     ...d.items.map((i) =>
       el('section', { class: `draft-item${i.insufficient ? ' insufficient' : ''}`, 'data-testid': `draft-item-${i.key}` },
-        el('h4', {}, i.title, i.insufficient ? null : el('span', { class: `method-chip ${i.method || 'rule'}`, 'data-testid': 'item-method', title: i.method === 'pregen' ? '개발 중 Claude가 이 근거만 보고 쓴 문장 — 앱이 열 때마다 근거 ID를 검증하고, 맞지 않으면 규칙 기반 문장으로 바꿉니다' : undefined }, i.method === 'pregen' ? '사전 생성' : i.method === 'llm' ? 'LLM' : '규칙 기반')),
+        el('h4', {}, i.title, i.insufficient ? null : el('span', { class: `method-chip ${i.method || 'rule'}`, 'data-testid': 'item-method', title: i.method === 'pregen' ? '개발 중 Claude가 이 근거만 보고 쓴 문장 — 앱이 열 때마다 근거 ID를 검증하고, 맞지 않으면 규칙 기반 문장으로 바꿉니다' : i.method === 'llm' ? 'Claude API가 실시간으로 이 근거만 보고 쓴 문장 — 앱이 근거 ID와 원문 인용(quote)을 검증했습니다' : undefined }, i.method === 'pregen' ? '사전 생성' : i.method === 'llm' ? 'Claude API' : '규칙 기반')),
         i.insufficient && i.empty_reason
           ? el('p', { class: 'muted', 'data-testid': 'not-found' }, `해당 없음 — ${i.empty_reason}`)
           : i.insufficient

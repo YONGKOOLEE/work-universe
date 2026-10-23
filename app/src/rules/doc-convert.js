@@ -386,14 +386,14 @@ function nameAndRest(cells, header, kind) {
   const desc = rest.join(' — ') || null;
   return { name, desc, duty: dutyAt >= 0 ? (cells[dutyAt] || '').trim() || null : desc };
 }
-const statusOf = (...texts) => {
+export const statusOf = (...texts) => {
   const all = texts.filter(Boolean).join(' ');
   if (/\[미확인/.test(all)) return '미확인';
   if (/\[가정/.test(all)) return '가정';
   return null;
 };
-const marksOf = (t) => (String(t).match(new RegExp(MARK.source, 'g')) || []);
-const stripMarks = (s) => s.replace(new RegExp(MARK.source, 'g'), '').replace(/\s+/g, ' ').trim();
+export const marksOf = (t) => (String(t).match(new RegExp(MARK.source, 'g')) || []);
+export const stripMarks = (s) => s.replace(new RegExp(MARK.source, 'g'), '').replace(/\s+/g, ' ').trim();
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const compact = (s) => normalizeLabel(s).replace(/\s/g, '');
 const contains = (hay, needle) => needle.length >= 2 && compact(hay).includes(compact(needle));
