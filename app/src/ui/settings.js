@@ -3,6 +3,7 @@ import { DEFAULT_LLM_MODEL, PROVIDERS } from '../llm/providers.js';
 import { LABEL_MAX } from '../model/schema.js';
 import { API_KEY_MAX, LLM_MODEL_MAX } from '../store/local.js';
 import { el } from './dom.js';
+import { KEY_NOTE, PREGEN_CHECK, PREGEN_WHAT } from './ai-notes.js';
 
 /**
  * @param {{current:string, authorName?:string, onAuthorName:(v:string)=>void, persisted:boolean, showCheckTools?:boolean, onChange:(name:string)=>void, onClose:()=>void,
@@ -11,7 +12,7 @@ import { el } from './dom.js';
  *   apiKey·llmModel·onApiKey·onLlmModel·onClearKey: 「Claude API」를 골랐을 때 보이는 키·모델 칸(CR-15)
  */
 // 화면에서만 바꾸는 부분(llm/providers.js는 그대로): 「사내 LLM」은 맨 아래로(FU-25), 사전 생성 설명은 실시간이 아닌 "써 둔 문장"임을 그대로 쓴다(FU-24)
-const HELP_OVERRIDE = { pregen: '기본값. Claude가 이 기록만 보고 써 둔 문장을 씁니다. 열 때마다 앱이 근거를 검사하고, 맞지 않거나 써 둔 문장이 없는 항목은 규칙 기반 문장으로 보입니다.' };
+const HELP_OVERRIDE = { pregen: ['기본값. ', PREGEN_WHAT, ' ', PREGEN_CHECK, ' 내가 새로 만든 지도 등 받아 둔 문장이 없는 항목은 규칙 기반 문장으로 보입니다.'].join('') };
 /** 설정 화면에 보일 공급자 순서: 사내 LLM만 맨 아래로(나머지는 PROVIDERS 순서 그대로) */
 export const displayProviders = (all) => [...all.filter((p) => p.name !== 'internal'), ...all.filter((p) => p.name === 'internal')];
 
@@ -31,7 +32,7 @@ export function settingsPanel(o) {
     const keyInput = el('input', { type: 'password', autocomplete: 'off', spellcheck: 'false', maxlength: String(API_KEY_MAX), value: o.apiKey || '', placeholder: '키를 붙여 넣으세요', 'aria-label': 'API 키', 'data-testid': 'settings-apikey' });
     const modelInput = el('input', { type: 'text', autocomplete: 'off', spellcheck: 'false', maxlength: String(LLM_MODEL_MAX), value: o.llmModel || '', placeholder: DEFAULT_LLM_MODEL, 'aria-label': '모델', 'data-testid': 'settings-model' });
     const status = el('p', { class: 'muted small', 'aria-live': 'polite', 'data-testid': 'settings-key-status' });
-    const showStatus = (hasKey) => { status.textContent = hasKey ? '키가 입력되어 있습니다. 초안과 인사이트 설명을 실시간으로 다듬습니다.' : '키가 없습니다. 규칙 기반(또는 사전 생성)으로 동작합니다.'; };
+    const showStatus = (hasKey) => { status.textContent = hasKey ? '키가 입력되어 있습니다. 초안과 인사이트 설명을 실시간으로 다듬습니다.' : '키가 없습니다. 기록을 그대로 모은 문장(규칙 기반)으로 보여 줍니다.'; };
     showStatus(!!(o.apiKey && o.apiKey.trim()));
     const sendKey = () => { if (o.onApiKey) o.onApiKey(keyInput.value); showStatus(!!keyInput.value.trim()); };
     keyInput.addEventListener('input', sendKey);
@@ -45,7 +46,7 @@ export function settingsPanel(o) {
     });
     return el('div', { class: 'settings-key', 'data-testid': 'settings-key-box' },
       el('h3', {}, 'Claude API'),
-      el('p', { class: 'muted small' }, '키는 이 브라우저에만 저장되고 어떤 파일에도 들어가지 않습니다. 공용 PC에서는 쓰지 마세요. 과금은 키 소유자에게 갑니다.'),
+      el('p', { class: 'muted small', 'data-testid': 'settings-key-note' }, KEY_NOTE),
       el('label', { class: 'field' }, el('span', {}, 'API 키'), keyInput),
       el('label', { class: 'field' }, el('span', {}, '모델'), modelInput),
       el('p', { class: 'muted small' }, `비워 두면 ${DEFAULT_LLM_MODEL}을(를) 씁니다.`),

@@ -248,7 +248,7 @@ test('LLM 호출 실패를 흉내 내면 규칙 기반으로 전환하고 원인
   const failing = { name: 'fake', method: 'llm', refine: () => { throw new Error('시간 초과'); } };
   const r = refineDraft(draft(), { provider: failing, exists: exists(v) });
   assert.equal(r.method, 'rule');
-  assert.deepEqual(r.fallback, { code: 'W-LLM-FALLBACK', reason: '공급자 오류: 시간 초과' });
+  assert.deepEqual(r.fallback, { code: 'W-LLM-FALLBACK', reason: '연결 오류: 시간 초과' } /* 3회차: 머리말 「공급자 오류」 → 「연결 오류」, 원인 코드는 그대로 */);
   // T-12: 항목마다 생성 방식(method)이 붙는다. 내용은 규칙 기반 그대로
   assert.deepEqual(r.items.map(({ method, ...rest }) => rest), draft().items);
   assert.ok(r.items.every((i) => i.method === 'rule'));

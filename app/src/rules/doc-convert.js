@@ -24,11 +24,16 @@ export const CONVERT_RULES = {
   artifactLabelMax: 40, // 산출물 이름이 이보다 길면 앞부분만 이름으로, 전체는 설명으로
   roleLabelMax: 40, // 역할 절의 줄이 이보다 길면(「키: 값」이 아니면) 사람 이름이 아니라 문장으로 본다(F23-4)
   maxInput: 200000, // 붙여 넣을 수 있는 글자 수
+  // 「관련 문서」 절의 문서를 대표 업무에 잇는 연결 종류(업무가 하나뿐인 문서만). produces: 인수인계 초안의 「산출물·문서 위치」가 읽는다.
+  // references로 바꾸면 「원문이 만든다고 말한 것」만 produces로 남는다(W8 결정: 사용자 지시 "대표 업무 → produces" 따름, 연결 메모에 추정임을 적음)
+  relatedDocEdge: 'references', // 만든 문서인지 참고한 문서인지 원문에 없으므로 「참조」(지어내지 않기). 초안 「산출물·문서 위치」에 넣으려면 CR-17 J
 };
 
 // 절 제목 → 무엇으로 바꿀지. 앞에 있는 것이 먼저다. 괄호 안 글자는 보지 않는다("비기능 요건 (…협의로 확정)")
 const SECTION_KINDS = [
   ['artifacts', /산출물|결과물|제출물|양식|서식/],
+  // 「관련 문서」「참고 자료」「첨부 서류」(W8). 제목 전체가 이 말일 때만: 「문서 관리 규정」「관련 법령」은 아니다
+  ['artifacts', /^(관련|참고|참조|첨부) ?(문서|자료|서류)( ?목록)?$/],
   ['memos', /미확정|미결|질문|확정할|확인할|확인 ?필요|리스크|위험|이슈|문제점/],
   ['steps', /흐름|절차|프로세스|처리 ?순서|진행 ?순서/],
   ['people', /이해관계자|관계자|역할|담당자|연락처/],
@@ -39,7 +44,114 @@ const SECTION_KINDS = [
   ['overview', /개요|요약|기본 ?정보|업무 ?정보/],
   // 「참여 주체」「참여 기관」(F23-4). 제목 전체가 이 말일 때만, 개요·범위보다 뒤: 「정보주체의 권리」「주체적 대응」「처리 주체별 책임」「참여자 교육」은 아니다(재검증 R2)
   ['people', /^((참여|업무|관련) ?)?주체$|^참여 ?(기관|자)$/],
+  // 「담당」「주 담당」「담당 및 검토」「담당자/검토자」(W8). 제목 전체가 이 말일 때만: 「담당 업무」「담당 범위」는 아니다
+  ['people', /^(주 ?)?담당(자)? ?(([및/·,]|과|와) ?(검토|승인|협조)(자)?)?$/],
 ];
+// 「관련 문서」류 절(업무가 하나뿐일 때 대표 업무가 이 문서들을 낸다고 읽는다). 그 절 자신의 제목만 본다
+const RELATED_DOC_TITLE = /^(관련|참고|참조|첨부) ?(문서|자료|서류)( ?목록)?$/;
+// 문서 종류 접두어(W8): 「업무정의서: 이름」「업무 정의서 - 이름」「[업무정의서] 이름」. 구분 기호나 괄호가 있을 때만 뗀다
+const DOC_KIND = '(?:업무 ?정의서|업무 ?기술서|업무 ?설명서|업무 ?매뉴얼|업무 ?지침서)';
+const DOC_PREFIX = new RegExp(`^\\s*(?:[\\[【(（]\\s*${DOC_KIND}\\s*[\\]】)）]\\s*[:：\\-–—]?|${DOC_KIND}\\s*[:：\\-–—])\\s*`);
+/** 제목에서 문서 종류 접두어를 뗀 업무 이름. 뗀 뒤 이름이 없으면 그대로 */
+export function stripDocPrefix(title) {
+  const t = String(title || '');
+  const rest = t.replace(DOC_PREFIX, '').trim();
+  return rest && /\p{L}/u.test(rest) ? rest : t.trim();
+}
+/** 업무 이름이 없어 문서 제목으로 만든 업무의 이름(접두어를 떼고, 40자 넘으면 줄임). 가져오기 미리 보기가 이름 변경을 따라가는 데도 쓴다 */
+export function docWorkLabel(title) {
+  const base = stripDocPrefix(title);
+  return base.length > CONVERT_RULES.workLabelMax ? `${base.slice(0, CONVERT_RULES.workLabelMax - 1)}…` : base;
+}
+
+// 작성 주체 줄에서 조직 낱말을 고른다(W8). 「가상재무팀 류다온 / 2026-09-01」 → 가상재무팀, 날짜는 따로
+const ORG_WORD = /(팀|부서|본부|센터|파트|그룹|실|부|처)$/;
+const NOT_ORG_WORD = /^(외부|내부|일부|전부|상부|하부|세부|실제|실무|총무|부|실|팀|처)$/;
+export function authorOf(value) {
+  const date = findDate(value);
+  const rest = String(value).replace(DATE_SPAN, ' ').replace(/(^|\s)(작성|작성일|작성일자)(\s|$)/g, ' ').replace(/^[\s/,·|:：-]+|[\s/,·|:：-]+$/g, '');
+  // 「/」「,」「·」「|」로 나뉜 덩어리마다 보고, 조직 낱말이 든 첫 덩어리에서 그 낱말까지를 작성 주체로 한다(「류다온 / 가상정산팀」은 사람 덩어리를 건너뜀)
+  for (const group of rest.split(/\s*[/,·|]\s*/)) {
+    const tokens = group.split(/\s+/).filter(Boolean);
+    const at = tokens.findIndex((t) => t.length >= 3 && ORG_WORD.test(t) && !NOT_ORG_WORD.test(t));
+    // 「가상 재무팀」처럼 조직 이름이 두 낱말이면 앞 낱말까지(최대 3낱말), 아니면 조직 낱말 하나
+    if (at >= 0) return { owner: at <= 2 ? tokens.slice(0, at + 1).join(' ') : tokens[at], date };
+  }
+  return { owner: rest || null, date };
+}
+
+// 개요 문장에서 분명한 주기·마감 구절을 원문 그대로 고른다(W8). 확실하지 않으면 null(지어내지 않기)
+const PERIOD_PATTERNS = [
+  /(?:매년|매해)(?:\s?\d{1,2}월(?:\s?(?:초|중순|말))?)?/,
+  /매월(?:\s?(?:초|중순|말|\d{1,2}일))?/,
+  /매\s?분기(?:\s?(?:초|말))?|분기\s?마다/,
+  /매\s?반기(?:\s?(?:초|말))?|반기\s?마다/,
+  /매주(?:\s?[월화수목금토일]요일)?|매일|(?:주|월|연)\s?\d{1,2}회/,
+];
+const DEADLINE_PATTERNS = [
+  /\d{1,2}월\s?\d{1,2}일\s?(?:까지|이내|전까지)/g,
+  /(?:익월|매월|매달|다음\s?달)?\s?(?:\d{1,2}일|말일|월말)\s?(?:까지|이내|전까지)/g,
+  /\d{1,3}\s?영업일\s?(?:이내|전까지|까지)/g,
+  /(?:익|다음)\s?영업일\s?(?:까지|이내|전까지)/g,
+  /\d{1,3}\s?(?:일|주|개월)\s?이내/g,
+];
+const oneSpace = (s) => s.replace(/\s+/g, ' ').trim();
+/** 글에서 가장 먼저 나오는 주기 구절(「매년 8월」「매월 말」「분기마다」). 없으면 null */
+export function periodIn(text) {
+  const s = String(text || '');
+  let best = null;
+  for (const re of PERIOD_PATTERNS) {
+    const m = re.exec(s);
+    if (m && (!best || m.index < best.index)) best = { index: m.index, text: oneSpace(m[0]) };
+  }
+  return best ? best.text : null;
+}
+/** 여러 글에서 마감 구절(「8월 31일까지」「5영업일 이내」)을 모은다. 서로 다른 구절이 둘 이상이면 어느 것이 업무의 마감인지 알 수 없어 null */
+export function deadlineIn(texts) {
+  const found = new Set();
+  for (const text of texts) {
+    const s = String(text || '');
+    const hits = [];
+    for (const re of DEADLINE_PATTERNS) for (const m of s.matchAll(re)) hits.push({ a: m.index + (m[0].length - m[0].trimStart().length), b: m.index + m[0].length, t: oneSpace(m[0]) });
+    // 다른 구절 안에 들어 있는 구절(「8월 31일까지」 안의 「31일까지」)은 버린다
+    for (const h of hits) if (!hits.some((o) => o !== h && o.a <= h.a && o.b >= h.b && (o.a < h.a || o.b > h.b))) found.add(h.t);
+  }
+  return found.size === 1 ? [...found][0] : null;
+}
+/** 글의 첫 문장(마침표·물음표·느낌표 뒤 공백에서 끊음). 마침표가 없으면 전체 */
+export const firstSentence = (text) => {
+  const s = oneSpace(String(text || ''));
+  const m = /^.*?[.!?。](?=\s|$)/.exec(s);
+  return m ? m[0] : s;
+};
+// 산출물 이름 뒤 괄호가 설명이 아니라 보관 위치로 보이는 경우(경로 기호 > \ 주소·드라이브 글자·a/b/c 꼴·보관처 낱말)
+const PLACE_LIKE = /\s>\s|[›»\\]|https?:\/\/|^[A-Za-z]:|\S\/\S+\/\S|^\/|드라이브|폴더|서버|경로|문서함/;
+export const looksLikePlace = (s) => PLACE_LIKE.test(String(s));
+
+// 담당 절의 「주 담당: 이름 / 검토: 이름」 꼴(W8). 키 앞은 줄 처음이거나 구분 기호여야 한다(「교부: …」의 부는 키가 아니다)
+const ASSIGN_RE = /(^|[\s/,;，、])((?:주|정|부)? ?담당자?|정|부|검토자?|승인자?|협조자?|확인자?)\s*[:：]\s*/g;
+// 업무를 직접 맡는다고 읽는 키(주 담당·담당·정). 검토·부·협조·승인은 사람 노드만 만들고 업무에 잇지 않는다(D-P3·D3-33 기준 안)
+const ASSIGN_STRONG = /^(주 ?담당자?|정 ?담당자?|담당자?|정)$/;
+const NAME_LIKE = /^[가-힣]{2,4}$/;
+const ROLE_WORD = /(담당|담당자|팀|역할|대리|사원|직원|고객|수강생|총무|대표|임원|이사|감사|매니저|장|자|사)$/; // model/import.js의 실명 판정과 같은 낱말
+/** 사람 이름 모양(한글 2~4자, 역할 낱말로 끝나지 않음) */
+export const looksLikePersonName = (s) => {
+  const t = stripParens(stripMarks(String(s))).trim();
+  return NAME_LIKE.test(t) && !ROLE_WORD.test(t);
+};
+/** 「주 담당: 류다온 / 검토: 가상재무팀장」 → [{key, name}]. 줄 전체가 이 꼴이 아니면 null */
+export function assignmentsOf(text) {
+  const s = String(text);
+  const marks = [...s.matchAll(ASSIGN_RE)];
+  if (!marks.length || marks[0].index + marks[0][1].length !== 0) return null;
+  const out = [];
+  marks.forEach((m, i) => {
+    const from = m.index + m[0].length;
+    const to = i + 1 < marks.length ? marks[i + 1].index : s.length;
+    for (const name of splitList(s.slice(from, to).replace(/[\s/,;，、]+$/, ''))) out.push({ key: m[2], name });
+  });
+  return out.length && out.every((x) => hasName(x.name)) ? out : null;
+}
 // 주제 노드의 하위 유형(절 제목으로 고른다). 없으면 하위 유형 없이 둔다
 const TOPIC_SUBTYPES = [['예외', /예외|장애|오류/], ['보안', /보안|개인정보|암호/], ['비기능', /비기능|성능|가용성/], ['요건', /요건|요구|규칙|기준|정책/]];
 
@@ -52,7 +164,7 @@ const OVERVIEW_KEYS = [
   ['scope', /^(범위|업무 ?범위|대상 ?업무|주요 ?업무)$/],
   ['people', /^(이해관계자|관계자|담당자|역할|담당)$/], // 「담당: 이름」도 사람으로(검토5 V-9: 목적에 섞이지 않게)
   ['date', /^(작성일|작성 ?일자|일자|날짜|기준일)$/],
-  ['owner', /^(작성 ?주체|작성자|작성 ?부서|주관|주관 ?부서|담당 ?부서|담당 ?팀)$/],
+  ['owner', /^(작성 ?주체|작성자|작성 ?부서|작성|주관|주관 ?부서|담당 ?부서|담당 ?팀)$/],
   ['work_attr', /^(주기|마감|사용 ?시스템|주의사항)$/], // 02-design 5.6 업무 속성 약속 → 대표 업무 속성
 ];
 const ORG_HINT = /(사|팀|부|처|실|센터|기관|은행|공단|VAN)$|\//; // 소속으로 볼 앞 낱말(A사, 당사, 카드사/VAN, …팀)
@@ -562,7 +674,13 @@ export function convertDocument(text, ctx) {
         if (!(wk in info.work_attrs)) info.work_attrs[wk] = truncate(v, TEXT_MAX, notes, wk); // 이미 있는 속성은 덮어쓰지 않는다(corpus F8). 긴 값은 잘라 알린다(검증 상한 2000자, C-6)
       }
       else if (k === 'date') info.date = info.date || findDate(v);
-      else if (!info[k]) info[k] = v;
+      else if (k === 'owner' && /^작성/.test(cleanText(key).replace(/\s/g, ''))) {
+        // 「작성: 가상재무팀 류다온 / 2026-09-01」: 날짜는 작성일로, 조직 낱말(…팀·…부·…실·…본부·…센터)까지만 작성 주체로(W8, D-P6은 조직 낱말이 없을 때만 그대로)
+        const a = authorOf(v);
+        if (a.date) info.date = info.date || a.date;
+        if (a.owner && !info.owner) info.owner = a.owner;
+      }
+      else if (!info[k]) { info[k] = v; if (k === 'purpose') info.purposeRef = ref; }
     }
     return used;
   };
@@ -574,7 +692,7 @@ export function convertDocument(text, ctx) {
     if (s.kind === 'overview') {
       const used = readOverview(s.blocks, refOf(s));
       const rest = s.blocks.filter((b) => !b.used && b.kind !== 'table');
-      if (!info.purpose && rest.length) info.purpose = rest.map((b) => b.text).join(' ');
+      if (!info.purpose && rest.length) { info.purpose = rest.map((b) => b.text).join(' '); info.purposeRef = refOf(s); }
       if (s.blocks.length) sections.push({ order: parsed.sections.indexOf(s), ref: refOf(s), title: s.heading, kind: 'overview', made: used });
     }
   }
@@ -669,8 +787,10 @@ export function convertDocument(text, ctx) {
   if (!works.length) {
     // 범위가 없으면 업무 하나(문서 이름)로 만든다
     // 이메일·뉴스처럼 업무정의서가 아닌 글이면 이름이 첫 줄 전체가 된다: 40자를 넘으면 앞부분만 이름으로 쓰고 전체는 설명에 둔다
-    const long = name.length > CONVERT_RULES.workLabelMax;
-    works.push(pushNode('work', long ? `${name.slice(0, CONVERT_RULES.workLabelMax - 1)}…` : name, { ref: stepRefs[0] || (parsed.title ? '제목' : '전체'), ...(long ? { description: name } : {}) }));
+    // 「업무정의서: …」 같은 문서 종류 접두어는 업무 이름에서 뗀다(꼭지 이름은 문서 제목 그대로, W8)
+    const base = stripDocPrefix(name);
+    const long = base.length > CONVERT_RULES.workLabelMax;
+    works.push(pushNode('work', docWorkLabel(name), { ref: stepRefs[0] || (parsed.title ? '제목' : '전체'), ...(long ? { description: base } : {}) }));
     notes.push({ code: 'C-NO-SCOPE' });
   }
   const main = works[0];
@@ -737,17 +857,43 @@ export function convertDocument(text, ctx) {
   }
   if (topics.some((t) => !t.known)) notes.push({ code: 'C-TOPIC-GUESS', count: topics.filter((t) => !t.known).length });
 
+  // 업무가 하나뿐인 문서: 개요의 첫 문장·주기·마감을 그 업무의 설명·속성으로(W8). 여러 업무면 어느 업무의 것인지 알 수 없어 넣지 않는다.
+  // 주기·마감은 원문 구절 그대로이고, 분명하지 않으면(마감 구절이 서로 다르면) 넣지 않는다. 개요 표의 「주기: …」 같은 명시 값이 먼저다
+  const single = works.length === 1;
+  if (single) {
+    let fromOverview = false;
+    if (!main.description && info.purpose) { main.description = truncate(firstSentence(info.purpose), TEXT_MAX, notes, main.label); fromOverview = true; }
+    const per = periodIn(info.purpose);
+    if (per && !('주기' in main.attrs)) { main.attrs.주기 = per; fromOverview = true; }
+    const dl = deadlineIn([info.purpose, ...steps]);
+    if (dl && !('마감' in main.attrs)) main.attrs.마감 = dl;
+    if (fromOverview && info.purposeRef && !main.attrs.원문.split(', ').includes(info.purposeRef)) main.attrs.원문 += `, ${info.purposeRef}`;
+  }
+
   // 사람(역할): 개요의 이해관계자 + 이해관계자 절
   const roleItems = [];
   for (const p of info.people) for (const part of splitList(p.text)) roleItems.push({ text: part, ref: p.ref });
   for (const s of parsed.sections.filter((x) => x.kind === 'people')) {
     const lines = linesOf(s.blocks);
+    let extra = 0; // 한 줄에서 사람이 여럿 나온 만큼(「주 담당: A / 검토: B」)
     const prose = []; // 「참가기관은 담당자를 선임하여야 한다.」 같은 문장은 사람 이름이 아니다 → 이 절의 주제 설명으로(F23-4)
     for (const l of lines) {
-      if (l.cells) {
+      const rowAssign = l.cells && l.cells.length === 2 && (!l.header || INDEX_HEADER.test(cleanText(l.header[0]))) ? assignmentsOf(`${l.cells[0]}: ${l.cells[1]}`) : null;
+      if (rowAssign) {
+        // 「주 담당 | 류다온」 두 칸 행(W8)
+        for (const a of rowAssign) roleItems.push({ text: a.name, ref: refOf(s), desc: a.key, assign: a.key });
+        extra += rowAssign.length - 1;
+      }
+      else if (l.cells) {
         const { name: cellName, desc, duty } = nameAndRest(l.cells, l.header, 'people');
         if (!cellName) { notes.push({ code: 'C-ROW-NO-NAME', ref: refOf(s), row: l.row }); continue; }
         roleItems.push({ text: cellName, ref: refOf(s), desc: desc || '', duty: duty || '' });
+      }
+      else if (assignmentsOf(l.text)) {
+        // 「주 담당: 류다온 / 검토: 가상재무팀장」(W8): 키마다 이름을 뽑아 사람으로. 주 담당·담당·정은 업무에 잇고, 검토·부·협조는 사람만 만든다
+        const found = assignmentsOf(l.text);
+        for (const a of found) roleItems.push({ text: a.name, ref: refOf(s), desc: a.key, assign: a.key });
+        extra += found.length - 1;
       }
       else {
         // 「이름: 설명」, 「이름 — 설명」을 먼저 나눈다(재검증 R6: 「가상 정산 담당 — 매월 대사를 한다.」는 역할)
@@ -756,7 +902,7 @@ export function convertDocument(text, ctx) {
         roleItems.push(kv ? { text: kv[1], ref: refOf(s), desc: kv[2] } : { text: l.text, ref: refOf(s) });
       }
     }
-    sections.push({ order: parsed.sections.indexOf(s), ref: refOf(s), title: s.heading, kind: 'people', made: lines.length - prose.length });
+    sections.push({ order: parsed.sections.indexOf(s), ref: refOf(s), title: s.heading, kind: 'people', made: lines.length - prose.length + extra });
     if (prose.length) {
       const label = topicLabel(s);
       if (!hasName(label)) { notes.push({ code: 'C-NO-NAME', ref: refOf(s), text: s.title }); continue; }
@@ -774,22 +920,29 @@ export function convertDocument(text, ctx) {
   }
   const roles = [];
   const roleDuty = new Map(); // 역할 노드 → [{text, ref}] 원문에 적힌 하는 일(담당 추정의 근거)
+  const assigns = []; // 담당 절에서 「주 담당·담당·정」으로 적힌 사람: {r, key, ref}
+  let hasRoleNode = false;
   for (const item of roleItems) {
     for (const label of item.desc ? [item.text] : expandRoles(item.text)) {
       if (!hasName(label)) { notes.push({ code: 'C-NO-NAME', ref: item.ref, text: label }); continue; }
       const { org } = roleParts(label);
-      const r = pushNode('person', label, { ref: item.ref, subtype: SUBTYPE_ROLE, description: item.desc, attrs: org ? { 소속: org } : {}, status: statusOf(label, item.desc) });
+      // 담당 절에서 뽑은 이름이 사람 이름 모양이면 하위 유형 없는 사람 노드, 역할 이름(…팀장·…담당)이면 역할(W8)
+      const named = !!item.assign && looksLikePersonName(label);
+      const r = pushNode('person', label, { ref: item.ref, subtype: named ? undefined : SUBTYPE_ROLE, description: item.desc, attrs: org && !named ? { 소속: org } : {}, status: statusOf(label, item.desc) });
       if (!roles.includes(r)) roles.push(r);
-      if (item.desc) {
+      if (!named) hasRoleNode = true;
+      if (item.assign && ASSIGN_STRONG.test(item.assign)) assigns.push({ r, key: item.assign, ref: item.ref });
+      if (item.desc && !item.assign) {
         if (!roleDuty.has(r)) roleDuty.set(r, []);
         roleDuty.get(r).push({ text: item.duty !== undefined ? item.duty : item.desc, ref: item.ref }); // 표면 「하는 일」 칸만, 아니면 설명 전체
       }
     }
   }
-  if (roles.length) subtypes.set(`person|${SUBTYPE_ROLE}`, { core_type: 'person', name: SUBTYPE_ROLE });
+  if (hasRoleNode) subtypes.set(`person|${SUBTYPE_ROLE}`, { core_type: 'person', name: SUBTYPE_ROLE });
 
   // 산출물: "가 → 나 → 다", 목록, 표의 이름 칸(산출물·문서·이름 칸, 첫 칸이 번호면 다음 칸 — corpus F5)
   const artifacts = [];
+  const related = new Set(); // 「관련 문서」 절에서 나온 산출물(업무가 하나뿐이면 그 업무에 잇는다)
   for (const s of parsed.sections.filter((x) => x.kind === 'artifacts')) {
     let order = 0;
     let made = 0;
@@ -802,14 +955,17 @@ export function convertDocument(text, ctx) {
         const m = /^(.+?)\s*\(([^)]*)\)\s*$/.exec(p);
         let label = m ? m[1] : p;
         let desc = m ? m[2] : cell ? cell.desc || '' : '';
+        // 괄호 안이 보관 경로 모양(>, \, a/b/c, 드라이브·폴더…)이면 설명이 아니라 「위치」 속성으로(W8)
+        const place = m && looksLikePlace(m[2]) ? m[2].trim() : '';
+        if (place) desc = '';
         if (!hasName(label)) { notes.push({ code: 'C-NO-NAME', ref: refOf(s), text: p }); continue; }
         if (label.length > CONVERT_RULES.artifactLabelMax) {
           desc = [p, desc].filter(Boolean).join(' — ');
           label = `${label.slice(0, CONVERT_RULES.artifactLabelMax - 1)}…`;
         }
         if (ordered) order += 1;
-        const a = pushNode('artifact', label, { ref: refOf(s), description: desc || undefined, attrs: ordered ? { 순서: order } : {}, status: statusOf(p) });
-        if (!artifacts.includes(a)) artifacts.push(a);
+        const a = pushNode('artifact', label, { ref: refOf(s), description: desc || undefined, attrs: { ...(ordered ? { 순서: order } : {}), ...(place ? { 위치: place } : {}) }, status: statusOf(p) });
+        if (!artifacts.includes(a)) { artifacts.push(a); if (RELATED_DOC_TITLE.test(titleCore(s.title))) related.add(a); }
         made += 1;
       }
     }
@@ -841,6 +997,7 @@ export function convertDocument(text, ctx) {
     else pushEdge(rootId, t.node.id, 'contains');
   }
   let performs = 0;
+  let assignSkipped = 0;
   for (const r of roles) {
     const { core } = roleParts(r.label);
     const hits = topics.filter((t) => contains(t.node.label, core));
@@ -860,10 +1017,25 @@ export function convertDocument(text, ctx) {
       pushEdge(r.id, w.id, 'performs', `규칙 기반 추정: 원문 ${d.ref}의 하는 일에 「${w.label}」${josa(w.label, '이/가')} 나옴(기간 미기재)`);
       performs += 1;
     }
-    if (!hits.length && !done.length) pushEdge(rootId, r.id, 'contains');
+    // 담당 절의 「주 담당·담당·정」(W8): 원문이 그 사람을 이 문서가 정의하는 업무의 담당으로 직접 적었다. 업무가 하나뿐일 때만 잇는다(여러 업무면 어느 업무인지 알 수 없어 연결하지 않고 알림)
+    const mine = assigns.find((x) => x.r === r);
+    let assigned = false;
+    if (mine && single) {
+      if (!done.includes(works[0])) {
+        pushEdge(r.id, works[0].id, 'performs', `규칙 기반 추정: 원문 ${mine.ref}의 「${mine.key}」 칸에 적힘(기간 미기재)`);
+        performs += 1;
+      }
+      assigned = true;
+    } else if (mine) assignSkipped += 1;
+    if (!hits.length && !done.length && !assigned) pushEdge(rootId, r.id, 'contains');
   }
   if (performs) notes.push({ code: 'C-PERFORMS-GUESS', count: performs });
-  for (const a of artifacts) pushEdge(rootId, a.id, 'contains');
+  if (assignSkipped) notes.push({ code: 'C-ASSIGN-SKIPPED', count: assignSkipped });
+  for (const a of artifacts) {
+    // 「관련 문서」 절의 문서: 업무가 하나뿐이면 그 업무에 잇는다(W8, CONVERT_RULES.relatedDocEdge). 아니면 꼭지가 담는다
+    if (related.has(a) && single) pushEdge(works[0].id, a.id, CONVERT_RULES.relatedDocEdge, '규칙 기반 추정: 「관련 문서」 절에 적힌 문서(만든 문서인지 참고한 문서인지는 원문에 없음)');
+    else pushEdge(rootId, a.id, 'contains');
+  }
 
   // 4) 메모: 미확정 질문·리스크(원문 번호를 앞에)
   const events = [];

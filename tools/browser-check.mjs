@@ -794,9 +794,13 @@ async function checkBrowser(browser, port) {
     await sleep(400);
     ti = await tourInfo();
     check('R9-1 근거 칩을 누르면 5/5(직접 고쳐 보고 되감기), 끝 카드는 아직', ti.mode !== 'end' && ti.index === 4 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 5/5', JSON.stringify(ti));
+    // 처음 사용 3회차(W6): 5/5 본문은 한두 줄, 세부 순서는 보조 문구로
+    const w6Tour = { task: await text(s.cdp, '[data-testid=tour-task]'), sub: await text(s.cdp, '[data-testid=tour-sub]') };
+    check('처음 사용 W6 따라 하기 5/5 본문이 짧다: 「(연습, 건너뛰어도 됩니다) 「대사 확인」의 설명을 조금 고쳐 저장한 뒤, 「편집 되감기」로 고치기 전 지도를 봅니다.」, 세부 순서(수정·글자 하나·저장·빈 곳)는 보조 문구', w6Tour.task === '(연습, 건너뛰어도 됩니다) 「대사 확인」의 설명을 조금 고쳐 저장한 뒤, 「편집 되감기」로 고치기 전 지도를 봅니다.' && w6Tour.task.length <= 80 && w6Tour.sub.startsWith('순서:') && w6Tour.sub.includes('글자 하나') && w6Tour.sub.includes('「수정」') && w6Tour.sub.includes('「저장」') && w6Tour.sub.includes('빈 곳'), JSON.stringify(w6Tour));
     // 처음 사용 점검 2회차 FU-24·FU-29(처음 사용 W4): 키가 없는 사전 생성 초안 위 안내 한 줄, 방금 누른 근거 칩 아래 근거 글 한 줄
-    const w4Hint = await evaluate(s.cdp, "(() => { const h = document.querySelector('[data-testid=draft-live-hint]'); const first = document.querySelector('.draft [data-testid^=draft-item-]'); const note = document.querySelector('[data-testid=draft-method-note]'); const r = h ? h.getBoundingClientRect() : { width: 0, height: 0 }; return { text: h ? h.textContent : null, size: r.width > 0 && r.height > 0, above: !!(h && first && (h.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING)), note: note ? note.textContent : null, oldWord: document.querySelector('.draft').textContent.includes('개발 중') }; })()");
-    check('처음 사용 W4(FU-24) 키가 없는 사전 생성 초안: 항목들 위에 「실시간으로 다시 쓰려면: 「설정」에서 Claude API를 고르고 본인 키를 넣으세요(선택)」 한 줄(크기 있음)과 새 사전 생성 안내, 옛 「개발 중」 글자 없음', w4Hint.text === '실시간으로 다시 쓰려면: 「설정」에서 Claude API를 고르고 본인 키를 넣으세요(선택)' && w4Hint.size && w4Hint.above && w4Hint.note === 'Claude가 이 기록만 보고 써 둔 문장입니다. 열 때마다 앱이 근거를 검사하고, 맞지 않으면 기록을 그대로 모은 문장으로 바꿉니다.' && !w4Hint.oldWord, JSON.stringify(w4Hint));
+    const w4Hint = await evaluate(s.cdp, "(() => { const h = document.querySelector('[data-testid=draft-live-hint]'); const first = document.querySelector('.draft [data-testid^=draft-item-]'); const note = document.querySelector('[data-testid=draft-method-note]'); const r = h ? h.getBoundingClientRect() : { width: 0, height: 0 }; return { text: h ? h.textContent : null, size: r.width > 0 && r.height > 0, last: !!(h && h.parentElement && h.parentElement.lastElementChild === h), below: !!(h && first && (h.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_PRECEDING)), next: !!document.querySelector('[data-testid=draft-next]'), note: note ? note.textContent : null, oldWord: document.querySelector('.draft').textContent.includes('개발 중') }; })()");
+    // 처음 사용 3회차(W6): 한 줄이 항목들 아래 맨 끝으로 옮겨졌고 말투가 바뀌었다. 사전 생성 안내는 「예시 지도의 기록을 앱을 만들 때 Claude에 넣어 미리 받아 둔 문장입니다(받은 날짜)」
+    check('처음 사용 W6(FU-24 이동) 키가 없는 사전 생성 초안: 항목들 아래 맨 끝에 「지금 문장은 미리 받아 둔 것입니다. 「설정」에 Claude API 키를 넣으면 이 초안을 Claude가 새로 씁니다(선택).」 한 줄(크기 있음)과 사전 생성 안내(받은 날짜 포함), 옛 「실시간으로 다시 쓰려면」·「개발 중」 글자 없음', w4Hint.text === '지금 문장은 미리 받아 둔 것입니다. 「설정」에 Claude API 키를 넣으면 이 초안을 Claude가 새로 씁니다(선택).' && w4Hint.size && w4Hint.last && w4Hint.below && w4Hint.next && /^예시 지도의 기록을 앱을 만들 때 Claude에 넣어 미리 받아 둔 문장입니다\(\d{4}-\d{2}-\d{2}\)\. 열 때마다 앱이 근거를 검사하고, 맞지 않으면 기록을 그대로 모은 문장으로 바꿉니다\.$/.test(w4Hint.note) && !w4Hint.oldWord && !w4Hint.text.includes('실시간으로 다시 쓰려면'), JSON.stringify(w4Hint));
     const w4Ev = await evaluate(s.cdp, "(() => { const c = document.querySelector('.draft .evidence'); const li = c && c.closest('li'); const t = li && li.querySelector('[data-testid=evidence-text]'); const r = t ? t.getBoundingClientRect() : { width: 0, height: 0 }; return { has: !!t, text: t ? t.textContent : '', below: !!(t && (c.compareDocumentPosition(t) & Node.DOCUMENT_POSITION_FOLLOWING)), size: r.width > 0 && r.height > 0, noGidHead: t ? !/^U-[A-Z0-9]+\\//.test(t.textContent) : false, pressed: c ? c.getAttribute('aria-pressed') : null }; })()");
     check('처음 사용 W4(FU-29) 근거 칩을 누르면 그 항목(칩 묶음) 아래에 근거 글 한 줄(크기 있음, 앞의 gid는 뗌)', w4Ev.has && w4Ev.text.length > 8 && w4Ev.below && w4Ev.size && w4Ev.noGidHead && w4Ev.pressed === 'true', JSON.stringify(w4Ev));
     await shot(s.cdp, `${browser.name}-w4-evidence-text`);
@@ -1462,7 +1466,7 @@ async function checkBrowser(browser, port) {
 
     // ── T-10 통합 확인(R-11 ②③④⑤) ──
     const hint = await text(s.cdp, '[data-testid=merge-hint]');
-    check('T-10: 부서 개요에 통합 확인 대기 건수와 「통합 확인 목록」', hint.includes('통합 확인 대기') && hint.includes('통합 확인 목록'), hint);
+    check('T-10: 부서 개요에 통합 확인 대기 건수(「같은 사람·업무인지 확인할 것 n건」)와 「통합 확인 목록」', /같은 사람·업무인지 확인할 것 \d+건\(사람 \d+, 업무 후보 \d+\)/.test(hint) && !hint.includes('통합 확인 대기') && hint.includes('통합 확인 목록'), hint);
     await clickTestId(s.cdp, 'btn-merge');
     await sleep(200);
     const persons = await text(s.cdp, '[data-testid=merge-persons]');
@@ -2671,14 +2675,15 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, "(() => { const r = document.querySelector('[data-testid=provider-claude_api]'); r.checked = true; r.dispatchEvent(new Event('change')); })()");
     await sleep(100);
     const keyUi = await evaluate(s.cdp, "(() => { const k = document.querySelector('[data-testid=settings-apikey]'); const m = document.querySelector('[data-testid=settings-model]'); const c = document.querySelector('[data-testid=settings-clear-key]'); const box = document.querySelector('[data-testid=settings-key-box]'); const r = k ? k.getBoundingClientRect() : { width: 0, height: 0 }; return { type: k && k.type, model: m && m.placeholder, clear: !!c, size: r.width > 0 && r.height > 0, note: box ? box.textContent : '', status: (document.querySelector('[data-testid=settings-key-status]') || {}).textContent || '' }; })()");
-    check('CR-15 설정에서 「Claude API」를 고르면 「API 키」(비밀번호 칸)·「모델」(기본 claude-opus-5-5)·「키 지우기」와 안내가 나타남(크기 있음)', keyUi.type === 'password' && keyUi.model === 'claude-opus-5-5' && keyUi.clear && keyUi.size && keyUi.note.includes('이 브라우저에만 저장') && keyUi.note.includes('공용 PC') && keyUi.note.includes('과금') && keyUi.status.includes('키가 없습니다'), JSON.stringify(keyUi));
+    check('CR-15 설정에서 「Claude API」를 고르면 「API 키」(비밀번호 칸)·「모델」(기본 claude-opus-5-5)·「키 지우기」와 안내가 나타남(크기 있음)', keyUi.type === 'password' && keyUi.model === 'claude-opus-5-5' && keyUi.clear && keyUi.size && keyUi.note.includes('이 브라우저 저장소') && keyUi.note.includes('공용 PC') && keyUi.note.includes('과금') && keyUi.status.includes('키가 없습니다'), JSON.stringify(keyUi));
     await settingsClose();
     await openDraft();
     await submitDraft();
     await sleep(300);
     const noKey = await evaluate(s.cdp, "({ live: !!document.querySelector('[data-testid=draft-live]'), calls: window.__wu.fakeLlm.calls.length, items: document.querySelectorAll('[data-testid^=draft-item-]').length, fb: (document.querySelector('[data-testid=draft-fallback]') || {}).textContent || '' })");
-    check('CR-15 키가 없으면 「생성 중…」 표시도 호출도 없고 규칙 기반 + 연결 전 이유(기존 동작 그대로)', !noKey.live && noKey.calls === 0 && noKey.items === 10 && noKey.fb.includes('규칙 기반으로 대체함'), JSON.stringify(noKey));
-    check('처음 사용 W4(FU-24) 「Claude API」를 골랐지만 키가 없으면 초안에 「실시간으로 다시 쓰려면…」 한 줄(draft-live-hint)이 보임', await evaluate(s.cdp, "!!document.querySelector('[data-testid=draft-live-hint]')"));
+    // 처음 사용 3회차(W6): 키 없음 이유는 고장이 아닌 안내 — 「공급자 오류」·「대체함」·사전 생성이라는 말 없이 실제 방식(규칙 기반)에 맞는 한 줄
+    check('CR-15 키가 없으면 「생성 중…」 표시도 호출도 없고 규칙 기반 + 키 없음 안내 한 줄(「공급자 오류」·「대체함」 없음)', !noKey.live && noKey.calls === 0 && noKey.items === 10 && noKey.fb === '키가 없어 기록을 그대로 모은 문장(규칙 기반)으로 보여 줍니다 — 「설정」에서 키를 넣으면 Claude가 실시간으로 다시 씁니다' && !noKey.fb.includes('공급자 오류') && !noKey.fb.includes('대체함'), JSON.stringify(noKey));
+    check('처음 사용 W6 「Claude API」를 골랐지만 키가 없으면 키 없음 안내(draft-fallback, 노란 띠 아님)가 이미 같은 말을 하므로 맨 아래 한 줄(draft-live-hint)은 그리지 않음', await evaluate(s.cdp, "(() => { const f = document.querySelector('[data-testid=draft-fallback]'); return !!f && f.dataset.keyless === 'true' && !f.classList.contains('notice') && !document.querySelector('[data-testid=draft-live-hint]'); })()"));
     // 2) 키를 넣는다: 머리글 설명에 「(실시간)」, 저장은 이 브라우저 설정에만
     await settingsOpen();
     await typeInto('settings-apikey', fakeKey);
@@ -2693,7 +2698,7 @@ async function checkBrowser(browser, port) {
     await sleep(150);
     const during = await evaluate(s.cdp, "({ note: (document.querySelector('[data-testid=draft-live]') || {}).textContent || '', aria: (document.querySelector('[data-testid=draft-live]') || {}).getAttribute && document.querySelector('[data-testid=draft-live]').getAttribute('aria-live'), items: document.querySelectorAll('[data-testid^=draft-item-]').length, claude: [...document.querySelectorAll('[data-testid=item-method]')].filter((c) => c.textContent === 'Claude API').length })");
     check('CR-15 초안: 먼저 규칙 기반(사전 생성) 10항목이 그려지고 「생성 중…」(aria-live=polite)이 보임, 아직 Claude API 칩은 없음', during.note === '생성 중…' && during.aria === 'polite' && during.items === 10 && during.claude === 0, JSON.stringify(during));
-    check('처음 사용 W4(FU-24) 키가 있으면 「실시간으로 다시 쓰려면…」 한 줄을 그리지 않음', await evaluate(s.cdp, "!document.querySelector('[data-testid=draft-live-hint]')"));
+    check('처음 사용 W4(FU-24) 키가 있으면 맨 아래 안내 한 줄(draft-live-hint)을 그리지 않음', await evaluate(s.cdp, "!document.querySelector('[data-testid=draft-live-hint]')"));
     const lockedDuring = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=draft-confirm]'); return b ? b.disabled : null; })()");
     check('CR-15 초안: 응답이 오면 「생성 중…」이 사라지고 항목이 교체됨(칩 「Claude API」), 생성 방식 표시도 바뀜', (await liveDone()) && (await chipCount()) >= 3 && (await text(s.cdp, '[data-testid=draft-method]')).includes('Claude API') && (await text(s.cdp, '[data-testid=draft-method-note]')).includes('원문 인용'), `칩 ${await chipCount()}`);
     const lockedAfter = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=draft-confirm]'); return { disabled: b ? b.disabled : null, note: (document.querySelector('[data-testid=draft-live]') || {}).textContent || '' }; })()");
@@ -2774,6 +2779,58 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=draft-form] button')].find((b) => b.textContent === '닫기').click()");
     await pickProvider('pregen'); // 이후 단계는 기본 생성 방식으로
     await evaluate(s.cdp, "localStorage.removeItem('wu:v1:llm-cache')");
+
+    // ── 처음 사용 W6(2026-10-24, 3회차): 키 없이 Claude API → 안내 문구·인사이트 띠 한 번, 초안 맨 아래 안내·「다음에 해 볼 것」, 도움말 키·데이터 절, 설정 키 안내 ──
+    await pickProvider('claude_api'); // 키는 앞 단계에서 지웠다 = 키 없음
+    await settingsOpen();
+    const w6Key = await evaluate(s.cdp, "(() => { const n = document.querySelector('[data-testid=settings-key-note]'); const r = n ? n.getBoundingClientRect() : { width: 0, height: 0 }; return { text: n ? n.textContent : '', size: r.width > 0 && r.height > 0, status: (document.querySelector('[data-testid=settings-key-status]') || {}).textContent || '' }; })()");
+    check('처음 사용 W6 설정 「Claude API」 칸 안내(크기 있음): 암호화 없이 localStorage·근거 글(이름·설명·속성·사번·이력 메모)이 api.anthropic.com으로·회사의 외부 전송 기준, 상태 문구는 「기록을 그대로 모은 문장(규칙 기반)」', w6Key.size && ['암호화 없이', 'localStorage', 'api.anthropic.com', '사번', '이력 메모', '회사의 외부 전송 기준'].every((w) => w6Key.text.includes(w)) && w6Key.status === '키가 없습니다. 기록을 그대로 모은 문장(규칙 기반)으로 보여 줍니다.', JSON.stringify(w6Key));
+    await settingsClose();
+    // 인사이트: 키 없음 안내는 탭 맨 위에 한 번만, 설명 상자에는 노란 띠가 없다
+    await evaluate(s.cdp, 'window.__wu.select(null)');
+    await clickTestId(s.cdp, 'btn-insight-universe');
+    await sleep(150);
+    await clickTestId(s.cdp, 'tab-risk');
+    await sleep(100);
+    const w6Ins = await evaluate(s.cdp, "(() => { const k = [...document.querySelectorAll('[data-testid=insight-keyless]')]; const r = k[0] ? k[0].getBoundingClientRect() : { width: 0, height: 0 }; return { keyless: k.length, text: k[0] ? k[0].textContent : '', size: r.width > 0 && r.height > 0, boxes: document.querySelectorAll('[data-testid=insight-explain]').length, fb: document.querySelectorAll('[data-testid=explain-fallback]').length, old: document.querySelector('.insight').textContent.includes('공급자 오류') }; })()");
+    check('처음 사용 W6 키 없이 Claude API: 인사이트 맨 위에 키 없음 안내가 한 번(크기 있음), 설명 상자(1개 이상)마다 되풀이하는 띠는 0개, 「공급자 오류」 글자 없음', w6Ins.keyless === 1 && w6Ins.size && w6Ins.text.startsWith('키가 없어 기록을 그대로 모은 문장(규칙 기반)으로 보여 줍니다') && w6Ins.boxes >= 1 && w6Ins.fb === 0 && !w6Ins.old, JSON.stringify(w6Ins));
+    await clickTestId(s.cdp, 'tab-repeat');
+    await sleep(150);
+    const w6Rep = await evaluate(s.cdp, "(() => { const has = !!document.querySelector('[data-testid=repeat-patterns]'); const b = document.querySelector('[data-testid=insight-explain]'); return { has, dup: b ? b.dataset.dup : null, note: b && b.querySelector('[data-testid=explain-same-note]') ? b.querySelector('[data-testid=explain-same-note]').textContent : null, li: b ? b.querySelectorAll('li').length : 0 }; })()");
+    check('처음 사용 W6 반복 비효율: 규칙 기반 설명이 아래 카드와 같은 글이면 설명 상자에는 문장 없이 「아래 근거를 요약한 문장이 없습니다(규칙 기반)」만(패턴이 없는 지도면 해당 없음)', !w6Rep.has || (w6Rep.dup === 'true' && w6Rep.note === '아래 근거를 요약한 문장이 없습니다(규칙 기반)' && w6Rep.li === 0), JSON.stringify(w6Rep));
+    await clickTestId(s.cdp, 'insight-close');
+    await sleep(100);
+    // 초안: 키 없음 안내, 「다음에 해 볼 것」 두 링크 → 인사이트 「인수인계 위험」·지도 전체 화면
+    await openDraft();
+    await submitDraft();
+    await sleep(300);
+    const w6Draft = await evaluate(s.cdp, "(() => { const res = document.querySelector('[data-testid=draft-result]'); const kids = [...res.children].map((c) => c.dataset.testid || ''); const n = document.querySelector('[data-testid=draft-next]'); const r = n ? n.getBoundingClientRect() : { width: 0, height: 0 }; return { last: kids.slice(-2), size: r.width > 0 && r.height > 0, text: n ? n.textContent : '', links: [...document.querySelectorAll('[data-testid=draft-next] button')].map((b) => b.textContent) }; })()");
+    check('처음 사용 W6 초안 끝 「다음에 해 볼 것」(크기 있음): 「혼자만 아는 일 보기」·「← 지도 전체 보기」 두 링크, 확정 영역 바로 뒤', w6Draft.size && w6Draft.text.startsWith('다음에 해 볼 것:') && JSON.stringify(w6Draft.links) === JSON.stringify(['혼자만 아는 일 보기', '← 지도 전체 보기']) && w6Draft.last[w6Draft.last.length - 1] === 'draft-next', JSON.stringify(w6Draft));
+    await clickTestId(s.cdp, 'draft-next-risk');
+    await sleep(250);
+    const w6Risk = await evaluate(s.cdp, "({ insight: !!document.querySelector('[data-testid=insight-body]'), risk: !!document.querySelector('[data-testid=tab-risk].active'), draft: !!document.querySelector('[data-testid=draft-form]') })");
+    check('처음 사용 W6 「혼자만 아는 일 보기」를 누르면 인사이트가 「인수인계 위험」 탭으로 열림(wu:open-insight {kind:risk})', w6Risk.insight && w6Risk.risk && !w6Risk.draft, JSON.stringify(w6Risk));
+    await clickTestId(s.cdp, 'insight-close');
+    await sleep(100);
+    await openDraft();
+    await submitDraft();
+    await sleep(300);
+    await clickTestId(s.cdp, 'draft-next-overview');
+    await sleep(250);
+    const w6Over = await evaluate(s.cdp, "({ draft: !!document.querySelector('[data-testid=draft-form]'), overview: !!document.querySelector('[data-testid=btn-draft-universe]') })");
+    check('처음 사용 W6 「← 지도 전체 보기」를 누르면 초안 창이 닫히고 지도 전체 화면(wu:overview)', !w6Over.draft && w6Over.overview, JSON.stringify(w6Over));
+    // 도움말: 「키와 데이터」 절(접어 두었다가 열면 보임) + 사전 생성 전문(내가 만든 지도는 어떻게 되는지)
+    await clickTestId(s.cdp, 'tour-open');
+    await sleep(250);
+    await evaluate(s.cdp, "document.querySelector('[data-testid=help-security]').open = true");
+    await sleep(100);
+    const w6Help = await evaluate(s.cdp, "(() => { const d = document.querySelector('[data-testid=help-security]'); const r = d ? d.getBoundingClientRect() : { width: 0, height: 0 }; const box = document.querySelector('[data-testid=help-box]'); const gen = document.querySelector('[data-testid=help-gen]'); return { size: r.width > 0 && r.height > 0, text: d ? d.textContent : '', dt: d ? d.querySelectorAll('dt').length : 0, gen: gen ? gen.textContent : '', overflowX: box ? box.scrollWidth > box.clientWidth + 1 : null }; })()");
+    check('처음 사용 W6 도움말 「키와 데이터」 절(열면 크기 있음, 항목 5개): 암호화 없이 localStorage·api.anthropic.com·사번·최대 200건·회사의 외부 전송 기준·사내 LLM은 연결 자리만, 가로 넘침 없음', w6Help.size && w6Help.dt === 5 && ['localStorage', '암호화 없이', 'api.anthropic.com', '사번', '최대 200건', '회사의 외부 전송 기준', '연결할 자리만 있고'].every((w) => w6Help.text.includes(w)) && w6Help.overflowX === false, JSON.stringify({ ...w6Help, text: '', gen: '' }));
+    check('처음 사용 W6 도움말 「사전 생성」 설명: 예시 지도 기록을 Claude에 넣어 미리 받아 둔 문장(받은 날짜)·내가 새로 만든 지도에는 미리 받아 둔 문장이 없음', /예시 지도의 기록을 앱을 만들 때 Claude에 넣어 미리 받아 둔 문장입니다\(\d{4}-\d{2}-\d{2}\)/.test(w6Help.gen) && w6Help.gen.includes('내가 새로 만든 지도에는 미리 받아 둔 문장이 없어') && !w6Help.gen.includes('개발 중'), '');
+    await shot(s.cdp, `${browser.name}-w6-help-security`);
+    await clickTestId(s.cdp, 'help-close');
+    await sleep(100);
+    await pickProvider('pregen'); // 이후 단계는 기본 생성 방식으로
   }
 
   // ── CR-15 T-37 A 문서 AI 변환(가짜 클라이언트, 실제 호출 없음): 키 없으면 단추 없음 → 키를 넣으면 「AI로 변환」 → 「AI가 읽는 중」 → 미리 보기(칩 「AI 변환」·노드 표·뺀 항목) →
@@ -2872,6 +2929,31 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(snap)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); location.hash = 'U-A1'; location.reload(); })()`).catch(() => {});
     await sleep(500);
     await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1'", 8000);
+  }
+
+  // ── W8 업무정의서 한 장 읽기(처음 사용 점검 3회차): 법인세 중간예납 정의서(가상)를 붙여 「초벌 변환」 →
+  //    사람 2·산출물 1·작성 주체 칸에 가상재무팀·「표준 양식: … 모두 권장 항목을 채웠습니다」(비었다는 줄 없음)·노드 수 알림이 겁주지 않는 말 →
+  //    이름 칸을 고치면 꼭지와 대표 업무 이름이 함께 바뀜. 가져오지 않고 닫는다(저장소 불변) ──
+  {
+    const W8_DOC = ['업무정의서: 법인세 중간예납 준비', '작성: 가상재무팀 류다온 / 2026-09-01', '1. 업무 개요', '매년 8월 법인세 중간예납 세액을 계산하고 신고서를 준비한다.', '2. 처리 절차',
+      '① 상반기 손익 자료 수집(회계 시스템에서 내려받기)', '② 전년도 납부세액 기준 계산과 가결산 기준 계산 비교', '③ 신고서 초안 작성 후 팀장 검토', '④ 8월 31일까지 신고·납부', '3. 주의사항',
+      '- 가결산 방식을 고르면 반기 결산 자료가 확정돼야 한다', '- 마감일이 주말이면 다음 영업일', '4. 관련 문서', '- 중간예납 계산표(공유 드라이브 > 재무 > 세무)', '5. 담당', '- 주 담당: 류다온 / 검토: 가상재무팀장', ''].join('\n');
+    await evaluate(s.cdp, "window.confirm = () => true; document.getElementById('import-open').click()");
+    await sleep(200);
+    await evaluate(s.cdp, `(() => { const t = document.getElementById('import-doc'); t.value = ${JSON.stringify(W8_DOC)}; t.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+    await clickTestId(s.cdp, 'import-convert');
+    await sleep(300);
+    const w8 = await evaluate(s.cdp, "({ summary: (document.querySelector('[data-testid=import-summary]') || {}).textContent || '', owner: (document.getElementById('import-owner') || {}).value || '', form: (document.querySelector('[data-testid=import-form] summary') || {}).textContent || '', notes: (document.querySelector('[data-testid=import-notes]') || {}).textContent || '', nodes: (document.querySelector('[data-testid=import-nodes]') || {}).textContent || '', sections: (document.querySelector('[data-testid=import-sections]') || {}).textContent || '' })");
+    check('W8 업무정의서 한 장: 미리 보기 규모가 사람 2·산출물 1이고 주제(규칙 밖)가 없음', /사람 2/.test(w8.summary) && /산출물 1/.test(w8.summary) && !/주제/.test(w8.summary) && !w8.notes.includes('규칙에 없는 제목'), w8.summary);
+    check('W8 작성 주체 칸에 「가상재무팀」이 채워지고(류다온 이름은 안 들어감) 노드 목록에 업무 이름의 접두어가 없음', w8.owner === '가상재무팀' && w8.nodes.includes('법인세 중간예납 준비') && !/(^|\s)업무정의서: 법인세 중간예납 준비 원문 §2/.test(w8.nodes), JSON.stringify([w8.owner, w8.nodes.slice(0, 160)]));
+    check('W8 표준 양식 줄이 「업무 1개 모두 권장 항목을 채웠습니다」(원문에 있는 것을 비었다고 하지 않음)', w8.form.includes('모두 권장 항목을 채웠습니다') && !w8.form.includes('비어 있음'), w8.form);
+    check('W8 노드 수 알림이 실패처럼 읽히지 않음(「10개 이상 목표」 없음, 「업무 하나짜리 문서라면 정상」 있음)', !w8.notes.includes('이상 목표') && w8.notes.includes('업무 하나짜리 문서라면 정상') && w8.summary.length > 0, w8.notes.slice(0, 200));
+    await evaluate(s.cdp, "(() => { const e = document.getElementById('import-name'); e.value = '법인세 중간예납 신고 준비'; e.dispatchEvent(new Event('input', { bubbles: true })); })()");
+    await sleep(150);
+    const w8n = await text(s.cdp, '[data-testid=import-nodes]');
+    check('W8 미리 보기에서 이름을 고치면 대표 업무 이름도 같이 바뀜(꼭지만 바뀌지 않음)', (w8n.match(/법인세 중간예납 신고 준비/g) || []).length >= 2 && !w8n.includes('업무정의서: 법인세 중간예납 준비'), w8n.slice(0, 200));
+    await evaluate(s.cdp, "document.getElementById('import-dialog').open && document.querySelector('[data-testid=import-close]').click()");
+    await sleep(100);
   }
 
   // ── CR-15 T-38 C AI 연관 후보(가짜 클라이언트, 실제 호출 없음): 가상 운영부(U-D1) 통합 확인 목록 — 키가 없으면 단추 없음 → 키를 넣으면 「AI로 연관 찾기」 →
@@ -3294,6 +3376,158 @@ async function checkBrowser(browser, port) {
       await shot(s.cdp, `${browser.name}-w5-add-error`);
     } else {
       check('W5 월말 정산(U-A1) 열기', false, 'U-A1이 열리지 않음');
+    }
+
+    // ── 처음 사용 W7(2026-10-24, 3회차): wu:open-insight·wu:overview 처리, 초안을 만든 뒤 노드를 더해도 고른 대상·보내는·받는 사람 유지(+ draft-rerun-note가 있으면 보임),
+    //    권장 항목 「담당」 → 이름 넣기 → 사람 + 수행 연결, 이름 수정 뒤 「함께 이을 노드」 목록의 새 이름, 새 지도 창 작성 주체 안내·오류 문구, 팀 지도 범례·통합 확인 문구.
+    //    데이터를 바꾸므로 시작 때 저장소를 찍어 두었다가 끝에서 되돌린다 ──
+    {
+      const w7Snap = await evaluate(s.cdp, 'JSON.stringify(Object.entries(localStorage))');
+      const w7Restore = async () => {
+        await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(w7Snap)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); location.hash = 'U-A1'; location.reload(); })()`).catch(() => {});
+        await sleep(500);
+        await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1'", 8000);
+      };
+      const addViaForm = (type, label) => evaluate(s.cdp, `(() => { const slot = document.getElementById('add-slot'); const t = slot.querySelector('[data-testid=node-type]'); t.value = ${JSON.stringify(type)}; t.dispatchEvent(new Event('change')); slot.querySelector('[data-testid=node-label]').value = ${JSON.stringify(label)}; slot.querySelector('button[type=submit]').click(); })()`);
+
+      // ── 가상 운영부(U-D1): 범례·통합 확인 문구, 이벤트, 초안 선택 유지 ──
+      if (await gotoU('U-D1')) {
+        await evaluate(s.cdp, 'window.__wu.select(null)');
+        await sleep(200);
+        const legend = await text(s.cdp, '#legend');
+        check('W7 팀 지도 범례: 「◎ 숫자 = 접힌 팀(두 번 누르면 펼침) · 점선 = 팀 사이 요약 연결」(예전 「이중 테두리 + 숫자…더블클릭」 글 없음)', legend.includes('숫자 = 접힌 팀(두 번 누르면 펼침) · 점선 = 팀 사이 요약 연결') && !legend.includes('◎ ◎') && !legend.includes('이중 테두리 + 숫자') && !legend.includes('더블클릭'), legend);
+        const mh = await text(s.cdp, '[data-testid=merge-hint]');
+        check('W7 통합 확인 줄: 「같은 사람·업무인지 확인할 것 n건」', /같은 사람·업무인지 확인할 것 \d+건/.test(mh), mh);
+
+        // wu:open-insight: 지도 전체 대상, 종류 없으면 인수인계 위험 탭 / 종류가 있으면 그 탭
+        await evaluate(s.cdp, "document.dispatchEvent(new CustomEvent('wu:open-insight', { detail: { kind: 'density' } }))");
+        await sleep(250);
+        const insDensity = await evaluate(s.cdp, "({ open: !!document.querySelector('[data-testid=insight-close]'), tab: (document.querySelector('.insight .tab.active') || { dataset: {} }).dataset.testid || '', selected: window.__wu.selected })");
+        check('W7 wu:open-insight {kind:density} → 인사이트가 밀집·공백 탭으로 열림(지도 전체 대상)', insDensity.open && insDensity.tab === 'tab-density' && insDensity.selected === null, JSON.stringify(insDensity));
+        await clickTestId(s.cdp, 'insight-close');
+        await sleep(150);
+        await evaluate(s.cdp, "document.dispatchEvent(new CustomEvent('wu:open-insight'))");
+        await sleep(250);
+        check('W7 wu:open-insight (종류 없음) → 인수인계 위험 탭', (await evaluate(s.cdp, "(document.querySelector('.insight .tab.active') || { dataset: {} }).dataset.testid || ''")) === 'tab-risk');
+        await clickTestId(s.cdp, 'insight-close');
+        await sleep(150);
+
+        // wu:overview: 노드를 고른 상태에서 보내면 선택이 풀리고 지도 전체 화면(「인수인계 초안 만들기」)이 보임
+        const someNode = await evaluate(s.cdp, "(window.__wu.view.nodes.find((n) => n.core_type === 'work' && !n.hidden) || {}).gid || null");
+        await evaluate(s.cdp, `window.__wu.select(${JSON.stringify(someNode)})`);
+        await sleep(200);
+        await evaluate(s.cdp, "document.dispatchEvent(new CustomEvent('wu:overview'))");
+        await sleep(200);
+        const ov = await evaluate(s.cdp, "({ selected: window.__wu.selected, draftBtn: !!document.querySelector('[data-testid=btn-draft-universe]'), back: !!document.querySelector('[data-testid=detail-back-universe]') })");
+        check('W7 wu:overview → 노드 선택이 풀리고 지도 전체 화면(「인수인계 초안 만들기」)으로, 「← 지도 전체 보기」는 없음', !!someNode && ov.selected === null && ov.draftBtn && !ov.back, JSON.stringify(ov));
+        // 초안 창이 열려 있어도 같은 동작(초안 창이 닫히고 지도 전체)
+        await clickTestId(s.cdp, 'btn-draft-universe');
+        await sleep(250);
+        await evaluate(s.cdp, "document.dispatchEvent(new CustomEvent('wu:overview'))");
+        await sleep(200);
+        check('W7 초안 창에서 wu:overview → 초안 창이 닫히고 지도 전체 화면', await evaluate(s.cdp, "!document.querySelector('[data-testid=draft-form]') && !!document.querySelector('[data-testid=btn-draft-universe]')"));
+
+        // 초안을 한 번 만든 뒤 노드 추가 → 다시 그려져도 대상·보내는·받는 사람 유지
+        await clickTestId(s.cdp, 'btn-draft-universe');
+        await sleep(250);
+        const w7Pick = await evaluate(s.cdp, "(() => { const f = document.querySelector('[data-testid=draft-from]'); const t = document.querySelector('[data-testid=draft-to]'); const opts = (sel) => [...sel.options].filter((o) => o.value); const a = opts(f)[0]; const b = opts(t).find((o) => o.value !== a.value); f.value = a.value; f.dispatchEvent(new Event('change')); t.value = b.value; t.dispatchEvent(new Event('change')); return { target: document.querySelector('[data-testid=draft-target]').value, from: f.value, to: t.value, fromText: a.textContent, toText: b.textContent }; })()");
+        await evaluate(s.cdp, "document.querySelector('[data-testid=draft-form] button[type=submit]').click()");
+        await sleep(600);
+        const made = await evaluate(s.cdp, "({ result: document.querySelector('[data-testid=draft-result]').children.length > 0 })");
+        const nW7 = await evaluate(s.cdp, 'window.__wu.doc.nodes.length');
+        await addViaForm('person', 'W7 시험 사람');
+        await sleep(700);
+        const kept = await evaluate(s.cdp, "(() => { const g = (id) => document.querySelector('[data-testid=' + id + ']'); const note = g('draft-rerun-note'); const to = g('draft-to'); return { nodes: window.__wu.doc.nodes.length, form: !!g('draft-form'), target: g('draft-target') && g('draft-target').value, from: g('draft-from') && g('draft-from').value, to: to && to.value, inTo: !!to && [...to.options].some((o) => o.textContent.includes('W7 시험 사람')), note: note ? { hidden: note.hidden, text: note.textContent } : null, resultFilled: !!g('draft-result') && g('draft-result').children.length > 0 }; })()");
+        check('W7 초안을 만든 뒤 노드 추가 → 초안 창 유지, 고른 대상·보내는·받는 사람이 그대로, 새 이름이 받는 사람 목록에 있음',
+          made.result && kept.nodes === nW7 + 1 && kept.form && kept.target === w7Pick.target && kept.from === w7Pick.from && kept.to === w7Pick.to && kept.inTo, JSON.stringify({ w7Pick, made, kept }));
+        check('W7 (W6 연동) draft-rerun-note가 있으면 보이고 초안이 다시 만들어져 있음 — 없으면 건너뜀(선택 유지만 확인)', kept.note === null || (kept.note.hidden === false && kept.resultFilled), JSON.stringify(kept.note));
+        await shot(s.cdp, `${browser.name}-w7-draft-rerun`);
+      } else {
+        check('W7 가상 운영부(U-D1) 열기', false, 'U-D1이 열리지 않음');
+      }
+
+      // ── 월말 정산(U-A1): 「담당」 단추, 이름 수정 뒤 목록 ──
+      if (await gotoU('U-A1')) {
+        await evaluate(s.cdp, 'window.__wu.select(null)');
+        await sleep(200);
+        // 새 업무(담당 없음)를 만들면 권장 항목에 「담당」이 있다
+        await addViaForm('work', 'W7 시험 업무');
+        await sleep(400);
+        const w7Work = await evaluate(s.cdp, 'window.__wu.selected');
+        const missing0 = await evaluate(s.cdp, "(() => { const b = [...document.querySelectorAll('[data-testid=form-missing-item]')].find((x) => x.dataset.field === '담당'); const box = document.querySelector('[data-testid=form-assign]'); return b ? { title: b.title, box: !!box, boxVisible: !!box && box.checkVisibility() } : null; })()");
+        check('W7 새 업무의 권장 항목에 「담당」 단추가 있고, 이름 넣는 칸은 처음엔 숨김', !!missing0 && missing0.box && !missing0.boxVisible, JSON.stringify(missing0));
+        await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=form-missing-item]')].find((x) => x.dataset.field === '담당').click()");
+        await sleep(200);
+        const opened = await evaluate(s.cdp, "(() => { const n = document.querySelector('[data-testid=form-assign-name]'); const r = n.getBoundingClientRect(); return { visible: n.checkVisibility() && r.width > 0, focus: document.activeElement === n, add: !!document.querySelector('[data-testid=form-assign-add]'), editForm: !!document.querySelector('[data-testid=edge-form]') || !!document.querySelector('[data-testid=node-form-edit]') }; })()");
+        check('W7 「담당」을 누르면 이 업무 상세 안에 「담당자 이름 [ ] 넣기」 칸이 열리고 이름 칸에 초점(연결 추가 화면은 안 열림)', opened.visible && opened.focus && opened.add && !opened.editForm, JSON.stringify(opened));
+        await shot(s.cdp, `${browser.name}-w7-assign-box`);
+        // 오류: 이름이 비면 안내, 아무것도 만들지 않음
+        const nA = await evaluate(s.cdp, 'window.__wu.doc.nodes.length');
+        const eA = await evaluate(s.cdp, 'window.__wu.doc.edges.length');
+        await clickTestId(s.cdp, 'form-assign-add');
+        await sleep(150);
+        const emptyErr = await evaluate(s.cdp, "({ text: (document.querySelector('[data-testid=form-assign-msg]') || {}).textContent || '', nodes: window.__wu.doc.nodes.length, edges: window.__wu.doc.edges.length })");
+        check('W7 「담당」 칸: 이름이 비면 안내 문구만 나오고 노드·연결은 그대로', emptyErr.text.includes('담당자 이름') && emptyErr.nodes === nA && emptyErr.edges === eA, JSON.stringify(emptyErr));
+        // 정상: 새 이름 → 새 사람 + 수행 연결(시작일 오늘)
+        const w7Person = 'W7 시험 담당';
+        await evaluate(s.cdp, `(() => { const n = document.querySelector('[data-testid=form-assign-name]'); n.value = ${JSON.stringify(w7Person)}; document.querySelector('[data-testid=form-assign-add]').click(); })()`);
+        await sleep(400);
+        const assigned = await evaluate(s.cdp, `(() => { const d = window.__wu.doc; const p = d.nodes.find((n) => n.label === ${JSON.stringify(w7Person)}); const wid = ${JSON.stringify(w7Work)}.split('/')[1]; const e = p ? d.edges.find((x) => x.core_type === 'performs' && x.source === p.id && x.target === wid && !x.hidden) : null; const t = new Date(); const today = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0'); return { person: !!p, type: p && p.core_type, nodes: d.nodes.length, edge: !!e, start: e && e.period && e.period.start, today, event: d.events.some((ev) => ev.type === 'assign_start' && ev.payload && ev.payload.work_id === wid), done: !!document.querySelector('[data-testid=assign-done]'), stillMissing: [...document.querySelectorAll('[data-testid=form-missing-item]')].some((x) => x.dataset.field === '담당'), selected: window.__wu.selected }; })()`);
+        check('W7 「담당」 칸에 새 이름을 넣으면 새 사람이 만들어지고 이 업무에 「수행」 연결(시작일 오늘, 담당 시작 이력), 안내가 보이고 권장 항목에서 「담당」이 빠짐',
+          assigned.person && assigned.type === 'person' && assigned.nodes === nA + 1 && assigned.edge && assigned.start === assigned.today && assigned.event && assigned.done && !assigned.stillMissing && assigned.selected === w7Work, JSON.stringify(assigned));
+        // 같은 이름의 사람이 이미 있으면 새로 만들지 않고 그 사람을 잇는다(다른 새 업무로)
+        await evaluate(s.cdp, 'window.__wu.select(null)');
+        await sleep(150);
+        await addViaForm('work', 'W7 시험 업무 둘');
+        await sleep(400);
+        const nB = await evaluate(s.cdp, 'window.__wu.doc.nodes.length');
+        await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=form-missing-item]')].find((x) => x.dataset.field === '담당').click()");
+        await sleep(150);
+        await evaluate(s.cdp, `(() => { document.querySelector('[data-testid=form-assign-name]').value = ${JSON.stringify(w7Person)}; document.querySelector('[data-testid=form-assign-add]').click(); })()`);
+        await sleep(400);
+        const reuse = await evaluate(s.cdp, `(() => ({ nodes: window.__wu.doc.nodes.length, same: window.__wu.doc.nodes.filter((n) => n.label === ${JSON.stringify(w7Person)}).length, links: window.__wu.doc.edges.filter((e) => e.core_type === 'performs' && !e.hidden && window.__wu.doc.nodes.find((n) => n.id === e.source).label === ${JSON.stringify(w7Person)}).length }))()`);
+        check('W7 「담당」 칸: 같은 이름의 사람이 이미 있으면 새 사람 없이 그 사람을 이어줌(같은 이름 한 명, 수행 연결 2개)', reuse.nodes === nB && reuse.same === 1 && reuse.links === 2, JSON.stringify(reuse));
+
+        // 이름 수정 뒤 「노드 추가」의 「함께 이을 노드」 목록이 바로 새 이름 (칸에 초점을 주기 전에 읽는다)
+        const renameOld = await evaluate(s.cdp, "window.__wu.doc.nodes.find((n) => n.id === 'N-002').label");
+        const renameNew = 'W7 바꾼 이름';
+        await evaluate(s.cdp, "window.__wu.select('U-A1/N-002')");
+        await sleep(150);
+        await clickTestId(s.cdp, 'btn-edit');
+        await fillPanelForm(s.cdp, { 'node-label': renameNew });
+        await sleep(300);
+        const listNames = await evaluate(s.cdp, "[...document.querySelectorAll('#add-slot [data-testid=node-link-other] option')].map((o) => o.textContent)");
+        check('W7 노드 이름을 고친 직후 「노드 추가」의 「함께 이을 노드」 목록이 새 이름이고 옛 이름이 없음', listNames.some((t) => t.includes(renameNew)) && !listNames.some((t) => t.includes(renameOld)), JSON.stringify({ renameOld, listNames: listNames.slice(0, 6) }));
+        await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+        await sleep(150);
+        await clickTestId(s.cdp, 'btn-edge');
+        await sleep(150);
+        const edgeNames = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=edge-other] option')].map((o) => o.textContent)");
+        check('W7 「연결 추가」의 상대 목록도 새 이름', edgeNames.some((t) => t.includes(renameNew)) && !edgeNames.some((t) => t.includes(renameOld)), JSON.stringify(edgeNames.slice(0, 6)));
+        await evaluate(s.cdp, "[...document.querySelectorAll('#detail button')].find((b) => b.textContent === '취소').click()");
+        await sleep(100);
+      } else {
+        check('W7 월말 정산(U-A1) 열기', false, 'U-A1이 열리지 않음');
+      }
+
+      // ── 새 지도 창: 작성 주체·단위 안내, 작성 주체 누락 오류 문구 ──
+      await w7Restore();
+      await evaluate(s.cdp, 'window.confirm = () => true; window.__wu.select(null)');
+      const nUni = await evaluate(s.cdp, 'document.getElementById("universe-picker").options.length');
+      await evaluate(s.cdp, "document.getElementById('create-open').click()");
+      await sleep(250);
+      const cd = await evaluate(s.cdp, "(() => { const t = (id) => (document.querySelector('[data-testid=' + id + ']') || { textContent: '' }).textContent; const o = document.getElementById('create-owner'); return { owner: t('create-owner-hint'), level: t('create-level-hint'), ph: o.placeholder, ownerVisible: o.checkVisibility(), titleText: o.parentElement.firstChild.textContent.trim().startsWith('작성 주체') }; })()");
+      check('W7 새 지도 창: 「작성 주체」 옆에 「(이 지도를 책임질 팀·부서 이름, 예: 가상영업팀)」, placeholder, 「단위」 옆에 「(업무 하나면 「업무」 그대로)」',
+        cd.owner === '(이 지도를 책임질 팀·부서 이름, 예: 가상영업팀)' && cd.level === '(업무 하나면 「업무」 그대로)' && cd.ph.includes('가상영업팀') && cd.ownerVisible && cd.titleText, JSON.stringify(cd));
+      await shot(s.cdp, `${browser.name}-w7-create-dialog`);
+      await evaluate(s.cdp, "(() => { document.getElementById('create-name').value = 'W7 시험 지도'; document.getElementById('create-level').value = '업무'; document.getElementById('create-owner').value = ''; document.querySelector('#create-form button[type=submit]').click(); })()");
+      await sleep(250);
+      const ownerErr = await evaluate(s.cdp, "({ code: document.getElementById('create-message').dataset.code, msg: document.getElementById('create-message').textContent, focus: document.activeElement && document.activeElement.id, open: document.getElementById('create-dialog').open, n: document.getElementById('universe-picker').options.length })");
+      check('W7 작성 주체가 비면 만들지 않고(E-REQUIRED 그대로) 「작성 주체(팀·부서 이름)를 적으세요. 모르면 「내 업무를 정리해 두고 싶어요」로 시작하면 자동으로 채웁니다.」, 작성 주체 칸에 초점',
+        ownerErr.code === 'E-REQUIRED' && ownerErr.msg === '작성 주체(팀·부서 이름)를 적으세요. 모르면 「내 업무를 정리해 두고 싶어요」로 시작하면 자동으로 채웁니다.' && ownerErr.focus === 'create-owner' && ownerErr.open && ownerErr.n === nUni, JSON.stringify(ownerErr));
+      await evaluate(s.cdp, "document.getElementById('create-cancel').click()");
+      await sleep(150);
+      await w7Restore();
     }
     await gotoU('U-A1'); // 뒤 단계(편집 되감기)는 월말 정산에서 시작한다
   }

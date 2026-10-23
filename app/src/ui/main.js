@@ -49,6 +49,7 @@ import { createTour } from './tour.js';
 import { helpPanel } from './help.js';
 import { scenarioOf } from '../rules/tour-steps.js';
 import { createFieldId, fillMineDefaults } from '../rules/new-universe.js';
+import { LEGEND_COLLAPSED_TEXT, OWNER_REQUIRED_TEXT, assignOps, keepDraftPick, mergePendingText } from './flow-helpers.js';
 
 // 점검 도구(tools/*-check.mjs)만 주소에 ?check를 붙여 연다. 그때만 점검용 전역 window.__wu를 만든다(D-4-10, 사용자 결정 2026-10-03)
 const CHECK_MODE = new URLSearchParams(location.search).has('check');
@@ -84,7 +85,7 @@ function wireCreateDialog(app, $, getAuthorName = () => undefined) {
     legend: '이 유니버스에 넣을 첫 업무(선택) — 채우면 작은 지도가 바로 생깁니다',
     intro: '업무 하나부터 시작하세요. 첫 업무를 적으면 업무·담당자·산출물이 이어진 작은 지도가 바로 생깁니다. 비워 두면 빈 유니버스를 만듭니다.',
     namePh: '예: 가상 교육팀 업무 지도',
-    ownerPh: '예: 가상 교육팀',
+    ownerPh: '팀·부서 이름 (예: 가상영업팀)',
   };
   const MINE = {
     title: '내 업무 지도 만들기',
@@ -155,7 +156,9 @@ function wireCreateDialog(app, $, getAuthorName = () => undefined) {
     if (same && !window.confirm(`같은 이름·단위의 유니버스「${same.name}」(${same.level})가 이미 있습니다. 그래도 새로 만들까요?`)) return;
     const r = app.createUniverse(input);
     if (!r.ok) {
-      showError(messageFor(r.error), r.error.code, r.error.field);
+      // 작성 주체가 비면 쓸 말을 알려 준다(점검 3회차). 오류 코드(E-REQUIRED)와 만들지 않는 동작은 그대로(R-12 ②)
+      const ownerMissing = r.error.code === 'E-REQUIRED' && r.error.field === 'owner';
+      showError(ownerMissing ? OWNER_REQUIRED_TEXT : messageFor(r.error), r.error.code, r.error.field);
       return;
     }
     openUniverse(r.doc.universe.id);
@@ -320,6 +323,7 @@ function start() {
   let rwPast = null; // 되감기 중인 시점의 app.viewAt 결과 {doc, view, diff, limits}
   // 따라 하기(CR-13 A): 완료 조건에 쓰는 표시. 따라 하기를 시작할 때 지운다
   let draftShown = false; // 초안 결과가 그려졌음
+  let draftDomLive = false; // 지금 화면 패널에 이 drafting의 초안 창이 그려져 있음(다시 그리기 전에 고른 값을 읽을 수 있다)
   let evidenceUsed = false; // 초안의 근거 칩을 눌렀음
   let foundGid = null; // 「노드 찾기」로 고른 노드
   let tourSaved = false; // 따라 하기를 시작한 뒤 저장이 한 번 성공했음(handover 5단계 안내용)
@@ -416,7 +420,7 @@ function start() {
       ...[
         ...legendItems(display).map((i) => el('li', {}, el('span', { class: 'dot', style: `background:${i.color}` }), i.label)),
         display.collapsed.size
-          ? el('li', { class: 'legend-note' }, el('span', { class: 'dot collapsed' }), '이중 테두리 + 숫자: 접힌 하위 유니버스(더블클릭하면 펼침) · 점선: 요약 연결')
+          ? el('li', { class: 'legend-note' }, el('span', { class: 'dot collapsed' }), LEGEND_COLLAPSED_TEXT)
           : null,
         // 노드가 많은 화면(부서 등)은 글자가 작다: 확대·이동 방법을 범례 끝에 알린다(재검증 5-2)
         display.nodes.some((n) => n.merged_from && n.merged_from.length)
@@ -530,6 +534,7 @@ function start() {
     issues = null;
     drafting = preset ? { target: targetGid, preset } : { target: targetGid };
     draftShown = false;
+    draftDomLive = false; // 새로 여는 초안 창: 이전 화면의 칸 값을 읽지 않는다
     renderPanel();
   }
 
@@ -600,14 +605,53 @@ function start() {
   function formNote(gid) {
     const missing = workFormMissing(view, gid);
     if (!missing || !missing.length) return null;
-    // 항목 이름을 누르면 그 항목을 채우는 수정 화면이 열린다(FU-16): 설명은 설명 칸, 담당은 연결 추가, 나머지는 그 속성 칸(없으면 줄을 더해서)에 초점. 고칠 수 없는 화면에서는 글자만
+    // 항목 이름을 누르면 그 항목을 채우는 길이 열린다(FU-16): 설명은 설명 칸, 나머지는 그 속성 칸(없으면 줄을 더해서)에 초점이 가는 수정 화면.
+    // 담당은 이 업무 상세 안의 작은 칸 「담당자 이름 [ ] 넣기」(점검 3회차: 사람↔업무를 「관련」으로 이으려다 막히던 길). 고칠 수 없는 화면에서는 글자만
     const canEdit = isOwn(gid) && !app.readOnly && !rw;
+    const box = canEdit && missing.includes('담당') ? assignBox(gid) : null;
     const items = missing.flatMap((m, i) => [i ? ', ' : null, canEdit
-      ? el('button', { type: 'button', class: 'link', 'data-testid': 'form-missing-item', 'data-field': m, title: m === '담당' ? '「연결 추가」 화면을 엽니다' : `「${m}」 칸을 채우는 수정 화면을 엽니다`,
-        onclick: () => { editing = m === '담당' ? { kind: 'edge' } : { kind: 'node', focus: m }; renderPanel(); } }, m)
+      ? el('button', { type: 'button', class: 'link', 'data-testid': 'form-missing-item', 'data-field': m, title: m === '담당' ? '이 업무의 담당자 이름을 넣는 칸을 엽니다' : `「${m}」 칸을 채우는 수정 화면을 엽니다`,
+        onclick: () => {
+          if (m !== '담당') { editing = { kind: 'node', focus: m }; renderPanel(); return; }
+          box.hidden = !box.hidden;
+          if (!box.hidden) box.querySelector('[data-testid=form-assign-name]').focus();
+        } }, m)
       : m]);
-    return el('p', { class: 'muted small', 'data-testid': 'form-missing', title: '업무를 넣는 표준 양식(절차·주기·마감·주의사항·관련 문서·담당·설명)과 비교한 결과입니다. 저장은 막지 않습니다' },
+    const line = el('p', { class: 'muted small', 'data-testid': 'form-missing', title: '업무를 넣는 표준 양식(절차·주기·마감·주의사항·관련 문서·담당·설명)과 비교한 결과입니다. 저장은 막지 않습니다' },
       `표준 양식: 권장 항목 ${missing.length}개 비어 있음 — `, ...items);
+    return box ? el('div', {}, line, box) : line;
+  }
+
+  // 권장 항목 「담당」의 이름 넣기 칸(처음엔 숨김). 같은 이름의 사람이 이 지도에 있으면 그 사람을, 없으면 새 사람을 만들어 이 업무에 「수행」으로 잇는다.
+  // 표의 담당자 칸과 같은 명령 경로(applyBatch assign)라 이력·검증이 같고, 시작일은 오늘이다
+  function assignBox(gid) {
+    const input = el('input', { type: 'text', maxlength: 100, autocomplete: 'off', placeholder: '예: 김가상', 'data-testid': 'form-assign-name', 'aria-label': '담당자 이름' });
+    const msg = el('span', { class: 'error-text', role: 'alert', 'data-testid': 'form-assign-msg' });
+    const submit = () => {
+      const work = localNode(gid);
+      const persons = ownNodes().filter((n) => n.core_type === 'person');
+      const plan = assignOps(persons, input.value, work ? work.id : '');
+      msg.textContent = '';
+      delete msg.dataset.code;
+      if (!plan.ok) {
+        msg.textContent = plan.reason === 'empty' ? '담당자 이름을 넣으세요.' : '같은 이름의 사람이 둘 이상입니다. 「연결 추가」에서 직접 고르세요.';
+        msg.dataset.code = plan.reason;
+        return;
+      }
+      const name = input.value.trim();
+      const b = app.applyBatch(plan.ops);
+      if (!b.ok) {
+        const err = b.errors && b.errors.length ? b.errors[0].error : b.error;
+        msg.textContent = messageFor(err);
+        msg.dataset.code = (err && err.code) || '';
+        return;
+      }
+      afterSave(b, gid); // refresh()가 상세를 다시 그린다(담당이 채워져 권장 항목에서 빠진다)
+      $('detail').prepend(el('p', { class: 'ok-notice', role: 'status', 'data-testid': 'assign-done' }, `「${name}」${josa(name, '을/를')} 이 업무의 담당으로 넣었습니다${plan.existing ? '' : ' (새 사람으로 만들었습니다)'}.`));
+    };
+    const add = el('button', { type: 'button', 'data-testid': 'form-assign-add', onclick: submit }, '넣기');
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+    return el('div', { class: 'row', hidden: true, 'data-testid': 'form-assign' }, el('label', { class: 'small' }, '담당자 이름 ', input), add, msg);
   }
 
   // 업무·주제 노드가 반복 비효율 패턴에 들어 있으면 한 줄
@@ -647,7 +691,7 @@ function start() {
     const plan = app.mergePlan();
     if (!plan) return null;
     return el('p', { class: plan.counts.pending ? 'notice' : 'muted small', 'data-testid': 'merge-hint' },
-      plan.counts.pending ? `통합 확인 대기 ${plan.counts.pending}건(사람 ${plan.counts.persons}, 업무 후보 ${plan.counts.works}) ` : '통합 확인할 항목이 없습니다. ',
+      mergePendingText(plan.counts),
       el('button', { type: 'button', class: 'link', 'data-testid': 'btn-merge', onclick: () => { merging = true; insight = null; issues = null; drafting = null; editing = null; settingsOpen = false; renderPanel(); } }, '통합 확인 목록'));
   }
 
@@ -820,8 +864,22 @@ function start() {
     tourHook();
   }
 
+  // 초안 창이 열린 채 다시 그려질 때(노드 추가·수정, 연결, 시간 이동 등) 고른 대상·보내는·받는 사람을 drafting.preset에 적어 둔다.
+  // 새 창이 같은 선택으로 열리고, 초안을 한 번 만든 뒤였으면 draft.js가 rerun으로 같은 선택의 초안을 다시 만든다(점검 3회차)
+  function keepDraftSelection() {
+    const sel = (id) => document.querySelector('#detail [data-testid=' + id + ']');
+    if (!drafting || !draftDomLive || !sel('draft-target')) return;
+    const val = (id) => { const s = sel(id); return s ? s.value : ''; };
+    const nameOf = (gid) => { const n = gid ? view.getNode(gid) : null; return n ? n.label : ''; };
+    const k = keepDraftPick(drafting, { target: val('draft-target'), from: val('draft-from'), to: val('draft-to') }, nameOf);
+    drafting.target = k.target;
+    drafting.preset = k.preset;
+  }
+
   function renderPanelBody() {
     const panel = $('detail');
+    if (drafting) keepDraftSelection();
+    else draftDomLive = false;
     if (rw && rwPast && !selected) { // 편집 되감기: 시점 막대·목록
       const nodeById = new Map(rwPast.doc.nodes.map((n) => [n.id, n]));
       const nowNode = (id) => app.findNode(id);
@@ -960,7 +1018,7 @@ function start() {
       return;
     }
     if (drafting) {
-      panel.replaceChildren(draftPanel({ view, provider, target: drafting.target, preset: drafting.preset || (tour ? tour.preset() : undefined), onDraft: () => { draftShown = true; tourHook(); }, asOf: todayLocal(), viewDate, readOnly: app.readOnly, onFocus: showInGraph, onClose: () => { drafting = null; renderPanel(); graph.highlight(selected); },
+      panel.replaceChildren(draftPanel({ view, provider, target: drafting.target, preset: drafting.preset || (tour ? tour.preset() : undefined), rerun: draftShown, onDraft: () => { draftShown = true; tourHook(); }, asOf: todayLocal(), viewDate, readOnly: app.readOnly, onFocus: showInGraph, onClose: () => { drafting = null; renderPanel(); graph.highlight(selected); },
         // 확정(R-03 ③, CR-8): 저장되면 초안 화면을 닫고 새 인수인계서를 연다
         onConfirm: (input) => {
           const r = app.confirmHandover(input);
@@ -971,11 +1029,12 @@ function start() {
           const node = view.getNode(r.artifact);
           const wlabel = r.works.map((w) => (view.getNode(w) || { label: w }).label).join('·');
           const alabel = node ? node.label : '인수인계서';
-          $('detail').prepend(el('p', { class: 'ok-notice', role: 'status', 'data-testid': 'confirm-done' }, `인수인계서로 저장했습니다 — 「${alabel}」${josa(alabel, '이/가')} 「${wlabel}」의 산출물과 이력에 남았습니다.`));
+          $('detail').prepend(el('p', { class: 'ok-notice', role: 'status', 'data-testid': 'confirm-done' }, `인수인계서로 저장했습니다 — 「${alabel}」${josa(alabel, '이/가')} 「${wlabel}」의 산출물과 이력에 남았습니다. 현재 담당은 그대로입니다 — 담당을 넘기려면 업무의 수행 연결을 「연결 수정」에서 기간으로 바꾸세요.`));
           $('detail').parentElement.scrollTop = 0;
           graph.zoomTo(view.canonical(r.artifact));
           return saved;
         } }));
+      draftDomLive = true;
       return;
     }
     if (!selected) {
@@ -1293,6 +1352,13 @@ function start() {
     $('detail').prepend(el('p', { class: 'ok-notice', role: 'status', 'data-testid': 'rewind-done' }, doneText(at, r.counts, (r.skipped || []).length, labelOf)));
   }
 
+  // 「노드 추가」 양식은 한 번 그려 두고 쓰므로, 화면이 바뀔 때마다 「함께 이을 노드」 목록만 지금 이름으로 다시 만든다(점검 3회차)
+  function refreshAddCandidates() {
+    const slot = $('add-slot');
+    const form = slot ? slot.querySelector('[data-testid=node-form-add]') : null;
+    if (form && typeof form.refreshCandidates === 'function') form.refreshCandidates();
+  }
+
   function refresh() {
     if (rw) {
       rwPast = app.viewAt(rw.at);
@@ -1324,6 +1390,7 @@ function start() {
     graph.setRewindMarks(rwMarkGids());
     renderLegend();
     graph.setTimeOff(timeOffIds());
+    refreshAddCandidates();
     renderPanel();
     showBackupNudge(); // 변경이 쌓일 때마다 기준을 다시 본다
     if (left) graph.relayout(); // 주변만 보기의 고리 배치를 그대로 두면 나머지 노드가 한 줄로 쌓인다
@@ -1579,12 +1646,6 @@ function start() {
   function addPersonDirect(detail) {
     const input = { core_type: 'person', label: detail.label };
     if (detail.attrs && typeof detail.attrs === 'object' && Object.keys(detail.attrs).length) input.attrs = detail.attrs;
-    // 다시 그려도 초안 창이 열린 채 고른 대상·보내는·받는 사람이 유지되게 지금 고른 값을 미리 적어 둔다
-    const pick = (id) => { const s = document.querySelector('#detail [data-testid=' + id + ']'); return s ? s.value : ''; };
-    const nameOf = (gid) => { const n = gid ? view.getNode(gid) : null; return n ? n.label : ''; };
-    const t = pick('draft-target');
-    const fromName = nameOf(pick('draft-from'));
-    const toName = nameOf(pick('draft-to'));
     // 노드 추가 양식의 저장과 같은 명령(applyBatch addNode)을 쓴다 — 이력·검증이 같다
     const b = app.applyBatch([{ op: 'addNode', row: 1, input, attachRoot: false }]);
     if (!b.ok) {
@@ -1598,11 +1659,7 @@ function start() {
       if (typeof m.scrollIntoView === 'function') m.scrollIntoView({ block: 'nearest' });
       return;
     }
-    if (drafting) {
-      if (t) drafting.target = t;
-      drafting.preset = { target: t || drafting.target, from: fromName, to: toName };
-    }
-    afterSave(b); // refresh()가 초안 창을 다시 그린다(새 사람이 받는 사람 목록에 들어간다)
+    afterSave(b); // refresh()가 초안 창을 다시 그린다(새 사람이 받는 사람 목록에 들어간다). 고른 대상·보내는·받는 사람은 renderPanelBody의 keepDraftSelection이 유지한다
   }
 
   document.addEventListener('wu:add-node', (e) => {
@@ -1618,6 +1675,14 @@ function start() {
     const label = $('add-slot').querySelector('[data-testid=node-label]');
     if (label) label.focus();
   });
+
+  // 초안 창 끝의 「혼자만 아는 일 보기」·「← 지도 전체 보기」 링크가 보내는 요청(W6 계약, 점검 3회차):
+  // wu:open-insight {kind} = 지도 전체를 대상으로 인사이트를 연다(기본 탭 인수인계 위험), wu:overview = 노드 선택을 풀고 지도 전체 화면으로(「← 지도 전체 보기」와 같은 동작)
+  document.addEventListener('wu:open-insight', (e) => {
+    const kind = e && e.detail && e.detail.kind;
+    openInsight('', typeof kind === 'string' && kind ? kind : 'risk');
+  });
+  document.addEventListener('wu:overview', () => select(null));
 
   // 가상 데이터 초기화: 「가져오기·내보내기」 창 맨 아래 위험 구역에서 부른다(R7-4). 문서만 읽기 전용이면 초기화로 복구할 수 있게 둔다
   function doReset() {

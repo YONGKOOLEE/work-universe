@@ -7,7 +7,7 @@ import { PREGEN } from '../app/data/pregen.js';
 import { createLlmCache } from '../app/src/store/local.js';
 import { PROVIDERS, createProvider } from '../app/src/llm/providers.js';
 import { createFakeClient } from '../app/src/llm/fake-client.js';
-import { LIVE_HINT, PREGEN_NOTE, draftPanel, forgetLastPeople } from '../app/src/ui/draft.js';
+import { LIVE_HINT_PREGEN, LIVE_HINT_RULE, PREGEN_CHIP_TITLE, PREGEN_NOTE, draftPanel, forgetLastPeople } from '../app/src/ui/draft.js';
 import { pickNewPerson } from '../app/src/ui/draft-hints.js';
 import { evidenceChips, readableEvidence } from '../app/src/ui/evidence.js';
 import { HELP_GEN } from '../app/src/ui/help.js';
@@ -46,31 +46,38 @@ const withDom = (fn) => async () => {
 test('FU-24: 사전 생성 안내는 "써 둔 문장"이라고 말하고, 옛 "개발 중" 문구가 없다', withDom(() => {
   const { q, make, panel } = openDraft(pregen);
   make();
-  assert.equal(q('draft-method-note').textContent, 'Claude가 이 기록만 보고 써 둔 문장입니다. 열 때마다 앱이 근거를 검사하고, 맞지 않으면 기록을 그대로 모은 문장으로 바꿉니다.');
+  // 3회차(FU-42): 사전 생성의 정체(예시 지도 기록을 Claude에 넣어 미리 받아 둔 문장 + 받은 날짜)를 말한다. 날짜는 pregen.js의 generated_at에서 읽는다
+  assert.equal(q('draft-method-note').textContent, `예시 지도의 기록을 앱을 만들 때 Claude에 넣어 미리 받아 둔 문장입니다(${PREGEN.generated_at.slice(0, 10)}). 열 때마다 앱이 근거를 검사하고, 맞지 않으면 기록을 그대로 모은 문장으로 바꿉니다.`);
   assert.equal(PREGEN_NOTE, q('draft-method-note').textContent);
   assert.ok(!panel.textContent.includes('개발 중'));
   assert.ok(!HELP_GEN.some((g) => g.desc.includes('개발 중')));
-  assert.equal(HELP_GEN.find((g) => g.term === '사전 생성').desc, PREGEN_NOTE);
+  // 도움말에는 전문(내가 만든 지도는 어떻게 되는지까지), 초안 위에는 짧게
+  const full = HELP_GEN.find((g) => g.term === '사전 생성').desc;
+  assert.ok(full.startsWith(PREGEN_NOTE) && full.includes('내가 새로 만든 지도에는 미리 받아 둔 문장이 없어'));
+  assert.ok(!PREGEN_NOTE.includes('내가 새로 만든 지도'));
   const chip = q('item-method');
-  assert.ok(chip.getAttribute('title').startsWith('Claude가 이 기록만 보고 써 둔 문장'));
+  assert.equal(chip.getAttribute('title'), PREGEN_CHIP_TITLE);
 }));
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-test('FU-24: 실시간 안내 한 줄(draft-live-hint)은 키가 없고 사전 생성·규칙 기반일 때만, 결과 위(제목 다음)에 보인다', withDom(async () => {
+// 3회차: 결과 위에 있던 한 줄이 "덜 된 건가?"로 읽혀, 결과를 다 읽은 뒤 맨 아래로 옮기고 지금 상태부터 말한다
+test('FU-24(3회차 이동): 실시간 안내 한 줄(draft-live-hint)은 키가 없고 사전 생성·규칙 기반일 때만, 초안 맨 아래에 보인다', withDom(async () => {
   const a = openDraft(pregen);
   assert.equal(a.q('draft-live-hint'), null, '만들기 전에는 결과가 없다');
   a.make();
-  assert.equal(a.q('draft-live-hint').textContent, '실시간으로 다시 쓰려면: 「설정」에서 Claude API를 고르고 본인 키를 넣으세요(선택)');
-  assert.equal(LIVE_HINT, a.q('draft-live-hint').textContent);
+  assert.equal(a.q('draft-live-hint').textContent, '지금 문장은 미리 받아 둔 것입니다. 「설정」에 Claude API 키를 넣으면 이 초안을 Claude가 새로 씁니다(선택).');
+  assert.equal(LIVE_HINT_PREGEN, a.q('draft-live-hint').textContent);
   const kids = a.q('draft-result').childNodes.filter((c) => c.nodeType === 1);
+  assert.equal(kids[kids.length - 1].dataset.testid, 'draft-live-hint', '맨 아래');
   const idx = (id) => kids.findIndex((k) => k.dataset.testid === id);
-  assert.ok(idx('draft-live-hint') > -1 && idx('draft-live-hint') < idx('draft-item-업무_개요'), '항목보다 위');
+  assert.ok(idx('draft-live-hint') > idx('draft-item-업무_개요') && idx('draft-live-hint') > idx('draft-next'), '항목·다음에 해 볼 것보다 아래');
   uninstallDom();
   const b = openDraft(none); // 규칙 기반만
   b.make();
   assert.equal(b.q('draft-method').textContent.includes('규칙 기반'), true);
-  assert.ok(b.q('draft-live-hint'));
+  assert.equal(b.q('draft-live-hint').textContent, LIVE_HINT_RULE);
+  assert.ok(LIVE_HINT_RULE.startsWith('지금 문장은 기록을 모은 것입니다.'));
   uninstallDom();
   const c = openDraft(live); // 키가 있으면 그리지 않는다(사전 생성 문장을 먼저 그리는 동안에도)
   c.make();

@@ -7,6 +7,7 @@ import { SCHEMA_VERSION, nodeTypeLabel } from '../model/schema.js';
 import { IMPORT_MAX_CHARS, parseImportText } from '../model/import.js';
 import { METHOD_LABELS } from '../llm/connector.js';
 import { folderTab } from './folder-tab.js';
+import { docWorkLabel } from '../rules/doc-convert.js';
 
 const KIND_TEXT = {
   overview: () => '개요 → 유니버스의 중심 노드(꼭지)의 이름·목적·배경, 그리고 범위·이해관계자',
@@ -14,7 +15,7 @@ const KIND_TEXT = {
   scope_out: () => '범위 제외 → 유니버스 설명',
   steps: (n) => `업무 흐름 → 대표 업무의 절차 속성 ${n}단계(노드로 만들지 않음)`,
   topic: () => '주제 노드 1개(항목은 설명에)',
-  people: (n) => `역할 ${n}개`,
+  people: (n) => `사람·역할 ${n}개`,
   cautions: (n) => `주의사항 → 대표 업무의 주의사항 속성 ${n}줄`,
   artifacts: (n) => `산출물 ${n}개`,
   memos: (n) => `메모 ${n}건`,
@@ -49,7 +50,8 @@ function noteText(n) {
     case 'C-DATE-ASSUMED': return `원문에 작성일이 없어 메모(질문·리스크) 날짜를 변환한 날(${n.date})로 적었습니다.`;
     case 'C-TOPIC-GUESS': return `규칙에 없는 제목의 절 ${n.count}개를 주제로 만들었습니다(표에 「규칙 밖」 표시). 맞는지 확인하세요.`;
     case 'C-TOO-MANY': return `노드가 ${n.count}개로, 정한 세분화(월말 정산 수준, ${n.max}개 이하)보다 많습니다. 범위 항목을 묶을 수 있는지 확인하세요.`;
-    case 'C-TOO-FEW': return `노드가 ${n.count}개로 적습니다(${n.min}개 이상 목표). 원문에 제목(#)·표·번호 목록이 있는지 확인하세요.`;
+    case 'C-TOO-FEW': return `노드가 ${n.count}개로 적습니다. 업무 하나짜리 문서라면 정상입니다. 업무가 여러 개인 문서라면 「AI로 변환」(설정에서 키를 넣었을 때)을 쓰거나 업무별로 나눠 변환하세요. 제목(#)·표·번호 목록이 있는지도 확인하세요.`;
+    case 'C-ASSIGN-SKIPPED': return `담당 절에 「주 담당」으로 적힌 사람 ${n.count}명은 업무가 여러 개라 어느 업무의 담당인지 알 수 없어 업무에 잇지 않았습니다. 필요하면 연결을 직접 추가하세요.`;
     case 'C-PERFORMS-GUESS': return `담당(수행) 연결 ${n.count}건을 추정했습니다 — 원문의 역할 「하는 일」 항목이 업무 이름과 같은 경우만이고(결재·검토처럼 이름이 일부만 들어간 항목은 잇지 않음), 기간이 없어 '지금 담당'으로 계산됩니다. 맞는지 확인하세요.`;
     case 'C-ROW-NO-NAME': return `${n.ref} 표의 ${n.row}번째 행은 이름 칸이 비어 있어 건너뛰었습니다. 원문을 확인하세요.`;
     case 'C-NO-NAME': return `${n.ref}의 「${n.text}」는 이름이 없어(표시·번호·괄호뿐) 노드로 만들지 않았습니다. 원문을 확인하세요.`;
@@ -106,10 +108,19 @@ export function importDialog(o) {
 
   const setUniverse = (field, value) => {
     const d = st.result.doc;
+    // 이름을 처음 고칠 때, 문서 제목으로 만든 대표 업무의 이름(제목에서 접두어를 뗀 것)을 기억해 둔다. 이름을 비웠다가 다시 써도 따라가게
+    if (field === 'name' && st.result.titleWork === undefined) st.result.titleWork = docWorkLabel(d.universe.name);
     d.universe[field] = value;
     if (field === 'name') {
       const root = d.nodes.find((n) => n.id === d.universe.root_node_id);
       if (root) root.label = value;
+      // 문서 제목으로 만든 대표 업무(이름이 제목에서 「업무정의서:」 같은 접두어를 뗀 것과 같은 업무)도 같이 바꾼다. 업무가 하나뿐일 때만
+      const works = d.nodes.filter((n) => n.core_type === 'work');
+      const newWork = value.trim() ? docWorkLabel(value) : '';
+      if (newWork) {
+        if (works.length === 1 && works[0].label === st.result.titleWork) works[0].label = newWork;
+        st.result.titleWork = newWork;
+      }
     }
     renderPreview();
   };
@@ -251,7 +262,8 @@ export function importDialog(o) {
       } else {
         blocks.push(el('p', { class: 'muted small', 'data-testid': 'import-method' }, `만든 방식: ${METHOD_LABELS[st.result.method] || st.result.method} 초벌(규칙 ${report ? report.rules_version : '-'}). 원문 구조를 규칙으로 옮긴 것이라 사람이 확인해야 합니다.`));
       }
-      if (st.result.fallback) blocks.push(el('p', { class: 'notice', 'data-testid': 'import-fallback' }, st.result.fallback.reason));
+      // 키가 없어 규칙 변환을 쓴 것은 고장이 아니므로 노란 띠가 아니라 조용한 한 줄(초안·인사이트와 같은 처리, 처음 사용 점검 FU-41)
+      if (st.result.fallback) blocks.push(el('p', { class: st.result.fallback.keyless ? 'muted small' : 'notice', 'data-testid': 'import-fallback', ...(st.result.fallback.keyless ? { 'data-keyless': 'true' } : {}) }, st.result.fallback.reason));
       if (st.result.note) blocks.push(el('p', { class: 'muted small', 'data-testid': 'import-note' }, st.result.note));
       blocks.push(el('div', { class: 'import-fields' },
         el('label', { class: 'field' }, el('span', {}, '이름'), el('input', { id: 'import-name', value: u.name || '', maxlength: '100', oninput: (e) => setUniverse('name', e.target.value) })),
@@ -278,7 +290,9 @@ export function importDialog(o) {
         el('dt', {}, '규모'), el('dd', {}, `노드 ${p.node_total}개(${p.counts.map((c) => `${c.label} ${c.count}`).join(', ')}), 연결 ${p.edge_total}개, 메모 ${p.memo_total}건`));
       if (report && report.target) {
         const { min, max } = report.target;
-        const fit = report.node_count > max ? '많음' : report.node_count < min ? '적음' : '맞음';
+        // 노드가 적어도 업무 하나를 적은 문서면 정상이다: 실패처럼 읽히지 않게 한마디 붙인다
+        const oneWork = (doc.nodes || []).filter((n) => n && n.core_type === 'work' && !n.hidden).length <= 1;
+        const fit = report.node_count > max ? '많음' : report.node_count < min ? (oneWork ? '적음 — 업무 하나짜리 문서라면 정상' : '적음') : '맞음';
         summary.append(el('dt', {}, '세분화'), el('dd', { 'data-testid': 'import-granularity' }, `월말 정산 수준(노드 ${min}~${max}개) — ${fit}`));
       }
       if (p.source) summary.append(el('dt', {}, '원문 근거'), el('dd', { 'data-testid': 'import-source' }, `노드 ${p.source.with}/${p.source.total}개`));

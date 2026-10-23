@@ -11,11 +11,14 @@ import { evidenceChips } from './evidence.js';
 import { josa, messageFor } from './messages.js';
 import { LABEL_MAX, SUBTYPE_ROLE } from '../model/schema.js';
 import { choosePeople, fillHintOf, findPresetTarget, needsPersonHelp, pickNewPerson, recall, remember } from './draft-hints.js';
+import { LIVE_HINT_PREGEN, LIVE_HINT_RULE, PREGEN_CHIP_TITLE, PREGEN_NOTE, liveHintFor } from './ai-notes.js';
 
 // 같은 지도에서 초안을 다시 만들 때 마지막으로 고른 보내는·받는 사람을 기억한다(FU-17). 메모리만: 저장소에는 쓰지 않고, 페이지를 다시 열면 사라진다
 const lastPeople = new Map();
-/** 기억한 보내는·받는 사람을 모두 잊는다(단위 테스트용) */
-export const forgetLastPeople = () => { lastPeople.clear(); pendingPerson = null; };
+// 마지막으로 초안을 만든 대상(유니버스 ID별). 기록이 바뀌어 창이 다시 그려질 때(rerun) 같은 대상으로 다시 만들기 위해서만 쓴다
+const lastTarget = new Map();
+/** 기억한 보내는·받는 사람·대상을 모두 잊는다(단위 테스트용) */
+export const forgetLastPeople = () => { lastPeople.clear(); lastTarget.clear(); pendingPerson = null; };
 
 // 「＋ 사람 추가」 → 「넣기」 직후(FU-36): main이 사람 노드를 만들고 초안 창을 다시 그린다. 새 창이 그 사람을 받는 사람으로 골라 두고,
 // 사람이 앞서 고른 대상·보내는 사람도 되살린다. 메모리만(저장소에는 쓰지 않음), 한 번 쓰면 비운다
@@ -24,12 +27,16 @@ let pendingPerson = null; // {key, label, target, from}
 /** 받는 사람 후보가 없을 때의 안내(FU-7). 「＋ 사람 추가」는 노드 추가 창을 유형 「사람」으로 열도록 문서에 알리기만 한다(main.js가 받음) */
 export const ADD_PERSON_HELP = '후임이 목록에 없으면 사람으로 먼저 넣으세요. 연결하지 않아도 받는 사람으로 고를 수 있습니다(「수행」으로 이으면 현재 담당으로 보입니다).';
 
-/** 키가 없고 사전 생성·규칙 기반 문장일 때 초안 결과 위에 보이는 한 줄(FU-24) */
-export const LIVE_HINT = '실시간으로 다시 쓰려면: 「설정」에서 Claude API를 고르고 본인 키를 넣으세요(선택)';
+// 키가 없고 사전 생성·규칙 기반 문장일 때의 한 줄(LIVE_HINT_*)은 초안 맨 아래에 보인다(3회차: 결과를 다 읽은 뒤 말한다).
+// 사전 생성 안내·칩 설명(PREGEN_NOTE, PREGEN_CHIP_TITLE)도 ai-notes.js 한 곳의 글이고, 이전 이름 그대로 여기서도 내보낸다
+export { LIVE_HINT_PREGEN, LIVE_HINT_RULE, PREGEN_CHIP_TITLE, PREGEN_NOTE };
 
-/** 사전 생성 결과 위 안내(FU-24): 실시간이 아니라 미리 써 둔 문장임을 그대로 밝힌다 */
-export const PREGEN_NOTE = 'Claude가 이 기록만 보고 써 둔 문장입니다. 열 때마다 앱이 근거를 검사하고, 맞지 않으면 기록을 그대로 모은 문장으로 바꿉니다.';
-export const PREGEN_CHIP_TITLE = 'Claude가 이 기록만 보고 써 둔 문장 — 앱이 열 때마다 근거 ID를 검증하고, 맞지 않으면 규칙 기반 문장으로 바꿉니다';
+/** 「다음에 해 볼 것」 한 줄(3회차): 초안을 본 뒤 갈 곳. 이벤트 이름은 main.js와의 약속이다(wu:open-insight {kind:'risk'}, wu:overview) */
+export const DRAFT_NEXT_LABEL = '다음에 해 볼 것:';
+export const DRAFT_NEXT_RISK = '혼자만 아는 일 보기';
+export const DRAFT_NEXT_OVERVIEW = '← 지도 전체 보기';
+/** 기록이 바뀌어 초안을 자동으로 다시 만들었을 때 결과 위 한 줄(rerun 옵션) */
+export const RERUN_NOTE = '기록이 바뀌어 초안을 다시 만들었습니다';
 
 /** 응답으로 문장이 바뀌었을 때 「생성 중…」 자리에 남기는 안내 */
 export const LIVE_REPLACED_NOTE = '문장이 Claude API 문장으로 바뀌었습니다 — 확인 후 확정하세요';
@@ -119,6 +126,15 @@ export function draftPanel(o) {
     if (added && added !== from.value) to.value = added;
     pendingPerson = null;
   }
+  // 기록이 바뀌어 다시 그려진 창(rerun): 마지막으로 초안을 만든 대상·보내는·받는 사람을 그대로 고른다(W7이 rerun:true를 넘김). 기억이 없거나 목록에 없으면 건드리지 않는다
+  if (o.rerun && !pend) {
+    const lt = lastTarget.get(universeKey);
+    if (lt && targets.some((t) => t.gid === lt)) target.value = lt;
+    const again = choosePeople({ people, preset: null, remembered: recall(lastPeople, universeKey) });
+    if (again.from) from.value = again.from;
+    if (again.to) to.value = again.to;
+    showHolder();
+  }
   if (from.value && from.value === to.value) to.value = '';
   // 받는 사람 후보가 없을 때의 안내(FU-7): 후보가 없으면 창을 열 때부터, 그 밖에는 받는 사람 오류가 났을 때 보인다
   // 「＋ 사람 추가」(FU-36): 긴 「노드 추가」 양식 대신 초안 창 안의 작은 칸 두 개(이름 필수·연락처 선택). 「넣기」는 wu:add-node를 label과 함께 보낸다
@@ -202,8 +218,10 @@ export function draftPanel(o) {
     el('div', { class: 'row' }, el('button', { type: 'submit', class: 'primary' }, '초안 만들기'), el('button', { type: 'button', onclick: o.onClose }, '닫기')),
   );
 
-  form.addEventListener('submit', (evt) => {
-    evt.preventDefault();
+  // 기록이 바뀌어 초안을 자동으로 다시 만들었다는 한 줄(결과 위). 사람이 「초안 만들기」를 직접 누르면 사라진다
+  const rerunNote = el('p', { class: 'muted small', hidden: true, 'data-testid': 'draft-rerun-note', role: 'status' }, RERUN_NOTE);
+  const makeDraft = () => {
+    rerunNote.hidden = true;
     msg.replaceChildren();
     msg.className = 'form-message';
     // 유사 경험자(D-08): 초안 범위 업무와 비슷한 다른 업무를 한 사람. 받는 사람(이미 담당)은 뺀다
@@ -229,16 +247,26 @@ export function draftPanel(o) {
     }
     syncPersonHelp();
     remember(lastPeople, universeKey, from.value, to.value); // 다시 만들 때 같은 두 사람을 미리 골라 준다(FU-17)
+    if (target.value) lastTarget.set(universeKey, target.value);
     // 실시간 공급자면 먼저 사전 생성(없으면 규칙 기반) 결과를 그리고, 응답이 오면 교체한다(R-04 ③)
     const first = refineDraft(r.draft, { provider: syncProvider(o.provider), exists: view.exists });
     renderDraft(result, first, view, o.onFocus, o);
     if (o.onDraft) o.onDraft(); // 따라 하기: 결과가 그려졌음을 알린다
     if (live) runLive(r.draft, first);
+  };
+  form.addEventListener('submit', (evt) => {
+    evt.preventDefault();
+    makeDraft();
   });
+  // 기록이 바뀌어 다시 그려진 창(rerun)은 같은 선택으로 바로 초안을 다시 만든다. 대상·보내는·받는 사람 중 하나라도 비면 만들지 않는다(오류 문구도 띄우지 않음)
+  if (o.rerun && target.value && from.value && to.value && from.value !== to.value) {
+    makeDraft();
+    if (result.childNodes.length) rerunNote.hidden = false;
+  }
 
   return el('div', { class: 'draft' }, el('h2', {}, '인수인계 초안'),
     o.viewDate ? el('p', { class: 'notice', 'data-testid': 'draft-today' }, `초안은 오늘(${o.asOf}) 기준으로 만듭니다. 시간 보기의 기준일(${o.viewDate})과 상관없습니다.`) : null,
-    form, liveNote, result);
+    form, rerunNote, liveNote, result);
 }
 
 function confirmError(err) {
@@ -286,6 +314,15 @@ function roleChip(view, itemKey, sentence) {
   return hasRole ? el('span', { class: 'chip', 'data-testid': 'role-chip', title: '원문에 사람 이름이 없어 역할 이름으로 만든 노드입니다. 실제 담당자는 연결되어 있지 않습니다.' }, '역할 · 담당자 미연결') : null;
 }
 
+// 초안 끝 「다음에 해 볼 것」 한 줄. 읽기 전용에서도 보인다(보기만 하는 이동). main.js가 두 이벤트를 받는다(계약, 이름을 바꾸지 말 것)
+function draftNext() {
+  const go = (label, testid, fire) => el('button', { type: 'button', class: 'link', 'data-testid': testid, onclick: fire }, label);
+  return el('p', { class: 'muted small draft-next', 'data-testid': 'draft-next' }, DRAFT_NEXT_LABEL, ' ',
+    go(DRAFT_NEXT_RISK, 'draft-next-risk', () => document.dispatchEvent(new CustomEvent('wu:open-insight', { detail: { kind: 'risk' } }))),
+    ' · ',
+    go(DRAFT_NEXT_OVERVIEW, 'draft-next-overview', () => document.dispatchEvent(new CustomEvent('wu:overview'))));
+}
+
 function renderDraft(box, d, view, onFocus, o = {}) {
   const copyBtn = el('button', { type: 'button', class: 'small-btn', 'data-testid': 'draft-copy' }, '글로 복사');
   copyBtn.addEventListener('click', async () => {
@@ -311,10 +348,12 @@ function renderDraft(box, d, view, onFocus, o = {}) {
       el('span', { class: 'method', 'data-testid': 'draft-method', title: METHOD_LABELS[d.method] }, `생성 방식: ${METHOD_LABELS[d.method].replace(/\(.*\)$/, '')}`),
       copyBtn, downBtn, printBtn),
     el('h3', { class: 'draft-title' }, d.title),
-    !isLive(o.provider) && (d.method === 'pregen' || d.method === 'rule') ? el('p', { class: 'muted small', 'data-testid': 'draft-live-hint' }, LIVE_HINT) : null,
     d.method === 'pregen' ? el('p', { class: 'muted small', 'data-testid': 'draft-method-note' }, PREGEN_NOTE) : null,
     d.method === 'llm' ? el('p', { class: 'muted small', 'data-testid': 'draft-method-note' }, '문장은 Claude API가 실시간으로 이 근거만 보고 썼고, 앱이 근거 ID와 원문 인용(quote)을 검증합니다. 확인되지 않은 항목은 규칙 기반 문장으로 바꿉니다.') : null,
-    d.fallback ? el('p', { class: 'notice', 'data-testid': 'draft-fallback' }, `${d.fallback.keep ? '원래 문장을 유지함' : '규칙 기반으로 대체함'}: ${d.fallback.reason}`) : null,
+    // 키가 없어 규칙 기반인 것은 고장이 아니라 안내이므로 노란 띠(notice)와 「대체함」 머리말 없이 그 안내만 보인다. 진짜 오류는 지금처럼 원인과 함께 띠로
+    d.fallback && d.fallback.keyless
+      ? el('p', { class: 'muted small', 'data-testid': 'draft-fallback', 'data-keyless': 'true' }, d.fallback.reason)
+      : d.fallback ? el('p', { class: 'notice', 'data-testid': 'draft-fallback' }, `${d.fallback.keep ? '원래 문장을 유지함' : '규칙 기반으로 대체함'}: ${d.fallback.reason}`) : null,
     d.method !== 'rule' && d.counts && d.counts.rule ? el('p', { class: 'muted small', 'data-testid': 'draft-counts' }, `${METHOD_LABELS[d.method]} ${d.counts.provider}개 항목, 나머지 ${d.counts.rule}개는 ${d.method === 'llm' && d.counts.kept ? `호출 전 문장 그대로(사전 생성 ${d.counts.kept}개 포함, 응답에 없거나 검증을 통과하지 못한 항목)` : `규칙 기반(${d.method === 'llm' ? '응답에 없거나 검증을 통과하지 못한 항목' : '사전 생성 결과가 없거나 데이터가 바뀐 항목'})`}`) : null,
     // 사전 생성을 골랐는데 이 조합에 미리 써 둔 문장이 없어 전부 규칙 기반이면 이유를 한 줄로 알린다(재검증 5-4)
     d.method === 'rule' && !d.fallback && o.provider && o.provider.name === 'pregen' ? el('p', { class: 'muted small', 'data-testid': 'draft-rule-reason' }, '이 조합(대상·보내는·받는 사람)에는 미리 써 둔 문장이 없어, 기록을 그대로 모아 만든 초안입니다(규칙 기반). 문장마다 근거가 붙어 있습니다.') : null,
@@ -331,5 +370,9 @@ function renderDraft(box, d, view, onFocus, o = {}) {
     ),
     el('p', { class: 'muted small' }, '축적된 이력으로 만든 초안입니다. 근거를 눌러 확인하고, 담당자가 검토해 확정하세요.'),
     confirmBox(d, view, o),
+    draftNext(),
+    // 결과를 다 읽은 뒤 맨 아래에 한 줄. 키가 있으면 없고, 키 없음 안내(draft-fallback)가 이미 같은 말을 하면 중복이라 그리지 않는다
+    !isLive(o.provider) && (d.method === 'pregen' || d.method === 'rule') && !(d.fallback && d.fallback.keyless)
+      ? el('p', { class: 'muted small', 'data-testid': 'draft-live-hint' }, liveHintFor(d.method)) : null,
   ].filter(Boolean));
 }

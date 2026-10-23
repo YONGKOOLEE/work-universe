@@ -234,7 +234,7 @@ export function nodeForm(o) {
     fill();
     const box = el('div', { class: 'link-group', 'data-testid': 'node-link' }, field('함께 이을 노드(선택)', other), detail,
       el('p', { class: 'muted small' }, '노드를 고르면 추가와 연결이 한 번에 저장됩니다. 연결할 수 없는 조합이면 저장하기 전에 알려 드립니다.'));
-    return { el: box, other, relation, direction, candidates };
+    return { el: box, other, relation, direction, candidates, fill };
   }
 
   const msg = messageBox();
@@ -255,6 +255,9 @@ export function nodeForm(o) {
     msg.box,
     actions(o.mode === 'add' ? '추가' : '저장', o.onCancel),
   );
+  // 화면이 다시 그려질 때(노드 이름 수정·추가·숨김 뒤) 「함께 이을 노드」 목록을 새 이름으로 다시 만든다(점검 3회차: 고친 직후 옛 이름이 한동안 보임).
+  // 이 목록은 칸에 초점이 갈 때만 다시 만들어져 왔다. 입력 중인 다른 칸은 건드리지 않고, 고른 상대는 그대로 둔다
+  form.refreshCandidates = () => { if (link) link.fill(); };
   // o.focusField(수정 양식만, FU-16): 표준 양식의 빈 항목 이름. 「설명」이면 설명 칸에, 그 밖이면 그 속성 칸(없으면 줄을 더해서)에 초점. 양식을 화면에 붙인 뒤 부른다
   form.focusStart = () => {
     if (!o.focusField) return;

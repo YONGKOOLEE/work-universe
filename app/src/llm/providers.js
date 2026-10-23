@@ -35,8 +35,15 @@ import { itemEvidence } from '../rules/handover.js';
 
 export const DEFAULT_PROVIDER = 'pregen';
 
-/** 키 없이 Claude API를 골랐을 때 알리는 이유(R10-13) */
-export const KEYLESS_REASON = '키가 없어 규칙 기반(사전 생성)으로 동작합니다 — 설정에서 키를 넣으면 실시간';
+/**
+ * 키 없이 Claude API를 골랐을 때 알리는 이유(R10-13). 고장이 아니라 안내이므로 「오류」 머리말을 붙이지 않는다(처음 사용 점검 3회차).
+ * 키가 없으면 공급자가 없는 것이라 문장은 항상 규칙 기반이다(사전 생성 문장도 쓰지 않는다) → 실제로 쓴 방식을 그대로 말한다.
+ */
+export const KEYLESS_REASON = '키가 없어 기록을 그대로 모은 문장(규칙 기반)으로 보여 줍니다 — 「설정」에서 키를 넣으면 Claude가 실시간으로 다시 씁니다';
+/** 키 없이 문서 변환을 할 때(문서 변환은 「기록을 모은 문장」이 아니라 규칙 변환 결과를 보여 준다) */
+export const KEYLESS_CONVERT_REASON = '키가 없어 규칙 변환 결과를 보여 줍니다 — 「설정」에서 키를 넣으면 「AI로 변환」을 쓸 수 있습니다';
+/** 진짜 오류(키 거부·한도·시간 초과·형식)의 이유 앞에 붙는 머리말. 원인 글은 그 뒤에 그대로 이어 붙인다 */
+export const REASON_PREFIX = '연결 오류: ';
 
 const sortedIds = (ids) => [...new Set(ids)].sort();
 /**
@@ -194,11 +201,21 @@ function claudeProvider({ apiKey, model, client = null, base = null, cache = nul
   }
 }
 
-function unavailable(name, reason) {
-  const fail = () => {
-    throw new Error(reason);
+/**
+ * 연결되지 않은 공급자. 부르면 이유를 담은 오류를 던지고, 연결부(connector)가 그 이유를 규칙 기반 전환 사유로 남긴다.
+ *  - keyless: 키가 없음(안내). noPrefix(머리말 없음)·keyless 표지가 붙는다. 문서 변환은 convertReason을 쓴다
+ *  - notice: 아직 연결하지 않음(안내, noPrefix)
+ *  - error: 호출 실패 흉내(점검용). 머리말 「연결 오류:」가 붙는다
+ */
+function unavailable(name, reason, kind = 'error', convertReason = reason) {
+  const thrower = (why) => () => {
+    const err = new Error(why);
+    if (kind !== 'error') err.noPrefix = true;
+    if (kind === 'keyless') err.keyless = true;
+    throw err;
   };
-  return { name, method: 'llm', refine: fail, explain: fail, convert: fail, candidates: fail };
+  const fail = thrower(reason);
+  return { name, method: 'llm', ...(kind === 'keyless' ? { keyless: true } : {}), refine: fail, explain: fail, convert: thrower(convertReason), candidates: fail };
 }
 
 /**
@@ -212,12 +229,12 @@ export function createProvider(name, { pregen, apiKey = '', model = '', client =
       return null;
     case 'claude_api':
       // 키가 없으면 지금처럼 "연결 전"(규칙 기반 + 이유). 키가 있어야만 실시간 호출 경로가 생긴다
-      if (typeof apiKey !== 'string' || !apiKey.trim()) return unavailable(name, KEYLESS_REASON);
+      if (typeof apiKey !== 'string' || !apiKey.trim()) return unavailable(name, KEYLESS_REASON, 'keyless', KEYLESS_CONVERT_REASON);
       return claudeProvider({ apiKey: apiKey.trim(), model, client, base: pregenProvider(pregen), cache });
     case 'internal':
-      return unavailable(name, '사내 LLM은 사용 방법이 정해지지 않아 연결하지 않았습니다(다음 단계)');
+      return unavailable(name, '사내 LLM은 사용 방법이 정해지지 않아 연결하지 않았습니다(다음 단계)', 'notice');
     case 'fail':
-      return unavailable(name, '호출 실패(점검용 흉내)');
+      return unavailable(name, '호출 실패(점검용 흉내)', 'error');
     case 'pregen':
     default:
       return pregenProvider(pregen);

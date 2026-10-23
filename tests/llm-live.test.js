@@ -45,7 +45,8 @@ test('공급자: 키가 없거나 공백이면 지금처럼 "연결 전"(실시�
     const p = createProvider('claude_api', { pregen: PREGEN, apiKey, client: fake });
     assert.equal(p.live, undefined);
     assert.equal(isLive(p), false);
-    assert.throws(() => p.refine(), /키가 없어 규칙 기반\(사전 생성\)으로 동작합니다 — 설정에서 키를 넣으면 실시간/);
+    assert.throws(() => p.refine(), /^Error: 키가 없어 기록을 그대로 모은 문장\(규칙 기반\)으로 보여 줍니다 — 「설정」에서 키를 넣으면 Claude가 실시간으로 다시 씁니다$/);
+    assert.equal(p.keyless, true); // 3회차: 화면이 키 없음 안내를 한 번만 보이게 하는 표지
   }
   const p = live(fake);
   assert.equal(p.live, true);
@@ -475,7 +476,10 @@ test('키 없음: 동기 경로는 지금과 같다(사전 생성 결과·규칙
   const noKey = createProvider('claude_api', { pregen: PREGEN });
   const r = refineDraft(H1.draft, { provider: syncProvider(noKey), exists: existsIn(H1.view) });
   assert.equal(r.method, 'rule');
-  assert.match(r.fallback.reason, /키가 없어 규칙 기반\(사전 생성\)으로 동작합니다 — 설정에서 키를 넣으면 실시간/);
+  assert.equal(r.fallback.reason, '키가 없어 기록을 그대로 모은 문장(규칙 기반)으로 보여 줍니다 — 「설정」에서 키를 넣으면 Claude가 실시간으로 다시 씁니다');
+  assert.equal(r.fallback.keyless, true);
+  assert.equal(r.fallback.code, 'W-LLM-FALLBACK'); // 원인 코드는 그대로
+  assert.ok(!r.fallback.reason.includes('공급자 오류'));
   const e = explainInsight(X[0].req, { provider: syncProvider(noKey), exists: existsIn(X[0].view) });
   assert.equal(e.method, 'rule');
   // 키가 있어도 동기 함수에는 base(사전 생성)를 넘겨 먼저 그린다

@@ -433,9 +433,9 @@
     <p id="create-intro" class="muted small">업무 하나부터 시작하세요. 첫 업무를 적으면 업무·담당자·산출물이 이어진 작은 지도가 바로 생깁니다. 비워 두면 빈 유니버스를 만듭니다.</p>
     <div id="create-meta">
     <label>지도 이름 <input id="create-name" maxlength="100" autocomplete="off" placeholder="예: 가상 교육팀 업무 지도"></label>
-    <label>단위 <input id="create-level" list="create-levels" value="업무" autocomplete="off"></label>
+    <label><span>단위 <span class="muted small" data-testid="create-level-hint">(업무 하나면 「업무」 그대로)</span></span> <input id="create-level" list="create-levels" value="업무" autocomplete="off"></label>
     <datalist id="create-levels"><option value="업무"><option value="팀"><option value="부서"><option value="본부"><option value="회사"></datalist>
-    <label>작성 주체 <input id="create-owner" autocomplete="off" placeholder="예: 가상 교육팀"></label>
+    <label><span>작성 주체 <span class="muted small" data-testid="create-owner-hint">(이 지도를 책임질 팀·부서 이름, 예: 가상영업팀)</span></span> <input id="create-owner" autocomplete="off" placeholder="팀·부서 이름 (예: 가상영업팀)"></label>
     <label>설명(선택) <textarea id="create-description" rows="3"></textarea></label>
     </div>
     <fieldset id="create-starter"><legend id="create-starter-legend">이 유니버스에 넣을 첫 업무(선택) — 채우면 작은 지도가 바로 생깁니다</legend>

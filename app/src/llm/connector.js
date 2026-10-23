@@ -10,7 +10,7 @@
 //   공급자가 live가 아니면(키 없음 등) 비동기 함수는 아무것도 부르지 않고 null을 돌려준다.
 // 브라우저 기능을 쓰지 않는다.
 
-import { fingerprint, itemEvidence, peopleKey } from './providers.js';
+import { REASON_PREFIX, fingerprint, itemEvidence, peopleKey } from './providers.js';
 import { validateDocument } from '../model/validate.js';
 import { describeEvidence, quoteInEvidence } from './evidence-text.js';
 import { buildDraftPrompt, buildExplainPrompt } from './prompts.js';
@@ -19,6 +19,12 @@ import { candidatesInputMessage, checkCandidatesInput, verifyAiCandidates, works
 
 export const METHOD_LABELS = { rule: '규칙 기반', pregen: '사전 생성(Claude가 기록만 보고 써 둔 문장)', llm: 'Claude API(실시간)' };
 const FALLBACK = 'W-LLM-FALLBACK';
+
+// 공급자가 던진 오류 → 규칙 기반 전환 사유. 키가 없거나 아직 연결하지 않은 공급자(noPrefix)는 고장이 아니므로 머리말 없이 그 안내를 그대로 쓰고(키 없음은 keyless 표지),
+// 진짜 오류(키 거부·한도·시간 초과·형식)는 머리말 「연결 오류:」 뒤에 원인을 이어 붙인다. 원인 코드(W-LLM-FALLBACK)는 그대로다
+const messageOf = (err) => (err && err.message ? err.message : String(err));
+const reasonOf = (err) => (err && err.noPrefix ? messageOf(err) : `${REASON_PREFIX}${messageOf(err)}`);
+const failureOf = (err) => ({ code: FALLBACK, reason: reasonOf(err), ...(err && err.keyless ? { keyless: true } : {}) });
 export const QUOTE_FAIL = 'W-LLM-QUOTE';
 
 const validSentences = (sentences, allowed, exists) =>
@@ -40,7 +46,7 @@ export function refineDraft(draft, { provider = null, exists }) {
   try {
     result = provider.refine('handover', draft);
   } catch (err) {
-    return asRule({ code: FALLBACK, reason: `공급자 오류: ${err && err.message ? err.message : err}` });
+    return asRule(failureOf(err));
   }
   if (!result || !Array.isArray(result.items)) return asRule({ code: FALLBACK, reason: '응답 형식 오류' });
 
@@ -80,7 +86,7 @@ export function explainInsight(req, { provider = null, exists }) {
   try {
     got = provider.explain(req.target, req.evidence_ids, req.task || 'insight_explain', req.rule);
   } catch (err) {
-    return { ...rule, fallback: { code: FALLBACK, reason: `공급자 오류: ${err && err.message ? err.message : err}` } };
+    return { ...rule, fallback: failureOf(err) };
   }
   if (!got) return rule;
   if (!validSentences(got.sentences, new Set(req.evidence_ids), exists)) {
@@ -110,7 +116,7 @@ export function convertDocumentWith(text, { provider = null, ruleConvert }) {
   try {
     got = provider.convert('doc_to_universe', text);
   } catch (err) {
-    return rule({ code: FALLBACK, reason: `공급자 오류: ${err && err.message ? err.message : err}` });
+    return rule(failureOf(err));
   }
   const d = got && got.doc;
   // 작성 주체는 미리 보기에서 사람이 채우므로 비어 있어도 된다
@@ -131,7 +137,6 @@ export const syncProvider = (provider) => (provider && provider.live ? provider.
 /** 비동기 경로를 쓸 수 있는 공급자인가(키가 있어 만들어진 실시간 공급자만 true) */
 export const isLive = (provider) => !!(provider && provider.live === true && typeof provider.refine === 'function');
 
-const reasonOf = (err) => `공급자 오류: ${err && err.message ? err.message : err}`;
 
 // 캐시 키(task, target, item, 규칙 기반 문장 지문, 모델, 사람): 근거가 바뀌면 지문이 달라져 다시 호출한다(K-9).
 // 초안은 보내는·받는 사람에 따라 문장(문의할 사람 등)이 달라지므로 사람 조합(from>to)이 키에 들어간다(사전 생성 키와 같은 원칙, R10-2). 설명·변환은 사람이 없다

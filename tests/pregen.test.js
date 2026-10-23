@@ -7,7 +7,7 @@ import { addEvent, updateNode } from '../app/src/model/commands.js';
 import { createUniverse, addNode } from '../app/src/model/commands.js';
 import { buildView } from '../app/src/view/view.js';
 import { buildHandoverDraft } from '../app/src/rules/handover.js';
-import { createProvider, fingerprint, itemEvidence, peopleKey, pregenKey, PROVIDERS, DEFAULT_PROVIDER } from '../app/src/llm/providers.js';
+import { KEYLESS_REASON, createProvider, fingerprint, itemEvidence, peopleKey, pregenKey, PROVIDERS, DEFAULT_PROVIDER } from '../app/src/llm/providers.js';
 import { explainInsight, refineDraft } from '../app/src/llm/connector.js';
 import { CANDIDATE_VIEWS, EXPLAIN_SCENARIOS, HANDOVER_SCENARIOS, candidateRequestsOf, explainRequestOf, handoverDraftOf, viewOf } from '../tools/pregen-scenarios.mjs';
 
@@ -96,10 +96,15 @@ test('사전 생성 결과가 하나도 없는 새 유니버스는 전부 규칙
 
 test('R-04 ③: 실패 흉내·Claude API(P2)·사내 LLM(P2)을 고르면 규칙 기반으로 전환하고 원인을 남긴다', () => {
   const { view, draft } = handoverDraftOf(HANDOVER_SCENARIOS[0]);
-  for (const [name, re] of [['fail', /실패/], ['claude_api', /키가 없어 규칙 기반\(사전 생성\)으로 동작합니다 — 설정에서 키를 넣으면 실시간/], ['internal', /다음 단계/]]) {
+  for (const [name, re] of [['fail', /실패/], ['claude_api', /^키가 없어 기록을 그대로 모은 문장\(규칙 기반\)으로 보여 줍니다 — 「설정」에서 키를 넣으면 Claude가 실시간으로 다시 씁니다$/], ['internal', /다음 단계/]]) {
     const r = refineDraft(draft, { provider: createProvider(name), exists: existsIn(view) });
     assert.equal(r.method, 'rule', name);
     assert.match(r.fallback.reason, re, name);
+    // 3회차: 키 없음·사내 LLM 미연결은 고장이 아니라 안내라 「공급자 오류」 머리말이 없고, 진짜 오류 흉내만 「연결 오류:」
+    assert.ok(!/공급자 오류/.test(r.fallback.reason), name);
+    assert.equal(r.fallback.reason.startsWith('연결 오류: '), name === 'fail', name);
+    assert.equal(!!r.fallback.keyless, name === 'claude_api', name);
+    if (name === 'claude_api') assert.equal(r.fallback.reason, KEYLESS_REASON);
     const { req } = explainRequestOf(EXPLAIN_SCENARIOS[1]);
     const e = explainInsight(req, { provider: createProvider(name), exists: existsIn(view) });
     assert.equal(e.method, 'rule');

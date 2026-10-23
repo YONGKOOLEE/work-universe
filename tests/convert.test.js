@@ -187,11 +187,14 @@ test('연결부: 규칙 기반만·사전 생성은 규칙 기반 결과(사전 
 });
 
 test('연결부: Claude API(P2)·실패 흉내는 규칙 기반으로 바뀌고 원인을 남긴다(R-04 ③)', () => {
+  // 3회차: 키 없음·사내 LLM 미연결은 고장이 아니라 안내(머리말 없음), 호출 실패 흉내만 「연결 오류:」. 키 없음의 이유는 문서 변환에 맞는 말(규칙 변환 결과)
+  const reasons = { claude_api: /^키가 없어 규칙 변환 결과를 보여 줍니다 — 「설정」에서 키를 넣으면 「AI로 변환」을 쓸 수 있습니다$/, internal: /^사내 LLM은/, fail: /^연결 오류: 호출 실패/ };
   for (const name of ['claude_api', 'internal', 'fail']) {
     const r = convertDocumentWith(DOC_EXAMPLE.text, { provider: createProvider(name), ruleConvert });
     assert.equal(r.method, 'rule', name);
     assert.equal(r.fallback.code, 'W-LLM-FALLBACK');
-    assert.match(r.fallback.reason, /^공급자 오류/);
+    assert.match(r.fallback.reason, reasons[name], name);
+    assert.equal(!!r.fallback.keyless, name === 'claude_api', name);
     assert.equal(r.doc.nodes.length, 18);
   }
 });

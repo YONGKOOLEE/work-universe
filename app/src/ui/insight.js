@@ -10,6 +10,8 @@ import { el } from './dom.js';
 import { evidenceChips } from './evidence.js';
 import { todayLocal } from './time.js';
 import { SUBTYPE_ROLE } from '../model/schema.js';
+import { KEYLESS_REASON } from '../llm/providers.js';
+import { EXPLAIN_SAME_AS_BELOW, PREGEN_CHIP_TITLE } from './ai-notes.js';
 
 // 밀집 기준 N. 화면에서 바꾸면 이 세션 동안 유지되고 사람 상세의 "밀집 기준에 해당" 판정도 같은 값을 쓴다(저장하지 않음)
 let denseN = DENSE_DEFAULT_N;
@@ -19,14 +21,15 @@ export const currentDenseN = () => denseN;
 const chips = (view, ids, onFocus) => evidenceChips(view, ids, onFocus, { tag: 'div', showText: true });
 
 // 인사이트 설명(역할 b): 공급자 결과(사전 생성)가 있으면 그 문장, 없으면 규칙 기반 문장. 문장마다 근거 버튼
-function explainBox(view, req, o) {
+// same: 아래 카드가 이미 보여 주는 문장(Set). 규칙 기반 설명이 이 문장들과 같으면 같은 글을 두 번 보이지 않는다(반복 비효율 탭, 3회차)
+function explainBox(view, req, o, same = null) {
   if (!req) return null;
   // 실시간 공급자(CR-15)면 먼저 사전 생성(없으면 규칙 기반) 설명을 그리고, 응답이 오면 같은 상자 안을 교체한다
   const live = isLive(o.provider);
   const r = explainInsight(req, { provider: syncProvider(o.provider), exists: view.exists });
   const box = el('div', { class: 'explain', 'data-testid': 'insight-explain', 'data-method': r.method });
   const note = live ? el('span', { class: 'muted small', 'aria-live': 'polite', 'data-testid': 'explain-live' }, ' 생성 중…') : null;
-  fillExplain(box, view, r, o, note);
+  fillExplain(box, view, r, o, note, same);
   if (live) {
     // 디바운스(R10-3): 시간 막대를 끌면 상자가 계속 다시 그려지므로 바로 부르지 않는다. 조용해진 뒤에도 상자가 화면에 남아 있을 때만 부른다(그 사이 다시 그려져 빠졌으면 부르지 않음)
     afterQuiet(() => box.isConnected, () => {
@@ -36,7 +39,7 @@ function explainBox(view, req, o) {
           note.textContent = '';
           if (r2) {
             box.dataset.method = r2.method;
-            fillExplain(box, view, r2, o, note);
+            fillExplain(box, view, r2, o, note, same);
           }
         })
         .catch(() => { if (box.isConnected) note.textContent = ''; });
@@ -45,14 +48,18 @@ function explainBox(view, req, o) {
   return box;
 }
 
-function fillExplain(box, view, r, o, note) {
+function fillExplain(box, view, r, o, note, same = null) {
+  // 규칙 기반 문장이 아래 카드와 글자까지 같으면 문장을 다시 쓰지 않는다. 사전 생성·실시간 문장은 카드와 다른 글이라 그대로 보인다
+  const dup = !!same && r.method === 'rule' && r.sentences.length > 0 && r.sentences.every((s) => same.has(s.text));
+  box.dataset.dup = dup ? 'true' : 'false';
   box.replaceChildren(...[
-    el('h4', {}, '설명', el('span', { class: `method-chip ${r.method}`, title: r.method === 'pregen' ? 'Claude가 이 기록만 보고 써 둔 문장 — 앱이 열 때마다 근거 ID를 검증하고, 맞지 않으면 규칙 기반 문장으로 바꿉니다' : r.method === 'llm' ? 'Claude API가 실시간으로 이 근거만 보고 쓴 문장 — 앱이 근거 ID와 원문 인용(quote)을 검증했습니다' : METHOD_LABELS[r.method] }, METHOD_LABELS[r.method].replace(/\(.*\)$/, '')), note),
+    el('h4', {}, '설명', el('span', { class: `method-chip ${r.method}`, title: r.method === 'pregen' ? PREGEN_CHIP_TITLE : r.method === 'llm' ? 'Claude API가 실시간으로 이 근거만 보고 쓴 문장 — 앱이 근거 ID와 원문 인용(quote)을 검증했습니다' : METHOD_LABELS[r.method] }, METHOD_LABELS[r.method].replace(/\(.*\)$/, '')), note),
     // 근거가 많으면 접어 둔다(표를 밀어내지 않게)
-    el('ul', {}, ...r.sentences.map((s) => el('li', {}, s.text, ' ', s.evidence_ids.length > 4
+    dup ? el('p', { class: 'muted small', 'data-testid': 'explain-same-note' }, EXPLAIN_SAME_AS_BELOW) : el('ul', {}, ...r.sentences.map((s) => el('li', {}, s.text, ' ', s.evidence_ids.length > 4
       ? el('details', { class: 'evidence-fold' }, el('summary', { class: 'muted small' }, `근거 ${s.evidence_ids.length}건`), chips(view, s.evidence_ids, o.onFocus))
       : chips(view, s.evidence_ids, o.onFocus)))),
-    r.fallback ? el('p', { class: 'muted small', 'data-testid': 'explain-fallback' }, `${r.fallback.keep ? '원래 문장을 유지함' : '규칙 기반으로 대체함'}: ${r.fallback.reason}`) : null,
+    // 키 없음 안내는 상자마다 되풀이하지 않는다 — 인사이트 맨 위에 한 번만(insightPanel의 insight-keyless)
+    r.fallback && !r.fallback.keyless ? el('p', { class: 'muted small', 'data-testid': 'explain-fallback' }, `${r.fallback.keep ? '원래 문장을 유지함' : '규칙 기반으로 대체함'}: ${r.fallback.reason}`) : null,
   ].filter(Boolean));
 }
 
@@ -66,6 +73,8 @@ export function insightPanel(o) {
   // 사전 생성 설명은 오늘 데이터 기준으로 쓴 문장이라 지난 날짜에는 쓰지 않는다(검토3 RULES-6)
   if (past) o = { ...o, provider: null };
   const asofNote = el('p', { class: 'notice', 'data-testid': 'insight-asof' });
+  // 키 없이 Claude API를 골랐으면 설명 상자마다 되풀이하지 않고 여기 한 번만 알린다(고장이 아니라 안내라 노란 띠를 쓰지 않음). 지난 날짜 보기는 공급자를 쓰지 않으므로(위) 보이지 않는다
+  const keylessNote = o.provider && o.provider.keyless ? el('p', { class: 'muted small', 'data-testid': 'insight-keyless' }, KEYLESS_REASON) : null;
   const body = el('div', { 'data-testid': 'insight-body' });
   const tabs = el('div', { class: 'tabs', role: 'tablist' });
 
@@ -86,6 +95,7 @@ export function insightPanel(o) {
   return el('div', { class: 'insight' },
     el('h2', {}, '인사이트'),
     asofNote,
+    keylessNote,
     tabs,
     body,
     el('p', { class: 'muted small', 'data-testid': 'insight-note' }, '참고 정보입니다. 해석과 인력 배치는 사람이 정합니다.'),
@@ -173,7 +183,7 @@ function repeatView(view, o) {
       ),
     );
   }
-  parts.splice(1, 0, explainBox(view, repeatExplain(r, view.universe_id), o));
+  parts.splice(1, 0, explainBox(view, repeatExplain(r, view.universe_id), o, new Set(r.status === 'ok' ? r.patterns.map((p) => p.summary) : [])));
   return el('div', { 'data-testid': 'repeat-body' }, ...parts.filter(Boolean));
 }
 

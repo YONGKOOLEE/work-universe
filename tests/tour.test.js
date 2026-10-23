@@ -78,11 +78,16 @@ test('handover 3단계(R9-4): 동작은 「인수인계 초안 만들기」 → 
 
 test('handover 5단계(R9-1 나) 문구·보조 문구·짚기: 대사 확인 → 수정 → 저장 → 빈 곳 → 편집 되감기', () => {
   const rew = scenarioOf('handover').steps[4];
-  assert.deepEqual(quotedNames(rew.task), ['대사 확인', '수정', '저장', '편집 되감기']);
+  // 3회차: 본문(task)은 한두 줄로 — 하려는 일만 두고, 세부 순서(수정·글자 하나·저장·빈 곳)는 보조 문구(sub)로 옮겼다
+  assert.deepEqual(quotedNames(rew.task), ['대사 확인', '편집 되감기']);
+  assert.ok(rew.task.length <= 80, `본문이 길다: ${rew.task.length}자`);
+  assert.match(rew.task, /^\(연습, 건너뛰어도 됩니다\) /); // 2회차 FU-28 → 3회차
   const base = emptyState('U-A1');
-  assert.equal(rew.sub(base), null);
+  assert.deepEqual(quotedNames(rew.sub(base)), ['대사 확인', '수정', '저장', '편집 되감기']);
+  assert.match(rew.sub(base), /글자 하나/);
+  assert.match(rew.sub(base), /언제든 되돌릴 수 있어요/);
+  assert.match(rew.sub({ ...base, saved: true }), /^고쳐서 저장했어요/);
   assert.match(rew.sub({ ...base, saved: true }), /편집 되감기/);
-  assert.match(rew.task, /^\(연습용 — 예시라서 언제든 되돌릴 수 있어요\) /); // 2회차 FU-28
   // 아직 고치지 않음: 고른 게 없으면 노드를, 고르면 「수정」 단추를, 양식이 열려 있으면 저장 단추를 짚는다
   assert.equal(rew.target(base)[0].cy, 'node[label = "대사 확인"]');
   assert.equal(rew.target({ ...base, selected: 'U-A1/N-001' })[0].sel, '[data-testid=btn-edit]');

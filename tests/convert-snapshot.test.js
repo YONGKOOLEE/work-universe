@@ -1,4 +1,4 @@
-// 변환기 경계 사례 108개 고정 비교(2026-10-04 재검증에서 모은 사례). 변환 규칙을 고치면 이 테스트가 바뀐 사례를 알려 준다.
+// 변환기 경계 사례 113개 고정 비교(2026-10-04 재검증에서 모은 사례). 변환 규칙을 고치면 이 테스트가 바뀐 사례를 알려 준다.
 // 의도한 변경이면 `node tools/convert-snapshot.mjs`로 차이를 보고 사례마다 판정한 뒤 `--write`로 갱신한다.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
