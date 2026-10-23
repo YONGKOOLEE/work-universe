@@ -11,6 +11,12 @@ gates:
   plan:approved: approved
   planning:complete: recorded 2026-09-30 (최종 점검 통과, CR-2 승인 후 재확정)
 approvals:   # 형식: gate / 대상 문서 / 사용자 승인 표현(원문) / 시각·시간대(확인 가능한 경우만) / 조건
+  - change: CR-14 — A 편집 되감기(R-25, D-30, T-33), B 인수인계 위험 인사이트 ①지식 집중 위험 ②인수인계 준비도 ③파급 영향(R-26, D-31, T-34), C 폴더 연결(R-27, D-32, T-35, 가능 여부 시험 뒤 조건부)
+    documents: docs/CR-14-초안.md v0.1(approved), 01 R-25~R-27·우선순위 표·상태 줄, 02 1.4·5.5·D-30~D-32·12.7, 03 T-33~T-35·상태 줄(빼는 순서)
+    user_expression: "전부 추천대로"(인사이트 ①②③, 되감기 보기+되돌리기, CR-14 후 바로 구현, 폴더 연결은 A·B 뒤), "전부 승인 및 구현"
+    date: 2026-10-23
+    time: 미기록
+    conditions: 저장 방식(브라우저 저장소)은 바꾸지 않음. 웹 공개(URL)는 기능 정리 뒤 따로 확인. 동결은 나중에(사용자 "밤을 새서라도 할 테니까 동결은 나중에"). 시간이 모자라면 C → B③ → A 되돌리기 → B② 순서로 뺌
   - change: CR-13 A 범위 — 확장안(① 시작 화면 "무엇을 하고 싶어?" 세 갈래 ② 이야기형 따라 하기 4단계(실제 동작으로 넘어감, 건너뛰기, 「?」로 다시 보기) ③ 처음엔 고급 도구 접기(「도구 더 보기」) ④ 처음 보이는 곳만 쉬운 말) + 고친 뒤 대리 관찰 체크 시트(성공 기준 "설명 없이 3분 안에 인수인계 초안까지")
     documents: decisions-pending 14절 C13-1
     user_expression: "추천대로하고 새세션을 위해서 인계준비도해"
@@ -546,6 +552,10 @@ implementation:
     build: esbuild 0.28.2, ES 모듈 소스 → IIFE 단일 스크립트 dist/app.js + dist/index.html
     toolchain: Node.js 24.19.0 LTS, npm 11.17.0, Git 2.55.0
   doc_changes:
+    - document: docs/01-requirements.md, 02-design.md, 03-plan.md, docs/CR-14-초안.md
+      change: CR-14 반영 — 01 R-25~R-27 행·우선순위 표·상태 줄, 02 1.4(편집 되감기 원리)·5.5(인수인계 위험 ①②③)·D-30~D-32·12.7(CR-14 모듈)·상태 줄, 03 T-33~T-35·상태 줄(빼는 순서). limits·실행안내는 구현 뒤
+      user_expression: "전부 승인 및 구현"
+      date: 2026-10-23
     - document: docs/01-requirements.md, 02-design.md, 03-plan.md, limits.md
       change: CR-9 a~l 반영 후 CR-10 반영안 [공통]·[A]~[E] 반영(D-ID는 D-16~D-20). 02 4절 샘플 이름(V-5·V-8), 02 6절·limits L-4의 R-09 문구를 CR-10 E에 맞춤
       user_expression: "우선 전부 권장대로"
