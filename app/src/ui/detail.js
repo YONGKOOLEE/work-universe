@@ -93,9 +93,18 @@ export function renderUniverseSummary(panel, s, shown = null, extras = {}) {
   );
   if (s.period) dl.append(el('dt', {}, '이력 기간'), el('dd', {}, `${s.period.first} ~ ${s.period.last}`));
   panel.append(dl);
+  // 묶은 지도의 위험 요약 한 줄(FU-10): 인사이트 「인수인계 위험」·「밀집·공백」 탭과 같은 계산의 숫자. 문구와 「자세히」 동작은 부르는 쪽이 정한다
+  if (extras.riskSummary) {
+    const r = extras.riskSummary;
+    panel.append(el('p', { class: 'risk-summary', 'data-testid': 'team-risk-summary' }, r.parts.join(' · '), ' ',
+      el('button', { type: 'button', class: 'link', 'data-testid': 'btn-team-risk-more', onclick: r.onMore }, '자세히')));
+  }
   if (s.missing.length) panel.append(el('p', { class: 'notice' }, `찾을 수 없는 하위 업무 지도:${s.missing.join(', ')}`));
-  for (const c of s.empno_conflicts) {
-    panel.append(el('p', { class: 'notice', 'data-testid': 'empno-conflict' }, `확인할 것: 사번 충돌 — ${c.emp_no}가 서로 다른 이름으로 있습니다(${c.nodes.map((n) => `${n.label}·${n.universe_name}`).join(', ')}). 자동으로 합치지 않았으니 같은 사람인지 확인해 주세요.`));
+  // 사번 충돌은 접힌 한 줄로(FU-13): 열자마자 노란 경고가 길게 보이면 무서우므로 「확인할 것 n건」만 먼저 보이고, 펼치면 예전 내용 그대로
+  if (s.empno_conflicts.length) {
+    panel.append(el('details', { class: 'conflict-fold', 'data-testid': 'empno-conflicts' },
+      el('summary', { class: 'notice', 'data-testid': 'empno-conflicts-summary' }, `확인할 것 ${s.empno_conflicts.length}건`),
+      ...s.empno_conflicts.map((c) => el('p', { class: 'notice', 'data-testid': 'empno-conflict' }, `확인할 것: 사번 충돌 — ${c.emp_no}가 서로 다른 이름으로 있습니다(${c.nodes.map((n) => `${n.label}·${n.universe_name}`).join(', ')}). 자동으로 합치지 않았으니 같은 사람인지 확인해 주세요.`))));
   }
   if (s.stale_links.length) panel.append(el('p', { class: 'notice', 'data-testid': 'stale-links' }, `사번이 바뀌어 더는 맞지 않는 사번 자동 연결 ${s.stale_links.length}건은 합치지 않았습니다. 다시 확인이 필요합니다.`));
   // 큰 유니버스: 업무별로 나누라는 안내(막지 않는다)

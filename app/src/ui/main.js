@@ -30,6 +30,7 @@ import { hiddenNodesOf } from '../rules/hidden.js';
 import { nowIso, todayLocal } from './time.js';
 import { personLoad, repeatPatternsFor, workLoad } from '../rules/insight.js';
 import { riskNoteFor } from '../rules/insight-risk.js';
+import { soloWorksOf, soloWorksText, teamRiskParts, teamRiskSummary } from '../view/risk-summary.js';
 import { monthAsOf, timeMonths } from '../rules/flow.js';
 import { splitHint, workFormMissing } from '../rules/form.js';
 import { starterSteps } from '../rules/starter-steps.js';
@@ -550,6 +551,7 @@ function start() {
     issues = null;
     insight = { work: workGid, kind };
     renderPanel();
+    $('detail').parentElement.scrollTop = 0; // 「닫기」에 초점을 주며 패널이 아래로 내려간 채 열리지 않게 맨 위부터 보인다(FU-5)
   }
 
   // 업무 노드에만 보이는 "유사 경험자" 버튼
@@ -589,8 +591,14 @@ function start() {
   function formNote(gid) {
     const missing = workFormMissing(view, gid);
     if (!missing || !missing.length) return null;
+    // 항목 이름을 누르면 그 항목을 채우는 수정 화면이 열린다(FU-16): 설명은 설명 칸, 담당은 연결 추가, 나머지는 그 속성 칸(없으면 줄을 더해서)에 초점. 고칠 수 없는 화면에서는 글자만
+    const canEdit = isOwn(gid) && !app.readOnly && !rw;
+    const items = missing.flatMap((m, i) => [i ? ', ' : null, canEdit
+      ? el('button', { type: 'button', class: 'link', 'data-testid': 'form-missing-item', 'data-field': m, title: m === '담당' ? '「연결 추가」 화면을 엽니다' : `「${m}」 칸을 채우는 수정 화면을 엽니다`,
+        onclick: () => { editing = m === '담당' ? { kind: 'edge' } : { kind: 'node', focus: m }; renderPanel(); } }, m)
+      : m]);
     return el('p', { class: 'muted small', 'data-testid': 'form-missing', title: '업무를 넣는 표준 양식(절차·주기·마감·주의사항·관련 문서·담당·설명)과 비교한 결과입니다. 저장은 막지 않습니다' },
-      `표준 양식: 권장 항목 ${missing.length}개 비어 있음 — ${missing.join(', ')}`);
+      `표준 양식: 권장 항목 ${missing.length}개 비어 있음 — `, ...items);
   }
 
   // 업무·주제 노드가 반복 비효율 패턴에 들어 있으면 한 줄
@@ -612,6 +620,16 @@ function start() {
       el('button', { type: 'button', class: 'link', 'data-testid': 'btn-risk-note', onclick: () => openInsight('', 'risk') }, '인수인계 위험 보기'));
   }
 
+  // 사람 노드: 이 사람 한 명만 해 본 업무(FU-12). 인수인계 위험 탭 ① 목록과 같은 계산이다. 0개면 그리지 않는다
+  function soloWorksNote(gid) {
+    const node = view.getNode(gid);
+    if (!node || node.hidden || node.core_type !== 'person') return null;
+    const text = soloWorksText(soloWorksOf(view, gid, asOf()));
+    if (!text) return null;
+    return el('p', { class: 'notice', 'data-testid': 'person-solo-works' }, text, ' ',
+      el('button', { type: 'button', class: 'link', 'data-testid': 'btn-person-solo', onclick: () => openInsight('', 'risk') }, '인수인계 위험 보기'));
+  }
+
   // 하위 유니버스를 묶은 유니버스의 개요: 통합 확인 목록으로 가는 버튼(대기 건수)
   function mergeButton() {
     const plan = app.mergePlan();
@@ -622,7 +640,7 @@ function start() {
   }
 
   // 어느 노드를 골랐든 전체 인사이트로 갈 수 있게(검토5 U-2: 시작 화면 3단계가 노드 선택 상태에서 끊기지 않도록)
-  const insightAllButton = () => el('button', { type: 'button', 'data-testid': 'btn-insight', onclick: () => openInsight('', 'repeat') }, '인사이트 보기');
+  const insightAllButton = () => el('button', { type: 'button', 'data-testid': 'btn-insight', onclick: () => openInsight('', 'risk') }, '인사이트 보기');
 
   // 확정한 인수인계서(산출물 「인수인계서」)의 내려받기·인쇄(R-19)
   function docButtons(node) {
@@ -725,7 +743,7 @@ function start() {
     const focusLocal = (id) => { editing = null; focus(toGid(currentId(), id)); };
     switch (editing.kind) {
       case 'node':
-        return nodeForm({ mode: 'edit', node, subtypes: app.subtypes(), onAddSubtype: (t, nm) => app.addSubtype(t, nm), onCancel: cancel, onFocusLocal: focusLocal,
+        return nodeForm({ mode: 'edit', node, focusField: editing.focus, subtypes: app.subtypes(), onAddSubtype: (t, nm) => app.addSubtype(t, nm), onCancel: cancel, onFocusLocal: focusLocal,
           onSubmit: (values) => afterSave(app.updateNode(currentId(), node.id, values)) });
       case 'edge':
         return edgeForm({ node, subtypes: app.subtypes(), onAddSubtype: (t, nm) => app.addSubtype(t, nm), candidates: ownNodes().filter((n) => n.id !== node.id), onCancel: cancel,
@@ -950,7 +968,10 @@ function start() {
     }
     if (!selected) {
       const summary = describeUniverse(view);
-      renderUniverseSummary(panel, summary, display.nodes.length, { split: splitHint(app.doc), starter: starterSteps(app.doc, view), universeId: app.doc.universe.id, onSelect: (g) => { reveal(g); select(view.canonical(g)); } });
+      // 묶은 지도(하위 유니버스가 있는 꼭지)만 위험 요약 한 줄(FU-10). 인사이트 탭과 같은 기준일·같은 밀집 기준의 같은 계산이다
+      const grouped = (view.ref_links || []).length > 0;
+      const riskSummary = grouped ? { parts: teamRiskParts(teamRiskSummary(view, { asOf: asOf(), n: currentDenseN() })), onMore: () => openInsight('', 'risk') } : null;
+      renderUniverseSummary(panel, summary, display.nodes.length, { split: splitHint(app.doc), starter: starterSteps(app.doc, view), riskSummary, universeId: app.doc.universe.id, onSelect: (g) => { reveal(g); select(view.canonical(g)); } });
       // 꼭지만 있으면 「노드 추가」를 펼쳐 둔다(검토5 U-5). 안내 문구(detail.js)와 같은 기준: 하위 유니버스를 묶은 화면은 노드가 있으므로 건드리지 않는다
       if (summary.node_total <= 1 && !app.readOnly) document.querySelector('details.add').open = true;
       const rootGid = app.rootGid();
@@ -959,17 +980,19 @@ function start() {
         app.rewindAvailable() ? rewindEntry({ points: app.editPoints(), onOpen: enterRewind }) : null,
         el('div', { class: 'row' },
         el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft-universe', onclick: () => openDraft(rootGid) }, '인수인계 초안 만들기'),
-        el('button', { type: 'button', 'data-testid': 'btn-insight-universe', onclick: () => openInsight('', 'repeat') }, '인사이트 보기')),
+        el('button', { type: 'button', 'data-testid': 'btn-insight-universe', onclick: () => openInsight('', 'risk') }, '인사이트 보기')),
         mergeButton(),
         folderEntry(),
-        el('p', { class: 'muted small', 'data-testid': 'insight-hint' }, '인사이트(반복 비효율 탭부터 열림): 유사 경험자 · 반복 비효율 · 밀집·공백(일이 몰린 사람, 담당자 없는 업무) · 흐름 변화 · 인수인계 위험(혼자만 아는 업무, 준비도, 파급 영향)')].filter(Boolean)); // append(null)은 "null" 글자를 넣으므로 거른다
+        el('p', { class: 'muted small', 'data-testid': 'insight-hint' }, '인사이트(인수인계 위험 탭부터 열림): 인수인계 위험(혼자만 아는 업무, 준비도, 파급 영향) · 유사 경험자 · 반복 비효율 · 밀집·공백(일이 몰린 사람, 담당자 없는 업무) · 흐름 변화')].filter(Boolean)); // append(null)은 "null" 글자를 넣으므로 거른다
       return;
     }
     if (editing && isOwn(selected) && localNode(selected)) {
-      panel.replaceChildren(el('h2', {}, localNode(selected).label), editorFor(selected));
+      const form = editorFor(selected);
+      panel.replaceChildren(el('h2', {}, localNode(selected).label), form);
+      if (form && form.focusStart) form.focusStart(); // 표준 양식의 빈 항목을 눌러 열었으면 그 칸에 초점(FU-16)
       return;
     }
-    const notes = [loadNote(selected), workNote(selected), issueNote(selected), formNote(selected), repeatNote(selected), riskNote(selected)].filter(Boolean);
+    const notes = [loadNote(selected), soloWorksNote(selected), workNote(selected), issueNote(selected), formNote(selected), repeatNote(selected), riskNote(selected)].filter(Boolean);
     const tools = toolbar(selected);
     const detail = renderNodeDetail(panel, describeNode(view, selected, { asOf: asOf(), past: !!viewDate }), {
       onFocus: focus,
@@ -982,6 +1005,9 @@ function start() {
       const change = local ? rwPast.diff.changed.find((c) => c.id === local && c.kind === 'node') || (rwPast.diff.hidden.includes(local) ? { fields: ['hidden'] } : null) : null;
       const note = change ? nodeChangeNote({ change, pastNode: rwPast.doc.nodes.find((n) => n.id === local), currentNode: app.findNode(local) }) : null;
       panel.prepend(...[el('button', { type: 'button', class: 'small-btn', 'data-testid': 'btn-rewind-list', onclick: () => select(null) }, '← 시점 목록으로'), note].filter(Boolean));
+    } else {
+      // 노드를 고르면 지도 전체 화면(「인수인계 초안 만들기」·「인사이트 보기」)이 사라지므로 맨 위에서 돌아갈 수 있게 한다(FU-6). Esc와 같은 동작: 선택만 푼다
+      panel.prepend(el('div', { class: 'detail-back' }, el('button', { type: 'button', class: 'small-btn', 'data-testid': 'detail-back-universe', title: '노드 선택을 풀고 지도 전체 화면으로 돌아갑니다(Esc와 같음)', onclick: () => select(null) }, '← 지도 전체 보기')));
     }
     return detail;
   }
@@ -1524,12 +1550,31 @@ function start() {
           const r = { ...b, node };
           afterSave(r, toGid(currentId(), node.id));
           renderAddForm(`추가했습니다: ${node.label}${b.warnings.map((w) => ` ${messageFor(w)}`).join('')}`);
+          if (addReturnToTop && drafting) $('detail').parentElement.scrollTop = 0; // 초안 창에서 사람을 추가했으면 초안 창 맨 위로 돌아간다(FU-7)
+          addReturnToTop = false;
           return r;
         },
       }),
     );
   }
   renderAddForm();
+
+  // 다른 화면(초안 창의 「＋ 사람 추가」)이 보내는 요청(FU-7 계약: document의 CustomEvent 'wu:add-node', detail {type:'person'}):
+  // 아래 「노드 추가」를 펼쳐 유형을 미리 고르고 이름 칸에 초점. 읽기 전용(되감기·보기 모드)이면 무시한다.
+  // 초안 창이 열려 있었으면 추가가 끝난 뒤 패널 맨 위의 초안 창으로 돌아가 보여 준다(초안 창은 닫히지 않고 새 사람이 받는 사람 목록에 들어간다)
+  let addReturnToTop = false;
+  document.addEventListener('wu:add-node', (e) => {
+    if (rw || app.readOnly) return;
+    const want = e && e.detail && e.detail.type;
+    const typeSelect = $('add-slot').querySelector('[data-testid=node-type]');
+    if (!typeSelect || ![...typeSelect.options].some((o) => o.value === want)) return;
+    document.querySelector('details.add').open = true;
+    typeSelect.value = want;
+    typeSelect.dispatchEvent(new Event('change'));
+    addReturnToTop = !!drafting;
+    const label = $('add-slot').querySelector('[data-testid=node-label]');
+    if (label) label.focus();
+  });
 
   // 가상 데이터 초기화: 「가져오기·내보내기」 창 맨 아래 위험 구역에서 부른다(R7-4). 문서만 읽기 전용이면 초기화로 복구할 수 있게 둔다
   function doReset() {

@@ -15,7 +15,12 @@ export function folderTab(o, rerender) {
     wrap.append(el('p', { class: 'muted small', 'data-testid': 'folder-unsupported' }, FOLDER_TEXT.unsupported));
     return wrap;
   }
-  const blocks = [el('p', { class: 'muted small', 'data-testid': 'folder-intro' }, FOLDER_TEXT.intro)];
+  // 처음 쓰는 사람을 위한 세 줄(FU-11): 팀원 각자 → 팀장 → 원본은 어디인가
+  const howto = el('ol', { class: 'folder-howto', 'data-testid': 'folder-howto' },
+    el('li', { 'data-testid': 'folder-howto-member' }, '팀원 각자: 같은 공유 폴더(공유 드라이브·동기화 폴더)를 「폴더 연결」로 고르면, 저장할 때마다 자기 파일이 그 폴더에 생깁니다.'),
+    el('li', { 'data-testid': 'folder-howto-leader' }, '팀장: 같은 폴더를 고르고 「새로 고침」 → 동료 파일에 체크 → 「팀 지도로 묶기」.'),
+    el('li', { 'data-testid': 'folder-howto-origin' }, '원본은 각자 브라우저에 있고, 폴더는 사본입니다(서버는 없습니다).'));
+  const blocks = [howto, el('p', { class: 'muted small', 'data-testid': 'folder-intro' }, FOLDER_TEXT.intro)];
   if (!fs.handle) {
     blocks.push(el('div', { class: 'row' }, el('button', { type: 'button', class: 'primary', 'data-testid': 'folder-connect', onclick: () => f.connect() }, '폴더 연결')));
   } else if (fs.needsPermission) {

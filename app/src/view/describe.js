@@ -43,6 +43,36 @@ function fieldValue(v) {
   return String(v);
 }
 
+// 속성(attrs) 수정 이력의 한 칸 값: 길면 줄인다. 원문 JSON 대신 읽기 쉬운 글로 보인다(처음 사용 점검 FU-15)
+export const ATTR_VALUE_MAX = 60;
+const attrValue = (v) => {
+  const s = v === null || v === undefined || v === '' ? '(없음)' : String(v).replace(/\s+/g, ' ').trim();
+  return s.length > ATTR_VALUE_MAX ? `${s.slice(0, ATTR_VALUE_MAX)}…` : s;
+};
+
+/**
+ * 속성 수정 전·후(키→값 객체)에서 바뀐 값만 읽기 쉬운 글로: 「주기: 매월 · 마감: 매월 말」.
+ * 새로 생긴 속성은 「키: 값」, 값이 바뀌면 「키: 이전 → 새」, 지운 속성은 「키: 지움(이전)」. 바뀐 것이 없으면 ''.
+ * 객체가 아니면(깨진 이력) null — 부르는 쪽이 예전 방식으로 보인다.
+ */
+export function attrsChangeText(before, after) {
+  const plain = (o) => o === null || o === undefined || (typeof o === 'object' && !Array.isArray(o));
+  if (!plain(before) || !plain(after)) return null;
+  const b = before || {};
+  const a = after || {};
+  const has = (o, k) => Object.hasOwn(o, k) && o[k] !== null && o[k] !== undefined && o[k] !== '';
+  const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])];
+  const parts = [];
+  for (const k of keys) {
+    const hb = has(b, k);
+    const ha = has(a, k);
+    if (hb && ha && String(b[k]) === String(a[k])) continue;
+    if (!hb && !ha) continue;
+    parts.push(!hb ? `${k}: ${attrValue(a[k])}` : !ha ? `${k}: 지움(${attrValue(b[k])})` : `${k}: ${attrValue(b[k])} → ${attrValue(a[k])}`);
+  }
+  return parts.join(' · ');
+}
+
 // 이벤트를 한 줄 문장으로. 노드 ID는 라벨로 바꾸고, 숨긴 노드는 표시를 붙인다
 export function eventText(view, ev) {
   const p = ev.payload || {};
@@ -89,7 +119,12 @@ export function eventText(view, ev) {
       if (p.before && p.before.hidden === true && p.after && p.after.hidden === false && Object.keys(p.after).length === 1) return '되살림(숨김 해제)';
       {
         const keys = Object.keys(p.after || {});
-        const changes = keys.map((k) => `${FIELD_NAMES[k] || k}: ${fieldValue(p.before && p.before[k])} → ${fieldValue(p.after[k])}`);
+        const changes = keys.map((k) => {
+          // 속성은 바뀐 값만(FU-15): 「속성: 주기: 매월 · 마감: 매월 말」. 객체가 아니거나 바뀐 것을 못 찾으면 예전 방식
+          const detail = k === 'attrs' ? attrsChangeText(p.before && p.before[k], p.after[k]) : null;
+          if (detail) return `${FIELD_NAMES[k] || k}: ${detail}`;
+          return `${FIELD_NAMES[k] || k}: ${fieldValue(p.before && p.before[k])} → ${fieldValue(p.after[k])}`;
+        });
         if (!changes.length && (ev.payload && ev.payload.cleared)) return '수정(내용 지움)';
         return `수정 — ${changes.join(', ') || '변경 내용 없음'}`;
       }

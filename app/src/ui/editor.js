@@ -122,6 +122,13 @@ function attrsEditor(attrs = {}) {
   const wrap = el('div', { class: 'attrs-editor' }, rows, el('button', { type: 'button', class: 'small-btn', onclick: () => addRow() }, '+ 속성 추가'));
   return {
     el: wrap,
+    // 표준 양식의 빈 항목 이름을 누르면(FU-16) 그 속성 칸을 보장한다: 같은 이름 줄이 있으면 그 값 칸, 없으면 새 줄을 더해 값 칸을 돌려준다
+    ensure(name) {
+      const row = [...rows.children].find((r) => r.querySelector('.attr-key').value.trim() === name);
+      if (row) return row.querySelector('.attr-val');
+      addRow(name, '');
+      return rows.lastElementChild.querySelector('.attr-val');
+    },
     value() {
       const out = {};
       for (const row of rows.children) {
@@ -231,6 +238,12 @@ export function nodeForm(o) {
     msg.box,
     actions(o.mode === 'add' ? '추가' : '저장', o.onCancel),
   );
+  // o.focusField(수정 양식만, FU-16): 표준 양식의 빈 항목 이름. 「설명」이면 설명 칸에, 그 밖이면 그 속성 칸(없으면 줄을 더해서)에 초점. 양식을 화면에 붙인 뒤 부른다
+  form.focusStart = () => {
+    if (!o.focusField) return;
+    const target = o.focusField === '설명' ? description : attrs.ensure(o.focusField);
+    target.focus();
+  };
   form.addEventListener('submit', (evt) => {
     evt.preventDefault();
     const resolved = resolveSubtype(sub, type.value, o.onAddSubtype);

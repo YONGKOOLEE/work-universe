@@ -45,6 +45,9 @@ export const PAIR_TEXT = {
   references: '꼭지 외 노드 → 꼭지 외 노드',
 };
 
+// 「관련」 연결이 주제가 아닌 노드에 걸려 거절될 때 덧붙이는 안내(FU-20). 사람 → 업무는 「수행」, 업무 → 산출물은 「산출」, 그 밖의 가리킴은 「참조」(꼭지 제외)
+const RELATES_TO_HELP = ' 무엇을 고르면 되나: 사람을 업무에 이으려면 「수행」(사람 → 업무), 업무가 만든 문서·산출물이면 「산출」(업무 → 산출물), 그냥 가리키기만 하면 「참조」입니다. 「관련」은 대상이 주제 노드일 때만 씁니다.';
+
 const name = (field) => FIELD_NAMES[field] || field;
 
 /**
@@ -83,7 +86,9 @@ export function messageFor(err, ctx = {}) {
       const base = ctx.relation && PAIR_TEXT[ctx.relation]
         ? `이 조합으로는 연결할 수 없습니다. 「${EDGE_NAMES[ctx.relation] || ctx.relation}」${josa(EDGE_NAMES[ctx.relation] || ctx.relation, '은/는')} ${PAIR_TEXT[ctx.relation]}만 가능합니다.`
         : '이 조합으로는 연결할 수 없습니다.';
-      if (!ctx.source || !ctx.target) return base;
+      // 「관련」은 주제에만 잇는다. 처음 쓰는 사람이 무엇을 골라야 하는지 알도록 흔한 경우를 덧붙인다(FU-20, schema.js PAIR_RULES와 같은 조합)
+      const tail = ctx.relation === 'relates_to' ? RELATES_TO_HELP : '';
+      if (!ctx.source || !ctx.target) return base + tail;
       // 고른 두 노드의 유형과, 이 두 노드에 쓸 수 있는 관계(N-4)
       const s = ctx.source;
       const t = ctx.target;
@@ -94,7 +99,7 @@ export function messageFor(err, ctx = {}) {
         if (x.forward && x.backward) return `「${name}」(어느 방향이든)`;
         return x.forward ? `「${name}」(${s.label} → ${t.label})` : `「${name}」(${t.label} → ${s.label})`;
       });
-      return base + what + (ok.length ? ` 이 두 노드에는 ${ok.join(', ')}${josa(lastRelation, '을/를')} 쓸 수 있습니다.` : ' 이 두 노드는 직접 연결할 수 있는 관계가 없습니다.');
+      return base + what + (ok.length ? ` 이 두 노드에는 ${ok.join(', ')}${josa(lastRelation, '을/를')} 쓸 수 있습니다.` : ' 이 두 노드는 직접 연결할 수 있는 관계가 없습니다.') + tail;
     }
     case 'E-SUBTYPE':
       return '등록되지 않은 하위 유형입니다.';

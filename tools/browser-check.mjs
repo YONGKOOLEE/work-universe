@@ -770,13 +770,17 @@ async function checkBrowser(browser, port) {
     check('N-2 빈 곳을 누르면(단계가 바뀌면) 표지가 사라지고 그래프 테두리도 풀림', (await hintInfo()) === null && !(await evaluate(s.cdp, "document.getElementById('graph').classList.contains('tour-target') || document.getElementById('graph').classList.contains('tour-inset')")));
     await evaluate(s.cdp, "document.querySelector('[data-testid=btn-draft-universe]').click()");
     await sleep(300);
-    const preset = await evaluate(s.cdp, "({ from: document.querySelector('[data-testid=draft-from]').selectedOptions[0].textContent, to: document.querySelector('[data-testid=draft-to]').selectedOptions[0].textContent })");
-    check('CR-13 A 3단계 초안 화면: 보내는 사람 윤바다·받는 사람 서하늘이 미리 골라져 있고, 화면만 열어서는 진행하지 않음', preset.from === '윤바다' && preset.to === '서하늘' && (await tourInfo()).index === 2, JSON.stringify(preset));
+    const preset = await evaluate(s.cdp, "({ target: document.querySelector('[data-testid=draft-target]').selectedOptions[0].textContent, from: document.querySelector('[data-testid=draft-from]').selectedOptions[0].textContent, to: document.querySelector('[data-testid=draft-to]').selectedOptions[0].textContent })");
+    check('CR-13 A 3단계 초안 화면: 대상 월말 정산 점검(지도 전체, FU-2)·보내는 사람 윤바다·받는 사람 서하늘이 미리 골라져 있고, 화면만 열어서는 진행하지 않음', preset.target === '월말 정산 점검' && preset.from === '윤바다' && preset.to === '서하늘' && (await tourInfo()).index === 2, JSON.stringify(preset));
     await shot(s.cdp, `${browser.name}-36c-tour-handover-3`);
     await evaluate(s.cdp, "document.querySelector('[data-testid=draft-form] button[type=submit]').click()");
     await sleep(400);
     ti = await tourInfo();
     check('CR-13 A 「초안 만들기」로 초안 결과가 그려지면 4/5(근거 칩)', ti.index === 3 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 4/5' && (await evaluate(s.cdp, "document.querySelectorAll('.draft .evidence').length")) > 5, JSON.stringify(ti));
+    const chips3 = await evaluate(s.cdp, "[...document.querySelectorAll('.draft [data-testid=item-method]')].map((c) => c.textContent)");
+    // 앞 블록들이 샘플을 고쳐 둔 상태라 근거가 바뀐 몇 항목은 사전 생성 문장이 낡았다고 판정돼 규칙 기반이 된다(의도된 검증). 깨끗한 샘플에서 전부 사전 생성인 것은 단위 테스트(first-use-w1)가 본다
+    const target3 = await evaluate(s.cdp, "(document.querySelector('[data-testid=draft-target]') || {}).value");
+    check('처음 사용 W1(FU-2) 따라 하기 끝 초안: 대상이 지도 전체(월말 정산 점검)로 잡히고 「사전 생성」 칩이 대부분, 「이 조합에는 미리 써 둔 문장이 없어」 안내(draft-rule-reason)는 없음', target3 === 'U-A1/N-000' && chips3.length >= 6 && chips3.filter((t) => t === '사전 생성').length >= 5 && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=draft-rule-reason]')")), JSON.stringify({ target3, chips3 }));
     const sn4 = await stepNamesOk();
     check('CR-13 A 4단계 문구의 「」 이름(근거:)이 실제 화면에 있고, 깜빡이는 대상은 근거 칩', sn4.missing.length === 0 && (await evaluate(s.cdp, "document.querySelector('.draft .evidence').classList.contains('tour-target')")), JSON.stringify(sn4));
     await shot(s.cdp, `${browser.name}-36d-tour-handover-4`);
@@ -893,41 +897,46 @@ async function checkBrowser(browser, port) {
     for (const c of [1, 2]) { await s.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: dbl.x, y: dbl.y, button: 'left', clickCount: c }); await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: dbl.x, y: dbl.y, button: 'left', clickCount: c }); }
     await sleep(700);
     ti = await tourInfo();
-    check('CR-13 A team 1단계 → 접힌 팀을 두 번 눌러 펼치면 2/5(노드 찾기)', ti.index === 1 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 2/5' && (await evaluate(s.cdp, 'window.__wu.cy.nodes().length')) > 18, JSON.stringify(ti));
+    // 처음 사용 점검 FU-14: 팀 따라 하기 순서가 펼치기 → 인사이트(인수인계 위험) → 찾기 → 주변만 보기 → 전체 보기로 바뀜
+    check('CR-13 A team 1단계 → 접힌 팀을 두 번 눌러 펼치면 2/5(인사이트 보기, FU-14: 팀장의 질문에 빨리 닿는 순서)', ti.index === 1 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 2/5' && (await evaluate(s.cdp, 'window.__wu.cy.nodes().length')) > 18, JSON.stringify(ti));
+    // 노드 하나를 골라 둔다(눌러서 펼친 뒤 선택이 남아 있는지는 상황에 따라 다르다): 선택이 남은 상태의 「빈 곳을 누르세요」 표지를 확인하기 위해
+    await evaluate(s.cdp, "window.__wu.select(window.__wu.cy.nodes('[!collapsed]')[0].id())");
+    await sleep(300);
     const tn2 = await stepNamesOk();
-    check('CR-13 A team 2단계 문구의 「」 이름(노드 찾기)이 실제 화면에 있고 깜빡이는 대상은 찾기 칸', tn2.missing.length === 0 && (await evaluate(s.cdp, "document.querySelector('[data-testid=find-input]').classList.contains('tour-target')")), JSON.stringify(tn2));
+    check('CR-13 A team 2단계 문구의 「」 이름(인사이트 보기)이 실제 화면에 있고(「인수인계 위험」 탭은 열기 전에는 없음), 문구에 「맨 먼저 「인수인계 위험」이 열려, 한 사람만 해 봤고…」 설명이 있음', tn2.names.includes('인사이트 보기') && tn2.names.includes('인수인계 위험') && tn2.missing.every((n) => n === '인수인계 위험') && (await text(s.cdp, '[data-testid=tour-task]')).includes('맨 먼저 「인수인계 위험」이 열려, 한 사람만 해 봤고 인수인계 기록이 없는 일을 근거와 함께 보여 줍니다'), JSON.stringify(tn2));
+    const hi2 = await hintInfo();
+    check('N-2 team 2단계(선택이 남은 상태)에도 그래프 안쪽 표지 「여기 빈 곳을 누르세요」(크기 있음, 안쪽 테두리)', !!hi2 && hi2.text === '여기 빈 곳을 누르세요' && hi2.w > 80 && hi2.inside && hi2.noPointer && hi2.graphInset, JSON.stringify(hi2));
+    await shot(s.cdp, `${browser.name}-37c-tour-team-5-hint`);
+    await blankClick();
+    check('CR-13 A team 2단계: 빈 곳을 누르면 표지가 사라지고 깜빡이는 대상은 「인사이트 보기」', (await hintInfo()) === null && (await evaluate(s.cdp, "document.querySelector('[data-testid=btn-insight-universe]').classList.contains('tour-target')")));
+    await evaluate(s.cdp, "document.querySelector('[data-testid=btn-insight-universe]').click()");
+    await sleep(500);
+    const insShow = await evaluate(s.cdp, "({ tab: document.querySelector('[data-testid=tab-risk]').classList.contains('active'), len: document.querySelector('#detail').textContent.length })");
+    ti = await tourInfo();
+    check('CR-13 A team 2단계 → 「인사이트 보기」로 인사이트가 열리면(첫 탭 「인수인계 위험」에 내용이 보임, FU-5) 3/5(노드 찾기)', ti.index === 2 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 3/5' && insShow.tab && insShow.len > 100, JSON.stringify({ ti, insShow }));
+    await shot(s.cdp, `${browser.name}-37d-tour-team-insight`);
+    const tn3 = await stepNamesOk();
+    check('CR-13 A team 3단계 문구의 「」 이름(노드 찾기)이 실제 화면에 있고 깜빡이는 대상은 찾기 칸', tn3.missing.length === 0 && (await evaluate(s.cdp, "document.querySelector('[data-testid=find-input]').classList.contains('tour-target')")), JSON.stringify(tn3));
     await evaluate(s.cdp, "(() => { const i = document.querySelector('[data-testid=find-input]'); i.value = ''; i.focus(); })()");
     await s.cdp.send('Input.insertText', { text: '대사' });
     await sleep(250);
-    check('CR-13 A team 2단계: 찾기 칸에 글자만 넣어서는 진행하지 않음', (await tourInfo()).index === 1);
+    check('CR-13 A team 3단계: 찾기 칸에 글자만 넣어서는 진행하지 않음', (await tourInfo()).index === 2);
     await evaluate(s.cdp, "document.querySelector('[data-testid=find-hit]').click()");
     await sleep(500);
     ti = await tourInfo();
-    check('CR-13 A team 2단계 → 찾기 결과를 고르면 3/5(주변만 보기)', ti.index === 2 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 3/5', JSON.stringify(ti));
-    const tn3 = await stepNamesOk();
-    check('CR-13 A team 3단계 문구의 「」 이름(주변만 보기)이 실제 화면에 있고 깜빡이는 대상은 그 단추', tn3.missing.length === 0 && (await evaluate(s.cdp, "document.querySelector('[data-testid=btn-nbhd]').classList.contains('tour-target')")), JSON.stringify(tn3));
+    check('CR-13 A team 3단계 → 찾기 결과를 고르면 4/5(주변만 보기)', ti.index === 3 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 4/5', JSON.stringify(ti));
+    const tn4 = await stepNamesOk();
+    check('CR-13 A team 4단계 문구의 「」 이름(주변만 보기)이 실제 화면에 있고 깜빡이는 대상은 그 단추', tn4.missing.length === 0 && (await evaluate(s.cdp, "document.querySelector('[data-testid=btn-nbhd]').classList.contains('tour-target')")), JSON.stringify(tn4));
     await evaluate(s.cdp, "document.querySelector('[data-testid=btn-nbhd]').click()");
     await sleep(600);
     ti = await tourInfo();
-    check('CR-13 A team 3단계 → 「주변만 보기」를 누르면 4/5(전체 보기로 돌아오기), 이때 깜빡이는 대상은 「전체 보기」', ti.index === 3 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 4/5' && !!(await evaluate(s.cdp, 'window.__wu.nbhd')) && (await evaluate(s.cdp, "document.getElementById('fit').classList.contains('tour-target')")), JSON.stringify(ti));
-    const tn4 = await stepNamesOk();
-    check('CR-13 A team 4단계 문구의 「」 이름(전체 보기)이 실제 화면에 있음', tn4.missing.length === 0 && tn4.names.includes('전체 보기'), JSON.stringify(tn4));
+    check('CR-13 A team 4단계 → 「주변만 보기」를 누르면 5/5(전체 보기로 돌아오기), 이때 깜빡이는 대상은 「전체 보기」', ti.index === 4 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 5/5' && !!(await evaluate(s.cdp, 'window.__wu.nbhd')) && (await evaluate(s.cdp, "document.getElementById('fit').classList.contains('tour-target')")), JSON.stringify(ti));
+    const tn5 = await stepNamesOk();
+    check('CR-13 A team 5단계 문구의 「」 이름(전체 보기)이 실제 화면에 있음', tn5.missing.length === 0 && tn5.names.includes('전체 보기'), JSON.stringify(tn5));
     await shot(s.cdp, `${browser.name}-37b-tour-team-4`);
     await evaluate(s.cdp, "document.getElementById('fit').click()");
     await sleep(600);
-    ti = await tourInfo();
-    check('CR-13 A team 4단계 → 「전체 보기」로 돌아오면(주변만 보기 해제) 5/5(인사이트 보기)', ti.index === 4 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 5/5' && !(await evaluate(s.cdp, 'window.__wu.nbhd')), JSON.stringify(ti));
-    const tn5 = await stepNamesOk();
-    check('CR-13 A team 5단계 문구의 「」 이름(인사이트 보기)이 실제 화면에 있고, 문구에 반복 비효율·유사 경험자 설명이 있음', tn5.missing.length === 0 && tn5.names.includes('인사이트 보기') && (await text(s.cdp, '[data-testid=tour-task]')).includes('같은 설명이 되풀이되는 곳(반복 비효율)과 비슷한 일을 해 본 사람(유사 경험자)을 근거와 함께 보여 줍니다'), JSON.stringify(tn5));
-    const hi5 = await hintInfo();
-    check('N-2 team 5단계(선택이 남은 상태)에도 그래프 안쪽 표지 「여기 빈 곳을 누르세요」(크기 있음, 안쪽 테두리)', !!hi5 && hi5.text === '여기 빈 곳을 누르세요' && hi5.w > 80 && hi5.inside && hi5.noPointer && hi5.graphInset, JSON.stringify(hi5));
-    await shot(s.cdp, `${browser.name}-37c-tour-team-5-hint`);
-    await blankClick();
-    check('CR-13 A team 5단계: 빈 곳을 누르면 표지가 사라지고 깜빡이는 대상은 「인사이트 보기」', (await hintInfo()) === null && (await evaluate(s.cdp, "document.querySelector('[data-testid=btn-insight-universe]').classList.contains('tour-target')")));
-    await evaluate(s.cdp, "document.querySelector('[data-testid=btn-insight-universe]').click()");
-    await sleep(500);
-    const insShow = await evaluate(s.cdp, "({ tab: document.querySelector('[data-testid=tab-repeat]').classList.contains('active'), len: document.querySelector('#detail').textContent.length })");
-    check('CR-13 A team 5단계 → 「인사이트 보기」로 인사이트가 열리면(첫 탭 「반복 비효율」에 내용이 보임) 끝 카드', (await tourInfo()).mode === 'end' && (await text(s.cdp, '[data-testid=tour-end]')) === '끝! 이제 내 업무로 해 볼까요?' && insShow.tab && insShow.len > 100 && (await text(s.cdp, '[data-testid=tour-card] .tour-count')) === '따라 하기 5/5 끝', JSON.stringify(insShow));
+    check('CR-13 A team 5단계 → 「전체 보기」로 돌아오면(주변만 보기 해제) 끝 카드', (await tourInfo()).mode === 'end' && (await text(s.cdp, '[data-testid=tour-end]')) === '끝! 이제 내 업무로 해 볼까요?' && (await text(s.cdp, '[data-testid=tour-card] .tour-count')) === '따라 하기 5/5 끝' && !(await evaluate(s.cdp, 'window.__wu.nbhd')));
     await shot(s.cdp, `${browser.name}-37d-tour-team-end`);
     await evaluate(s.cdp, "document.querySelector('[data-testid=tour-skip]').click()");
     // 「?」: 다른 유니버스(U-K1)에서는 두 시나리오 고르기 → 팀을 고르면 U-D1이 열리고 team 시작
@@ -1000,6 +1009,8 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, "window.__wu.select(null)");
     await clickTestId(s.cdp, 'btn-insight-universe');
     await sleep(200);
+    await clickTestId(s.cdp, 'tab-repeat'); // FU-5: 인사이트는 「인수인계 위험」 탭부터 열리므로 반복 비효율은 탭을 눌러 본다
+    await sleep(150);
     const insuf = await text(s.cdp, '[data-testid=repeat-insufficient]');
     check('오류(R-05 ②): 기록이 없는 새 유니버스 → 반복 비효율 "데이터 부족"과 "입력된 업무 이력 없음"(생성 이력은 입력이 아님)', insuf.includes('데이터 부족') && insuf.includes('입력된 업무 이력 없음') && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=repeat-patterns]')")), insuf);
     await clickTestId(s.cdp, 'tab-density');
@@ -1193,6 +1204,8 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, "window.__wu.select(null)");
     await clickTestId(s.cdp, 'btn-insight-universe');
     await sleep(200);
+    await clickTestId(s.cdp, 'tab-repeat'); // FU-5: 기본 탭은 「인수인계 위험」
+    await sleep(150);
     const rep = await text(s.cdp, '[data-testid=repeat-patterns]');
     check('R-05 ⑤ 반복 비효율: 이전 인수인계서를 이어받지 않은 인수인계가 근거 이벤트와 함께 나옴', rep.includes('인수인계 2회 중 1회가 이전 인수인계서를 이어받지 않아') && rep.includes('2026-09-30 윤바다 → 서하늘 (인수인계서 없음) — 이전 인수인계서를 이어받지 않음') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=repeat-patterns] .evidence').length")) >= 2, rep.slice(0, 120));
     check('R-05 ③ 결정은 사람이 한다는 안내', (await text(s.cdp, '[data-testid=insight-note]')).includes('사람이 정합니다'));
@@ -2492,6 +2505,82 @@ async function checkBrowser(browser, port) {
   await clickTestId(s.cdp, 'issue-close');
   await sleep(100);
 
+  // ── 처음 사용 W1(2026-10-24, docs/first-use-2026-10-24.md FU-7·8·17): 받는 사람 후보가 없는 새 지도의 안내와 「＋ 사람 추가」, 이력 부족 항목의 「채우려면」,
+  //    초안을 다시 만들 때 같은 두 사람 기억. 새 지도를 하나 만들어 쓰고, 끝나면 월말 정산 점검(U-A1)으로 돌아간다. (따라 하기 끝 초안의 「사전 생성」 칩은 위 handover 3→4단계에서 확인) ──
+  {
+    const w1Visible = (sel) => evaluate(s.cdp, `(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e || e.hidden || !e.checkVisibility()) return false; const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; })()`);
+    const w1OpenDraft = async () => {
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await clickTestId(s.cdp, 'btn-draft-universe');
+      await sleep(250);
+    };
+    const w1CloseDraft = async () => {
+      await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=draft-form] button')].find((b) => b.textContent === '닫기').click()");
+      await sleep(200);
+    };
+    // 목록의 글자(이름)로 고른다: 새 지도의 gid를 몰라도 되게
+    const w1Pick = (testid, label) => evaluate(s.cdp, `(() => { const sel = document.querySelector('[data-testid=${testid}]'); const o = [...sel.options].find((x) => x.textContent === ${JSON.stringify(label)}); sel.value = o ? o.value : ''; sel.dispatchEvent(new Event('change')); return !!o; })()`);
+    await evaluate(s.cdp, "window.confirm = () => true; window.__wu.select(null)");
+    await evaluate(s.cdp, `(() => {
+      document.getElementById('create-open').click();
+      document.getElementById('create-name').value = '처음 사용 W1 시험';
+      document.getElementById('create-level').value = '업무';
+      document.getElementById('create-owner').value = '가상 시험팀';
+      document.querySelector('#create-form button[type=submit]').click();
+    })()`);
+    await sleep(500);
+    const w1Made = await waitFor(s.cdp, "window.__wu && window.__wu.doc.universe.name === '처음 사용 W1 시험' && window.__wu.cy.nodes().length === 1", 8000);
+    check('처음 사용 W1: 시험용 새 지도(꼭지만)가 열림', w1Made);
+    if (w1Made) {
+      // FU-7: 사람이 하나도 없으면 오류가 나기 전에, 창을 열 때부터 안내와 단추가 보인다
+      await w1OpenDraft();
+      const help0 = await evaluate(s.cdp, "(() => { const h = document.querySelector('[data-testid=draft-person-help]'); return h ? h.textContent : null; })()");
+      check('처음 사용 W1(FU-7) 받는 사람 후보가 0명인 새 지도: 초안 창을 열면 안내 「후임이 목록에 없으면 사람으로 먼저 넣으세요…」와 「＋ 사람 추가」 단추가 보임(크기 있음)', !!help0 && help0.includes('후임이 목록에 없으면 사람으로 먼저 넣으세요. 연결하지 않아도 받는 사람으로 고를 수 있습니다(「수행」으로 이으면 현재 담당으로 보입니다).') && (await w1Visible('[data-testid=draft-person-help]')) && (await w1Visible('[data-testid=draft-add-person]')) && (await text(s.cdp, '[data-testid=draft-add-person]')) === '＋ 사람 추가', String(help0));
+      await shot(s.cdp, `${browser.name}-w1-draft-no-person`);
+      // 단추는 wu:add-node(사람) 알림만 보낸다(노드 추가 창을 여는 것은 main.js 쪽 — 여기서는 알림 내용만 확인)
+      await evaluate(s.cdp, "window.__w1evt = null; document.addEventListener('wu:add-node', (e) => { window.__w1evt = e.detail; }, { once: true }); document.querySelector('[data-testid=draft-add-person]').click()");
+      await sleep(250);
+      check('처음 사용 W1(FU-7) 「＋ 사람 추가」를 누르면 wu:add-node 알림(detail.type = person)이 나감', (await evaluate(s.cdp, 'window.__w1evt && window.__w1evt.type')) === 'person', JSON.stringify(await evaluate(s.cdp, 'window.__w1evt')));
+      await w1CloseDraft();
+      // 업무 하나 + 사람 하나(사람이 하나뿐이어도 받는 사람 후보는 없다) → 안내가 계속 보임
+      const w1Work = await submitAdd(s.cdp, 'work', '시험 업무');
+      const w1P1 = await submitAdd(s.cdp, 'person', '가상갑');
+      check('처음 사용 W1: 시험 지도에 업무 하나·사람 하나를 넣음', w1Work.code === 'OK' && w1P1.code === 'OK', JSON.stringify([w1Work, w1P1]));
+      await w1OpenDraft();
+      check('처음 사용 W1(FU-7) 사람이 하나뿐이어도 안내가 보임', await w1Visible('[data-testid=draft-person-help]'));
+      await w1CloseDraft();
+      const w1P2 = await submitAdd(s.cdp, 'person', '가상을');
+      check('처음 사용 W1: 사람 둘째를 넣음', w1P2.code === 'OK', JSON.stringify(w1P2));
+      await w1OpenDraft();
+      check('처음 사용 W1(FU-7) 받는 사람 후보가 있으면 안내는 숨어 있음', !(await w1Visible('[data-testid=draft-person-help]')));
+      // 받는 사람을 고르지 않고 만들면 오류와 함께 안내가 나타난다
+      check('처음 사용 W1(FU-17) 처음 만들 때는 보내는·받는 사람이 비어 있음', (await evaluate(s.cdp, "document.querySelector('[data-testid=draft-from]').value")) === '' && (await evaluate(s.cdp, "document.querySelector('[data-testid=draft-to]').value")) === '');
+      await w1Pick('draft-target', '처음 사용 W1 시험');
+      await w1Pick('draft-from', '가상갑');
+      await evaluate(s.cdp, "document.querySelector('[data-testid=draft-form] button[type=submit]').click()");
+      await sleep(200);
+      check('처음 사용 W1(FU-7) 받는 사람 누락 오류(기존 문구 「받는 사람을 고르세요」)와 함께 안내가 나타남', (await text(s.cdp, '[data-testid=draft-message]')).includes('받는 사람') && (await w1Visible('[data-testid=draft-person-help]')));
+      // FU-8: 이력 부족 항목마다 「채우려면」
+      await w1Pick('draft-to', '가상을');
+      await evaluate(s.cdp, "document.querySelector('[data-testid=draft-form] button[type=submit]').click()");
+      await sleep(400);
+      const w1Fill = await evaluate(s.cdp, "({ insufficient: document.querySelectorAll('[data-testid=insufficient]').length, hints: [...document.querySelectorAll('[data-testid=draft-fill-hint]')].map((h) => h.textContent), rel: (document.querySelector('[data-testid=draft-item-관계자_연락처] [data-testid=draft-fill-hint]') || {}).textContent || '' })");
+      check('처음 사용 W1(FU-8) 이력 부족 항목마다 「채우려면: …」 한 줄(개수 일치, 관계자는 「수행」으로 이으라고 안내)', w1Fill.insufficient >= 6 && w1Fill.hints.length === w1Fill.insufficient && w1Fill.hints.every((t) => t.startsWith('채우려면: ')) && w1Fill.rel.includes('「수행」(사람 → 업무)'), JSON.stringify(w1Fill));
+      await shot(s.cdp, `${browser.name}-w1-fill-hints`);
+      // FU-17: 초안을 닫았다가 다시 열면 마지막으로 만든 보내는·받는 사람이 골라져 있음
+      await w1CloseDraft();
+      await w1OpenDraft();
+      const w1Mem = await evaluate(s.cdp, "({ from: document.querySelector('[data-testid=draft-from]').selectedOptions[0].textContent, to: document.querySelector('[data-testid=draft-to]').selectedOptions[0].textContent })");
+      check('처음 사용 W1(FU-17) 같은 지도에서 초안을 다시 열면 마지막으로 만든 보내는 사람(가상갑)·받는 사람(가상을)이 미리 골라져 있음', w1Mem.from === '가상갑' && w1Mem.to === '가상을', JSON.stringify(w1Mem));
+      await w1CloseDraft();
+    }
+    // 시험 지도에서 나와 월말 정산 점검(U-A1)으로 돌아간다(이후 점검이 U-A1을 전제로 함)
+    await evaluate(s.cdp, "location.hash = 'U-A1'; location.reload()").catch(() => {});
+    await sleep(500);
+    await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
+    await evaluate(s.cdp, 'window.confirm = () => true');
+  }
+
   // ── CR-15 T-36 실시간 Claude API(가짜 클라이언트, 실제 호출 없음): 키 없으면 평소와 같고, 키를 넣으면 「생성 중…」 → 교체(칩 「Claude API」) → 실패하면 「규칙 기반으로 대체함」 → 키 지우기 → 칩 없음.
   //    데이터를 바꾸지 않는다(설정과 응답 캐시만). 가짜 키는 조각을 이어 붙여 비밀값 패턴에 걸리지 않게 한다 ──
   {
@@ -2815,6 +2904,219 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(snap)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); location.hash = 'U-A1'; location.reload(); })()`).catch(() => {});
     await sleep(500);
     await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1'", 8000);
+  }
+
+  // ── 처음 사용 W3(2026-10-24, 처음 사용 점검 FU-5·6·7·10·11·12·13·15·16·23): 인사이트 기본 탭 risk·맨 위 스크롤, 노드 상세 「← 지도 전체 보기」,
+  //    묶은 지도 위험 요약 = 탭 숫자, 사람 「이 사람만 아는 일」, 사번 충돌 접힘, 이력 속성 수정 글, 권장 항목 단추, wu:add-node, 폴더 연결 세 줄, 묶기 안내, 「지도 이름」.
+  //    데이터는 저장하지 않는다(예외: 초안 창에서 사람을 추가해 보고 바로 「삭제」로 되돌림 — 노드 수가 같아야 통과) ──
+  {
+    const gotoU = async (id) => {
+      await evaluate(s.cdp, `location.hash = ${JSON.stringify(id)}; location.reload()`).catch(() => {});
+      await sleep(500);
+      const ok = await waitFor(s.cdp, `window.__wu && window.__wu.doc && window.__wu.doc.universe.id === ${JSON.stringify(id)} && window.__wu.cy.nodes().length > 0`, 8000);
+      await evaluate(s.cdp, 'window.confirm = () => true');
+      return ok;
+    };
+    const box = (testid) => evaluate(s.cdp, `(() => { const e = document.querySelector('[data-testid=${testid}]'); if (!e) return null; const r = e.getBoundingClientRect(); return { w: r.width, h: r.height, text: e.textContent }; })()`);
+    const activeTab = () => evaluate(s.cdp, "(document.querySelector('.insight .tab.active') || { dataset: {} }).dataset.testid || ''");
+    const num = (re, str) => { const m = re.exec(str); return m ? Number(m[1]) : 0; };
+
+    // ── 가상 운영부(U-D1): 묶은 지도 ──
+    if (await gotoU('U-D1')) {
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await sleep(200);
+      // FU-10 위험 요약 한 줄
+      const sum = await box('team-risk-summary');
+      check('W3 FU-10 묶은 지도(가상 운영부) 개요에 위험 요약 한 줄(크기 있음): 혼자만 아는 일·일 몰린 사람·담당자 빈 일 + 「자세히」',
+        !!sum && sum.w > 100 && sum.h > 10 && /혼자만 아는 일 (\d+개|없음)/.test(sum.text) && /일 몰린 사람 (\d+명|없음)/.test(sum.text) && /담당자 빈 일 (\d+개|없음)/.test(sum.text) && sum.text.includes('자세히'), sum && sum.text);
+      const sumSolo = num(/혼자만 아는 일 (\d+)개/, sum ? sum.text : '');
+      const sumDense = num(/일 몰린 사람 (\d+)명/, sum ? sum.text : '');
+      const sumGaps = num(/담당자 빈 일 (\d+)개/, sum ? sum.text : '');
+      // FU-13 사번 충돌 접힘 (개요를 연 이 자리에서)
+      const conflicts = await evaluate(s.cdp, 'window.__wu.view.empno_conflicts.length');
+      const fold = await evaluate(s.cdp, "(() => { const d = document.querySelector('[data-testid=empno-conflicts]'); if (!d) return null; const p = d.querySelector('[data-testid=empno-conflict]'); return { open: d.open, summary: d.querySelector('summary').textContent, inner: p ? p.textContent : '', innerVisible: p ? p.checkVisibility() : null }; })()");
+      check('W3 FU-13 사번 충돌은 접힌 한 줄 「확인할 것 n건」(펼치기 전에는 내용이 안 보임)', conflicts > 0 && !!fold && !fold.open && fold.summary === `확인할 것 ${conflicts}건` && fold.inner.includes('V-1002') && fold.innerVisible === false, JSON.stringify({ conflicts, fold }));
+      await evaluate(s.cdp, "document.querySelector('[data-testid=empno-conflicts] summary').click()");
+      await sleep(150);
+      const foldOpen = await evaluate(s.cdp, "(() => { const d = document.querySelector('[data-testid=empno-conflicts]'); const p = d.querySelector('[data-testid=empno-conflict]'); return { open: d.open, visible: p.checkVisibility(), text: p.textContent }; })()");
+      check('W3 FU-13 펼치면 예전 내용 그대로(V-1002 윤바다·윤바다라, 자동으로 합치지 않았다는 안내)', foldOpen.open && foldOpen.visible && foldOpen.text.includes('윤바다라') && foldOpen.text.includes('자동으로 합치지 않았으니'), JSON.stringify(foldOpen));
+      await shot(s.cdp, `${browser.name}-w3-1-team-summary`);
+      // FU-5 「인사이트 보기」 기본 탭 risk + 맨 위. 먼저 패널을 아래로 내려 둔다
+      await evaluate(s.cdp, "document.getElementById('detail').parentElement.scrollTop = 600");
+      await clickTestId(s.cdp, 'btn-insight-universe');
+      await sleep(300);
+      const top1 = await evaluate(s.cdp, "document.getElementById('detail').parentElement.scrollTop");
+      check('W3 FU-5 「인사이트 보기」(개요) → 기본 탭이 「인수인계 위험」이고 패널이 맨 위부터 보임', (await activeTab()) === 'tab-risk' && top1 === 0 && !!(await box('risk-concentration')), JSON.stringify({ tab: await activeTab(), top1 }));
+      // 탭 숫자와 요약 숫자가 같다
+      const conc = await text(s.cdp, '[data-testid=risk-concentration-counts]');
+      const tabSolo = num(/혼자 해 본 업무 (\d+)개/, conc);
+      await clickTestId(s.cdp, 'tab-density');
+      await sleep(200);
+      const heads = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=density-result] h3')].map((h) => h.textContent)");
+      const tabGaps = num(/^공백 (\d+)건/, heads.find((h) => /^공백 /.test(h)) || '');
+      const tabDense = num(/^밀집 (\d+)명/, heads.find((h) => /^밀집 /.test(h)) || '');
+      check('W3 FU-10 위험 요약 숫자 = 인사이트 탭 숫자(혼자 해 본 업무·밀집·공백)', sumSolo === tabSolo && sumDense === tabDense && sumGaps === tabGaps && tabSolo > 0, JSON.stringify({ sumSolo, tabSolo, sumDense, tabDense, sumGaps, tabGaps }));
+      // 「자세히」 → 인수인계 위험 탭
+      await clickTestId(s.cdp, 'insight-close');
+      await sleep(150);
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await sleep(150);
+      const hint = await text(s.cdp, '[data-testid=insight-hint]');
+      check('W3 FU-5 개요의 인사이트 안내 글이 「인수인계 위험 탭부터 열림」으로 맞춰짐', hint.includes('인수인계 위험 탭부터 열림') && !hint.includes('반복 비효율 탭부터'), hint);
+      await clickTestId(s.cdp, 'btn-team-risk-more');
+      await sleep(300);
+      check('W3 FU-10 「자세히」 → 인사이트 「인수인계 위험」 탭이 열림', (await activeTab()) === 'tab-risk' && !!(await box('risk-concentration-list')));
+      // FU-12 사람 상세: 이 사람만 아는 일
+      const owners = await evaluate(s.cdp, "(() => { const m = {}; for (const li of document.querySelectorAll('[data-testid=risk-concentration-list] li')) { const name = li.children[1].textContent.split('만 해 봤')[0]; m[name] = (m[name] || 0) + 1; } return m; })()");
+      await clickTestId(s.cdp, 'insight-close');
+      await sleep(150);
+      const ownerName = Object.keys(owners)[0];
+      const ownerGid = await evaluate(s.cdp, `(() => { const p = window.__wu.view.nodes.find((n) => n.core_type === 'person' && !n.hidden && n.label === ${JSON.stringify(ownerName)}); return p ? p.gid : null; })()`);
+      await evaluate(s.cdp, `window.__wu.select(${JSON.stringify(ownerGid)})`);
+      await sleep(200);
+      const soloLine = await box('person-solo-works');
+      const soloN = owners[ownerName];
+      check('W3 FU-12 사람 상세에 「이 사람만 아는 일 n개: 「…」」(n = 인수인계 위험 탭 목록의 그 사람 수)', !!soloLine && soloLine.text.startsWith(`이 사람만 아는 일 ${soloN}개: 「`), JSON.stringify({ ownerName, soloN, soloLine }));
+      const noneGid = await evaluate(s.cdp, `(() => { const names = ${JSON.stringify(Object.keys(owners))}; const p = window.__wu.view.nodes.find((n) => n.core_type === 'person' && !n.hidden && !names.includes(n.label)); return p ? p.gid : null; })()`);
+      if (noneGid) {
+        await evaluate(s.cdp, `window.__wu.select(${JSON.stringify(noneGid)})`);
+        await sleep(200);
+        check('W3 FU-12 혼자 아는 일이 없는 사람은 줄을 그리지 않음', !(await box('person-solo-works')));
+      }
+      // FU-6 노드 상세 「← 지도 전체 보기」
+      const workGid = await evaluate(s.cdp, "window.__wu.view.nodes.find((n) => n.core_type === 'work' && !n.hidden).gid");
+      await evaluate(s.cdp, `window.__wu.select(${JSON.stringify(workGid)})`);
+      await sleep(200);
+      const back = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=detail-back-universe]'); if (!b) return null; const r = b.getBoundingClientRect(); return { first: document.getElementById('detail').firstElementChild.contains(b), w: r.width, text: b.textContent, draftUniverse: !!document.querySelector('[data-testid=btn-draft-universe]') }; })()");
+      check('W3 FU-6 노드 상세 맨 위에 「← 지도 전체 보기」(크기 있음), 이 화면에는 지도 전체용 단추가 없음', !!back && back.first && back.w > 20 && back.text === '← 지도 전체 보기' && !back.draftUniverse, JSON.stringify(back));
+      await clickTestId(s.cdp, 'detail-back-universe');
+      await sleep(250);
+      const afterBack = await evaluate(s.cdp, "({ sel: window.__wu.selected, draft: !!document.querySelector('[data-testid=btn-draft-universe]'), insight: !!document.querySelector('[data-testid=btn-insight-universe]'), summary: !!document.querySelector('[data-testid=team-risk-summary]') })");
+      check('W3 FU-6 「← 지도 전체 보기」 → 선택이 풀리고 꼭지 상세(「인수인계 초안 만들기」「인사이트 보기」·위험 요약)로', afterBack.sel === null && afterBack.draft && afterBack.insight && afterBack.summary, JSON.stringify(afterBack));
+    } else {
+      check('W3 가상 운영부(U-D1) 열기', false, 'U-D1이 열리지 않음');
+    }
+
+    // ── 월말 정산(U-A1): 한 업무 지도 ──
+    if (await gotoU('U-A1')) {
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await sleep(200);
+      check('W3 FU-10 업무 하나짜리 지도(월말 정산)의 개요에는 위험 요약이 없음', !(await box('team-risk-summary')));
+      // 노드 「인사이트 보기」(더 보기 안)도 기본 탭 risk
+      await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+      await sleep(200);
+      await clickTestId(s.cdp, 'btn-insight');
+      await sleep(250);
+      check('W3 FU-5 노드 상세의 「인사이트 보기」도 기본 탭이 「인수인계 위험」', (await activeTab()) === 'tab-risk');
+      await clickTestId(s.cdp, 'insight-close');
+      await sleep(150);
+      // FU-15 이력의 속성 수정 글
+      await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+      await sleep(200);
+      await evaluate(s.cdp, "(() => { const t = document.querySelector('[data-testid=history-toggle]'); if (t && !/최근 것만/.test(t.textContent)) t.click(); })()");
+      await sleep(100);
+      const hist = await text(s.cdp, '[data-testid=history]');
+      check('W3 FU-15 이력의 「수정 — 속성」이 원문 JSON 없이 바뀐 값만(마감: 월 마감 후 5영업일 이내 → 월 마감 후 3영업일 이내)', hist.includes('수정 — 속성: 마감: 월 마감 후 5영업일 이내 → 월 마감 후 3영업일 이내') && !hist.includes('{'), hist.slice(-300));
+      // FU-6 + 따라 하기: 노드를 기다리는 단계에서 「← 지도 전체 보기」를 눌러도 따라 하기 상태가 깨지지 않는다
+      await clickTestId(s.cdp, 'tour-open');
+      await sleep(300);
+      await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+      await sleep(300);
+      const tiBefore = await evaluate(s.cdp, 'window.__wu.tour');
+      await clickTestId(s.cdp, 'detail-back-universe');
+      await sleep(300);
+      const tiAfter = await evaluate(s.cdp, 'window.__wu.tour');
+      check('W3 FU-6 따라 하기 중 「← 지도 전체 보기」: 선택만 풀리고 따라 하기 단계는 그대로(카드 유지)', tiBefore.mode === 'step' && tiAfter.mode === 'step' && tiAfter.scenario === 'handover' && tiAfter.index === tiBefore.index && (await evaluate(s.cdp, 'window.__wu.selected')) === null, JSON.stringify({ tiBefore, tiAfter }));
+      await evaluate(s.cdp, "document.querySelector('[data-testid=tour-skip]').click()");
+      await sleep(200);
+
+      // FU-7 받는 쪽: wu:add-node 이벤트 → 「노드 추가」가 펼쳐지고 유형이 「사람」으로 골라짐 (저장하지 않음)
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await sleep(150);
+      await evaluate(s.cdp, "document.dispatchEvent(new CustomEvent('wu:add-node', { detail: { type: 'person' } }))");
+      await sleep(200);
+      const addEv = await evaluate(s.cdp, "({ open: document.querySelector('details.add').open, type: document.querySelector('#add-slot [data-testid=node-type]').value, focus: document.activeElement && document.activeElement.dataset.testid, emp: !document.querySelector('#add-slot [data-testid=node-empno]').closest('label').hidden })");
+      check('W3 FU-7 wu:add-node {type:person} → 「노드 추가」가 열리고 유형 「사람」(사번 칸 보임), 이름 칸에 초점', addEv.open && addEv.type === 'person' && addEv.focus === 'node-label' && addEv.emp, JSON.stringify(addEv));
+      await evaluate(s.cdp, "document.dispatchEvent(new CustomEvent('wu:add-node', { detail: { type: 'zzz' } }))");
+      await sleep(100);
+      check('W3 FU-7 모르는 유형이나 detail이 없는 요청은 무시(유형이 그대로)', (await evaluate(s.cdp, "document.querySelector('#add-slot [data-testid=node-type]').value")) === 'person');
+      // 초안 창이 열린 채 사람을 추가: 초안 창이 유지되고 새 사람이 받는 사람 목록에 보인다. 끝에 바로 지워 되돌린다
+      const nodesBefore = await evaluate(s.cdp, 'window.__wu.doc.nodes.length');
+      const newPerson = '처음사용 시험 후임';
+      await clickTestId(s.cdp, 'btn-draft-universe');
+      await sleep(250);
+      await evaluate(s.cdp, "document.dispatchEvent(new CustomEvent('wu:add-node', { detail: { type: 'person' } }))");
+      await sleep(150);
+      const addR = await submitAdd(s.cdp, 'person', newPerson);
+      await sleep(250);
+      const draftAfter = await evaluate(s.cdp, `(() => ({ draft: !!document.querySelector('[data-testid=draft-form]'), inTo: [...document.querySelectorAll('[data-testid=draft-to] option')].some((o) => o.textContent.includes(${JSON.stringify(newPerson)})), top: document.getElementById('detail').parentElement.scrollTop }))()`);
+      check('W3 FU-7 초안 창에서 사람을 추가하면 초안 창이 그대로 열려 있고 새 사람이 받는 사람 목록에 있음', addR.code === 'OK' && draftAfter.draft && draftAfter.inTo && draftAfter.top === 0, JSON.stringify({ addR, draftAfter }));
+      const newGid = await evaluate(s.cdp, `(() => { const p = window.__wu.view.nodes.find((n) => n.label === ${JSON.stringify(newPerson)}); return p ? p.gid : null; })()`);
+      if (newGid) {
+        await evaluate(s.cdp, `window.__wu.select(${JSON.stringify(newGid)})`);
+        await sleep(200);
+        await evaluate(s.cdp, "(document.querySelector('[data-testid=btn-delete]') || { click() {} }).click()");
+        await sleep(300);
+      }
+      const nodesAfter = await evaluate(s.cdp, 'window.__wu.doc.nodes.length');
+      check('W3 FU-7 시험으로 추가한 사람을 바로 지워 노드 수가 처음과 같음(데이터 되돌림)', nodesAfter === nodesBefore, `${nodesBefore} → ${nodesAfter}`);
+
+      // FU-11 폴더 연결 탭 세 줄 / 유니버스 묶기 안내 / FU-23 「지도 이름」
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await evaluate(s.cdp, "document.getElementById('import-open').click()");
+      await sleep(250);
+      await evaluate(s.cdp, "(document.querySelector('[data-testid=import-tab-folder]') || { click() {} }).click()");
+      await sleep(250);
+      const howto = await evaluate(s.cdp, "(() => { const h = document.querySelector('[data-testid=folder-howto]'); if (!h) return { unsupported: !!document.querySelector('[data-testid=folder-unsupported]') }; return { items: [...h.children].map((li) => li.textContent), before: !!(h.compareDocumentPosition(document.querySelector('[data-testid=folder-intro]')) & Node.DOCUMENT_POSITION_FOLLOWING) }; })()");
+      check('W3 FU-11 「폴더 연결」 탭 위에 세 줄(팀원 각자 / 팀장 / 원본은 각자 브라우저·폴더는 사본)', howto.unsupported === true || (howto.items && howto.items.length === 3 && howto.items[0].startsWith('팀원 각자') && howto.items[0].includes('공유 폴더') && howto.items[1].startsWith('팀장') && howto.items[1].includes('팀 지도로 묶기') && howto.items[2].includes('각자 브라우저') && howto.items[2].includes('사본') && howto.before), JSON.stringify(howto));
+      await evaluate(s.cdp, "document.getElementById('import-dialog').close()");
+      await sleep(100);
+      await evaluate(s.cdp, "document.getElementById('group-open').click()");
+      await sleep(200);
+      const groupNote = await text(s.cdp, '[data-testid=group-note]');
+      check('W3 FU-11 「유니버스 묶기」 창 위에 안내(이미 이 브라우저에 있는 지도끼리, 동료 지도는 「폴더 연결」·「가져오기」로 먼저)', groupNote.includes('이미 이 브라우저에 있는 지도끼리 묶습니다') && groupNote.includes('「폴더 연결」이나 「가져오기」로 먼저 들여오세요'), groupNote);
+      await evaluate(s.cdp, "document.getElementById('group-cancel').click()");
+      await sleep(100);
+      await evaluate(s.cdp, "document.getElementById('create-open').click()");
+      await sleep(200);
+      const nameLabel = await evaluate(s.cdp, "document.getElementById('create-name').parentElement.firstChild.textContent.trim()");
+      check('W3 FU-23 새 유니버스 창의 칸 제목이 「지도 이름」(첫 업무의 「업무 이름」과 구분, 칸 id 그대로)', nameLabel === '지도 이름' && (await evaluate(s.cdp, "document.getElementById('create-start-work').parentElement.firstChild.textContent.trim()")) === '업무 이름', nameLabel);
+      await evaluate(s.cdp, "document.getElementById('create-cancel').click()");
+      await sleep(100);
+    } else {
+      check('W3 월말 정산(U-A1) 열기', false, 'U-A1이 열리지 않음');
+    }
+
+    // ── 대형가맹점 A 카드승인 전문 송수신(U-K1): 권장 항목이 비어 있는 업무가 있는 지도 ──
+    if (await gotoU('U-K1')) {
+      // FU-16 권장 항목 이름을 누르면 그 속성 칸이 생기고 초점 (저장하지 않고 취소)
+      const target = await evaluate(s.cdp, "(() => { for (const n of window.__wu.view.nodes) { if (n.core_type !== 'work' || n.hidden) continue; window.__wu.select(n.gid); const b = [...document.querySelectorAll('[data-testid=form-missing-item]')].find((x) => ['절차', '주기', '마감', '주의사항', '관련 문서'].includes(x.dataset.field)); if (b) return { gid: n.gid, field: b.dataset.field, text: document.querySelector('[data-testid=form-missing]').textContent }; } return null; })()");
+      check('W3 FU-16 표준 양식의 빈 항목 이름이 단추(글은 「표준 양식: 권장 항목 n개 비어 있음 — …」 그대로)', !!target && target.text.startsWith('표준 양식: 권장 항목') && target.text.includes('비어 있음 — '), JSON.stringify(target));
+      if (target) {
+        await evaluate(s.cdp, `window.__wu.select(${JSON.stringify(target.gid)})`);
+        await sleep(150);
+        await evaluate(s.cdp, `[...document.querySelectorAll('[data-testid=form-missing-item]')].find((x) => x.dataset.field === ${JSON.stringify(target.field)}).click()`);
+        await sleep(250);
+        const ed = await evaluate(s.cdp, "(() => { const a = document.activeElement; const row = a && a.closest ? a.closest('.attr-row') : null; return { form: !!document.querySelector('[data-testid=node-form-edit]'), onVal: !!a && a.classList.contains('attr-val'), key: row ? row.querySelector('.attr-key').value : null }; })()");
+        check('W3 FU-16 항목 이름을 누르면 수정 화면이 열려 그 속성 칸(이름 채워짐)에 초점', ed.form && ed.onVal && ed.key === target.field, JSON.stringify({ target, ed }));
+        await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=node-form-edit] button')].find((b) => b.textContent === '취소').click()");
+        await sleep(150);
+      }
+      const descTarget = await evaluate(s.cdp, "(() => { for (const n of window.__wu.view.nodes) { if (n.core_type !== 'work' || n.hidden) continue; window.__wu.select(n.gid); const b = [...document.querySelectorAll('[data-testid=form-missing-item]')].find((x) => x.dataset.field === '설명'); if (b) return n.gid; } return null; })()");
+      if (descTarget) {
+        await evaluate(s.cdp, `window.__wu.select(${JSON.stringify(descTarget)})`);
+        await sleep(150);
+        await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=form-missing-item]')].find((x) => x.dataset.field === '설명').click()");
+        await sleep(250);
+        check('W3 FU-16 「설명」 항목을 누르면 설명 칸에 초점', (await evaluate(s.cdp, "document.activeElement && document.activeElement.dataset.testid")) === 'node-description');
+        await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=node-form-edit] button')].find((b) => b.textContent === '취소').click()");
+        await sleep(150);
+      }
+
+    } else {
+      check('W3 대형가맹점 A 카드승인 전문 송수신(U-K1) 열기', false, 'U-K1이 열리지 않음');
+    }
+    await gotoU('U-A1'); // 뒤 단계(편집 되감기)는 월말 정산에서 시작한다
   }
 
   // ── CR-14 A 편집 되감기(R-25, D-30): 이름 수정 → 개요 「편집 되감기」 → 이전 시점 → 읽기 전용 확인 → 지금으로 → 다시 → 되돌리기. 데이터를 바꾸므로 끝부분 ──

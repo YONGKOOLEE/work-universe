@@ -26,7 +26,7 @@ test('시나리오는 handover·team 둘(handover·team 모두 5단계), 이야�
 });
 
 test('단계 문구에 「」 화면 이름이 있고, 실제 화면의 단추·칸 이름과 같은 글자다', () => {
-  const known = new Set(['대사 확인', '미해결', '다음', '인수인계 초안 만들기', '초안 만들기', '근거:', '노드 찾기', '주변만 보기', '전체 보기', '인사이트 보기', '유사 경험자', '수정', '저장', '편집 되감기']);
+  const known = new Set(['대사 확인', '미해결', '다음', '인수인계 초안 만들기', '초안 만들기', '근거:', '노드 찾기', '주변만 보기', '전체 보기', '인사이트 보기', '인수인계 위험', '수정', '저장', '편집 되감기']);
   for (const id of TOUR_IDS) {
     const names = scenarioOf(id).steps.flatMap((st) => quotedNames(st.task));
     assert.ok(names.length >= 4, id);
@@ -48,7 +48,7 @@ test('handover 완료 조건: 대사 확인 선택 → (읽기, 다음) → 초�
   assert.equal(draft.done({ ...s, draftOpen: true, draftShown: true }), true);
   assert.equal(evid.done({ ...s, draftShown: true }), false);
   assert.equal(evid.done({ ...s, evidenceUsed: true }), true);
-  assert.deepEqual(draft.preset, { from: '윤바다', to: '서하늘' });
+  assert.deepEqual(draft.preset, { target: '월말 정산 점검', from: '윤바다', to: '서하늘' });
   // 5단계(R9-1 나): 고쳐 저장하는 것만으로는 완료가 아니고, 되감기 모드가 켜져야 완료. 읽기 전용이면 고칠 수 없으므로 건너뛴다
   assert.equal(rew.id, 'edit-rewind');
   assert.equal(rew.done(s), false);
@@ -62,9 +62,11 @@ test('handover 3단계(R9-4): 동작은 「인수인계 초안 만들기」 → 
   const draft = scenarioOf('handover').steps[2];
   assert.deepEqual(quotedNames(draft.task), ['인수인계 초안 만들기', '초안 만들기']);
   assert.doesNotMatch(draft.task, /윤바다|서하늘/); // 사람 이름은 본문에서 뺐다
-  assert.equal(draft.sub(emptyState()), '보내는·받는 사람은 이미 골라져 있어요');
-  assert.equal(draft.sub({ ...emptyState(), draftOpen: true }), '보내는·받는 사람은 이미 골라져 있어요');
-  assert.deepEqual(draft.preset, { from: '윤바다', to: '서하늘' }); // 미리 골라 두는 값은 그대로
+  const SUB = '대상(월말 정산 점검 전체)과 보내는·받는 사람은 이미 골라져 있어요';
+  assert.equal(draft.sub(emptyState()), SUB);
+  assert.equal(draft.sub({ ...emptyState(), draftOpen: true }), SUB);
+  // FU-2: 대상(지도 전체=꼭지)도 미리 골라 둔다 — 사전 생성 문장이 있는 조합(U-A1/N-000, 윤바다 → 서하늘)
+  assert.deepEqual(draft.preset, { target: '월말 정산 점검', from: '윤바다', to: '서하늘' });
 });
 
 test('handover 5단계(R9-1 나) 문구·보조 문구·짚기: 대사 확인 → 수정 → 저장 → 빈 곳 → 편집 되감기', () => {
@@ -86,8 +88,9 @@ test('handover 5단계(R9-1 나) 문구·보조 문구·짚기: 대사 확인 �
   assert.equal(rew.target(saved)[1].hint, BLANK_HINT);
 });
 
-test('team 완료 조건: 펼침 → 찾기로 선택 → 주변만 보기 → 전체 보기로 돌아옴 → 인사이트 열기', () => {
-  const [exp, find, nb, full, ins] = scenarioOf('team').steps;
+test('team 완료 조건(FU-14 순서): 펼침 → 인사이트 열기 → 찾기로 선택 → 주변만 보기 → 전체 보기로 돌아옴', () => {
+  const [exp, ins, find, nb, full] = scenarioOf('team').steps;
+  assert.deepEqual(scenarioOf('team').steps.map((x) => x.id), ['expand', 'insight', 'find', 'neighborhood', 'full']);
   const s = emptyState('U-D1');
   assert.equal(exp.done(s), false);
   assert.equal(exp.done({ ...s, expandedCount: 1 }), true);
@@ -99,26 +102,30 @@ test('team 완료 조건: 펼침 → 찾기로 선택 → 주변만 보기 → �
   assert.equal(full.done({ ...s, nbhd: true }), false); // 주변만 보기 중이면 아직
   assert.equal(full.done(s), true); // 주변만 보기를 풀면 완료
   assert.equal(ins.done(s), false);
-  assert.equal(ins.done({ ...s, insightOpen: true, insightKind: 'repeat' }), true); // 열리면 첫 탭(반복 비효율)에 내용이 보인다
+  assert.equal(ins.done({ ...s, insightOpen: true, insightKind: 'risk' }), true); // 열리면 첫 탭(인수인계 위험)에 내용이 보인다
   assert.equal(ins.done({ ...s, insightOpen: true, insightKind: 'similar' }), true);
-  assert.match(ins.task, /반복 비효율/);
-  assert.match(ins.task, /유사 경험자/);
-  assert.equal(quotedNames(ins.task).includes('유사 경험자'), false); // 탭은 열기 전에는 없으므로 「」로 짚지 않는다
+  assert.match(ins.task, /맨 먼저 「인수인계 위험」이 열려/);
+  assert.match(ins.task, /한 사람만 해 봤고/);
+  assert.deepEqual(quotedNames(ins.task), ['인사이트 보기', '인수인계 위험']);
+  assert.equal(ins.target({ ...s, insightOpen: true })[0].sel, '[data-testid=tab-risk]');
 });
 
-test('team advance: 주변만 보기를 누른 직후에는 「전체 보기」 단계에서 멈추고, 풀면 인사이트 단계', () => {
+test('team advance: 펼친 뒤 인사이트 단계에서 멈추고, 주변만 보기를 누른 직후에는 「전체 보기」 단계에서 멈추며, 풀면 끝', () => {
   const sc = scenarioOf('team');
   const base = { ...emptyState('U-D1'), expandedCount: 1, foundGid: 'U-A1/N-001' };
-  assert.equal(advance(sc, 0, { ...base, nbhd: true }), 3);
-  assert.equal(advance(sc, 0, { ...base, nbhd: false }), 2); // 아직 주변만 보기를 누르지 않았다
-  assert.equal(advance(sc, 3, { ...base, nbhd: false }), 4);
-  assert.equal(advance(sc, 4, { ...base, insightOpen: true }), 5); // 5단계가 끝
+  assert.equal(advance(sc, 0, { ...base, nbhd: true }), 1); // 인사이트를 아직 열지 않았다
+  assert.equal(advance(sc, 1, { ...emptyState('U-D1'), expandedCount: 1 }), 1);
+  assert.equal(advance(sc, 1, { ...emptyState('U-D1'), insightOpen: true }), 2); // 찾기 단계
+  const opened = { ...base, insightOpen: true };
+  assert.equal(advance(sc, 0, { ...opened, nbhd: true }), 4);
+  assert.equal(advance(sc, 0, { ...opened, nbhd: false }), 3); // 아직 주변만 보기를 누르지 않았다
+  assert.equal(advance(sc, 4, { ...opened, nbhd: false }), 5); // 5단계가 끝
 });
 
-test('「빈 곳을 누르세요」 단계(handover 3·team 5): 선택이 있으면 그래프 안쪽 표지(hint)를 짚고, 선택이 없으면 단추를 짚는다', () => {
+test('「빈 곳을 누르세요」 단계(handover 3·team 2): 선택이 있으면 그래프 안쪽 표지(hint)를 짚고, 선택이 없으면 단추를 짚는다', () => {
   const sel = { ...emptyState(), selected: 'U-A1/N-001' };
   const draft = scenarioOf('handover').steps[2];
-  const insight = scenarioOf('team').steps[4];
+  const insight = scenarioOf('team').steps[1];
   assert.equal(BLANK_HINT, '여기 빈 곳을 누르세요');
   for (const st of [draft, insight]) {
     const [t0] = st.target(sel);

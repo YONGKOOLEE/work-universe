@@ -55,8 +55,9 @@ const HANDOVER = {
       id: 'make-draft',
       // 9차 검토 R9-4: 보내는·받는 사람은 미리 골라 두므로(preset) 동작은 둘 — 「인수인계 초안 만들기」 → 「초안 만들기」
       task: '빈 곳을 누르고 「인수인계 초안 만들기」를 누른 뒤, 「초안 만들기」를 누르세요.',
-      sub: () => '보내는·받는 사람은 이미 골라져 있어요',
-      preset: { from: '윤바다', to: '서하늘' },
+      // 처음 사용 점검 FU-2: 대상도 미리 골라 둔다. 「대사 확인」을 고른 채 눌러도 대상은 지도 전체(꼭지)로 바뀌어 미리 써 둔 문장(사전 생성)이 있는 조합이 된다
+      sub: () => '대상(월말 정산 점검 전체)과 보내는·받는 사람은 이미 골라져 있어요',
+      preset: { target: '월말 정산 점검', from: '윤바다', to: '서하늘' },
       target: (s) => (s.draftOpen ? [{ sel: '[data-testid=draft-form] button[type=submit]' }]
         : s.selected ? [{ sel: '#graph', hint: BLANK_HINT }]
           : [{ sel: '[data-testid=btn-draft-universe]' }]),
@@ -101,6 +102,15 @@ const TEAM = {
       done: (s) => s.expandedCount > 0,
     },
     {
+      // 처음 사용 점검 FU-14: 팀장의 질문(한 사람만 아는 일)에 빨리 닿게 둘째로 둔다. 인사이트는 맨 먼저 「인수인계 위험」 탭이 열린다
+      id: 'insight',
+      task: '빈 곳을 누르고 「인사이트 보기」를 누르세요. 맨 먼저 「인수인계 위험」이 열려, 한 사람만 해 봤고 인수인계 기록이 없는 일을 근거와 함께 보여 줍니다.',
+      target: (s) => (s.insightOpen ? [{ sel: '[data-testid=tab-risk]' }]
+        : s.selected ? [{ sel: '#graph', hint: BLANK_HINT }]
+          : [{ sel: '[data-testid=btn-insight-universe]' }]),
+      done: (s) => s.insightOpen,
+    },
+    {
       id: 'find',
       task: '위의 「노드 찾기」에 "대사"를 넣고 결과 하나를 고르세요.',
       target: () => [{ sel: '[data-testid=find-input]' }],
@@ -117,14 +127,6 @@ const TEAM = {
       task: '그래프 위의 「전체 보기」를 눌러 전체 지도로 돌아오세요.',
       target: () => [{ sel: '#fit' }],
       done: (s) => !s.nbhd,
-    },
-    {
-      id: 'insight',
-      task: '빈 곳을 누르고 「인사이트 보기」를 누르세요. 같은 설명이 되풀이되는 곳(반복 비효율)과 비슷한 일을 해 본 사람(유사 경험자)을 근거와 함께 보여 줍니다.',
-      target: (s) => (s.insightOpen ? [{ sel: '[data-testid=tab-repeat]' }]
-        : s.selected ? [{ sel: '#graph', hint: BLANK_HINT }]
-          : [{ sel: '[data-testid=btn-insight-universe]' }]),
-      done: (s) => s.insightOpen,
     },
   ],
 };

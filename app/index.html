@@ -26,6 +26,7 @@
   #backup-nudge[hidden] { display: none; }
   #folder-note { margin: 0; padding: 6px 16px; background: var(--panel-2); color: var(--text); border-bottom: 1px solid var(--accent); font-size: 14px; }
   #folder-note[hidden] { display: none; }
+  .folder-howto { margin: 0 0 10px; padding-left: 20px; font-size: 13px; color: var(--muted); }
   .folder-files { list-style: none; padding: 0; margin: 6px 0; }
   .folder-file { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid var(--panel-2); }
   #embed-banner { margin: 0; padding: 8px 16px; background: var(--panel-2); color: var(--text); border-bottom: 1px solid var(--accent); font-size: 14px; }
@@ -102,6 +103,12 @@
   .hint { color: var(--muted); font-size: 13px; margin-top: 16px; padding: 10px; background: var(--panel-2); border-radius: 8px; }
   .hint > p:first-child { margin-top: 0; } .hint > p:last-child { margin-bottom: 0; } /* 화면 점검 S-6 */
   .notice { background: var(--warn-bg); color: var(--warn-text); padding: 8px 10px; border-radius: 8px; font-size: 13px; margin: 0 0 10px; }
+  /* 처음 사용 점검 W3: 묶은 지도 위험 요약(FU-10), 접힌 사번 충돌(FU-13), 노드 상세의 「← 지도 전체 보기」(FU-6), 사람 상세의 「이 사람만 아는 일」(FU-12) */
+  .risk-summary { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; font-size: 13px; margin: 0 0 10px; }
+  details.conflict-fold { margin: 0 0 10px; }
+  details.conflict-fold > summary { cursor: pointer; margin: 0 0 6px; }
+  details.conflict-fold > p { margin: 0 0 6px; }
+  .detail-back { margin: 0 0 8px; }
   button.link { background: none; border: 0; padding: 0; color: var(--link); text-decoration: underline; cursor: pointer; font: inherit; border-radius: 0; }
   details.add { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 12px; }
   details.add summary { cursor: pointer; font-size: 14px; font-weight: bold; }
@@ -408,7 +415,7 @@
     <h2 id="create-title">새 유니버스 만들기</h2>
     <p id="create-intro" class="muted small">업무 하나부터 시작하세요. 첫 업무를 적으면 업무·담당자·산출물이 이어진 작은 지도가 바로 생깁니다. 비워 두면 빈 유니버스를 만듭니다.</p>
     <div id="create-meta">
-    <label>이름 <input id="create-name" maxlength="100" autocomplete="off" placeholder="예: 가상 교육팀 업무 지도"></label>
+    <label>지도 이름 <input id="create-name" maxlength="100" autocomplete="off" placeholder="예: 가상 교육팀 업무 지도"></label>
     <label>단위 <input id="create-level" list="create-levels" value="업무" autocomplete="off"></label>
     <datalist id="create-levels"><option value="업무"><option value="팀"><option value="부서"><option value="본부"><option value="회사"></datalist>
     <label>작성 주체 <input id="create-owner" autocomplete="off" placeholder="예: 가상 교육팀"></label>
@@ -429,6 +436,7 @@
 <dialog id="group-dialog" aria-labelledby="group-title">
   <form id="group-form" novalidate>
     <h2 id="group-title">유니버스 묶기</h2>
+    <p class="muted small" data-testid="group-note">이미 이 브라우저에 있는 지도끼리 묶습니다. 동료가 만든 지도는 「폴더 연결」이나 「가져오기」로 먼저 들여오세요.</p>
     <p class="muted small">고른 유니버스를 하위 유니버스로 묶어 상위 유니버스를 만듭니다. 원래 유니버스는 바뀌지 않습니다.</p>
     <label>이름 <input id="group-name" maxlength="100" autocomplete="off" placeholder="예: 가상 신규팀"></label>
     <label>단위 <input id="group-level" list="group-levels" value="팀" autocomplete="off"></label>
