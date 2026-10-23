@@ -1319,10 +1319,19 @@ function start() {
     else settings.panelWidth = w;
     saveSettings(storage, settings); // 저장소가 없거나 실패하면 조용히 건너뛴다(이번 화면에서만 유지)
   };
+  // 패널 폭이 바뀌면 그래프 영역이 좁아지거나 넓어진다. cy.resize()는 캔버스 크기만 다시 재고 그린 내용은 제자리에 두므로
+  // 오른쪽이 패널에 가려진다(사용자 지적 2026-10-23). 폭이 바뀐 만큼 절반을 밀어 보던 가운데를 그대로 유지한다
+  let lastGraphW = null;
+  const resizeGraphKeepCenter = () => {
+    const w = graph.cy.container().clientWidth;
+    graph.cy.resize();
+    if (lastGraphW !== null && w !== lastGraphW) graph.cy.panBy({ x: (w - lastGraphW) / 2, y: 0 });
+    lastGraphW = w;
+  };
   let resizeRaf = 0;
   const resizeGraphSoon = () => {
     if (resizeRaf) return;
-    resizeRaf = requestAnimationFrame(() => { resizeRaf = 0; graph.cy.resize(); });
+    resizeRaf = requestAnimationFrame(() => { resizeRaf = 0; resizeGraphKeepCenter(); });
   };
   // 현재 화면 폭을 기준으로 새 폭을 정해 적용(저장은 호출한 쪽이 한다)
   const setPanelWidth = (w) => {
@@ -1337,6 +1346,7 @@ function start() {
     applyPanelWidth();
     graph.cy.resize();
     graph.fit();
+    lastGraphW = graph.cy.container().clientWidth;
   });
   resizer.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || narrowMq.matches) return;
@@ -1355,7 +1365,7 @@ function start() {
     resizer.classList.remove('dragging');
     document.body.classList.remove('resizing');
     savePanelWidth(settings.panelWidth);
-    graph.cy.resize();
+    resizeGraphKeepCenter();
   };
   resizer.addEventListener('pointerup', endDrag);
   resizer.addEventListener('pointercancel', endDrag);
@@ -1363,7 +1373,7 @@ function start() {
     if (panelMain.classList.contains('wide')) setWide(false);
     savePanelWidth(null);
     applyPanelWidth();
-    graph.cy.resize();
+    resizeGraphKeepCenter();
   });
   resizer.addEventListener('keydown', (e) => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
@@ -1371,7 +1381,7 @@ function start() {
     const base = settings.panelWidth && !panelMain.classList.contains('wide') ? clampPanelWidth(settings.panelWidth, window.innerWidth) : currentPanelWidth();
     setPanelWidth(base + (e.key === 'ArrowLeft' ? PANEL.KEY_STEP : -PANEL.KEY_STEP)); // 패널이 오른쪽에 있으므로 ←는 넓히기
     savePanelWidth(settings.panelWidth);
-    graph.cy.resize();
+    resizeGraphKeepCenter();
   });
   window.addEventListener('resize', applyPanelWidth);
   narrowMq.addEventListener('change', () => { applyPanelWidth(); graph.cy.resize(); });
