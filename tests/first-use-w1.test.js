@@ -62,7 +62,7 @@ test('FU-8: 「채우려면」 표는 초안 10개 항목의 key를 빠짐없이
 test('FU-8: 문구가 규칙이 실제로 세는 것과 맞다 — 관계자는 「수행」만, 산출물은 「산출」, 진행 중·이슈·주의사항은 메모 분류', () => {
   assert.match(FILL_HINTS.관계자_연락처, /「수행」\(사람 → 업무\)/);
   assert.match(FILL_HINTS.관계자_연락처, /세지 않습니다/);
-  assert.match(FILL_HINTS.산출물_문서, /「산출」\(업무 → 산출물\)/);
+  assert.match(FILL_HINTS.산출물_문서, /「산출」\(만든 문서\) 또는 「참조」\(참고한 문서\)\(업무 → 산출물\)/); // CR-17 J ⑩: 참조도 읽는다
   assert.match(FILL_HINTS.산출물_문서, /「위치」/);
   assert.match(FILL_HINTS.진행_중, /분류 「진행 중」/);
   assert.match(FILL_HINTS.최근_이슈, /분류 「이슈」/);
@@ -72,6 +72,7 @@ test('FU-8: 문구가 규칙이 실제로 세는 것과 맞다 — 관계자는 
   // 쓰인 연결 이름이 실제 연결 허용 조합과 맞는다: 사람 → 업무 수행, 업무 → 산출물 산출, 업무 → 주제 관련
   assert.equal(pairAllowed('performs', 'person', 'work'), true);
   assert.equal(pairAllowed('produces', 'work', 'artifact'), true);
+  assert.equal(pairAllowed('references', 'work', 'artifact'), true);
   assert.equal(pairAllowed('relates_to', 'work', 'topic'), true);
 });
 

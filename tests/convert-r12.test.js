@@ -10,8 +10,10 @@ import { noteText } from '../app/src/ui/import.js';
 
 const ctx = { now: '2026-10-24T10:00:00+09:00', random: () => 0.5 };
 const ALL_ON = Object.fromEntries(Object.keys(CONVERT_RULES.cr17j).map((k) => [k, true]));
+const ALL_OFF = Object.fromEntries(Object.keys(CONVERT_RULES.cr17j).map((k) => [k, false]));
+// on: true = 스위치 전부 켬, false = 전부 끔(승인된 12.9 v1), 없음 = 기본값(CR-17 J 승인안: 6개 켬)
 const conv = (text, on) => {
-  const r = convertDocument(text, on ? { ...ctx, cr17j: ALL_ON } : ctx);
+  const r = convertDocument(text, on === undefined ? ctx : { ...ctx, cr17j: on ? ALL_ON : ALL_OFF });
   assert.equal(r.ok, true, JSON.stringify(r.error));
   return r;
 };
@@ -49,10 +51,14 @@ test('R12-1: 이해관계자 절 아래의 「담당」 하위 절과 「담당�
 });
 
 test('R12-1: W8에서 제목 낱말로 새로 잡힌 「담당」 절만 키·값을 뒤집어 값을 사람으로 읽는다', () => {
-  const { doc } = conv(`${HEAD}## 담당\n- 담당: 류다온\n- 검토: 가상재무팀장\n`);
-  assert.deepEqual(labelsOf(doc, 'person'), ['류다온', '가상재무팀장']);
-  assert.equal(descOf(doc, '류다온'), '담당');
-  assert.deepEqual(edgesOf(doc, 'performs'), [], '기본값은 연결 없음(D-P3)');
+  const text = `${HEAD}## 담당\n- 담당: 류다온\n- 검토: 가상재무팀장\n`;
+  for (const on of [false, undefined]) {
+    const { doc } = conv(text, on);
+    assert.deepEqual(labelsOf(doc, 'person'), ['류다온', '가상재무팀장'], `on=${on}`);
+    assert.equal(descOf(doc, '류다온'), '담당', `on=${on}`);
+  }
+  assert.deepEqual(edgesOf(conv(text, false).doc, 'performs'), [], '스위치 꺼짐은 연결 없음(D-P3)');
+  assert.deepEqual(edgesOf(conv(text).doc, 'performs'), ['류다온>가상 접수'], '기본값(CR-17 J ①): 업무 하나짜리 문서의 「담당」 사람은 업무를 맡음');
 });
 
 test('R12-2: 키가 그냥 「작성」이면 작성 주체로 읽지 않는다(W8 전과 같게 입력받음). 날짜만 작성일 후보(F4)', () => {
@@ -139,8 +145,8 @@ test('R12-4: 담당 줄은 값 단위로 거른다 — 문장 값 하나가 있�
   assert.equal(sec.made, 5, '만든 사람 수가 절 보고에 맞다');
 });
 
-test('R12-7: previewRenameWork 스위치가 CONVERT_RULES.cr17j에 있고 기본은 꺼짐(미리 보기에서 지도 이름을 고쳐도 업무 이름은 그대로)', () => {
-  assert.equal(CONVERT_RULES.cr17j.previewRenameWork, false);
+test('R12-7: previewRenameWork 스위치가 CONVERT_RULES.cr17j에 있고 기본은 켬(CR-17 J ⑨: 미리 보기에서 지도 이름을 고치면 업무 하나짜리 문서의 업무 이름도 따라 바뀜)', () => {
+  assert.equal(CONVERT_RULES.cr17j.previewRenameWork, true);
 });
 
 // 3차 재검증 R13-3·R13-4·R13-2(2026-10-24): 복성이 아닌 5자 명사구는 이름이 아니다, 상자 이름(…함)은 문장이 아니다, 작성 주체 안내는 "읽지 못함"

@@ -219,14 +219,22 @@ export function buildHandoverDraft(view, input) {
   //    판정은 미해결 이슈 목록(R-20)과 같은 함수를 쓴다(rules/issues.js)
   items.진행_중 = openMemos(view, { memos, categories: ['in_progress'] }).map(memoSentence);
 
-  // 6) 산출물·문서 위치: 범위 업무의 산출 연결. 근거는 산출물 노드. 위치 속성이 있으면 붙인다
-  items.산출물_문서 = ordered.flatMap((w) =>
-    edgesFrom(w.gid, 'produces').map((e) => {
+  // 6) 산출물·문서 위치: 범위 업무의 산출 연결(만듦) + 산출물로 「참조」한 연결(참조, CR-17 J ⑩: 업무정의서 변환이 「관련 문서」를 참조로 잇는다). 근거는 산출물 노드. 위치 속성이 있으면 붙인다
+  // 같은 업무가 같은 산출물을 만들고 참조하면 만듦 한 줄만. 참조는 산출물 유형 노드만(업무 → 주제 같은 참조는 이 항목이 아니다)
+  const artifactLine = (w, e, verb) => {
+    const art = view.getNode(e.target);
+    const where = art && attr(art, '위치') ? `, 위치: ${attr(art, '위치')}` : '';
+    return sentence(`${name(view, e.target)}${where} — ${w.label}에서 ${verb}`, [e.target]);
+  };
+  items.산출물_문서 = ordered.flatMap((w) => {
+    const made = edgesFrom(w.gid, 'produces');
+    const madeIds = new Set(made.map((e) => e.target));
+    const referred = edgesFrom(w.gid, 'references').filter((e) => {
       const art = view.getNode(e.target);
-      const where = art && attr(art, '위치') ? `, 위치: ${attr(art, '위치')}` : '';
-      return sentence(`${name(view, e.target)}${where} — ${w.label}에서 만듦`, [e.target]);
-    }),
-  );
+      return !madeIds.has(e.target) && !!art && !art.hidden && art.core_type === 'artifact';
+    });
+    return [...made.map((e) => artifactLine(w, e, '만듦')), ...referred.map((e) => artifactLine(w, e, '참조'))];
+  });
 
   // 7) 관계자·연락처: 범위 안 업무를 수행한 사람. 보내는 사람과 받는 사람은 뺀다(받는 사람에게 자신을 알려 줄 필요가 없음)
   const people = new Map();

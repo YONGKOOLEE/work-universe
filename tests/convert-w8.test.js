@@ -3,9 +3,11 @@
 // 원문(가상)은 tests/fixtures/w8/tax-prepay.md. 읽혀야 하는 것과 읽히면 안 되는 것(지어내기)을 함께 본다.
 //
 // 두 판으로 나뉜다. CONVERT_RULES.cr17j(CR-17 J 스위치 9개)가
-//   - 꺼짐(기본값) = 승인된 02-design 12.9.1 v1·12.9.2 D-P3·D-P6 그대로. 담당 절은 「역할」 사람만(연결 없음), 관련 문서는 산출물(꼭지가 담음, 괄호는 설명),
+//   - 전부 꺼짐(OFF) = 승인된 02-design 12.9.1 v1·12.9.2 D-P3·D-P6 그대로. 담당 절은 「역할」 사람만(연결 없음), 관련 문서는 산출물(꼭지가 담음, 괄호는 설명),
 //     작성 줄은 값 그대로, 개요의 문장에서 설명·주기·마감을 고르지 않는다.
-//   - 켬(CR-17 J ①을 승인받으면 켤 값) = W8 때 동작.
+//   - 전부 켬(ON) = W8 때 동작.
+//   - 기본값(CR-17 J 승인안, 이 준비 커밋) = 6개 켬(assignPerforms·namedPersonPlain·relatedDocLink·pathToLocation·authorDate·previewRenameWork),
+//     authorPickOrg·summaryToWork·periodDeadline은 꺼짐(J 추천: ⑤는 고친 뒤, ⑦⑧은 1차 후).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -25,6 +27,9 @@ const conv = (text, cr17j) => {
   return r;
 };
 const convOn = (text) => conv(text, ALL_ON);
+const OFF = Object.fromEntries(SWITCHES.map((k) => [k, false]));
+const convOff = (text) => conv(text, OFF);
+const J_DEFAULT = { assignPerforms: true, namedPersonPlain: true, relatedDocLink: true, pathToLocation: true, authorPickOrg: false, authorDate: true, summaryToWork: false, periodDeadline: false, previewRenameWork: true };
 const TAX = readFileSync(new URL('./fixtures/w8/tax-prepay.md', import.meta.url), 'utf8');
 const CARD = readFileSync(new URL('./fixtures/w9/card-recon.txt', import.meta.url), 'utf8');
 const byLabel = (doc, label) => doc.nodes.find((n) => n.label === label);
@@ -35,25 +40,26 @@ const HEAD = '# 가상 업무\n- 작성 주체: 가상팀\n## 업무 범위\n- �
 
 // ── 스위치 ───────────────────────────────────────────────────────────
 
-test('W9 스위치: CR-17 J 스위치 9개가 CONVERT_RULES.cr17j 한 곳에 있고 기본값은 전부 꺼짐(= 승인된 12.9 동작)', () => {
+test('W9 스위치: CR-17 J 스위치 9개가 CONVERT_RULES.cr17j 한 곳에 있고 기본값은 J 승인안(6개 켬, authorPickOrg·summaryToWork·periodDeadline 꺼짐)', () => {
   assert.deepEqual(Object.keys(CONVERT_RULES.cr17j).sort(), [...SWITCHES].sort());
-  for (const [k, v] of Object.entries(CONVERT_RULES.cr17j)) assert.equal(v, false, k);
+  assert.deepEqual({ ...CONVERT_RULES.cr17j }, J_DEFAULT);
   // 한 번의 호출만 덮어쓸 수 있고, 덮어쓴 값이 설정 객체를 바꾸지 않는다
   assert.equal(labelsOf(convOn(TAX).doc, 'person').length, 2);
-  assert.ok(Object.values(CONVERT_RULES.cr17j).every((v) => v === false));
-  // 설정 객체를 직접 바꾸면 ctx 없이도 따라간다(켠 뒤 반드시 되돌린다)
+  assert.equal(labelsOf(convOff(TAX).doc, 'person').length, 2);
+  assert.deepEqual({ ...CONVERT_RULES.cr17j }, J_DEFAULT);
+  // 설정 객체를 직접 바꾸면 ctx 없이도 따라간다(바꾼 뒤 반드시 되돌린다)
   const before = { ...CONVERT_RULES.cr17j };
   try {
-    CONVERT_RULES.cr17j.assignPerforms = true;
-    assert.deepEqual(edgesOf(conv(TAX).doc, 'performs'), ['류다온>법인세 중간예납 준비']);
+    CONVERT_RULES.cr17j.assignPerforms = false;
+    assert.deepEqual(edgesOf(conv(TAX).doc, 'performs'), []);
   } finally {
     Object.assign(CONVERT_RULES.cr17j, before);
   }
-  assert.deepEqual(edgesOf(conv(TAX).doc, 'performs'), []);
+  assert.deepEqual(edgesOf(conv(TAX).doc, 'performs'), ['류다온>법인세 중간예납 준비']);
 });
 
 test('W9 스위치 하나씩: 각 스위치는 자기 동작만 바꾼다(법인세 중간예납 사례)', () => {
-  const only = (k) => conv(TAX, { [k]: true }).doc;
+  const only = (k) => conv(TAX, { ...OFF, [k]: true }).doc;
   const work = (d) => d.nodes.find((n) => n.core_type === 'work');
   // assignPerforms: 담당 연결만
   assert.deepEqual(edgesOf(only('assignPerforms'), 'performs'), ['류다온>법인세 중간예납 준비']);
@@ -69,12 +75,12 @@ test('W9 스위치 하나씩: 각 스위치는 자기 동작만 바꾼다(법인
   assert.equal(byLabel(only('pathToLocation'), '중간예납 계산표').attrs.위치, '공유 드라이브 > 재무 > 세무');
   assert.deepEqual(edgesOf(only('pathToLocation'), 'references'), []);
   // 작성 줄
-  assert.equal(conv(TAX, { authorPickOrg: true }).doc.universe.owner, '가상재무팀');
+  assert.equal(conv(TAX, { ...OFF, authorPickOrg: true }).doc.universe.owner, '가상재무팀');
   const byline = '# 가상 업무\n- 작성자: 가상재무팀 류다온 / 2026-09-01\n## 업무 범위\n- 가상 접수\n';
-  assert.equal(conv(byline, { authorPickOrg: true }).doc.universe.owner, '가상재무팀');
-  assert.ok(codes(conv(byline, { authorPickOrg: true })).includes('C-DATE-ASSUMED'), '날짜는 따로 읽지 않으면 작성일 없음 알림');
-  assert.equal(conv(byline, { authorDate: true }).doc.universe.owner, '가상재무팀 류다온 / 2026-09-01', '날짜만 읽으면 작성 주체는 값 그대로');
-  assert.ok(!codes(conv(byline, { authorDate: true })).includes('C-DATE-ASSUMED'));
+  assert.equal(conv(byline, { ...OFF, authorPickOrg: true }).doc.universe.owner, '가상재무팀');
+  assert.ok(codes(conv(byline, { ...OFF, authorPickOrg: true })).includes('C-DATE-ASSUMED'), '날짜는 따로 읽지 않으면 작성일 없음 알림');
+  assert.equal(conv(byline, { ...OFF, authorDate: true }).doc.universe.owner, '가상재무팀 류다온 / 2026-09-01', '날짜만 읽으면 작성 주체는 값 그대로');
+  assert.ok(!codes(conv(byline, { ...OFF, authorDate: true })).includes('C-DATE-ASSUMED'));
   // 개요
   assert.equal(work(only('summaryToWork')).description, '매년 8월 법인세 중간예납 세액을 계산하고 신고서를 준비한다.');
   assert.equal(work(only('summaryToWork')).attrs.주기, undefined);
@@ -85,8 +91,8 @@ test('W9 스위치 하나씩: 각 스위치는 자기 동작만 바꾼다(법인
 
 // ── 기본값(꺼짐) = 승인된 12.9 범위 ──────────────────────────────────
 
-test('W9 기본값 고정 사례: 법인세 중간예납 정의서 → 꼭지 1·업무 1·사람 2(역할)·산출물 1, 담당 연결 없음, 작성 주체는 원문 값 그대로', () => {
-  const { doc, report } = conv(TAX);
+test('W9 스위치 꺼짐 고정 사례: 법인세 중간예납 정의서 → 꼭지 1·업무 1·사람 2(역할)·산출물 1, 담당 연결 없음, 작성 주체는 원문 값 그대로', () => {
+  const { doc, report } = convOff(TAX);
   assert.equal(doc.nodes.filter((n) => n.core_type === 'root').length, 1);
   assert.equal(doc.nodes.filter((n) => n.core_type === 'work').length, 1);
   assert.deepEqual(labelsOf(doc, 'person'), ['류다온', '가상재무팀장'], '라벨은 원문 이름 그대로');
@@ -105,8 +111,8 @@ test('W9 기본값 고정 사례: 법인세 중간예납 정의서 → 꼭지 1�
   assert.equal(validateDocument(doc).ok, true);
 });
 
-test('W9 기본값 담당: 사람은 역할(라벨 원문), 업무와 이어지지 않고 꼭지가 담는다(D-P3: 담당 연결은 만들지 않음)', () => {
-  const { doc, report } = conv(TAX);
+test('W9 스위치 꺼짐 담당: 사람은 역할(라벨 원문), 업무와 이어지지 않고 꼭지가 담는다(D-P3: 담당 연결은 만들지 않음)', () => {
+  const { doc, report } = convOff(TAX);
   const ryu = byLabel(doc, '류다온');
   const head = byLabel(doc, '가상재무팀장');
   assert.equal(ryu.subtype, '역할');
@@ -118,8 +124,8 @@ test('W9 기본값 담당: 사람은 역할(라벨 원문), 업무와 이어지�
   assert.ok(!codes({ report }).includes('C-ASSIGN-SKIPPED'), '스위치가 꺼진 기본값에서는 나오지 않는다');
 });
 
-test('W9 기본값 관련 문서: 산출물 노드, 괄호는 설명, 꼭지가 담는다(12.9.1 v1)', () => {
-  const { doc } = conv(TAX);
+test('W9 스위치 꺼짐 관련 문서: 산출물 노드, 괄호는 설명, 꼭지가 담는다(12.9.1 v1)', () => {
+  const { doc } = convOff(TAX);
   const art = byLabel(doc, '중간예납 계산표');
   assert.equal(art.description, '공유 드라이브 > 재무 > 세무');
   assert.equal(art.attrs.위치, undefined);
@@ -145,14 +151,42 @@ test('W9 기본값 개요: 대표 업무에 문장에서 고른 설명·주기·
   assert.equal(prose.attrs.마감, undefined);
 });
 
-test('W9 기본값 표준 양식: 설명·주기·마감·관련 문서·담당은 비어 있음으로 나온다(원문 문장에서 채우지 않음). 절차·주의사항은 채워짐', () => {
-  const { doc } = conv(TAX);
+test('W9 스위치 꺼짐 표준 양식: 설명·주기·마감·관련 문서·담당은 비어 있음으로 나온다(원문 문장에서 채우지 않음). 절차·주의사항은 채워짐', () => {
+  const { doc } = convOff(TAX);
   const full = { ...doc, universe: { ...doc.universe, owner: '가상재무팀' } };
   const fr = formReport(buildView(full, () => null));
   assert.equal(fr.total, 1);
   assert.equal(fr.incomplete, 1);
   assert.deepEqual(fr.works[0].missing, ['설명', '주기', '마감', '관련 문서', '담당']);
   assert.deepEqual(previewImport(full).errors, []);
+});
+
+// ── 기본값(CR-17 J 승인안): 6개 켬, 작성 주체 읽기·개요 문장·주기 마감은 꺼짐 ─────────
+
+test('CR-17 J 기본값: 법인세 중간예납 정의서 → 담당 연결 1·관련 문서는 「참조」·경로는 위치 속성, 그러나 그냥 「작성:」은 작성 주체가 아니고 개요 문장은 읽지 않음', () => {
+  const { doc, report } = conv(TAX);
+  assert.deepEqual(edgesOf(doc, 'performs'), ['류다온>법인세 중간예납 준비']);
+  assert.equal(byLabel(doc, '류다온').subtype, undefined, '이름 모양은 하위 유형 없는 사람');
+  assert.equal(byLabel(doc, '가상재무팀장').subtype, '역할');
+  assert.deepEqual(edgesOf(doc, 'references'), ['법인세 중간예납 준비>중간예납 계산표']);
+  assert.deepEqual(edgesOf(doc, 'produces'), []);
+  assert.equal(byLabel(doc, '중간예납 계산표').attrs.위치, '공유 드라이브 > 재무 > 세무');
+  assert.equal(doc.universe.owner, '', '⑤ authorPickOrg 꺼짐: 그냥 「작성:」은 작성 주체로 읽지 않음(입력받음)');
+  assert.ok(codes({ report }).includes('C-NO-OWNER'));
+  assert.ok(codes({ report }).includes('C-PERFORMS-GUESS'));
+  const w = doc.nodes.find((n) => n.core_type === 'work');
+  assert.equal(w.description, undefined, '⑦ summaryToWork 꺼짐');
+  assert.equal(w.attrs.주기, undefined, '⑧ periodDeadline 꺼짐');
+  assert.equal(w.attrs.마감, undefined);
+  doc.universe.owner = '가상재무팀';
+  assert.equal(validateDocument(doc).ok, true);
+});
+
+test('CR-17 J 기본값: 작성 줄의 날짜는 작성일로 읽고(authorDate 켬), 작성 주체는 키가 「작성자」·「작성 부서」일 때 값 그대로', () => {
+  const byline = '# 가상 업무\n- 작성자: 가상재무팀 류다온 / 2026-09-01\n## 업무 범위\n- 가상 접수\n';
+  const r = conv(byline);
+  assert.equal(r.doc.universe.owner, '가상재무팀 류다온 / 2026-09-01');
+  assert.ok(!codes(r).includes('C-DATE-ASSUMED'));
 });
 
 // ── 켬(CR-17 J ① 승인 뒤의 값) = W8 동작 ─────────────────────────────
@@ -219,7 +253,7 @@ test('W8 지어내지 않기(스위치 켬·꺼짐 모두): 업무가 여러 개
   const text = ['# 가상 업무정의서', '- 작성 부서: 가상재무팀 / 2026-09-01', '## 개요', '매월 말 가상 정산과 가상 접수를 처리한다.', '## 범위', '- 가상 정산', '- 가상 접수',
     '## 절차', '1. 5영업일 이내 가상 접수', '## 관련 문서', '- 가상 계산표(공유 드라이브 > 재무)', '## 담당', '- 주 담당: 류다온 / 검토: 가상재무팀장', ''].join('\n');
   for (const on of [false, true]) {
-    const { doc, report } = on ? convOn(text) : conv(text);
+    const { doc, report } = on ? convOn(text) : convOff(text);
     const first = byLabel(doc, '가상 정산');
     assert.equal(first.description, undefined, `on=${on}`);
     assert.equal(first.attrs.주기, undefined, `on=${on}`);
@@ -251,28 +285,28 @@ test('W8 제목 접두어: 업무 이름에서 「업무정의서:」를 떼고 
   assert.equal(docWorkLabel('업무정의서: ' + '가'.repeat(60)), '가'.repeat(39) + '…');
 });
 
-test('W9 작성 줄(기본값): 「작성자:」「작성 부서:」는 값 그대로(D-P6), 「작성:」은 작성 주체로 읽지 않는다(R12-2)', () => {
+test('W9 작성 줄(스위치 꺼짐): 「작성자:」「작성 부서:」는 값 그대로(D-P6), 「작성:」은 작성 주체로 읽지 않는다(R12-2)', () => {
   for (const key of ['작성자', '작성 부서']) {
-    const { doc, report } = conv(`# 가상 업무\n- ${key}: 가상재무팀 류다온 / 2026-09-01\n## 업무 범위\n- 가상 접수\n`);
+    const { doc, report } = convOff(`# 가상 업무\n- ${key}: 가상재무팀 류다온 / 2026-09-01\n## 업무 범위\n- 가상 접수\n`);
     assert.equal(doc.universe.owner, '가상재무팀 류다온 / 2026-09-01', key);
     assert.ok(!doc.universe.description.includes('머리말'), key);
     assert.ok(!codes({ report }).includes('C-NO-OWNER'), key);
     assert.ok(codes({ report }).includes('C-DATE-ASSUMED'), `${key}: 작성자·작성 부서 줄의 날짜는 읽지 않음(예전과 같음)`);
   }
   // 키가 그냥 「작성」: 작성 주체는 입력받고(C-NO-OWNER), 줄은 머리말 글로 남으며, 같은 줄 날짜만 작성일 후보(F4)
-  const bare = conv('# 가상 업무\n- 작성: 가상재무팀 류다온 / 2026-09-01\n## 업무 범위\n- 가상 접수\n');
+  const bare = convOff('# 가상 업무\n- 작성: 가상재무팀 류다온 / 2026-09-01\n## 업무 범위\n- 가상 접수\n');
   assert.equal(bare.doc.universe.owner, '');
   assert.ok(codes(bare).includes('C-NO-OWNER'));
   assert.ok(bare.doc.universe.description.includes('머리말: 작성: 가상재무팀 류다온 / 2026-09-01'));
   assert.ok(!codes(bare).includes('C-DATE-ASSUMED'));
   // 키가 그냥 「작성」이면 같은 줄 날짜는 예전처럼(F4) 작성일 후보
-  const f4 = conv('# 가상 업무\n- 작성: 가상구매팀 / 2026.09.05\n## 업무 범위\n- 가상 접수\n## 확인할 질문\n1. 가상 질문?\n');
+  const f4 = convOff('# 가상 업무\n- 작성: 가상구매팀 / 2026.09.05\n## 업무 범위\n- 가상 접수\n## 확인할 질문\n1. 가상 질문?\n');
   assert.ok(!codes(f4).includes('C-DATE-ASSUMED'));
   assert.equal(f4.doc.events.find((e) => e.type === 'memo').occurred_at, '2026-09-05');
-  assert.equal(conv('# 가상 업무\n- 작성자: 류다온\n## 업무 범위\n- 가상 접수\n').doc.universe.owner, '류다온');
+  assert.equal(convOff('# 가상 업무\n- 작성자: 류다온\n## 업무 범위\n- 가상 접수\n').doc.universe.owner, '류다온');
   // 날짜뿐인 값은 어떤 키든 작성 주체가 아니다
   for (const key of ['작성', '작성자', '작성 부서']) {
-    const d = conv(`# 가상 업무\n- ${key}: 2026-09-01\n## 업무 범위\n- 가상 접수\n`);
+    const d = convOff(`# 가상 업무\n- ${key}: 2026-09-01\n## 업무 범위\n- 가상 접수\n`);
     assert.equal(d.doc.universe.owner, '', key);
     assert.ok(codes(d).includes('C-NO-OWNER'), key);
   }
@@ -343,7 +377,7 @@ test('W8 담당 줄 읽기: 키는 사람 노드(역할)로, 스위치 켜면 �
   assert.equal(looksLikePersonName('운영 담당'), false);
   assert.equal(looksLikePersonName('총무'), false);
   const tblText = '# 가상 업무\n- 작성 주체: 가상팀\n## 업무 범위\n- 가상 접수\n## 담당\n| 구분 | 이름 |\n|---|---|\n| 주 담당 | 류다온 |\n| 협조 | 가상정산담당 |\n';
-  const off = conv(tblText);
+  const off = convOff(tblText);
   assert.deepEqual(edgesOf(off.doc, 'performs'), []);
   assert.deepEqual(labelsOf(off.doc, 'person'), ['류다온', '가상정산담당']);
   assert.ok(off.doc.nodes.filter((n) => n.core_type === 'person').every((n) => n.subtype === '역할'));
@@ -351,12 +385,12 @@ test('W8 담당 줄 읽기: 키는 사람 노드(역할)로, 스위치 켜면 �
   assert.deepEqual(edgesOf(on.doc, 'performs'), ['류다온>가상 접수']);
   assert.equal(byLabel(on.doc, '가상정산담당').subtype, '역할');
   const wkText = '# 가상 업무\n- 작성 주체: 가상팀\n## 업무 범위\n- 가상 접수\n## 담당\n- 정: 류다온\n- 부: 한가상\n- 협조: 가상정산담당\n';
-  assert.deepEqual(edgesOf(conv(wkText).doc, 'performs'), []);
+  assert.deepEqual(edgesOf(convOff(wkText).doc, 'performs'), []);
   const wk = convOn(wkText);
   assert.deepEqual(edgesOf(wk.doc, 'performs'), ['류다온>가상 접수']);
   assert.ok(byLabel(wk.doc, '한가상') && byLabel(wk.doc, '가상정산담당'));
   // 기존 이해관계자 절(「역할: 하는 일」)은 그대로
-  const old = conv('# 가상 업무\n- 작성 주체: 가상팀\n## 업무 범위\n- 가상 접수\n## 이해관계자\n- 운영 담당: 가상 접수\n');
+  const old = convOff('# 가상 업무\n- 작성 주체: 가상팀\n## 업무 범위\n- 가상 접수\n## 이해관계자\n- 운영 담당: 가상 접수\n');
   assert.equal(byLabel(old.doc, '운영 담당').subtype, '역할');
   assert.deepEqual(edgesOf(old.doc, 'performs'), ['운영 담당>가상 접수'], '하는 일에 업무 이름이 적힌 경우는 12.9대로 스위치와 상관없이 연결');
 });
@@ -398,7 +432,7 @@ test('W8 경로 모양: >, \\, a/b/c, 드라이브·폴더는 위치(스위치 �
   assert.equal(byLabel(doc, '가상 점검표').attrs.위치, '공유 폴더 > 점검');
   assert.equal(byLabel(doc, '가상 점검표').description, undefined);
   assert.deepEqual(edgesOf(doc, 'produces'), [], '산출물 절은 현행대로 꼭지가 담는다');
-  const off = conv(text).doc;
+  const off = convOff(text).doc;
   assert.equal(byLabel(off, '가상 점검표').description, '공유 폴더 > 점검');
   assert.equal(byLabel(off, '가상 점검표').attrs.위치, undefined);
 });
@@ -421,9 +455,9 @@ test('W8 개요 구절 고르기(스위치 켬에서 쓰는 함수): 주기·마
 // ── 미리 보기 알림 문구 ──────────────────────────────────────────────
 
 test('W9 알림 문구(R11-8·9): 기본값에서는 담당 절 알림이 나오지 않고, 켰을 때만 「주 담당·담당·정으로 적힌 사람」 문구', () => {
-  for (const code of ['C-PERFORMS-GUESS', 'C-ASSIGN-SKIPPED']) assert.ok(!codes(conv(TAX)).includes(code), code);
+  for (const code of ['C-PERFORMS-GUESS', 'C-ASSIGN-SKIPPED']) assert.ok(!codes(convOff(TAX)).includes(code), code);
   // 기본값에서도 12.9대로 「하는 일」 항목이 업무 이름과 같으면 담당 추정(문구는 하는 일 기준)
-  const duty = conv(CARD);
+  const duty = convOff(CARD);
   const guess = duty.report.notes.find((n) => n.code === 'C-PERFORMS-GUESS');
   assert.deepEqual(guess, { code: 'C-PERFORMS-GUESS', count: 4 });
   assert.match(noteText(guess), /원문의 역할 「하는 일」 항목이 업무 이름과 같은 경우만/);

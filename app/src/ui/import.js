@@ -51,7 +51,7 @@ export function noteText(n) {
     case 'C-TOPIC-GUESS': return `규칙에 없는 제목의 절 ${n.count}개를 주제로 만들었습니다(표에 「규칙 밖」 표시). 맞는지 확인하세요.`;
     case 'C-TOO-MANY': return `노드가 ${n.count}개로, 정한 세분화(월말 정산 수준, ${n.max}개 이하)보다 많습니다. 범위 항목을 묶을 수 있는지 확인하세요.`;
     case 'C-TOO-FEW': return `노드가 ${n.count}개로 적습니다. 업무 하나짜리 문서라면 정상입니다. 업무가 여러 개인 문서라면 「AI로 변환」(설정에서 키를 넣었을 때)을 쓰거나 업무별로 나눠 변환하세요. 제목(#)·표·번호 목록이 있는지도 확인하세요.`;
-    // 아래 두 알림 중 담당 절(「주 담당·담당·정」) 관련은 변환 스위치 CONVERT_RULES.cr17j.assignPerforms가 켜졌을 때만 나온다(기본 꺼짐)
+    // 아래 두 알림 중 담당 절(「주 담당·담당·정」) 관련은 변환 스위치 CONVERT_RULES.cr17j.assignPerforms가 켜졌을 때만 나온다(CR-17 J 승인안은 켬)
     case 'C-ASSIGN-SKIPPED': return `담당 절에 「주 담당·담당·정」으로 적힌 사람 ${n.count}명은 업무가 여러 개라 어느 업무의 담당인지 알 수 없어 업무에 잇지 않았습니다. 필요하면 연결을 직접 추가하세요.`;
     case 'C-PERFORMS-GUESS': return `담당(수행) 연결 ${n.count}건을 추정했습니다 — ${n.assigned ? `${n.count - n.assigned > 0 ? `${n.count - n.assigned}건은 원문의 역할 「하는 일」 항목이 업무 이름과 같은 경우이고, ` : ''}${n.assigned}건은 담당 절에 「주 담당·담당·정」으로 적힌 사람을 업무가 하나뿐인 문서의 그 업무에 이은 것입니다` : '원문의 역할 「하는 일」 항목이 업무 이름과 같은 경우만이고(결재·검토처럼 이름이 일부만 들어간 항목은 잇지 않음)'}. 기간이 없어 '지금 담당'으로 계산됩니다. 맞는지 확인하세요.`;
     case 'C-ROW-NO-NAME': return `${n.ref} 표의 ${n.row}번째 행은 이름 칸이 비어 있어 건너뛰었습니다. 원문을 확인하세요.`;
@@ -108,11 +108,11 @@ export function importDialog(o) {
   let aiLive = null; // 지금 그려진 「AI가 읽는 중」 안내 칸
   const cancelAi = () => { st.aiRun += 1; st.aiBusy = false; };
 
-  const followWork = () => !!CONVERT_RULES.cr17j.previewRenameWork; // 지도 이름을 고치면 업무가 하나뿐인 문서의 대표 업무 이름도 따라 바꿀지(CR-17 J, 기본 꺼짐)
+  const followWork = () => !!CONVERT_RULES.cr17j.previewRenameWork; // 지도 이름을 고치면 업무가 하나뿐인 문서의 대표 업무 이름도 따라 바꿀지(CR-17 J ⑨, 승인안은 켬)
   const setUniverse = (field, value) => {
     const d = st.result.doc;
     // 이름을 처음 고칠 때, 문서 제목으로 만든 대표 업무의 이름(제목에서 접두어를 뗀 것)을 기억해 둔다. 이름을 비웠다가 다시 써도 따라가게
-    // CR-17 J 스위치 previewRenameWork(기본 꺼짐): 12.9.1 미리 보기에서 확인하는 것은 지도 이름·작성 주체뿐이므로, 꺼져 있으면 업무 이름은 건드리지 않는다(R12-7)
+    // CR-17 J 스위치 previewRenameWork(승인안은 켬): 12.9.1 미리 보기에서 확인하는 것은 지도 이름·작성 주체뿐이므로, 꺼져 있으면 업무 이름은 건드리지 않는다(R12-7)
     if (field === 'name' && followWork() && st.result.titleWork === undefined) st.result.titleWork = docWorkLabel(d.universe.name);
     d.universe[field] = value;
     if (field === 'name') {

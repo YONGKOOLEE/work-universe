@@ -10,7 +10,7 @@
 //   - 미확정 질문·리스크는 메모 이력(원문 번호를 내용 앞에)으로 둔다
 // 지어내지 않기: 모든 노드에 원문 근거(attrs.원문 = 절 번호)를 두고, 원문에 없는 사번은 만들지 않는다.
 // 담당(수행) 연결은 원문이 역할의 하는 일로 업무 이름을 적은 경우만 만든다(D3-21 나, 사용자 결정 2026-10-03).
-// 「주 담당」 같은 담당 절의 키로 잇는 것은 CONVERT_RULES.cr17j.assignPerforms(CR-17 J 승인 전에는 꺼짐)가 켜졌을 때만.
+// 「주 담당」 같은 담당 절의 키로 잇는 것은 CONVERT_RULES.cr17j.assignPerforms(CR-17 J 승인안에서 켬)가 켜졌을 때만.
 // [가정]·[미확인] 표시는 글자 그대로 남기고, 해당 노드의 attrs.상태에도 적는다(CR-3 AC ④).
 
 import { newId } from '../model/commands.js';
@@ -29,18 +29,19 @@ export const CONVERT_RULES = {
   // 만든 문서인지 참고한 문서인지 원문에 없으므로 「참조」(지어내지 않기, 메인 결정 2026-10-24). produces로 바꾸면 인수인계 초안의 「산출물·문서 위치」가
   // 읽지만 「원문이 만든다고 말한 것」이 아닌 문서까지 산출로 보이게 된다. 초안이 「참조」도 읽게 하는 것은 CR-17 J ②(승인 필요)
   relatedDocEdge: 'references',
-  // CR-17 J 스위치 묶음(승인 전 기본값 전부 false = 승인된 02-design 12.9.1 v1·12.9.2 D-P3·D-P6 그대로). CR-17 J ①을 승인받으면 켠다.
+  // CR-17 J 스위치 묶음. 승인안 기본값: assignPerforms·namedPersonPlain·relatedDocLink·pathToLocation·authorDate·previewRenameWork 켬,
+  // authorPickOrg·summaryToWork·periodDeadline 끔(전부 끄면 승인된 02-design 12.9.1 v1·12.9.2 D-P3·D-P6 그대로).
   // convertDocument의 ctx.cr17j로 한 번 호출만 덮어쓸 수 있다(시험·비교용).
   cr17j: {
-    assignPerforms: false, // 담당 절의 「주 담당·담당·정」 사람 → 문서의 업무가 하나뿐일 때 업무 performs(+ 알림 C-PERFORMS-GUESS·C-ASSIGN-SKIPPED). 끄면 연결 없음(D-P3)
-    namedPersonPlain: false, // 담당 절에서 이름 모양(한글 2~4자)인 사람을 하위 유형 「역할」 없는 사람으로. 끄면 모두 「역할」(12.9.1 v1: 이해관계자는 역할)
-    relatedDocLink: false, // 「관련 문서」 절의 산출물 → 대표 업무 relatedDocEdge 연결(업무 하나짜리 문서). 끄면 꼭지 contains(v1: 산출물은 꼭지가 담음)
-    pathToLocation: false, // 산출물 이름 뒤 괄호가 경로 모양이면 설명 대신 속성 「위치」로. 끄면 괄호는 설명(v1: 괄호는 설명)
+    assignPerforms: true, // 담당 절의 「주 담당·담당·정」 사람 → 문서의 업무가 하나뿐일 때 업무 performs(+ 알림 C-PERFORMS-GUESS·C-ASSIGN-SKIPPED). 끄면 연결 없음(D-P3)
+    namedPersonPlain: true, // 담당 절에서 이름 모양(한글 2~4자)인 사람을 하위 유형 「역할」 없는 사람으로. 끄면 모두 「역할」(12.9.1 v1: 이해관계자는 역할)
+    relatedDocLink: true, // 「관련 문서」 절의 산출물 → 대표 업무 relatedDocEdge 연결(업무 하나짜리 문서). 끄면 꼭지 contains(v1: 산출물은 꼭지가 담음)
+    pathToLocation: true, // 산출물 이름 뒤 괄호가 경로 모양이면 설명 대신 속성 「위치」로. 끄면 괄호는 설명(v1: 괄호는 설명)
     authorPickOrg: false, // 「작성(자/부서/주체):」 값에서 조직 낱말(…팀·…부)까지만 작성 주체로 + 키가 그냥 「작성:」인 줄도 작성 주체로 읽음. 끄면 값 그대로이고 「작성:」은 작성 주체로 읽지 않음(D-P6: 변경 없음, R12-2)
-    authorDate: false, // 「작성(자/부서/주체):」 값 속의 날짜를 작성일로 읽음. 끄면 작성일은 따로 적힌 날짜만
+    authorDate: true, // 「작성(자/부서/주체):」 값 속의 날짜를 작성일로 읽음. 끄면 작성일은 따로 적힌 날짜만
     summaryToWork: false, // 업무 하나짜리 문서에서 개요 첫 문장 → 대표 업무 설명
     periodDeadline: false, // 업무 하나짜리 문서에서 개요·절차 문장 속 주기·마감 구절 → 대표 업무 속성 「주기」「마감」(문장에서 낱말 고르기 — 12.9의 「개요의 주기·마감 항목」 밖)
-    previewRenameWork: false, // (ui/import.js가 읽음) 가져오기 미리 보기에서 지도 이름을 고치면 업무 하나짜리 문서의 대표 업무 이름도 따라 바꿈. 끄면 지도 이름·작성 주체만 바뀜(12.9.1 미리 보기 확인 대상)
+    previewRenameWork: true, // (ui/import.js가 읽음) 가져오기 미리 보기에서 지도 이름을 고치면 업무 하나짜리 문서의 대표 업무 이름도 따라 바꿈. 끄면 지도 이름·작성 주체만 바뀜(12.9.1 미리 보기 확인 대상)
   },
 };
 
@@ -731,7 +732,7 @@ export function convertDocument(text, ctx) {
   if (src.length > CONVERT_RULES.maxInput) return { ok: false, error: { code: 'E-SCHEMA', field: 'document', too_long: CONVERT_RULES.maxInput } };
 
   const random = ctx.random || Math.random;
-  const sw = { ...CONVERT_RULES.cr17j, ...(ctx.cr17j || {}) }; // CR-17 J 스위치(기본 전부 꺼짐)
+  const sw = { ...CONVERT_RULES.cr17j, ...(ctx.cr17j || {}) }; // CR-17 J 스위치(기본값은 CONVERT_RULES.cr17j)
   const today = ctx.now.slice(0, 10);
   const parsed = parseDocument(src);
   const notes = [];
@@ -961,7 +962,7 @@ export function convertDocument(text, ctx) {
   }
   if (topics.some((t) => !t.known)) notes.push({ code: 'C-TOPIC-GUESS', count: topics.filter((t) => !t.known).length });
 
-  // 업무가 하나뿐인 문서: 개요의 첫 문장·주기·마감을 그 업무의 설명·속성으로(W8, CR-17 J 스위치 summaryToWork·periodDeadline — 기본 꺼짐).
+  // 업무가 하나뿐인 문서: 개요의 첫 문장·주기·마감을 그 업무의 설명·속성으로(W8, CR-17 J 스위치 summaryToWork·periodDeadline — 기본 꺼짐, J 추천은 1차 후).
   // 여러 업무면 어느 업무의 것인지 알 수 없어 넣지 않는다. 주기·마감은 원문 구절 그대로이고, 분명하지 않으면(마감 구절이 서로 다르면) 넣지 않는다.
   // 개요 표의 「주기: …」 같은 명시 값이 먼저다
   const single = works.length === 1;
@@ -1138,7 +1139,7 @@ export function convertDocument(text, ctx) {
       pushEdge(r.id, w.id, 'performs', `규칙 기반 추정: 원문 ${d.ref}의 하는 일에 「${w.label}」${josa(w.label, '이/가')} 나옴(기간 미기재)`);
       performs += 1;
     }
-    // CR-17 J 스위치 assignPerforms(꺼짐 = 연결 없음, D-P3): 담당 절의 「주 담당·담당·정」은 이 문서가 정의하는 업무의 담당으로 직접 적힌 것이다.
+    // CR-17 J 스위치 assignPerforms(켬이 승인안. 꺼짐 = 연결 없음, D-P3): 담당 절의 「주 담당·담당·정」은 이 문서가 정의하는 업무의 담당으로 직접 적힌 것이다.
     // 업무가 하나뿐일 때만 잇는다(여러 업무면 어느 업무인지 알 수 없어 연결하지 않고 알림)
     const mine = assigns.find((x) => x.r === r);
     let assigned = false;
