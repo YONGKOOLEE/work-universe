@@ -6,6 +6,7 @@ import { josa, messageFor } from './messages.js';
 import { SCHEMA_VERSION, nodeTypeLabel } from '../model/schema.js';
 import { parseImportText } from '../model/import.js';
 import { METHOD_LABELS } from '../llm/connector.js';
+import { folderTab } from './folder-tab.js';
 
 const KIND_TEXT = {
   overview: () => '개요 → 유니버스의 중심 노드(꼭지)의 이름·목적·배경, 그리고 범위·이해관계자',
@@ -274,7 +275,7 @@ export function importDialog(o) {
       el('div', { class: 'row' }, el('button', { type: 'button', class: 'primary', 'data-testid': 'export-download', onclick: () => o.onExport() }, 'JSON 파일로 내려받기'),
         o.onExportHtml ? el('button', { type: 'button', 'data-testid': 'export-html', onclick: (e) => o.onExportHtml(e.currentTarget) }, 'HTML 파일로 내려받기(내용 포함)') : null),
       o.onExportHtml ? el('p', { class: 'muted small', 'data-testid': 'export-html-note' }, '받는 사람은 이 파일 하나를 더블클릭하면 이 유니버스를 바로 볼 수 있습니다. 내용이 파일에 들어 있으니 보낼 사람에게만 주세요.') : null);
-    const body = st.tab === 'export' ? exportBody() : st.tab === 'doc'
+    const body = st.tab === 'folder' ? folderTab(o, render) : st.tab === 'export' ? exportBody() : st.tab === 'doc'
       ? el('div', { class: 'editor' },
         el('p', { class: 'muted small' }, '업무정의서 같은 문서를 붙여 넣으면 제목(#)·표·번호 목록을 규칙으로 읽어 유니버스 초벌을 만듭니다. 업무 흐름은 절차 속성으로, 요건·예외 같은 절은 주제 하나로 묶어 노드를 10~20개 정도로 만듭니다(월말 정산 수준).'),
         el('textarea', { id: 'import-doc', rows: '9', 'aria-label': '문서 원문', placeholder: '# 업무 이름\n## 1. 개요\n| 항목 | 내용 |\n…' }, st.docText),
@@ -294,7 +295,7 @@ export function importDialog(o) {
       el('div', { class: 'import-head' },
         el('h2', { id: 'import-title' }, o.onExport ? '가져오기·내보내기' : '가져오기'),
         el('button', { type: 'button', 'data-testid': 'import-close', onclick: () => o.dialog.close() }, '닫기')),
-      el('div', { class: 'tabs' }, tab('doc', '문서 붙여넣기(초벌 변환)'), tab('json', 'JSON 파일'), o.onExport ? tab('export', '내보내기') : null),
+      el('div', { class: 'tabs' }, tab('doc', '문서 붙여넣기(초벌 변환)'), tab('json', 'JSON 파일'), o.onExport ? tab('export', '내보내기') : null, o.folder && o.onExport ? tab('folder', '폴더 연결') : null),
       body,
       el('p', { class: 'error-text', 'data-testid': 'import-message', 'aria-live': 'polite' }, st.message),
       head,
@@ -308,8 +309,10 @@ export function importDialog(o) {
     renderPreview();
   }
 
+  if (o.folder) o.folder.subscribe(() => { if (o.dialog.open && st.tab === 'folder') render(); });
+
   return () => {
-    if (st.tab === 'export' && !o.onExport) st.tab = 'doc';
+    if ((st.tab === 'export' || st.tab === 'folder') && !o.onExport) st.tab = 'doc';
     st.result = null;
     st.message = '';
     render();

@@ -24,6 +24,10 @@
   button.primary, form button[type=submit] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: bold; }
   #backup-nudge { margin: 0; padding: 8px 16px; background: var(--panel-2); color: var(--text); border-bottom: 1px solid var(--accent); font-size: 14px; }
   #backup-nudge[hidden] { display: none; }
+  #folder-note { margin: 0; padding: 6px 16px; background: var(--panel-2); color: var(--text); border-bottom: 1px solid var(--accent); font-size: 14px; }
+  #folder-note[hidden] { display: none; }
+  .folder-files { list-style: none; padding: 0; margin: 6px 0; }
+  .folder-file { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid var(--panel-2); }
   #embed-banner { margin: 0; padding: 8px 16px; background: var(--panel-2); color: var(--text); border-bottom: 1px solid var(--accent); font-size: 14px; }
   #embed-banner[hidden] { display: none; }
   #embed-banner .embed-message { margin-left: 8px; color: var(--warn-text); }
@@ -267,7 +271,7 @@
   button.home { background: none; border: 0; padding: 0; border-radius: 6px; }
   button.home h1 { margin: 0; }
   body.start-mode { overflow: auto; height: auto; min-height: 100vh; }
-  body.start-mode > header, body.start-mode > main, body.start-mode > #banner, body.start-mode > #embed-banner,body.start-mode > #backup-nudge { display: none; }
+  body.start-mode > header, body.start-mode > main, body.start-mode > #banner, body.start-mode > #embed-banner,body.start-mode > #backup-nudge, body.start-mode > #folder-note { display: none; }
   #start-screen:empty { display: none; }
   .start-inner { max-width: 960px; margin: 0 auto; padding: 32px 20px 64px; display: grid; gap: 28px; }
   header.start-hero { display: block; padding: 0; background: none; border: 0; }
@@ -357,6 +361,7 @@
 <p id="banner" role="alert" hidden></p>
 <p id="embed-banner" role="status" data-testid="embed-banner" hidden></p>
 <p id="backup-nudge" role="status" data-testid="backup-nudge" hidden></p>
+<p id="folder-note" role="status" data-testid="folder-note" hidden></p>
 <main>
   <div class="graph-wrap">
     <div id="rewind-band" class="rewind-band" data-testid="rewind-band" role="status" hidden></div>

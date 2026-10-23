@@ -2488,6 +2488,70 @@ async function checkBrowser(browser, port) {
   await clickTestId(s.cdp, 'btn-rewind-back');
   await sleep(200);
 
+  // ── CR-14 C 폴더 연결(R-27, D-32): 가짜 폴더(메모리)를 주입 → 탭 → 수정 저장 → 내 파일 생김 → 동료 파일 2개 → 새로 고침 → 묶기. 데이터를 바꾸므로 맨 끝 ──
+  await reloadApp();
+  // 페이지 안 가짜 폴더 손잡이: getFileHandle·values·getFile·createWritable만 있다(실제 고르기 창은 사람 확인)
+  const makeFakeDir = () => {
+    const files = new Map();
+    return {
+      kind: 'directory',
+      name: '가상 공유 폴더',
+      files,
+      async getFileHandle(name, opt = {}) {
+        if (!files.has(name) && !opt.create) throw Object.assign(new Error('없음'), { name: 'NotFoundError' });
+        return { kind: 'file', name, async createWritable() { let buf = ''; return { write: async (t) => { buf += t; }, close: async () => { files.set(name, { text: buf, lastModified: Date.now() }); } }; } };
+      },
+      async *values() {
+        for (const [name, f] of files) yield { kind: 'file', name, async getFile() { return { size: f.text.length, lastModified: f.lastModified, text: async () => f.text }; } };
+      },
+    };
+  };
+  await evaluate(s.cdp, `window.__fk = (${makeFakeDir})(); window.confirm = () => true; window.__wu.useFolderHandle(window.__fk).then(() => true)`);
+  const fkTab = async () => {
+    await evaluate(s.cdp, "document.getElementById('import-open').click()");
+    await sleep(200);
+    await clickTestId(s.cdp, 'import-tab-folder');
+    await sleep(250);
+  };
+  await fkTab();
+  const fkBox = (id) => evaluate(s.cdp, `(() => { const e = document.querySelector('[data-testid=${id}]'); if (!e) return null; const r = e.getBoundingClientRect(); return { w: r.width, h: r.height, text: e.textContent }; })()`);
+  const fkIntro = await fkBox('folder-intro');
+  const fkName = await fkBox('folder-name');
+  const fkBtns = [await fkBox('folder-save'), await fkBox('folder-refresh'), await fkBox('folder-disconnect'), await fkBox('folder-bundle')];
+  check('CR-14 C 「폴더 연결」 탭: 설명 한 줄·폴더 이름·「지금 저장」「새로 고침」「연결 끊기」「팀 지도로 묶기」(크기 있음)', !!fkIntro && fkIntro.text.includes('남의 파일은 고치지 않습니다') && !!fkName && fkName.text.includes('가상 공유 폴더') && fkBtns.every((b) => b && b.w > 0 && b.h > 0), JSON.stringify([fkIntro, fkName, fkBtns]));
+  check('CR-14 C 동료 파일이 없으면 「팀 지도로 묶기」가 꺼져 있고 「폴더에 .json 파일이 없습니다」', await evaluate(s.cdp, "document.querySelector('[data-testid=folder-bundle]').disabled") && (await text(s.cdp, '[data-testid=folder-empty]')).includes('.json 파일이 없습니다'));
+  await shot(s.cdp, `${browser.name}-31-folder-tab-empty`);
+  await evaluate(s.cdp, "document.getElementById('import-dialog').close()");
+
+  // 노드 이름 수정(저장) → 1초 디바운스 뒤 폴더에 내 파일
+  await sleep(1100);
+  await evaluate(s.cdp, "window.__wu.select('U-A1/N-002')");
+  await sleep(150);
+  await clickTestId(s.cdp, 'btn-edit');
+  await fillPanelForm(s.cdp, { 'node-label': '폴더 거울 시험 이름' });
+  await sleep(1500);
+  const fkMine = await evaluate(s.cdp, "(() => { const names = [...window.__fk.files.keys()]; const mine = names.filter((n) => n.endsWith('U-A1.json')); const d = mine.length ? JSON.parse(window.__fk.files.get(mine[0]).text) : null; return { names, id: d && d.universe.id, label: d && d.nodes.find((n) => n.id === 'N-002').label }; })()");
+  check('CR-14 C 저장 1.2초 뒤 폴더에 내 파일(…U-A1.json)이 생기고 내용이 방금 고친 지도', fkMine.names.length === 1 && fkMine.id === 'U-A1' && fkMine.label === '폴더 거울 시험 이름', JSON.stringify(fkMine));
+
+  // 동료 파일 2개(다른 샘플 유니버스)를 폴더에 넣고 새로 고침
+  const peers = SAMPLES.filter((d) => d.universe.id !== 'U-A1' && !(d.refs || []).length).slice(0, 2);
+  await evaluate(s.cdp, `(() => { for (const d of ${JSON.stringify(peers)}) window.__fk.files.set('동료-' + d.universe.id + '.json', { text: JSON.stringify(d), lastModified: Date.now() }); window.__fk.files.set('깨진파일.json', { text: '{"universe":', lastModified: Date.now() }); })()`);
+  await fkTab();
+  await clickTestId(s.cdp, 'folder-refresh');
+  await sleep(400);
+  const fkList = await evaluate(s.cdp, "(() => { const rows = [...document.querySelectorAll('[data-testid=folder-file]')]; const r = document.querySelector('[data-testid=folder-files]').getBoundingClientRect(); return { n: rows.length, mine: rows.filter((x) => x.querySelector('[data-testid=folder-mine]')).length, checks: rows.filter((x) => x.querySelector('[data-testid=folder-check]') && x.querySelector('[data-testid=folder-check]').checked).length, bad: rows.filter((x) => x.querySelector('[data-testid=folder-bad]')).length, w: r.width, h: r.height, bundleOff: document.querySelector('[data-testid=folder-bundle]').disabled }; })()");
+  check('CR-14 C 새로 고침 → 파일 4개(내 파일 1·동료 2 체크됨·깨진 파일 1은 건너뜀 표시), 묶기 단추 켜짐(목록 크기 있음)', fkList.n === 4 && fkList.mine === 1 && fkList.checks === 2 && fkList.bad === 1 && fkList.w > 0 && fkList.h > 0 && !fkList.bundleOff, JSON.stringify(fkList));
+  const fkNull = await nullTextSpots(s.cdp);
+  check('CR-14 C 폴더 연결 탭에 "null" 글자 없음', fkNull.length === 0, JSON.stringify(fkNull));
+  await shot(s.cdp, `${browser.name}-32-folder-tab-list`);
+  await clickTestId(s.cdp, 'folder-bundle');
+  await sleep(500);
+  await waitFor(s.cdp, "window.__wu && window.__wu.cy && window.__wu.doc.universe.name === '폴더 팀 지도'"); // 묶음을 열면 페이지가 다시 불러와진다
+  const fkGroup = await evaluate(s.cdp, "(() => { const d = window.__wu.doc; return { name: d.universe.name, level: d.universe.level, children: d.refs.filter((r) => !r.hidden).length, hash: location.hash, dialogOpen: document.getElementById('import-dialog').open, peerIds: d.refs.map((r) => r.child_universe_id) }; })()");
+  check('CR-14 C 「팀 지도로 묶기」 → 확인 뒤 묶음 「폴더 팀 지도」가 열리고 하위 3개(지금 유니버스+동료 2), 창은 닫힘', fkGroup.name === '폴더 팀 지도' && fkGroup.level === '팀' && fkGroup.children === 3 && !fkGroup.dialogOpen && fkGroup.peerIds.includes('U-A1') && peers.every((d) => fkGroup.peerIds.includes(d.universe.id)), JSON.stringify(fkGroup));
+  const fkNull2 = await nullTextSpots(s.cdp);
+  check('CR-14 C 묶음이 열린 화면에 "null" 글자 없음', fkNull2.length === 0, JSON.stringify(fkNull2));
+
   const errors2 = [...s.log.errors];
   const external2 = [...s.log.external];
   s.cdp.close();

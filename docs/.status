@@ -202,6 +202,14 @@ implementation:
   scope_change: CR-12 승인(docs/CR-12-초안.md v0.2, 2026-10-13). 날짜 일정·동결 날짜는 폐기, 동결은 진행에 따라 사용자가 정함
   current_task: (2026-10-13 저녁) CR-12 T-23~T-26·C12-8·일곱 번째 검토(T-28)·가·나 묶음 완료, push됨 9b56b0c. 남은 것: 사용자 화면 확인 체크리스트, T-27 E는 ①로 결정됨(구현 끝), T-21(F)은 조력자 샘플 도착 시, 사람 몫(T-14·T-15·T-16), 기능 동결 선언·제출
   tasks:
+    - id: T-35
+      status: 구현·검증 완료(CR-14 C 폴더 연결, R-27, D-32). 실제 폴더 고르기 창·동기화 폴더·허락 기억은 사람 확인(미확인)
+      date: 2026-10-23
+      model: 사전 시험(file://·localhost에서 고르기 창 열림, 변화 알림 있음)·통합·기록 Opus 메인 / 구현 Sonnet 하위 에이전트
+      result: store/folder.js, view/folder-plan.js, ui/folder-link.js·folder-tab.js, import.js 「폴더 연결」 탭, main.js 거울 저장(afterSave 뒤 1초 디바운스)·머리글 알림, index.html, tests/folder.test.js 19개, browser-check 항목(가짜 손잡이). 파일 이름 「작성자-유니버스ID.json」(C14-7 해석: 한 사람이 유니버스 여럿), 묶음은 새로 만듦(「폴더 팀 지도」, 같은 이름이면 번호). limits L-50, 실행안내, tech-record 52절
+      normal_checks: 통과 (단위 773, check:chrome 461 — 탭 크기, 거울 저장 파일 생성, 동료 2개+깨진 1개 목록, 팀 지도로 묶기 → 하위 3개, "null" 없음, 스크린샷 확인)
+      error_checks: 통과 (가짜 손잡이: 쓰기 거부, 1MB 초과·읽기 실패 건너뜀, 취소·허락 거부·IndexedDB 없음, 되감기·읽기 전용 때 거울 저장 금지, 같은 ID 파일 제외, 결함 주입 2건 잡음)
+      unverified: [실제 showDirectoryPicker 고르기·OneDrive·네트워크 드라이브·브라우저 재시작 뒤 허락 기억·실제 FileSystemObserver(사람 1분 확인), Edge]
     - id: T-33
       status: 구현·검증 완료(CR-14 A 편집 되감기, R-25, D-30). 화면 확인은 사람 몫(미확인)
       date: 2026-10-23

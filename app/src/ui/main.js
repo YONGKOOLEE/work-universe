@@ -34,6 +34,7 @@ import { splitHint, workFormMissing } from '../rules/form.js';
 import { starterSteps } from '../rules/starter-steps.js';
 import { josa, messageFor } from './messages.js';
 import { exportFileName, importDialog } from './import.js';
+import { createFolderLink } from './folder-link.js';
 import { EMBED_HASH_PREFIX, embedFileName } from '../view/embed.js';
 import { EMBED_WARNINGS, captureAppHtml, createEmbedApp, embedHtmlFor, importEmbedToStorage, readEmbedFromDocument, renderEmbedBanner } from './embed-banner.js';
 import { tableDialog } from './table.js';
@@ -161,8 +162,9 @@ function wireCreateDialog(app, $, getAuthorName = () => undefined) {
 }
 
 // 가져오기(T-17): 문서 초벌 변환(CR-5 ②)·JSON 파일 → 미리 보기 → 가져오기. 시작 화면과 본 화면이 함께 쓴다
-function wireImportDialog(app, $, getProvider, methodLabel, onExport = null, onReset = null, onExportHtml = null) {
+function wireImportDialog(app, $, getProvider, methodLabel, onExport = null, onReset = null, onExportHtml = null, folder = null) {
   const open = importDialog({
+    folder,
     onExport,
     onExportHtml,
     onReset,
@@ -261,7 +263,26 @@ function start() {
       if (hashId()) showBackupNudge();
     }
   };
-  const openImport = wireImportDialog(app, $, () => provider, providerLabel, hashId() ? doExport : null, doReset, hashId() ? doExportHtml : null);
+  // 폴더 연결(CR-14 C, R-27, D-32): 브라우저 저장소가 원본, 폴더는 거울. 유니버스를 연 본 화면(내용 포함 HTML 보기 제외)에서만
+  // rw(편집 되감기)는 아래에서 선언되지만, 거울 저장은 저장 뒤에만 불리므로 그때는 이미 있다
+  const folder = hashId() && !embedMode ? createFolderLink({ app, getAuthor: () => settings.authorName, canMirror: () => !rw && !app.readOnly }) : null;
+  const folderSlot = $('folder-note');
+  const showFolderNote = () => {
+    if (!folder || !folderSlot) return;
+    const fs = folder.state;
+    const parts = [
+      fs.warning ? el('span', { 'data-testid': 'folder-note-warning' }, fs.warning) : null,
+      fs.changed ? el('span', { 'data-testid': 'folder-note-changed' }, '폴더에 바뀐 파일이 있습니다 — ') : null,
+      fs.changed ? el('button', { type: 'button', 'data-testid': 'folder-note-refresh', onclick: () => folder.refresh() }, '새로 고침') : null,
+    ].filter(Boolean);
+    folderSlot.replaceChildren(...parts);
+    folderSlot.hidden = parts.length === 0;
+  };
+  if (folder) {
+    folder.subscribe(showFolderNote);
+    folder.init().catch(() => {});
+  }
+  const openImport = wireImportDialog(app, $, () => provider, providerLabel, hashId() ? doExport : null, doReset, hashId() ? doExportHtml : null, folder);
 
   // 주소에 유니버스가 없으면(더블클릭으로 처음 열었을 때) 시작 화면을 보여 준다(R-08)
   if (!hashId()) { // 깨진 인코딩(#%E0)도 시작 화면(hashId의 주석대로, 여섯 번째 검토 C-16)
@@ -458,6 +479,7 @@ function start() {
     editing = null;
     selected = nextSelected;
     refresh();
+    if (folder) folder.mirror(); // 저장은 끝났다. 폴더에 거울로 내보낸다(실패해도 되돌리지 않고 머리글에 알린다)
     return result;
   }
 
@@ -1528,6 +1550,8 @@ function start() {
     get readOnly() {
       return app.readOnly;
     },
+    // CR-14 C 점검용: 가짜 폴더 손잡이(메모리)를 연결된 상태로 둔다
+    useFolderHandle: (handle) => (folder ? folder.useHandle(handle) : Promise.resolve()),
     // CR-14 A 점검용: 편집 되감기 상태
     get rewind() {
       return rw ? { at: rw.at } : null;
