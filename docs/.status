@@ -212,7 +212,7 @@ implementation:
       status: 패널 폭 조절 결함 수정(사용자 지적 "늘리면 가려지니까 — 껐다 키면 왼쪽 창이 맞춰서 이동", 2026-10-23)
       date: 2026-10-23
       model: 재현·수정·점검 항목·기록 Opus 메인
-      result: ui/main.js resizeGraphKeepCenter — cy.resize() 뒤 바뀐 폭의 절반만큼 panBy로 보던 가운데 유지(끌기 rAF·끌기 끝·두 번 누르기·키보드 공통, 「패널 넓게 보기」는 fit 뒤 기준 폭 갱신). browser-check 항목 "100px 넓혀도 꼭지 노드가 그래프 가운데 기준 같은 자리"
+      result: ui/main.js resizeGraphKeepCenter — 폭이 바뀌면 배율을 폭 비율대로(노드 크기가 따라옴, 사용자 2차 지적 "노드 크기는 패널하고 상관없이 작아져 있거나 커져 있음")·가운데 모델 좌표 유지(cy.viewport), minZoom·maxZoom 안으로(끌기 rAF·끌기 끝·두 번 누르기·키보드 공통, 「패널 넓게 보기」는 fit 뒤 기준 폭 갱신). browser-check 항목 "100px 넓히면 배율이 폭 비율대로 줄고 가운데 그대로"(두 번째 점검 467 통과)
       normal_checks: 통과 (check:chrome 467 모두 통과 — CHECK_PORT 9342·CHECK_TMP 절대 경로로 실행: 앞선 점검이 남긴 헤드리스 Chrome이 .tmp/browser-check 프로필과 9333을 잠가 EBUSY·DevTools 연결 실패)
       error_checks: 해당 없음(화면 동작)
       unverified: [실제 마우스 끌기 중 매 프레임의 체감(사람), Edge]

@@ -1321,11 +1321,26 @@ function start() {
   };
   // 패널 폭이 바뀌면 그래프 영역이 좁아지거나 넓어진다. cy.resize()는 캔버스 크기만 다시 재고 그린 내용은 제자리에 두므로
   // 오른쪽이 패널에 가려진다(사용자 지적 2026-10-23). 폭이 바뀐 만큼 절반을 밀어 보던 가운데를 그대로 유지한다
+  // 배율도 폭 비율만큼 따라간다(사용자 지적 2026-10-23 "노드 크기가 패널과 상관없이 작아져 있거나 커져 있음"): 넓어지면 노드가 커지고 좁아지면 작아져,
+  // 보이던 범위가 그대로 보인다. 기준점은 그래프 가운데(cytoscape가 minZoom·maxZoom 안으로 자른다)
   let lastGraphW = null;
   const resizeGraphKeepCenter = () => {
-    const w = graph.cy.container().clientWidth;
-    graph.cy.resize();
-    if (lastGraphW !== null && w !== lastGraphW) graph.cy.panBy({ x: (w - lastGraphW) / 2, y: 0 });
+    const cy = graph.cy;
+    const el = cy.container();
+    const w = el.clientWidth;
+    if (lastGraphW === null || w === lastGraphW || lastGraphW <= 0) {
+      cy.resize();
+      lastGraphW = w;
+      return;
+    }
+    const oldZoom = cy.zoom();
+    const oldPan = cy.pan();
+    const h = el.clientHeight;
+    // 바뀌기 전 화면 가운데가 가리키던 모델 좌표
+    const model = { x: (lastGraphW / 2 - oldPan.x) / oldZoom, y: (h / 2 - oldPan.y) / oldZoom };
+    cy.resize();
+    const zoom = Math.min(cy.maxZoom(), Math.max(cy.minZoom(), oldZoom * (w / lastGraphW)));
+    cy.viewport({ zoom, pan: { x: w / 2 - model.x * zoom, y: h / 2 - model.y * zoom } });
     lastGraphW = w;
   };
   let resizeRaf = 0;

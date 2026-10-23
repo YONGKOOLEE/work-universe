@@ -1507,12 +1507,14 @@ async function checkBrowser(browser, port) {
     // 패널 폭 끌기 손잡이: 보이고 크기가 있다 → ←로 20px 넓어진다 → 두 번 누르면 기본 폭(380)으로 돌아온다
     const handle0 = await evaluate(s.cdp, "(() => { const r = document.getElementById('panel-resizer').getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height), role: document.getElementById('panel-resizer').getAttribute('role') }; })()");
     // 폭을 바꿔도 보던 가운데가 그대로(사용자 지적 2026-10-23: 넓히면 오른쪽이 가려짐): 꼭지 노드의 "그래프 가운데에서의 거리"가 변하지 않아야 한다
-    const centerOff = () => evaluate(s.cdp, "(() => { const c = window.__wu.cy.container().getBoundingClientRect(); const n = window.__wu.cy.nodes().filter((x) => x.visible())[0]; if (!n) return { dx: 0, dy: 0, w: Math.round(c.width), none: true }; const p = n.renderedPosition(); return { dx: Math.round(p.x - c.width / 2), dy: Math.round(p.y - c.height / 2), w: Math.round(c.width) }; })()");
+    // 배율은 폭 비율대로(노드 크기가 따라옴), 가운데 노드의 "가운데에서의 상대 거리"는 폭 비율로 줄어든다
+    const centerOff = () => evaluate(s.cdp, "(() => { const c = window.__wu.cy.container().getBoundingClientRect(); const n = window.__wu.cy.nodes().filter((x) => x.visible())[0]; if (!n) return { dx: 0, dy: 0, w: Math.round(c.width), zoom: window.__wu.cy.zoom(), none: true }; const p = n.renderedPosition(); return { dx: p.x - c.width / 2, dy: p.y - c.height / 2, w: Math.round(c.width), zoom: window.__wu.cy.zoom() }; })()");
     const off0 = await centerOff();
     for (let k = 0; k < 5; k += 1) await evaluate(s.cdp, "document.getElementById('panel-resizer').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true }))");
     await sleep(400);
     const off1 = await centerOff();
-    check('패널 폭을 100px 넓혀도 그래프의 꼭지 노드는 그래프 가운데 기준 같은 자리(가려지지 않음)', off1.w === off0.w - 100 && Math.abs(off1.dx - off0.dx) <= 2 && Math.abs(off1.dy - off0.dy) <= 2, JSON.stringify([off0, off1]));
+    const ratio = off1.w / off0.w;
+    check('패널 폭을 100px 넓히면 그래프 배율이 폭 비율대로 줄고(노드 크기 따라옴) 가운데는 그대로(가려지지 않음)', off1.w === off0.w - 100 && Math.abs(off1.zoom / off0.zoom - ratio) < 0.02 && Math.abs(off1.dx - off0.dx * ratio) <= 2 && Math.abs(off1.dy - off0.dy * ratio) <= 2, JSON.stringify([off0, off1]));
     for (let k = 0; k < 4; k += 1) await evaluate(s.cdp, "document.getElementById('panel-resizer').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }))");
     await sleep(300);
     const wk1 = await asideW();
