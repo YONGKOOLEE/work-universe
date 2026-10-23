@@ -101,6 +101,11 @@ export function cleanAuthorName(v) {
   return typeof v === 'string' ? v.trim().slice(0, LABEL_MAX).trim() : '';
 }
 
+/** 오른쪽 패널 폭 설정값: 200~4000 사이 정수만 받는다 */
+function validPanelWidth(v) {
+  return Number.isInteger(v) && v >= 200 && v <= 4000;
+}
+
 /** 설정(12.4 wu:v1:settings): 공급자 선택. 저장소가 없거나 값이 깨졌으면 기본값. 키는 저장하지 않는다(Claude API는 P2) */
 export function loadSettings(storage, defaults, allowed = null) {
   if (!storage) return { ...defaults };
@@ -118,6 +123,7 @@ export function loadSettings(storage, defaults, allowed = null) {
     if (stamp(v.backupDismissedAt)) out.backupDismissedAt = v.backupDismissedAt;
     // 「도구 더 보기」 펼침(CR-13 A): true일 때만 펼침. 깨진 값은 접힘(기본)
     if (v.moreTools === true) out.moreTools = true;
+    if (validPanelWidth(v.panelWidth)) out.panelWidth = v.panelWidth;
     return out;
   } catch {
     return { ...defaults };
@@ -134,6 +140,7 @@ export function saveSettings(storage, settings) {
     if (settings.lastExportAt) out.lastExportAt = settings.lastExportAt;
     if (settings.backupDismissedAt) out.backupDismissedAt = settings.backupDismissedAt;
     if (settings.moreTools === true) out.moreTools = true;
+    if (validPanelWidth(settings.panelWidth)) out.panelWidth = settings.panelWidth;
     storage.setItem(SETTINGS_KEY, JSON.stringify(out));
     return true;
   } catch {

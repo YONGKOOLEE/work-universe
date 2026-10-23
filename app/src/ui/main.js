@@ -11,6 +11,7 @@ import { startScreen } from './start.js';
 import { describeNode, describeUniverse, eventText, periodStatus } from '../view/describe.js';
 import { exposureOf, projectView } from '../view/collapse.js';
 import { parseGid, toGid } from '../view/view.js';
+import { PANEL, clampPanelWidth, maxPanelWidth } from '../view/panel.js';
 import { DRAFT_TARGET_TYPES, SUBTYPE_HANDOVER_DOC } from '../model/schema.js';
 import { confirmedDoc, downloadWithNotice, printHtml } from './doc-output.js';
 import { el } from './dom.js';
@@ -1134,15 +1135,85 @@ function start() {
 
   // 패널 넓게 보기(U-5): 눌러서 바꾸고, 그래프 영역이 줄거나 늘면 화면에 다시 맞춘다. 저장하지 않는다
   const wideBtn = $('wide-toggle');
-  wideBtn.addEventListener('click', () => {
-    const main = document.querySelector('main');
-    const on = !main.classList.contains('wide');
-    main.classList.toggle('wide', on);
+  const panelMain = document.querySelector('main');
+  const panelAside = document.querySelector('aside');
+  const resizer = $('panel-resizer');
+  const narrowMq = window.matchMedia('(max-width: 800px)');
+  // 패널 폭(끌기 손잡이): 저장값(settings.panelWidth)은 그대로 두고 화면에서만 범위로 자른다. 넓게 보기·세로 배치에서는 인라인 폭을 쓰지 않는다
+  const applyPanelWidth = () => {
+    const free = !narrowMq.matches && !panelMain.classList.contains('wide');
+    panelAside.style.width = free && settings.panelWidth ? `${clampPanelWidth(settings.panelWidth, window.innerWidth)}px` : '';
+    resizer.setAttribute('aria-valuemin', String(PANEL.MIN));
+    resizer.setAttribute('aria-valuemax', String(maxPanelWidth(window.innerWidth)));
+    resizer.setAttribute('aria-valuenow', String(Math.round(panelAside.getBoundingClientRect().width)));
+  };
+  const setWide = (on) => {
+    panelMain.classList.toggle('wide', on);
     wideBtn.setAttribute('aria-pressed', String(on));
     wideBtn.textContent = on ? '패널 좁게 보기' : '패널 넓게 보기';
+  };
+  const savePanelWidth = (w) => {
+    if (w == null) delete settings.panelWidth;
+    else settings.panelWidth = w;
+    saveSettings(storage, settings); // 저장소가 없거나 실패하면 조용히 건너뛴다(이번 화면에서만 유지)
+  };
+  let resizeRaf = 0;
+  const resizeGraphSoon = () => {
+    if (resizeRaf) return;
+    resizeRaf = requestAnimationFrame(() => { resizeRaf = 0; graph.cy.resize(); });
+  };
+  // 현재 화면 폭을 기준으로 새 폭을 정해 적용(저장은 호출한 쪽이 한다)
+  const setPanelWidth = (w) => {
+    if (panelMain.classList.contains('wide')) setWide(false);
+    settings.panelWidth = clampPanelWidth(w, window.innerWidth);
+    applyPanelWidth();
+    resizeGraphSoon();
+  };
+  const currentPanelWidth = () => Math.round(panelAside.getBoundingClientRect().width);
+  wideBtn.addEventListener('click', () => {
+    setWide(!panelMain.classList.contains('wide'));
+    applyPanelWidth();
     graph.cy.resize();
     graph.fit();
   });
+  resizer.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || narrowMq.matches) return;
+    e.preventDefault();
+    resizer.setPointerCapture(e.pointerId);
+    resizer.classList.add('dragging');
+    document.body.classList.add('resizing');
+  });
+  resizer.addEventListener('pointermove', (e) => {
+    if (!resizer.hasPointerCapture(e.pointerId)) return;
+    setPanelWidth(window.innerWidth - e.clientX); // aside는 오른쪽 끝에 붙어 있다
+  });
+  const endDrag = (e) => {
+    if (!resizer.hasPointerCapture(e.pointerId)) return;
+    resizer.releasePointerCapture(e.pointerId);
+    resizer.classList.remove('dragging');
+    document.body.classList.remove('resizing');
+    savePanelWidth(settings.panelWidth);
+    graph.cy.resize();
+  };
+  resizer.addEventListener('pointerup', endDrag);
+  resizer.addEventListener('pointercancel', endDrag);
+  resizer.addEventListener('dblclick', () => {
+    if (panelMain.classList.contains('wide')) setWide(false);
+    savePanelWidth(null);
+    applyPanelWidth();
+    graph.cy.resize();
+  });
+  resizer.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    const base = settings.panelWidth && !panelMain.classList.contains('wide') ? clampPanelWidth(settings.panelWidth, window.innerWidth) : currentPanelWidth();
+    setPanelWidth(base + (e.key === 'ArrowLeft' ? PANEL.KEY_STEP : -PANEL.KEY_STEP)); // 패널이 오른쪽에 있으므로 ←는 넓히기
+    savePanelWidth(settings.panelWidth);
+    graph.cy.resize();
+  });
+  window.addEventListener('resize', applyPanelWidth);
+  narrowMq.addEventListener('change', () => { applyPanelWidth(); graph.cy.resize(); });
+  applyPanelWidth();
 
   // 유니버스 묶기(R-11 ①, CR-4 시제품): 사용자가 하위 유니버스와 이름·단위를 고른다
   const dialog = $('group-dialog');

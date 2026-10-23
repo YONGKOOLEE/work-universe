@@ -1482,6 +1482,15 @@ async function checkBrowser(browser, port) {
     await sleep(400);
     const w2 = await asideW();
     check('U-5: 「패널 넓게 보기」 → 오른쪽 패널이 넓어지고(그래프는 줄어도 300px 이상), 한 번 더 누르면 원래대로', w1.aside > w0.aside + 150 && w1.graph >= 300 && w1.pressed === 'true' && w1.label.includes('좁게') && w2.aside === w0.aside && w2.pressed === 'false', JSON.stringify([w0, w1, w2]));
+    // 패널 폭 끌기 손잡이: 보이고 크기가 있다 → ←로 20px 넓어진다 → 두 번 누르면 기본 폭(380)으로 돌아온다
+    const handle0 = await evaluate(s.cdp, "(() => { const r = document.getElementById('panel-resizer').getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height), role: document.getElementById('panel-resizer').getAttribute('role') }; })()");
+    await evaluate(s.cdp, "document.getElementById('panel-resizer').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true }))");
+    await sleep(300);
+    const wk1 = await asideW();
+    await evaluate(s.cdp, "document.getElementById('panel-resizer').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))");
+    await sleep(300);
+    const wk2 = await asideW();
+    check('패널 폭 손잡이: 보이고(폭 4px 이상·높이 100px 이상), ←키로 20px 넓어지고, 두 번 누르면 기본 폭(380)으로 돌아옴', handle0.w >= 4 && handle0.h >= 100 && handle0.role === 'separator' && wk1.aside === w0.aside + 20 && wk2.aside === 380, JSON.stringify([handle0, w0, wk1, wk2]));
     // 첫 화면 배율(나중에 펼쳤다 접은 뒤와 비교: 키운 이름이 배치를 넓히지 않는지)
     const firstZoom = await evaluate(s.cdp, 'window.__wu.cy.zoom()');
     await evaluate(s.cdp, "window.__wu.toggle('U-C')");

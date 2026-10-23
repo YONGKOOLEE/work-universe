@@ -196,6 +196,14 @@ implementation:
   scope_change: CR-12 승인(docs/CR-12-초안.md v0.2, 2026-10-13). 날짜 일정·동결 날짜는 폐기, 동결은 진행에 따라 사용자가 정함
   current_task: (2026-10-13 저녁) CR-12 T-23~T-26·C12-8·일곱 번째 검토(T-28)·가·나 묶음 완료, push됨 9b56b0c. 남은 것: 사용자 화면 확인 체크리스트, T-27 E는 ①로 결정됨(구현 끝), T-21(F)은 조력자 샘플 도착 시, 사람 몫(T-14·T-15·T-16), 기능 동결 선언·제출
   tasks:
+    - id: FEEDBACK-2026-10-23
+      status: 조력자 의견 4건 대응(사용자 "1번 진행, 2 가이드, 3 우선 추천대로, 4 두 개 검토", 2026-10-23). 1 구현·검증, 2·3 가이드·실행안내, 4 진단만(고치기는 답 대기, decisions-pending 15절)
+      date: 2026-10-23
+      model: 패널 폭 구현 Sonnet 하위 에이전트 / 코드 검토·손잡이 표시 보강·변환 진단·가이드·기록·커밋 Opus 메인
+      result: view/panel.js(PANEL·clampPanelWidth), store/local.js panelWidth, index.html #panel-resizer(상시 손잡이 표시), main.js 끌기·키보드·두 번 누르기, tests/panel-width.test.js, browser-check 항목. 실행안내 「이전 판으로 되돌리기」. 가이드 .tmp/guide/유니버스-묶기-가이드.html(Git 밖). tech-record 51절
+      normal_checks: 통과 (단위 686, check:chrome 모두 통과 — 「패널 폭 손잡이: 보이고, ←키로 20px 넓어지고, 두 번 누르면 380」 포함, 스크린샷으로 손잡이 확인)
+      error_checks: 통과 (설정 panelWidth 잘못된 값 9종 버림·저장소 없음, 창이 좁아 최대<최소면 300, 결함 주입 MIN 300→310 → 3개 실패 후 되돌림)
+      unverified: [실제 마우스 끌기(점검은 키보드·두 번 누르기만), Edge(다음 제출 점검), 800px 이하 세로 배치 화면]
     - id: SUBMIT-2026-10-18
       status: 대리 관찰용 새 제출 압축 만들기·제출 점검 완료(사용자 "시작", 2026-10-18)
       date: 2026-10-18

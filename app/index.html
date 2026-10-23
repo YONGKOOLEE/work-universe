@@ -70,6 +70,13 @@
   aside { width: 380px; border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 16px; }
   /* 패널 넓게 보기(여섯 번째 검토 U-5): 초안·인사이트·통합 확인은 좁은 열에서 한 번에 6~8줄만 보인다 */
   main.wide aside { width: min(62vw, 860px); }
+  /* 패널 폭 끌기 손잡이: 그래프와 패널 사이 세로 막대. 끄는 동안(body.resizing) 글 선택 방지 */
+  .panel-resizer { flex: none; width: 6px; cursor: col-resize; background: transparent; touch-action: none; margin-left: -3px; margin-right: -3px; position: relative; z-index: 2; }
+  /* 평소에도 끌 수 있다는 것이 보이게 가운데에 작은 손잡이 표시(처음 사용자: 투명하면 모른다) */
+  .panel-resizer::after { content: ''; position: absolute; left: 1px; top: 50%; width: 4px; height: 44px; margin-top: -22px; border-radius: 2px; background: var(--muted); opacity: .7; }
+  .panel-resizer:hover, .panel-resizer:focus-visible, .panel-resizer.dragging { background: var(--accent); opacity: .55; outline: none; }
+  .panel-resizer:hover::after, .panel-resizer:focus-visible::after, .panel-resizer.dragging::after { background: var(--accent-ink); }
+  body.resizing { user-select: none; cursor: col-resize; }
   .aside-tools { display: flex; justify-content: flex-end; margin: -6px 0 8px; }
   aside h2 { font-size: 17px; margin: 0 0 10px; }
   aside h3 { font-size: 14px; margin: 18px 0 6px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--accent); }
@@ -319,7 +326,7 @@
   details.start-more > summary { cursor: pointer; font-size: 16px; color: var(--accent); padding: 4px 0; }
   details.start-more[open] > summary { margin-bottom: 12px; }
   details.start-more > section { margin-bottom: 20px; }
-  @media (max-width: 800px) { .aside-tools { display: none; } main.wide aside { width: auto; } main { flex-direction: column; } aside { width: auto; border-left: 0; border-top: 1px solid var(--line); max-height: 50vh; } .graph-wrap { min-height: 320px; } }
+  @media (max-width: 800px) { .aside-tools { display: none; } .panel-resizer { display: none; } aside, main.wide aside { width: auto !important; } main { flex-direction: column; } aside { width: auto; border-left: 0; border-top: 1px solid var(--line); max-height: 50vh; } .graph-wrap { min-height: 320px; } }
 </style>
 </head>
 <body>
@@ -348,6 +355,7 @@
     <div id="timebar" class="timebar" data-testid="timebar"></div>
     <ul id="legend" aria-label="범례"></ul>
   </div>
+  <div id="panel-resizer" class="panel-resizer" data-testid="panel-resizer" role="separator" aria-orientation="vertical" aria-label="오른쪽 패널 폭" aria-valuenow="380" tabindex="0" title="끌어서 패널 폭 조절 · 두 번 누르면 기본 폭"></div>
   <aside>
     <div id="tour-slot" class="tour-slot" data-testid="tour-slot" hidden></div>
     <div class="aside-tools"><button type="button" id="wide-toggle" class="small-btn" aria-pressed="false" title="오른쪽 패널을 넓혀 인수인계 초안·인사이트·통합 확인을 한 번에 더 많이 봅니다">패널 넓게 보기</button></div>
