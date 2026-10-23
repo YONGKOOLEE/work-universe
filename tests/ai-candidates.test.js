@@ -285,7 +285,7 @@ test('연결부: 키가 없으면 null이고 호출 0회(실시간 공급자가 
   assert.equal(await findCandidatesAsync(works, { provider: createProvider('none') }), null);
   assert.equal(await findCandidatesAsync(works, { provider: null }), null);
   assert.equal(fake.calls.length, 0);
-  assert.throws(() => createProvider('claude_api', { pregen: PREGEN, apiKey: '' }).candidates(works), /연결하지 않았습니다/);
+  assert.throws(() => createProvider('claude_api', { pregen: PREGEN, apiKey: '' }).candidates(works), /키가 없어 규칙 기반\(사전 생성\)으로 동작합니다/);
 });
 
 // ── 후보 끼워 넣기 ──

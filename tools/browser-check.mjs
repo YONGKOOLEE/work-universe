@@ -2505,7 +2505,7 @@ async function checkBrowser(browser, port) {
       await sleep(150);
     };
     const submitDraft = () => evaluate(s.cdp, `(() => { const set = (id, v) => { const e = document.querySelector('[data-testid=' + id + ']'); e.value = v; e.dispatchEvent(new Event('change')); }; set('draft-target', 'U-A1/N-000'); set('draft-from', 'U-A1/N-011'); set('draft-to', 'U-A1/N-012'); document.querySelector('[data-testid=draft-form] button[type=submit]').click(); })()`);
-    const liveDone = (extra = '') => waitFor(s.cdp, `(() => { const n = document.querySelector('[data-testid=draft-live]'); return !!n && n.textContent === ''${extra}; })()`, 5000);
+    const liveDone = (extra = '') => waitFor(s.cdp, `(() => { const n = document.querySelector('[data-testid=draft-live]'); return !!n && n.textContent !== '생성 중…'${extra}; })()`, 5000);
     const chipCount = () => evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=draft-result] [data-testid=item-method]')].filter((c) => c.textContent === 'Claude API').length");
     const calls = () => evaluate(s.cdp, 'window.__wu.fakeLlm.calls.length');
     await reloadApp();
@@ -2536,13 +2536,28 @@ async function checkBrowser(browser, port) {
     await sleep(150);
     const during = await evaluate(s.cdp, "({ note: (document.querySelector('[data-testid=draft-live]') || {}).textContent || '', aria: (document.querySelector('[data-testid=draft-live]') || {}).getAttribute && document.querySelector('[data-testid=draft-live]').getAttribute('aria-live'), items: document.querySelectorAll('[data-testid^=draft-item-]').length, claude: [...document.querySelectorAll('[data-testid=item-method]')].filter((c) => c.textContent === 'Claude API').length })");
     check('CR-15 초안: 먼저 규칙 기반(사전 생성) 10항목이 그려지고 「생성 중…」(aria-live=polite)이 보임, 아직 Claude API 칩은 없음', during.note === '생성 중…' && during.aria === 'polite' && during.items === 10 && during.claude === 0, JSON.stringify(during));
+    const lockedDuring = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=draft-confirm]'); return b ? b.disabled : null; })()");
     check('CR-15 초안: 응답이 오면 「생성 중…」이 사라지고 항목이 교체됨(칩 「Claude API」), 생성 방식 표시도 바뀜', (await liveDone()) && (await chipCount()) >= 3 && (await text(s.cdp, '[data-testid=draft-method]')).includes('Claude API') && (await text(s.cdp, '[data-testid=draft-method-note]')).includes('원문 인용'), `칩 ${await chipCount()}`);
+    const lockedAfter = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=draft-confirm]'); return { disabled: b ? b.disabled : null, note: (document.querySelector('[data-testid=draft-live]') || {}).textContent || '' }; })()");
+    check('CR-15 초안: 「생성 중…」 동안 「확정」이 잠겨 있고, 응답으로 문장이 바뀌면 「문장이 Claude API 문장으로 바뀌었습니다 — 확인 후 확정하세요」 안내와 함께 다시 켜짐(R10-11)', lockedDuring === true && lockedAfter.disabled === false && lockedAfter.note === '문장이 Claude API 문장으로 바뀌었습니다 — 확인 후 확정하세요', JSON.stringify({ lockedDuring, lockedAfter }));
     await shot(s.cdp, `${browser.name}-41-llm-draft`);
-    // 4) 같은 초안을 다시: 응답 캐시로 호출이 늘지 않는다
+    // 4) 같은 초안을 다시: 검증을 통과해 캐시에 든 항목은 호출 없이 쓰고, 통과 못 한 항목(캐시에 넣지 않음)만 다시 요청한다.
+    //    앞 블록들이 데이터를 바꿔 가짜 client가 따온 인용이 글자 8개에 못 미치는 항목이 생길 수 있어, 첫 결과를 기준으로 판정한다(2026-10-24)
+    const methodsNow = () => evaluate(s.cdp, "JSON.stringify([...document.querySelectorAll('[data-testid=draft-result] [data-testid^=draft-item-]')].map((sec) => { const c = sec.querySelector('[data-testid=item-method]'); return [sec.dataset.testid.replace('draft-item-', ''), c ? c.textContent : '']; }).filter(([, m]) => m))");
+    const callHeads = (n) => evaluate(s.cdp, `JSON.stringify(((window.__wu.fakeLlm.calls[${n}] || {}).messages || [{ content: '' }])[0].content.match(/^### 항목 key=(\\S+)/gm) || [])`);
     const calls1 = await calls();
+    const firstMethods = JSON.parse(await methodsNow());
+    const firstLlm = firstMethods.filter(([, m]) => m === 'Claude API').map(([k]) => k);
+    const firstOther = firstMethods.filter(([, m]) => m !== 'Claude API').map(([k]) => k);
     await openDraft();
     await submitDraft();
-    check('CR-15 초안: 같은 근거로 다시 만들면 응답 캐시를 써서 호출이 늘지 않음', (await liveDone()) && (await calls()) === calls1 && calls1 === 1 && (await chipCount()) >= 3, `호출 ${calls1}→${await calls()}`);
+    await liveDone();
+    const calls2 = await calls();
+    const againMethods = JSON.parse(await methodsNow());
+    const heads2 = calls2 > calls1 ? JSON.parse(await callHeads(calls1)).map((h) => h.replace('### 항목 key=', '')) : [];
+    const cachedKept = firstLlm.every((k) => againMethods.some(([k2, m]) => k2 === k && m === 'Claude API'));
+    const onlyFailed = firstOther.length === 0 ? calls2 === calls1 : (calls2 === calls1 + 1 && heads2.length === firstOther.length && heads2.every((k) => firstOther.includes(k)));
+    check('CR-15 초안: 같은 근거로 다시 만들면 통과한 항목은 응답 캐시를 써서 다시 보내지 않고(Claude API 칩 그대로), 통과 못 한 항목만 다시 요청', calls1 === 1 && firstLlm.length >= 3 && cachedKept && onlyFailed, JSON.stringify({ calls1, calls2, firstLlm, firstOther, heads2, cachedKept }));
     // 5) 실패: 모델을 바꿔(캐시 키가 달라져) 시간 초과 / 지어낸 quote
     const setModel = async (m) => { await settingsOpen(); await typeInto('settings-model', m); await sleep(100); await settingsClose(); };
     await setModel('claude-test-timeout');
@@ -2550,7 +2565,7 @@ async function checkBrowser(browser, port) {
     await openDraft();
     await submitDraft();
     const failed = (await liveDone()) && (await evaluate(s.cdp, "({ fb: (document.querySelector('[data-testid=draft-fallback]') || {}).textContent || '', chips: [...document.querySelectorAll('[data-testid=item-method]')].filter((c) => c.textContent === 'Claude API').length, items: document.querySelectorAll('[data-testid^=draft-item-]').length })"));
-    check('CR-15 초안: 시간 초과면 「규칙 기반으로 대체함: …연결 실패·시간 초과」 + 규칙 기반 10항목, Claude API 칩 없음', !!failed && failed.fb.includes('규칙 기반으로 대체함') && failed.fb.includes('연결 실패·시간 초과') && failed.chips === 0 && failed.items === 10, JSON.stringify(failed));
+    check('CR-15 초안: 시간 초과면 「원래 문장을 유지함: …연결 실패·시간 초과」(먼저 그린 사전 생성 문장이 그대로) + 10항목, Claude API 칩 없음', !!failed && (failed.fb.includes('원래 문장을 유지함') || failed.fb.includes('규칙 기반으로 대체함')) && failed.fb.includes('연결 실패·시간 초과') && failed.chips === 0 && failed.items === 10, JSON.stringify(failed));
     await setModel('claude-test-quote');
     await evaluate(s.cdp, "window.__wu.fakeLlm.mode = 'badquote'");
     await openDraft();

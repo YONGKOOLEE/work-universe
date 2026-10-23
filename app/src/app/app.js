@@ -80,7 +80,7 @@ export function storageFailReason(err) {
  *   store가 null이면 저장소를 쓸 수 없는 상태다(W-STORAGE → 샘플 읽기 전용, 5.3).
  *   currentId가 없거나 찾을 수 없으면 첫 샘플을 연다.
  */
-export function createApp({ store, samples, currentId, now, authorName, locked = false }) {
+export function createApp({ store, samples, currentId, now, authorName, locked = false, clearLlmCache = null }) {
   const warnings = [];
   // 확정자·통합 확인 목록 판정(decideIdentity)의 기록 주체(R-22, D-24). 작성자 이름이 있으면 그 이름, 없거나 깨졌으면 지금 문구
   const author = () => cleanAuthorName(typeof authorName === 'function' ? authorName() : authorName) || DEFAULT_AUTHOR;
@@ -588,6 +588,12 @@ export function createApp({ store, samples, currentId, now, authorName, locked =
       db = store;
       writable = true;
       doc = db.loadUniverse(samples[0].universe.id);
+      // 실시간 응답 캐시(wu:v1:llm-cache)도 지운다(R10-12). 데이터가 초기화되면 저장된 응답 문장이 남을 이유가 없다. 못 지워도 초기화는 성공이다
+      try {
+        if (typeof clearLlmCache === 'function') clearLlmCache();
+      } catch {
+        // 캐시는 근거 지문으로 다시 검증하므로 남아도 틀린 문장을 쓰지 않는다
+      }
       return { ok: true };
     },
   };

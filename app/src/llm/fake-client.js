@@ -4,13 +4,13 @@
 // 키·네트워크를 쓰지 않는다. 브라우저 기능을 쓰지 않는다.
 
 import Anthropic from '@anthropic-ai/sdk';
+import { evidenceBody } from './evidence-text.js';
 import { parseCandidatesUser, parseConvertUser, parsePrompt } from './prompts.js';
 
-/** 근거 글 한 줄에서 gid 뒤의 앞부분을 quote로 쓴다(근거 글에 글자 그대로 있는 구절) */
+/** 근거 글 한 줄에서 머리(「gid [유형]」)를 뗀 본문의 앞부분을 quote로 쓴다(근거 글 본문에 글자 그대로 있는 구절, 8글자 이상) */
 function quoteOf(line, gid) {
   if (!gid) return '';
-  const body = String(line || '').slice(gid.length).trim();
-  return body.slice(0, 14).trim();
+  return evidenceBody(String(line || '')).trim().slice(0, 20).trim();
 }
 
 const isConvert = (params) => !!(params.output_config && params.output_config.format && params.output_config.format.schema.properties.works);
@@ -39,7 +39,8 @@ function convertAnswer(mode, doc) {
   const people = peopleLine ? (cells(peopleLine)[1] || '').split(/[,，]/).map((x) => x.trim()).filter(Boolean).map((label) => ({ label, role: true, org: '', duty: '', quote: q(peopleLine) })) : [];
   const flow = row(/→/);
   const artifacts = flow ? flow.split(/\s*→\s*/).map((x) => x.trim()).filter(Boolean).map((label) => ({ label, description: '', quote: q(flow) })) : [];
-  const topics = lines.filter((l) => /^###\s/.test(l)).slice(0, 3).map((l) => ({ label: l.replace(/^#+\s*[\d.]*\s*/, ''), description: '', subtype: '', quote: q(l) }));
+  // 제목 줄만으로는 글자가 8개 미만일 수 있어 다음 줄을 붙여 인용한다(공백·줄바꿈은 비교에서 무시되므로 원문 부분 문자열)
+  const topics = lines.map((l, i) => [l, i]).filter(([l]) => /^###\s/.test(l)).slice(0, 3).map(([l, i]) => ({ label: l.replace(/^#+\s*[\d.]*\s*/, ''), description: '', subtype: '', quote: q(`${l} ${lines[i + 1] || ''}`.trim()) }));
   const ask = row(/^\d+\.\s.*\?$/);
   const memos = ask ? [{ text: ask.replace(/^\d+\.\s*/, ''), kind: 'issue', work: '', quote: q(ask) }] : [];
   const edges = people[0] && works[0] ? [{ from: { type: 'person', label: people[0].label }, to: { type: 'work', label: works[0].label }, relation: 'performs', quote: '' }] : [];

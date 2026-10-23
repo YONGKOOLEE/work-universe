@@ -35,6 +35,9 @@ import { itemEvidence } from '../rules/handover.js';
 
 export const DEFAULT_PROVIDER = 'pregen';
 
+/** 키 없이 Claude API를 골랐을 때 알리는 이유(R10-13) */
+export const KEYLESS_REASON = '키가 없어 규칙 기반(사전 생성)으로 동작합니다 — 설정에서 키를 넣으면 실시간';
+
 const sortedIds = (ids) => [...new Set(ids)].sort();
 /**
  * 사전 생성 조회 키(12.3): 작업, 대상, (초안이면) 항목·보내는 사람>받는 사람, 정렬한 근거 ID.
@@ -125,6 +128,16 @@ export function classifyLlmError(err) {
  *  - refine(task, {system, user, schema}) → Promise<파싱된 JSON>. 오류는 LlmError로 던진다. 검증(근거 ID·quote)은 연결부가 한다
  *  - client는 시험용으로 주입한다(messages.parse를 흉내 내는 가짜). 없으면 SDK를 처음 부를 때 만든다
  */
+// SDK 기본 parse는 깨진 JSON에서 예외를 던져, max_tokens로 잘린 응답이 「도중에 끊김」이 아니라 「응답 형식 오류」가 된다.
+// 예외 없이 null을 돌려주게 하면 stop_reason 검사가 먼저 돌고, 그다음 null이면 형식 오류로 처리한다(R10-6)
+const parseJsonOrNull = (content) => {
+  try {
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+};
+
 function claudeProvider({ apiKey, model, client = null, base = null, cache = null }) {
   const useModel = typeof model === 'string' && model.trim() ? model.trim() : DEFAULT_LLM_MODEL;
   let cli = client;
@@ -158,7 +171,7 @@ function claudeProvider({ apiKey, model, client = null, base = null, cache = nul
         max_tokens: maxTokens,
         system,
         messages: [{ role: 'user', content: user }],
-        output_config: { effort: LLM_EFFORT, format: jsonSchemaOutputFormat(schema) },
+        output_config: { effort: LLM_EFFORT, format: { ...jsonSchemaOutputFormat(schema), parse: parseJsonOrNull } },
       };
       msg = await (options ? getClient().messages.parse(body, options) : getClient().messages.parse(body));
     } catch (err) {
@@ -199,7 +212,7 @@ export function createProvider(name, { pregen, apiKey = '', model = '', client =
       return null;
     case 'claude_api':
       // 키가 없으면 지금처럼 "연결 전"(규칙 기반 + 이유). 키가 있어야만 실시간 호출 경로가 생긴다
-      if (typeof apiKey !== 'string' || !apiKey.trim()) return unavailable(name, 'Claude API는 이번 제출물에 연결하지 않았습니다(다음 단계)');
+      if (typeof apiKey !== 'string' || !apiKey.trim()) return unavailable(name, KEYLESS_REASON);
       return claudeProvider({ apiKey: apiKey.trim(), model, client, base: pregenProvider(pregen), cache });
     case 'internal':
       return unavailable(name, '사내 LLM은 사용 방법이 정해지지 않아 연결하지 않았습니다(다음 단계)');

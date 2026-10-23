@@ -10,7 +10,7 @@
 
 import { pairKey } from '../model/schema.js';
 import { textFingerprint } from './ai-convert.js';
-import { describeEvidence, normalizeQuote } from './evidence-text.js';
+import { QUOTE_MAX, QUOTE_MIN, describeEvidence, normalizeQuote, quoteShapeProblem } from './evidence-text.js';
 import { CANDIDATES_SYSTEM_PROMPT, candidatesUserText } from './prompts.js';
 
 /** 보낼 업무 수와 글자 수 상한(한 곳). 넘으면 호출하지 않고 안내한다 */
@@ -19,7 +19,7 @@ export const AI_CANDIDATES_MAX_CHARS = 100000;
 /** 업무 하나의 글 길이 상한(보낸 글 = 인용을 확인하는 글) */
 export const AI_CANDIDATES_WORK_TEXT_MAX = 1500;
 /** 인용의 최소 길이(공백을 뺀 글자 수). ai-convert와 같은 기준 */
-export const AI_CANDIDATES_MIN_QUOTE = 8;
+export const AI_CANDIDATES_MIN_QUOTE = QUOTE_MIN;
 /** 한 번에 받아들일 쌍 수(프롬프트는 30쌍까지 요청) */
 export const AI_CANDIDATES_MAX_PAIRS = 50;
 export const AI_CANDIDATE_LABEL = 'AI 후보';
@@ -165,7 +165,10 @@ export function verifyAiCandidates(works, parsed, decided = {}) {
   const quoteProblem = (quote, g, side) => {
     if (typeof quote !== 'string') return `${side} 업무의 원문 인용이 없음`;
     const q = normalizeQuote(quote);
-    if (q.length < AI_CANDIDATES_MIN_QUOTE) return `${side} 업무의 원문 인용이 ${AI_CANDIDATES_MIN_QUOTE}글자 미만`;
+    const shape = quoteShapeProblem(q);
+    if (shape === 'short') return `${side} 업무의 원문 인용이 ${AI_CANDIDATES_MIN_QUOTE}글자 미만`;
+    if (shape === 'long') return `${side} 업무의 원문 인용이 ${QUOTE_MAX}글자 초과`;
+    if (shape) return `${side} 업무의 원문 인용에 글자·숫자가 ${AI_CANDIDATES_MIN_QUOTE}개 미만`;
     return hay.get(g).includes(q) ? null : `${side} 업무 글에서 인용을 찾지 못함`;
   };
 

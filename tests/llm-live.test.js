@@ -13,7 +13,7 @@ import {
   DEFAULT_LLM_MODEL, LLM_EFFORT, LLM_MAX_RETRIES, LLM_MAX_TOKENS, LLM_TIMEOUT_MS, LlmError, PROVIDERS, classifyLlmError, createProvider, itemEvidence,
 } from '../app/src/llm/providers.js';
 import { QUOTE_FAIL, explainInsight, explainInsightAsync, isLive, llmCacheKey, refineDraft, refineDraftAsync, syncProvider } from '../app/src/llm/connector.js';
-import { MIN_QUOTE_LEN, describeEvidence, normalizeQuote, quoteInEvidence } from '../app/src/llm/evidence-text.js';
+import { QUOTE_MAX, QUOTE_MIN, describeEvidence, evidenceBody, normalizeQuote, quoteInEvidence, quoteShapeProblem } from '../app/src/llm/evidence-text.js';
 import { buildDraftPrompt, buildExplainPrompt, parsePrompt } from '../app/src/llm/prompts.js';
 import { createFakeClient } from '../app/src/llm/fake-client.js';
 import { EXPLAIN_SCENARIOS, HANDOVER_SCENARIOS, explainRequestOf, handoverDraftOf } from '../tools/pregen-scenarios.mjs';
@@ -45,7 +45,7 @@ test('공급자: 키가 없거나 공백이면 지금처럼 "연결 전"(실시�
     const p = createProvider('claude_api', { pregen: PREGEN, apiKey, client: fake });
     assert.equal(p.live, undefined);
     assert.equal(isLive(p), false);
-    assert.throws(() => p.refine(), /Claude API는 이번 제출물에 연결하지 않았습니다/);
+    assert.throws(() => p.refine(), /키가 없어 규칙 기반\(사전 생성\)으로 동작합니다 — 설정에서 키를 넣으면 실시간/);
   }
   const p = live(fake);
   assert.equal(p.live, true);
@@ -127,15 +127,19 @@ test('프롬프트: 규칙이 고른 근거 글과 규칙 기반 문장만 보�
 });
 
 // ── quote 규칙 ──
-test('quote 규칙: 공백·대소문자를 무시한 부분 문자열, 짧거나 없는 구절은 불통과', () => {
+test('quote 규칙: 공백·대소문자를 무시한 부분 문자열(본문만), 8글자 미만·없는 구절은 불통과', () => {
   const ev = ['U-1/N-1 [업무] Month End Close — 월말 정산 대사 확인 {담당=윤바다}'];
-  assert.equal(quoteInEvidence('월말 정산', ev), true);
-  assert.equal(quoteInEvidence('월말정산', ev), true); // 공백 무시
-  assert.equal(quoteInEvidence('  월 말   정 산 ', ev), true);
+  assert.equal(quoteInEvidence('월말 정산 대사 확인', ev), true);
+  assert.equal(quoteInEvidence('월말정산대사확인', ev), true); // 공백 무시
+  assert.equal(quoteInEvidence('  월 말   정 산 대 사 확 인 ', ev), true);
   assert.equal(quoteInEvidence('MONTH end close', ev), true); // 대소문자 무시
-  assert.equal(quoteInEvidence('월말 결산', ev), false); // 글에 없음
+  assert.equal(quoteInEvidence('월말 결산 대사 확인', ev), false); // 글에 없음
   assert.equal(quoteInEvidence('정', ev), false); // 너무 짧음
-  assert.equal(MIN_QUOTE_LEN, 3);
+  assert.equal(quoteInEvidence('월말 정산', ev), false); // 7글자 이하(R10-1: 최소 3 → 8)
+  assert.equal(quoteInEvidence('월말정산대사확', ev), false); // 7글자
+  assert.equal(quoteInEvidence('월말정산대사확인', ev), true); // 8글자
+  assert.equal(QUOTE_MIN, 8);
+  assert.equal(QUOTE_MAX, 300);
   assert.equal(quoteInEvidence('', ev), false);
   assert.equal(quoteInEvidence(undefined, ev), false);
   assert.equal(quoteInEvidence(5, ev), false);
@@ -471,7 +475,7 @@ test('키 없음: 동기 경로는 지금과 같다(사전 생성 결과·규칙
   const noKey = createProvider('claude_api', { pregen: PREGEN });
   const r = refineDraft(H1.draft, { provider: syncProvider(noKey), exists: existsIn(H1.view) });
   assert.equal(r.method, 'rule');
-  assert.match(r.fallback.reason, /Claude API는 이번 제출물에 연결하지 않았습니다/);
+  assert.match(r.fallback.reason, /키가 없어 규칙 기반\(사전 생성\)으로 동작합니다 — 설정에서 키를 넣으면 실시간/);
   const e = explainInsight(X[0].req, { provider: syncProvider(noKey), exists: existsIn(X[0].view) });
   assert.equal(e.method, 'rule');
   // 키가 있어도 동기 함수에는 base(사전 생성)를 넘겨 먼저 그린다
@@ -602,8 +606,7 @@ test('실제 SDK(가짜 fetch): 요청은 api.anthropic.com/v1/messages, 본문�
       const sections = parsePrompt(JSON.parse(init.body).messages[0].content);
       const first = sections[0];
       const ev = first.evidence[first.rule[0].evidence_ids[0]];
-      const gid = first.rule[0].evidence_ids[0];
-      const out = { items: [{ key: first.key, sentences: [{ text: first.rule[0].text, evidence_ids: first.rule[0].evidence_ids, quotes: [ev.slice(gid.length).trim().slice(0, 14)] }] }] };
+      const out = { items: [{ key: first.key, sentences: [{ text: first.rule[0].text, evidence_ids: first.rule[0].evidence_ids, quotes: [evidenceBody(ev).trim().slice(0, 20).trim()] }] }] };
       return jsonResponse(200, message(JSON.stringify(out)));
     }),
   });

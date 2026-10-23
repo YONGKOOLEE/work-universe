@@ -167,13 +167,14 @@ test('검증: 인용이 공백·대소문자만 다르면 통과, 글자가 다�
 });
 
 test('검증: 인용이 8글자 미만이면(공백 제외) 원문에 있어도 버린다. 8글자는 통과', () => {
-  const text = '월말 정산을 한다. 대사를 수행한다.';
-  const one = (quote) => verify(resp({ works: [work('정산', quote), work('다른 업무', '대사를 수행한다.')] }), text);
+  const text = '월말 정정산을 한다. 대사를 수행한다.';
+  const one = (quote) => verify(resp({ works: [work('정산', quote), work('다른 업무', '한다. 대사를 수행한다.')] }), text);
   const short = one('월말 정산을'); // 정규화하면 5글자
   assert.equal(short.counts.works, 1);
   assert.match(reasons(short)[0], /8글자 미만/);
-  assert.equal(normalizeLen('월말 정산을 한다.'), 8);
-  assert.equal(one('월말 정산을 한다.').counts.works, 2);
+  // R10-9: 8글자는 기호가 아닌 글자·숫자로 센다 → 「정산을 한다. 대사를」는 기호 포함 9글자, 글자 8개로 통과
+  assert.equal(normalizeLen('정산을 한다. 대사를'), 9);
+  assert.equal(one('정산을 한다. 대사를').counts.works, 2);
   const none = verify(resp({ works: [work('정산', 12345), work('정산2', null), work('정산3', undefined)] }), text);
   assert.equal(none.ok, false);
   assert.deepEqual(reasons(none), ['원문 인용이 없음', '원문 인용이 없음', '원문 인용이 없음']);
@@ -451,7 +452,9 @@ test('연결부: 스키마가 깨진 응답(JSON 아님·배열·빈 객체)은 
   assert.equal(arr.ok, false);
   const empty = await run(DOC, live(withOut({})));
   assert.equal(empty.ok, false);
-  assert.match(empty.fallback.reason, /하나도 없습니다/);
+  // R10-14: 항목이 하나도 없고 뺀 항목도 0개면 인용 문제가 아니라 응답이 빈 것 → 형식 쪽 코드와 문구
+  assert.equal(empty.fallback.reason, '응답에 항목이 없음');
+  assert.equal(empty.fallback.code, 'W-LLM-FALLBACK');
 });
 
 test('연결부: 오류는 분류된 문구로 실패(auth·rate·timeout·connect·server), 원문 메시지·키는 새지 않는다', async () => {

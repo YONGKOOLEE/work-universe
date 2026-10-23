@@ -228,6 +228,7 @@ function start() {
     now: nowIso,
     // 확정자·통합 확인 목록 판정(decideIdentity)의 기록 주체(R-22, D-24). 설정은 아래에서 읽으므로 부를 때마다 지금 값을 돌려준다
     authorName: () => settings.authorName,
+    clearLlmCache: () => llmCache.clear(), // 가상 데이터 초기화에서 실시간 응답 캐시도 지운다(R10-12)
   });
 
   const $ = (id) => document.getElementById(id);
@@ -860,7 +861,10 @@ function start() {
         onApiKey: (v) => {
           const key = cleanApiKey(v);
           if (key) settings.apiKey = key;
-          else delete settings.apiKey;
+          else {
+            delete settings.apiKey;
+            llmCache.clear(); // 키 칸을 비워 지워도 「키 지우기」와 같이 응답 캐시를 남기지 않는다(R10-12)
+          }
           provider = makeProvider();
           saveSettings(storage, settings);
           renderSettingsButton();

@@ -96,7 +96,7 @@ test('사전 생성 결과가 하나도 없는 새 유니버스는 전부 규칙
 
 test('R-04 ③: 실패 흉내·Claude API(P2)·사내 LLM(P2)을 고르면 규칙 기반으로 전환하고 원인을 남긴다', () => {
   const { view, draft } = handoverDraftOf(HANDOVER_SCENARIOS[0]);
-  for (const [name, re] of [['fail', /실패/], ['claude_api', /다음 단계/], ['internal', /다음 단계/]]) {
+  for (const [name, re] of [['fail', /실패/], ['claude_api', /키가 없어 규칙 기반\(사전 생성\)으로 동작합니다 — 설정에서 키를 넣으면 실시간/], ['internal', /다음 단계/]]) {
     const r = refineDraft(draft, { provider: createProvider(name), exists: existsIn(view) });
     assert.equal(r.method, 'rule', name);
     assert.match(r.fallback.reason, re, name);

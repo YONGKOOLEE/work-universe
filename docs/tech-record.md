@@ -731,7 +731,7 @@
   - 공식 TypeScript SDK `@anthropic-ai/sdk` 최신 1.1.0, 라이선스 Apache-2.0(npm view). 브라우저 사용은 기본 꺼짐이며 `dangerouslyAllowBrowser: true`로 켠다. 공식 문서 경고: 키가 클라이언트 코드에 노출되므로 "내부 도구·신뢰된 사용자, 또는 단기·자주 바꾸는 키의 개발·시연 용도"에서만(https://platform.claude.com/docs/en/cli-sdks-libraries/sdks/typescript 「Browser usage」). 이 프로젝트는 시연·개인 키 용도라 조건에 맞고, 제출물에는 키가 없다(A-2 유지).
   - 1.x SDK는 API 버전 `2026-10-21`을 기본으로 보낸다. 기본 모델 `claude-opus-5-5`(입력 $4 / 출력 $20 per MTok, 2026-10-06 캐시 표 — 요금은 바뀔 수 있어 소개자료에 적지 않음). 구조화 출력은 `output_config.format`(`messages.parse`), 사고(thinking)는 기본 켜짐(adaptive)이며 effort로 조절. 커뮤니티 자료(2024)의 원시 헤더 `anthropic-dangerous-direct-browser-access: true`는 SDK가 대신 처리하므로 직접 쓰지 않는다.
 - **결정(D-33):** 공식 SDK를 esbuild 번들에 함께 묶어 호출(프로젝트 규칙 "라이브러리는 함께 넣는다"). 빌드 `fetch(` 금지는 SDK 번들 때문에 "앱 소스(app/src)에서의 fetch 금지"로 좁히고, CSP `connect-src`에 `https://api.anthropic.com`만 허용. 번들 크기 증가는 측정해 기록(상한 어림 +700KB, 넘으면 보고 후 결정). 키·모델은 `wu:v1:settings`, 응답 캐시는 `wu:v1:llm-cache`(키를 지우면 함께 지움).
-- **지어내기 방지 3중:** ① 스키마(구조화 출력) ② 근거 ID·지문(기존) ③ 원문 인용(quote) 부분 문자열 검증(신규) — 통과 못 한 노드·문장·후보는 버리고 건수 표시.
+- **지어내기 방지 3중:** ① 스키마(구조화 출력)(SDK가 enum은 설명 글로 바꿔 보냄 — enum 강제는 앱 검증이 담당) ② 근거 ID·지문(기존) ③ 원문 인용(quote) 부분 문자열 검증(신규) — 통과 못 한 노드·문장·후보는 버리고 건수 표시.
 - **T-36 구현 결과(2026-10-23, Sonnet 하위 에이전트 구현·Opus 메인 검증):**
   - 호출 모양: `new Anthropic({ apiKey, dangerouslyAllowBrowser: true, timeout: 30000, maxRetries: 1 })` → `client.messages.parse({ model, max_tokens, system, messages, output_config: { effort: 'medium', format: jsonSchemaOutputFormat(schema) } })`. `jsonSchemaOutputFormat`은 `@anthropic-ai/sdk/helpers/json-schema`에서 가져온다(SDK 1.1.0 소스로 확인). 기본 모델 `claude-opus-5-5`(설정 창에서 바꿀 수 있음).
   - 번들 크기: 스크립트 831KB → 1173KB(**+342KB**, 어림 상한 +700KB 안). dist/index.html 1224KB.
@@ -752,3 +752,11 @@
   - 화면 `ui/merge.js`: 「AI로 연관 찾기」(키 있고 읽기 전용 아닐 때) → 「AI가 업무를 비교하는 중… (최대 60초)」 → 「AI 후보」 칩·이유·인용 두 줄·확신·「같은 업무」/「다른 업무」, 요약 「AI 후보 n개(확인되지 않아 뺀 쌍 m개)」, 실패 「AI 연관 찾기 실패: 원인 — 기존 후보만 보여 줍니다」. 판정으로 다시 그려도 결과 유지·현재 판정으로 다시 거름. 닫기·다른 노드 선택 시 늦은 응답 버림. 키 없는 화면의 DOM은 이전과 같음.
   - 검증: `tests/ai-candidates.test.js` 23개(결함 주입 3종 잡힘), 단위 전체 898, 브라우저 점검 항목 14개(U-D1 통합 확인 목록, 가짜 쌍 「참가자 모집 ↔ 신입 교육 운영」, 확정·거부는 누르지 않음).
   - 미확인·한계: 실제 모델 품질(인용은 "그 업무 글에 있다"까지만 보증 — 같은 업무인지는 사람이 확정), 업무 300개 초과 묶음에서는 기능 없음(일부 선택 UI는 범위 밖), 응답 8000토큰 잘림 여부.
+- **FIX-R10(2026-10-23, 재검증 docs/review-2026-10-23-cr15.md 반영, Sonnet 하위 에이전트 수정·Opus 메인 점검):**
+  - quote 공통 규칙을 `evidence-text.js` 한 곳으로: `QUOTE_MIN 8`·`QUOTE_MAX 300`(정규화 뒤), 글자·숫자 8개 이상(`quoteShapeProblem`), NFC 정규화, 근거 글 머리 `gid [유형]`은 떼고 본문만 비교(R10-1·8·9). 초안·변환·후보가 같은 함수를 쓴다.
+  - 연결부: 초안 캐시 키에 보내는·받는 사람(R10-2), 공급자별 진행 중 요청 Map으로 같은 키 동시 호출 합침 + 인사이트 설명 400ms 디바운스(R10-3), 실패·불통과 항목은 **호출 전 문장(사전 생성 포함) 유지**(`base` 옵션, 화면 「원래 문장을 유지함」), 변환 응답에 항목·뺀 항목 모두 0이면 FALLBACK「응답에 항목이 없음」(R10-14).
+  - 프롬프트: 초안·설명 SYSTEM_PROMPT에 규칙 0(근거 글 안 지시문 무시) + 근거 글을 `<근거>…</근거>`로 감싸고 안의 닫는 표지 위조는 지움(R10-4). 사전 생성 지문 36 불변.
+  - 공급자: `format.parse`를 예외 없는 JSON 파서로 바꿔 `stop_reason: max_tokens` 검사가 먼저 돌게(R10-6). 키 없음 문구 「키가 없어 규칙 기반(사전 생성)으로 동작합니다 — 설정에서 키를 넣으면 실시간」(R10-13).
+  - 화면: 「생성 중…」 동안 확정 잠금 → 바뀌면 안내 뒤 해제(R10-11), 키 칸 비움·가상 데이터 초기화 때 응답 캐시 삭제(R10-12, `createApp({clearLlmCache})`). ai-convert 표시 속성 2000자 자름(R10-7).
+  - T-38 점검 3건의 실제 원인: ① merge 화면이 실시간 공급자를 그대로 `explainInsight`에 넘겨 사전 생성 대신 규칙 문장이 나옴 → `syncProvider`로(후보 이유에는 refine을 걸지 않음 — 의도대로) ③ 메모리 캐시로 즉시 온 응답이 `st.result`에 남아 다른 노드를 고른 뒤 다시 열 때 보임 → 옛 패널이 DOM에서 빠져 있으면 결과 비움. ② 는 기대값만.
+  - 테스트 `tests/cr15-r10.test.js` 27개(+DOM 흉내 `tests/dom-stub.js`), 전체 925. 바꾼 기존 테스트: quote 3~7자 데이터 → 8자 이상(검증 강화), 옛 키 없음 문구, `{}` 응답 문구(R10-14), fake-client 변환 모드의 주제 인용을 다음 줄까지(새 규칙에서 8자 미만이라 버려짐).

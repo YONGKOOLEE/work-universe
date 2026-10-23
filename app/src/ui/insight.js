@@ -5,7 +5,7 @@ import { DENSE_DEFAULT_N, denseLimit, densityGaps, repeatInefficiency, similarEx
 import { flowChange } from '../rules/flow.js';
 import { RISK, concentrationExplain, handoverReadiness, knowledgeConcentration, readinessExplain, ripple, rippleExplain } from '../rules/insight-risk.js';
 import { densityExplain, flowExplain, repeatExplain, similarExplain } from '../rules/explain.js';
-import { METHOD_LABELS, explainInsight, explainInsightAsync, isLive, syncProvider } from '../llm/connector.js';
+import { METHOD_LABELS, afterQuiet, explainInsight, explainInsightAsync, isLive, syncProvider } from '../llm/connector.js';
 import { el } from './dom.js';
 import { evidenceChips } from './evidence.js';
 import { todayLocal } from './time.js';
@@ -28,16 +28,19 @@ function explainBox(view, req, o) {
   const note = live ? el('span', { class: 'muted small', 'aria-live': 'polite', 'data-testid': 'explain-live' }, ' 생성 중…') : null;
   fillExplain(box, view, r, o, note);
   if (live) {
-    explainInsightAsync(req, { provider: o.provider, exists: view.exists, view })
-      .then((r2) => {
-        if (!box.isConnected) return; // 다른 화면·탭·업무로 옮겨 갔으면 응답을 버린다
-        note.textContent = '';
-        if (r2) {
-          box.dataset.method = r2.method;
-          fillExplain(box, view, r2, o, note);
-        }
-      })
-      .catch(() => { if (box.isConnected) note.textContent = ''; });
+    // 디바운스(R10-3): 시간 막대를 끌면 상자가 계속 다시 그려지므로 바로 부르지 않는다. 조용해진 뒤에도 상자가 화면에 남아 있을 때만 부른다(그 사이 다시 그려져 빠졌으면 부르지 않음)
+    afterQuiet(() => box.isConnected, () => {
+      explainInsightAsync(req, { provider: o.provider, exists: view.exists, view, base: r }) // base: 먼저 그린 문장(실패하면 그대로 둔다)
+        .then((r2) => {
+          if (!box.isConnected) return; // 다른 화면·탭·업무로 옮겨 갔으면 응답을 버린다
+          note.textContent = '';
+          if (r2) {
+            box.dataset.method = r2.method;
+            fillExplain(box, view, r2, o, note);
+          }
+        })
+        .catch(() => { if (box.isConnected) note.textContent = ''; });
+    });
   }
   return box;
 }
@@ -49,7 +52,7 @@ function fillExplain(box, view, r, o, note) {
     el('ul', {}, ...r.sentences.map((s) => el('li', {}, s.text, ' ', s.evidence_ids.length > 4
       ? el('details', { class: 'evidence-fold' }, el('summary', { class: 'muted small' }, `근거 ${s.evidence_ids.length}건`), chips(view, s.evidence_ids, o.onFocus))
       : chips(view, s.evidence_ids, o.onFocus)))),
-    r.fallback ? el('p', { class: 'muted small', 'data-testid': 'explain-fallback' }, `규칙 기반으로 대체함: ${r.fallback.reason}`) : null,
+    r.fallback ? el('p', { class: 'muted small', 'data-testid': 'explain-fallback' }, `${r.fallback.keep ? '원래 문장을 유지함' : '규칙 기반으로 대체함'}: ${r.fallback.reason}`) : null,
   ].filter(Boolean));
 }
 

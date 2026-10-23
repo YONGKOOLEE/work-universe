@@ -13,11 +13,11 @@ import { isDate } from '../model/checks.js';
 import { ID_PREFIX, LABEL_MAX, SCHEMA_VERSION, SUBTYPE_ROLE, TEXT_MAX, normalizeLabel, pairAllowed } from '../model/schema.js';
 import { validateDocument } from '../model/validate.js';
 import { CONVERT_RULES, findDate, marksOf, statusOf, stripMarks } from '../rules/doc-convert.js';
-import { normalizeQuote } from './evidence-text.js';
+import { QUOTE_MAX, QUOTE_MIN, normalizeQuote, quoteShapeProblem } from './evidence-text.js';
 import { CONVERT_SYSTEM_PROMPT, convertUserText } from './prompts.js';
 
 /** 인용의 최소 길이(공백을 뺀 글자 수). 짧은 구절은 어디에나 있어 근거가 되지 못한다 */
-export const AI_CONVERT_MIN_QUOTE = 8;
+export const AI_CONVERT_MIN_QUOTE = QUOTE_MIN;
 /** 노드의 원문 속성(attrs.원문)에 남기는 인용 길이 */
 export const AI_SOURCE_MAX = 40;
 export const AI_CONVERT_LABEL = 'AI 변환';
@@ -130,7 +130,10 @@ export function verifyAiConvert(text, parsed) {
   const quoteProblem = (quote) => {
     if (typeof quote !== 'string') return '원문 인용이 없음';
     const q = normalizeQuote(quote);
-    if (q.length < AI_CONVERT_MIN_QUOTE) return `원문 인용이 ${AI_CONVERT_MIN_QUOTE}글자 미만`;
+    const shape = quoteShapeProblem(q);
+    if (shape === 'short') return `원문 인용이 ${AI_CONVERT_MIN_QUOTE}글자 미만`;
+    if (shape === 'long') return `원문 인용이 ${QUOTE_MAX}글자 초과(원문을 통째로 베낀 인용)`;
+    if (shape) return `원문 인용에 글자·숫자가 ${AI_CONVERT_MIN_QUOTE}개 미만`;
     return hay.includes(q) ? null : '원문에서 인용을 찾지 못함';
   };
   const text1 = (v, max, where) => {
@@ -145,7 +148,7 @@ export function verifyAiConvert(text, parsed) {
     if (typeof raw !== 'string') return null;
     const full = oneLine(stripMarks(raw) || raw);
     if (!full) return null;
-    const marks = marksOf(raw).join(' ');
+    const marks = clip(marksOf(raw).join(' '), LABEL_MAX); // 표시도 이름 상한 안으로(R10-7: attrs.표시가 길어 문서 전체가 실패하지 않게)
     if (full.length <= LABEL_MAX) return { label: full, marks, full: '' };
     truncated.push({ where: '이름', max: LABEL_MAX });
     return { label: `${full.slice(0, LABEL_MAX - 1)}…`, marks, full };

@@ -11,6 +11,9 @@ import { evidenceChips } from './evidence.js';
 import { josa, messageFor } from './messages.js';
 import { SUBTYPE_ROLE } from '../model/schema.js';
 
+/** 응답으로 문장이 바뀌었을 때 「생성 중…」 자리에 남기는 안내 */
+export const LIVE_REPLACED_NOTE = '문장이 Claude API 문장으로 바뀌었습니다 — 확인 후 확정하세요';
+
 const DRAFT_FIELDS = { target: '대상', from: '보내는 사람', to: '받는 사람' };
 
 function draftError(err) {
@@ -89,18 +92,28 @@ export function draftPanel(o) {
   const live = isLive(o.provider);
   const liveNote = live ? el('p', { class: 'muted small', 'aria-live': 'polite', 'data-testid': 'draft-live' }) : null;
   let liveSeq = 0; // 요청 번호: 새 초안을 만들거나 이 화면을 떠나면(result가 화면에서 빠짐) 이전 응답을 버린다
-  const runLive = (draft) => {
+  // 「생성 중…」 동안은 확정을 잠근다(R10-11): 사용자가 읽지 않은 문장이 응답으로 바뀐 뒤 확정되는 일을 막는다. 읽기 전용이면 원래 잠겨 있으므로 건드리지 않는다
+  const lockConfirm = (locked) => {
+    const btn = result.querySelector('[data-testid=draft-confirm]');
+    if (btn && !o.readOnly) btn.disabled = locked;
+  };
+  const runLive = (draft, base) => {
     liveSeq += 1;
     const mine = liveSeq;
     const stale = () => mine !== liveSeq || !result.isConnected;
     liveNote.textContent = '생성 중…';
-    refineDraftAsync(draft, { provider: o.provider, exists: view.exists, view })
+    lockConfirm(true);
+    // base: 먼저 그린 결과. 실패·불통과 항목은 그 문장을 그대로 둔다(규칙 기반으로 내려가지 않음)
+    refineDraftAsync(draft, { provider: o.provider, exists: view.exists, view, base })
       .then((d) => {
         if (stale()) return;
         liveNote.textContent = '';
-        if (d) renderDraft(result, d, view, o.onFocus, o);
+        if (d) {
+          renderDraft(result, d, view, o.onFocus, o); // 새로 그린 확정 단추는 켜진 상태
+          if (d.items.some((i) => i.method === 'llm')) liveNote.textContent = LIVE_REPLACED_NOTE;
+        } else lockConfirm(false);
       })
-      .catch(() => { if (!stale()) liveNote.textContent = ''; });
+      .catch(() => { if (!stale()) { liveNote.textContent = ''; lockConfirm(false); } });
   };
 
   const field = (label, input) => el('label', { class: 'field' }, el('span', {}, label), input);
@@ -140,9 +153,10 @@ export function draftPanel(o) {
       return;
     }
     // 실시간 공급자면 먼저 사전 생성(없으면 규칙 기반) 결과를 그리고, 응답이 오면 교체한다(R-04 ③)
-    renderDraft(result, refineDraft(r.draft, { provider: syncProvider(o.provider), exists: view.exists }), view, o.onFocus, o);
+    const first = refineDraft(r.draft, { provider: syncProvider(o.provider), exists: view.exists });
+    renderDraft(result, first, view, o.onFocus, o);
     if (o.onDraft) o.onDraft(); // 따라 하기: 결과가 그려졌음을 알린다
-    if (live) runLive(r.draft);
+    if (live) runLive(r.draft, first);
   });
 
   return el('div', { class: 'draft' }, el('h2', {}, '인수인계 초안'),
@@ -222,8 +236,8 @@ function renderDraft(box, d, view, onFocus, o = {}) {
     el('h3', { class: 'draft-title' }, d.title),
     d.method === 'pregen' ? el('p', { class: 'muted small', 'data-testid': 'draft-method-note' }, '문장은 개발 중 Claude가 이 근거만 보고 썼고, 앱이 근거를 검증합니다. 근거가 맞지 않거나 미리 쓴 문장이 없으면 규칙 기반으로 만듭니다.') : null,
     d.method === 'llm' ? el('p', { class: 'muted small', 'data-testid': 'draft-method-note' }, '문장은 Claude API가 실시간으로 이 근거만 보고 썼고, 앱이 근거 ID와 원문 인용(quote)을 검증합니다. 확인되지 않은 항목은 규칙 기반 문장으로 바꿉니다.') : null,
-    d.fallback ? el('p', { class: 'notice', 'data-testid': 'draft-fallback' }, `규칙 기반으로 대체함: ${d.fallback.reason}`) : null,
-    d.method !== 'rule' && d.counts && d.counts.rule ? el('p', { class: 'muted small', 'data-testid': 'draft-counts' }, `${METHOD_LABELS[d.method]} ${d.counts.provider}개 항목, 나머지 ${d.counts.rule}개는 규칙 기반(${d.method === 'llm' ? '응답에 없거나 검증을 통과하지 못한 항목' : '사전 생성 결과가 없거나 데이터가 바뀐 항목'})`) : null,
+    d.fallback ? el('p', { class: 'notice', 'data-testid': 'draft-fallback' }, `${d.fallback.keep ? '원래 문장을 유지함' : '규칙 기반으로 대체함'}: ${d.fallback.reason}`) : null,
+    d.method !== 'rule' && d.counts && d.counts.rule ? el('p', { class: 'muted small', 'data-testid': 'draft-counts' }, `${METHOD_LABELS[d.method]} ${d.counts.provider}개 항목, 나머지 ${d.counts.rule}개는 ${d.method === 'llm' && d.counts.kept ? `호출 전 문장 그대로(사전 생성 ${d.counts.kept}개 포함, 응답에 없거나 검증을 통과하지 못한 항목)` : `규칙 기반(${d.method === 'llm' ? '응답에 없거나 검증을 통과하지 못한 항목' : '사전 생성 결과가 없거나 데이터가 바뀐 항목'})`}`) : null,
     // 사전 생성을 골랐는데 이 조합에 미리 써 둔 문장이 없어 전부 규칙 기반이면 이유를 한 줄로 알린다(재검증 5-4)
     d.method === 'rule' && !d.fallback && o.provider && o.provider.name === 'pregen' ? el('p', { class: 'muted small', 'data-testid': 'draft-rule-reason' }, '이 대상·사람 조합은 미리 써 둔 문장이 없어 규칙 기반으로 만들었습니다(기록을 그대로 옮겨 적은 문장).') : null,
     ...d.items.map((i) =>

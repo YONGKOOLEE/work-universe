@@ -1,7 +1,7 @@
 // 통합 확인 목록(R-11 ②③④, T-10). 사람이 "같음/다름"을 정해야 동일성 연결이 생긴다. 확인하지 않은 항목이 있어도
 // 통합 유니버스는 그대로 탐색할 수 있다(R-11 ④). 원래 유니버스는 바뀌지 않는다(R-11 ⑤).
 // AI 연관 찾기(CR-15 C, T-38): 키가 있을 때만 「AI로 연관 찾기」가 보이고, 찾은 쌍은 「AI 후보」 표시로 업무 후보에 끼워 넣는다. 확정은 여전히 사람.
-import { METHOD_LABELS, explainInsight, findCandidatesAsync, isLive } from '../llm/connector.js';
+import { METHOD_LABELS, explainInsight, findCandidatesAsync, isLive, syncProvider } from '../llm/connector.js';
 import { AI_CANDIDATE_LABEL, collectWorks, decidedSets, withAiCandidates } from '../llm/ai-candidates.js';
 import { pairKey } from '../model/schema.js';
 import { el } from './dom.js';
@@ -9,10 +9,13 @@ import { evidenceChips as chips } from './evidence.js';
 
 export const AI_CANDIDATES_WAIT = 'AI가 업무를 비교하는 중… (최대 60초)';
 
-/** 업무 후보 이유(역할 c): 사전 생성이 있으면 그 문장, 없으면 규칙 기반 문장 */
+/**
+ * 업무 후보 이유(역할 c): 사전 생성이 있으면 그 문장, 없으면 규칙 기반 문장.
+ * 이 화면은 후보 이유를 실시간으로 다듬지 않는다(AI는 「AI로 연관 찾기」 쌍만) — 키가 있어도 동기 공급자(사전 생성)로 같은 문장을 그린다(B1)
+ */
 export function candidateReason(view, item, provider) {
   const exists = view.exists;
-  return explainInsight({ task: 'work_candidate_reason', target: `work_candidate|${[item.a, item.b].sort().join('|')}`, evidence_ids: item.evidence_ids, rule: [{ text: item.reason, evidence_ids: item.evidence_ids }] }, { provider, exists });
+  return explainInsight({ task: 'work_candidate_reason', target: `work_candidate|${[item.a, item.b].sort().join('|')}`, evidence_ids: item.evidence_ids, rule: [{ text: item.reason, evidence_ids: item.evidence_ids }] }, { provider: syncProvider(provider), exists });
 }
 
 // ── AI 연관 찾기 상태 ──
@@ -77,6 +80,9 @@ function aiBlock(view, w) {
 export function mergePanel(o) {
   if (!aiAvailable(o)) return renderMerge(o, o.plan, []); // 키가 없으면 지금과 같은 화면
   const st = aiStateOf(o.provider, o.view.universe_id);
+  // 이전 패널이 이미 화면에서 빠져 있으면 목록을 벗어났다가 다시 연 것이다 → 보관 결과·진행 중 요청을 버린다(B3).
+  // 판정 등으로 다시 그릴 때는 caller가 새 패널을 만든 뒤에 옛 패널을 바꾸므로, 이 시점에 옛 패널이 아직 화면에 있다
+  if (st.root && !st.root.isConnected) { st.run += 1; st.busy = false; st.result = null; st.error = ''; }
   const root = el('div', { class: 'insight', 'data-testid': 'merge-panel' });
   st.root = root;
   const q = (id) => root.querySelector(`[data-testid=${id}]`);

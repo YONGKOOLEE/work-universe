@@ -10,7 +10,7 @@
 //   공급자가 live가 아니면(키 없음 등) 비동기 함수는 아무것도 부르지 않고 null을 돌려준다.
 // 브라우저 기능을 쓰지 않는다.
 
-import { fingerprint, itemEvidence } from './providers.js';
+import { fingerprint, itemEvidence, peopleKey } from './providers.js';
 import { validateDocument } from '../model/validate.js';
 import { describeEvidence, quoteInEvidence } from './evidence-text.js';
 import { buildDraftPrompt, buildExplainPrompt } from './prompts.js';
@@ -133,8 +133,35 @@ export const isLive = (provider) => !!(provider && provider.live === true && typ
 
 const reasonOf = (err) => `공급자 오류: ${err && err.message ? err.message : err}`;
 
-// 캐시 키(task, target, item, 규칙 기반 문장 지문, 모델): 근거가 바뀌면 지문이 달라져 다시 호출한다(K-9)
-export const llmCacheKey = (task, target, item, ruleSentences, model) => [task, target, item || '', fingerprint(ruleSentences), model || ''].join('|');
+// 캐시 키(task, target, item, 규칙 기반 문장 지문, 모델, 사람): 근거가 바뀌면 지문이 달라져 다시 호출한다(K-9).
+// 초안은 보내는·받는 사람에 따라 문장(문의할 사람 등)이 달라지므로 사람 조합(from>to)이 키에 들어간다(사전 생성 키와 같은 원칙, R10-2). 설명·변환은 사람이 없다
+export const llmCacheKey = (task, target, item, ruleSentences, model, people = '') => [task, target, item || '', fingerprint(ruleSentences), model || '', people].join('|');
+
+// 진행 중인 요청 합치기(R10-3): 같은 키의 요청이 아직 끝나지 않았으면 새로 보내지 않고 같은 응답을 기다린다(과금·한도).
+// 공급자(=키·모델) 하나마다 따로 둔다. 끝나면(성공·실패 모두) 지운다 — 실패를 기억하지 않으므로 다음 호출은 새로 보낸다
+const inflightMaps = new WeakMap();
+function sharedRequest(provider, key, start) {
+  let m = inflightMaps.get(provider);
+  if (!m) {
+    m = new Map();
+    inflightMaps.set(provider, m);
+  }
+  if (m.has(key)) return m.get(key);
+  const p = (async () => start())().finally(() => { if (m.get(key) === p) m.delete(key); });
+  m.set(key, p);
+  return p;
+}
+
+/** 인사이트 설명의 실시간 호출을 늦추는 시간(R10-3): 시간 막대를 끌면 설명 상자가 계속 다시 그려지므로, 조용해진 뒤 화면에 남은 상자만 부른다 */
+export const LLM_INSIGHT_DEBOUNCE_MS = 400;
+/**
+ * ms 뒤에 shouldRun()이 참이면 run()을 부른다(그 사이 상자가 화면에서 빠졌으면 부르지 않음). 돌려주는 함수로 취소할 수 있다
+ * @returns {() => void} 취소
+ */
+export function afterQuiet(shouldRun, run, ms = LLM_INSIGHT_DEBOUNCE_MS) {
+  const t = setTimeout(() => { if (shouldRun()) run(); }, ms);
+  return () => clearTimeout(t);
+}
 
 /**
  * 한 항목의 문장 검증. 근거 ID(비어 있지 않고, 허용 목록 안이고, 데이터에 있음)를 먼저, 그다음 quote를 본다.
@@ -179,16 +206,21 @@ const cacheSet = (cache, key, value) => {
  * refineDraft의 실시간 판. 캐시에 있는 항목은 호출 없이 쓰고, 없는 항목만 한 번에 요청한다.
  * 전체 실패(오류·시간 초과·형식)는 규칙 기반 + 원인(W-LLM-FALLBACK), quote만 틀린 항목은 규칙 기반 + replaced + 사유 W-LLM-QUOTE.
  * @param {object} draft 규칙 기반 결과
- * @param {{provider:object|null, exists:(gid:string)=>boolean, view:object}} opts view: 근거 글을 만들 buildView 결과
+ * @param {{provider:object|null, exists:(gid:string)=>boolean, view:object, base?:object|null}} opts view: 근거 글을 만들 buildView 결과. base: 호출 전에 그려진 동기 결과(refineDraft) — 실패·불통과 항목은 그 문장을 유지한다
  * @returns {Promise<object|null>} refineDraft와 같은 모양(method는 쓴 항목이 있으면 'llm') + live({called, cached}). 실시간 공급자가 아니면 null
  */
-export async function refineDraftAsync(draft, { provider = null, exists, view }) {
+export async function refineDraftAsync(draft, { provider = null, exists, view, base = null }) {
   if (!isLive(provider)) return null;
   const textOf = memo((g) => describeEvidence(view, g));
   const targets = draft.items.filter((i) => !i.insufficient && Array.isArray(i.sentences));
-  const asRule = (fallback, called) => ({ ...draft, items: draft.items.map((i) => ({ ...i, method: 'rule' })), method: 'rule', fallback, counts: { provider: 0, rule: targets.length }, live: { called, cached: 0 } });
+  const people = peopleKey(draft.from, draft.to);
+  // base: 호출 전에 화면에 그려진 동기 결과(사전 생성 등). 실패·검증 불통과 항목은 그 문장을 그대로 둔다(규칙 기반으로 내리지 않음, B1)
+  const keptOf = (key) => {
+    const b = base && Array.isArray(base.items) ? base.items.find((i) => i && i.key === key) : null;
+    return b && b.method && b.method !== 'rule' && Array.isArray(b.sentences) && b.sentences.length ? b : null;
+  };
 
-  const keyOf = (i) => llmCacheKey('handover', draft.target, i.key, i.sentences, provider.model);
+  const keyOf = (i) => llmCacheKey('handover', draft.target, i.key, i.sentences, provider.model, people);
   const done = new Map(); // 항목 key → 검증을 통과한 문장(quotes 포함)
   const need = [];
   for (const item of targets) {
@@ -199,12 +231,29 @@ export async function refineDraftAsync(draft, { provider = null, exists, view })
   }
   const cached = done.size;
 
+  // 항목 구성: 통과한 항목은 Claude API 문장, 아니면 호출 전 문장(사전 생성 등), 그것도 없으면 규칙 기반
+  const build = (failed) => {
+    let keptN = 0;
+    const items = draft.items.map((ruleItem) => {
+      const got = done.get(ruleItem.key);
+      if (ruleItem.insufficient || !Array.isArray(ruleItem.sentences)) return { ...ruleItem, method: 'rule' };
+      if (got) return { ...ruleItem, sentences: withoutQuotes(got), method: 'llm' };
+      const kept = keptOf(ruleItem.key);
+      if (kept) {
+        keptN += 1;
+        return { ...kept };
+      }
+      return failed ? { ...ruleItem, method: 'rule' } : { ...ruleItem, method: 'rule', replaced: true };
+    });
+    return { items, keptN };
+  };
+
   let failure = null;
   let badQuote = 0;
   let badOther = 0;
   if (need.length) {
     try {
-      const result = await provider.refine('handover', buildDraftPrompt({ draft, items: need, textOf }));
+      const result = await sharedRequest(provider, need.map(keyOf).join('\n'), () => provider.refine('handover', buildDraftPrompt({ draft, items: need, textOf })));
       if (!result || !Array.isArray(result.items)) throw new Error('응답 형식 오류');
       for (const item of need) {
         const got = result.items.find((i) => i && i.key === item.key);
@@ -219,38 +268,47 @@ export async function refineDraftAsync(draft, { provider = null, exists, view })
       failure = reasonOf(err);
     }
   }
-  if (failure && done.size === 0) return asRule({ code: FALLBACK, reason: failure }, true);
+  if (failure && done.size === 0) {
+    const { items, keptN } = build(true);
+    return {
+      ...draft, items, method: keptN ? base.method : 'rule', fallback: { code: FALLBACK, reason: failure, ...(keptN ? { keep: true } : {}) },
+      counts: { provider: keptN, rule: targets.length - keptN }, live: { called: true, cached: 0 },
+    };
+  }
 
-  const items = draft.items.map((ruleItem) => {
-    const got = done.get(ruleItem.key);
-    if (ruleItem.insufficient || !Array.isArray(ruleItem.sentences)) return { ...ruleItem, method: 'rule' };
-    if (got) return { ...ruleItem, sentences: withoutQuotes(got), method: 'llm' };
-    return failure ? { ...ruleItem, method: 'rule' } : { ...ruleItem, method: 'rule', replaced: true };
-  });
-  const parts = [];
-  if (failure) parts.push(`${failure}(저장된 응답이 있는 항목만 쓰고 나머지는 규칙 기반)`);
-  if (badQuote) parts.push(`원문 인용(quote)이 근거 글에서 확인되지 않은 항목 ${badQuote}개는 규칙 기반 문장으로 대체`);
-  if (badOther) parts.push(`근거가 확인되지 않은 항목 ${badOther}개는 규칙 기반 문장으로 대체`);
+  const { items, keptN } = build(!!failure);
   const used = done.size;
+  const keep = keptN > 0;
+  const parts = [];
+  if (failure) parts.push(`${failure}(저장된 응답이 있는 항목만 쓰고 나머지는 ${keep ? '원래 문장 유지' : '규칙 기반'})`);
+  if (badQuote) parts.push(`원문 인용(quote)이 근거 글에서 확인되지 않은 항목 ${badQuote}개는 ${keep ? '원래 문장 유지' : '규칙 기반 문장으로 대체'}`);
+  if (badOther) parts.push(`근거가 확인되지 않은 항목 ${badOther}개는 ${keep ? '원래 문장 유지' : '규칙 기반 문장으로 대체'}`);
   return {
     ...draft,
     items,
-    method: used ? 'llm' : 'rule',
-    fallback: parts.length ? { code: badQuote ? QUOTE_FAIL : FALLBACK, reason: parts.join(', ') } : null,
-    counts: { provider: used, rule: targets.length - used },
+    method: used ? 'llm' : keep ? base.method : 'rule',
+    fallback: parts.length ? { code: badQuote ? QUOTE_FAIL : FALLBACK, reason: parts.join(', '), ...(keep ? { keep: true } : {}) } : null,
+    // 이력 부족 항목은 어느 쪽에도 세지 않는다. 쓴 항목이 없고 호출 전 문장이 남았으면 그 방식(사전 생성)의 개수로 센다
+    counts: used ? { provider: used, rule: targets.length - used, kept: keptN } : { provider: keptN, rule: targets.length - keptN },
     live: { called: need.length > 0, cached },
   };
 }
 
 /**
- * explainInsight의 실시간 판(인사이트 설명 7종). 캐시 → 호출 → 검증(근거 ID + quote), 실패하면 규칙 기반 문장 + 원인.
+ * explainInsight의 실시간 판(인사이트 설명 7종). 캐시 → 호출 → 검증(근거 ID + quote), 실패하면 호출 전 문장(base: 사전 생성 등, 없으면 규칙 기반 문장) + 원인.
  * @param {{task?:string, target:string, evidence_ids:string[], rule:object[]}} req
- * @param {{provider:object|null, exists:(gid:string)=>boolean, view:object}} opts
+ * @param {{provider:object|null, exists:(gid:string)=>boolean, view:object, base?:{sentences:object[], method:string}|null}} opts base: 호출 전에 그려진 동기 결과
  * @returns {Promise<{sentences:object[], method:string, fallback:object|null, live:{called:boolean, cached:boolean}}|null>} 실시간 공급자가 아니면 null
  */
-export async function explainInsightAsync(req, { provider = null, exists, view }) {
+export async function explainInsightAsync(req, { provider = null, exists, view, base = null }) {
   if (!isLive(provider)) return null;
-  const rule = (fallback, called) => ({ sentences: req.rule, method: 'rule', fallback, live: { called, cached: false } });
+  const keep = !!(base && base.method && base.method !== 'rule' && Array.isArray(base.sentences) && base.sentences.length);
+  const rule = (fallback, called) => ({
+    sentences: keep ? base.sentences : req.rule,
+    method: keep ? base.method : 'rule',
+    fallback: fallback && keep ? { ...fallback, keep: true } : fallback,
+    live: { called, cached: false },
+  });
   if (!Array.isArray(req.evidence_ids) || req.evidence_ids.length === 0) return rule(null, false);
   const textOf = memo((g) => describeEvidence(view, g));
   const task = req.task || 'insight_explain';
@@ -263,16 +321,17 @@ export async function explainInsightAsync(req, { provider = null, exists, view }
 
   let result;
   try {
-    result = await provider.refine(task, buildExplainPrompt({ req, textOf }));
+    result = await sharedRequest(provider, key, () => provider.refine(task, buildExplainPrompt({ req, textOf })));
     if (!result || !Array.isArray(result.sentences)) throw new Error('응답 형식 오류');
   } catch (err) {
     return rule({ code: FALLBACK, reason: reasonOf(err) }, true);
   }
   const checked = checkLive(result.sentences, allowed, exists, textOf);
   if (!checked.ok) {
+    const word = keep ? '원래 설명 유지' : '규칙 기반 설명으로 대체';
     return rule(checked.quote
-      ? { code: QUOTE_FAIL, reason: '원문 인용(quote)이 근거 글에서 확인되지 않아 규칙 기반 설명으로 대체' }
-      : { code: FALLBACK, reason: '근거가 확인되지 않아 규칙 기반 설명으로 대체' }, true);
+      ? { code: QUOTE_FAIL, reason: `원문 인용(quote)이 근거 글에서 확인되지 않아 ${word}` }
+      : { code: FALLBACK, reason: `근거가 확인되지 않아 ${word}` }, true);
   }
   cacheSet(provider.cache, key, { sentences: checked.sentences });
   return { sentences: withoutQuotes(checked.sentences), method: 'llm', fallback: null, live: { called: true, cached: false } };
@@ -304,13 +363,15 @@ export async function convertDocumentAsync(text, { provider = null, now = () => 
   const cached = parsed !== null;
   if (!cached) {
     try {
-      parsed = await provider.convert(text);
+      parsed = await sharedRequest(provider, `convert|${key}`, () => provider.convert(text));
     } catch (err) {
       return fail(err && err.message ? err.message : '알 수 없는 오류');
     }
   }
   const checked = verifyAiConvert(text, parsed);
   if (!checked.ok) {
+    // 항목이 하나도 없는데 뺀 항목도 0개면 인용 문제가 아니라 응답이 비어 있는 것(R10-14)
+    if (checked.reason === 'empty' && checked.dropped.length === 0) return fail('응답에 항목이 없음');
     return fail(checked.reason === 'empty'
       ? `원문 인용이 확인된 항목이 하나도 없습니다(뺀 항목 ${checked.dropped.length}개)`
       : '응답 형식 오류', checked.reason === 'empty' ? QUOTE_FAIL : FALLBACK);
@@ -346,7 +407,7 @@ export async function findCandidatesAsync(works, { provider = null, rejected, co
   const cached = parsed !== null;
   if (!cached) {
     try {
-      parsed = await provider.candidates(works);
+      parsed = await sharedRequest(provider, `candidates|${key}`, () => provider.candidates(works));
     } catch (err) {
       return fail(err && err.message ? err.message : '알 수 없는 오류');
     }
