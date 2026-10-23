@@ -7,9 +7,10 @@ import { NC } from './cases-b.mjs';
 export const ctx = { now: '2026-10-04T09:00:00+09:00', random: () => 0.5 };
 export const ALL_CASES = [...CASES, ...NC];
 
-export function dump(text) {
+// cr17j: CR-17 J 스위치를 이 호출에서만 덮어쓴다(예: 전부 켠 결과 보기). 없으면 CONVERT_RULES.cr17j(기본 전부 꺼짐)
+export function dump(text, cr17j) {
   let r;
-  try { r = convertDocument(text, ctx); } catch (e) { return ['CRASH ' + e.message]; }
+  try { r = convertDocument(text, cr17j ? { ...ctx, cr17j } : ctx); } catch (e) { return ['CRASH ' + e.message]; }
   if (!r.ok) return ['ERROR ' + JSON.stringify(r.error)];
   const d = r.doc;
   const out = [];

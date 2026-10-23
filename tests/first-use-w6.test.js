@@ -190,7 +190,7 @@ test('사전 생성의 정체: 날짜는 pregen.js의 generated_at에서 읽고,
   assert.equal(pregenDate({}), '');
   assert.equal(pregenDate(null), '');
   assert.ok(PREGEN_NOTE.includes(`(${pregenDate()})`));
-  assert.ok(PREGEN_NOTE_FULL.includes('내가 새로 만든 지도에는 미리 받아 둔 문장이 없어, 키가 없으면 기록을 그대로 모은 문장(규칙 기반)으로, 키가 있으면 Claude가 그 자리에서 씁니다.'));
+  assert.ok(PREGEN_NOTE_FULL.includes('내가 새로 만든 지도에는 미리 받아 둔 문장이 없어, 키가 없으면 기록을 그대로 모은 문장(규칙 기반)으로 나옵니다. 「설정」에서 Claude API를 고르고 키를 넣으면 Claude가 그 자리에서 씁니다.'));
   assert.equal(HELP_GEN.find((g) => g.term === '사전 생성').desc, PREGEN_NOTE_FULL);
 });
 

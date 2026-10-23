@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { PREGEN } from '../app/data/pregen.js';
 import { buildView } from '../app/src/view/view.js';
 import { buildHandoverDraft, HANDOVER_ITEMS } from '../app/src/rules/handover.js';
-import { scenarioOf } from '../app/src/rules/tour-steps.js';
+import { scenarioOf, teamScenario } from '../app/src/rules/tour-steps.js';
 import { createProvider } from '../app/src/llm/providers.js';
 import { allowedRelations, pairAllowed } from '../app/src/model/schema.js';
 import { messageFor } from '../app/src/ui/messages.js';
@@ -287,7 +287,9 @@ test('FU-17: choosePeople·remember — 예시 > 기억 > 비움, 목록에 없�
   remember(m, '', 'x', 'y');
   remember(m, 'U-2', 'U/N-1', '');
   assert.deepEqual([...m.keys()], ['U-1']);
-  assert.deepEqual(recall(m, 'U-1'), { from: 'U/N-1', to: 'U/N-2' });
+  assert.deepEqual(recall(m, 'U-1'), { from: 'U/N-1', to: 'U/N-2', fromName: '', toName: '' });
+  remember(m, 'U-3', 'U/N-1', 'U/N-2', { from: '가', to: '나' });
+  assert.deepEqual(recall(m, 'U-3'), { from: 'U/N-1', to: 'U/N-2', fromName: '가', toName: '나' });
   assert.equal(recall(m, 'U-9'), null);
 });
 
@@ -313,11 +315,15 @@ test('FU-20: 「관련」 연결이 주제 아닌 노드에 걸려 거절되면 
 });
 
 // ── FU-14 ──
-// 2회차 FU-33: 1단계를 묶은 지도 위험 요약의 「자세히」로 바꾸고 겹치는 「인사이트 보기」 단계를 뺐다(옛 순서: expand → insight → find → neighborhood → full). 단계 수 5는 그대로
-test('FU-14·FU-33: 팀 따라 하기 순서 — 위험 요약 「자세히」(인수인계 위험) → 펼치기 → 찾기 → 주변만 보기 → 전체 보기', () => {
+// 2회차 FU-33이 팀 순서를 위험 요약 먼저(risk-first)로 바꿨으나 승인된 D-29는 "마지막은 내용이 있는 반복 비효율 탭"이라 R11-11에서 기본을 D-29 판으로 되돌렸다.
+// 두 판 모두 단계 수 5. 상수 TEAM_ORDER 하나로 바꾼다(CR-17 K 승인 시). tests/w10-screen.test.js가 두 판의 완료 조건을 고정한다
+test('FU-14·FU-33·R11-11: 팀 따라 하기 순서 — 기본(D-29) 펼치기 → 찾기 → 주변만 → 전체 보기 → 인사이트, 위험 요약 먼저 판은 상수만 바꾸면', () => {
   const steps = scenarioOf('team').steps;
-  assert.deepEqual(steps.map((s) => s.id), ['risk', 'expand', 'find', 'neighborhood', 'full']);
+  assert.deepEqual(steps.map((s) => s.id), ['expand', 'find', 'neighborhood', 'full', 'insight']);
   assert.equal(steps.length, 5);
-  assert.match(steps[0].task, /「혼자만 아는 일 …」 줄의 「자세히」/);
-  assert.match(steps[0].task, /한 사람만 해 봤고 인수인계 기록이 없는 일/);
+  assert.match(steps[4].task, /「반복 비효율」 탭을 누르세요/);
+  const riskFirst = teamScenario('risk-first').steps;
+  assert.deepEqual(riskFirst.map((s) => s.id), ['risk', 'expand', 'find', 'neighborhood', 'full']);
+  assert.match(riskFirst[0].task, /「혼자만 아는 일 …」 줄의 「자세히」/);
+  assert.match(riskFirst[0].task, /한 사람만 해 봤고 인수인계 기록이 없는 일/);
 });

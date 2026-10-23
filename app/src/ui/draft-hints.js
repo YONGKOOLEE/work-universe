@@ -40,35 +40,47 @@ export function findPresetTarget(targets, ref) {
 }
 
 /**
- * 초안 화면을 열 때 보내는·받는 사람을 정한다. 우선순위: 따라 하기 예시(이름) > 마지막으로 고른 사람 > 비움(null).
+ * 초안 화면을 열 때 보내는·받는 사람을 정한다. 우선순위: 따라 하기 예시/지금 칸 값(gid 먼저, 이름은 대체) > 마지막으로 고른 사람(gid 먼저, 이름은 대체) > 비움(null).
+ * preset: {from, to}는 이름, {from_gid, to_gid}는 gid(선택). gid가 지금 목록에 있으면 그 사람을, 없으면 이름이 같은 사람(처음 만나는 사람)을 쓴다 —
+ * 같은 이름의 사람이 둘이어도 gid로 고른 사람이 유지된다(R11-6).
  * 기억한 사람이 지금 목록에 없으면 쓰지 않는다. 보내는 사람과 받는 사람이 같게 되면 받는 사람은 비운다.
  * @returns {{from: string|null, to: string|null}} gid
  */
 export function choosePeople({ people, preset, remembered }) {
-  const byLabel = (label) => (people.find((p) => p.label === label) || {}).gid || null;
+  const byLabel = (label) => (label ? (people.find((p) => p.label === label) || {}).gid || null : null);
   const has = (gid) => (gid && people.some((p) => p.gid === gid) ? gid : null);
-  let from = (preset && byLabel(preset.from)) || has(remembered && remembered.from);
-  let to = (preset && byLabel(preset.to)) || has(remembered && remembered.to);
+  const pick = (gid, label) => has(gid) || byLabel(label);
+  const p = preset || {};
+  const r = remembered || {};
+  let from = pick(p.from_gid, p.from) || pick(r.from, r.fromName);
+  let to = pick(p.to_gid, p.to) || pick(r.to, r.toName);
   if (from && from === to) to = null;
   return { from: from || null, to: to || null };
 }
 
-/** 기억 저장소(모듈 수준 Map) 접근: 유니버스 ID별 마지막 보내는·받는 사람. 저장소(localStorage)에는 쓰지 않는다 */
-export function remember(memory, universeId, from, to) {
+/**
+ * 기억 저장소(모듈 수준 Map) 접근: 유니버스 ID별 마지막 보내는·받는 사람. 저장소(localStorage)에는 쓰지 않는다.
+ * names({from, to}, 선택): 이름도 함께 기억해, 그 사람의 gid가 바뀌었을 때(예: 통합) 이름으로 대신 찾는다
+ */
+export function remember(memory, universeId, from, to, names = {}) {
   if (!universeId || !from || !to) return;
-  memory.set(universeId, { from, to });
+  memory.set(universeId, { from, to, fromName: names.from || '', toName: names.to || '' });
 }
 export function recall(memory, universeId) {
   return memory.get(universeId) || null;
 }
 
 /**
- * 「＋ 사람 추가」로 방금 넣은 사람을 받는 사람 후보에서 찾는다(FU-36). 이름이 같은 사람이 여럿이면 가장 나중에 만든(목록 맨 끝) 사람.
+ * 「＋ 사람 추가」로 방금 넣은 사람을 받는 사람 후보에서 찾는다(FU-36). 넣기 전에 있던 사람(before: gid 목록)은 제외하므로, 같은 이름의 사람이 이미 있어도
+ * 새로 만든 사람이 골라진다(R11-6). before가 없으면 이름이 같은 사람 중 가장 나중에 만든(목록 맨 끝) 사람.
  * @param {{gid:string,label:string}[]} people
  * @param {string} label 넣을 때 쓴 이름
+ * @param {string[]} [before] 넣기 전의 사람 gid 목록
  * @returns {string|null} gid
  */
-export function pickNewPerson(people, label) {
+export function pickNewPerson(people, label, before) {
   const hits = people.filter((p) => p.label === label);
-  return hits.length ? hits[hits.length - 1].gid : null;
+  const fresh = Array.isArray(before) ? hits.filter((p) => !before.includes(p.gid)) : hits;
+  const list = fresh.length ? fresh : hits;
+  return list.length ? list[list.length - 1].gid : null;
 }

@@ -1,7 +1,7 @@
 // CR-13 A(2026-10-18) 앱 안 따라 하기: 시나리오 정의(rules/tour-steps.js)와 「도구 더 보기」 설정 필드(store/local.js)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BLANK_HINT, TOUR_IDS, advance, emptyState, quotedNames, scenarioFor, scenarioOf } from '../app/src/rules/tour-steps.js';
+import { BLANK_HINT, TOUR_IDS, advance, emptyState, quotedNames, scenarioFor, scenarioOf, teamScenario } from '../app/src/rules/tour-steps.js';
 import { loadSettings, saveSettings } from '../app/src/store/local.js';
 
 const memoryStorage = (init = {}) => {
@@ -26,12 +26,13 @@ test('시나리오는 handover·team 둘(handover·team 모두 5단계), 이야�
 });
 
 test('단계 문구에 「」 화면 이름이 있고, 실제 화면의 단추·칸 이름과 같은 글자다', () => {
-  const known = new Set(['대사 확인', '미해결', '다음', '인수인계 초안 만들기', '초안 만들기', '근거:', '노드 찾기', '주변만 보기', '전체 보기', '인사이트 보기', '인수인계 위험', '수정', '저장', '편집 되감기', '혼자만 아는 일 …', '자세히']); // 2회차 FU-33: team 1단계가 위험 요약 줄의 「자세히」
+  const known = new Set(['대사 확인', '미해결', '다음', '인수인계 초안 만들기', '초안 만들기', '근거:', '노드 찾기', '주변만 보기', '전체 보기', '인사이트 보기', '인수인계 위험', '수정', '저장', '편집 되감기', '혼자만 아는 일 …', '자세히', '반복 비효율']); // 2회차 FU-33: 위험 요약 먼저 판의 1단계가 위험 요약 줄의 「자세히」. R11-11: 기본(D-29) 판의 마지막 단계가 「반복 비효율」 탭
   for (const id of TOUR_IDS) {
     const names = scenarioOf(id).steps.flatMap((st) => quotedNames(st.task));
     assert.ok(names.length >= 4, id);
     for (const n of names) assert.ok(known.has(n), `${id}: 「${n}」은 화면에 있는 이름이 아니다`);
   }
+  for (const n of teamScenario('risk-first').steps.flatMap((st) => quotedNames(st.task))) assert.ok(known.has(n), `team(risk-first): 「${n}」은 화면에 있는 이름이 아니다`);
   assert.deepEqual(quotedNames('「가」와 「나 다」'), ['가', '나 다']);
   assert.deepEqual(quotedNames('없음'), []);
 });
@@ -102,9 +103,10 @@ test('handover 5단계(R9-1 나) 문구·보조 문구·짚기: 대사 확인 �
 });
 
 // 2회차 FU-33: 첫 단계가 위험 요약 「자세히」(insight → risk)로 바뀌어 순서가 risk, expand, find, neighborhood, full
-test('team 완료 조건(FU-33 순서): 「자세히」로 인수인계 위험 열기 → 펼침 → 찾기로 선택 → 주변만 보기 → 전체 보기로 돌아옴', () => {
-  const [ins, exp, find, nb, full] = scenarioOf('team').steps;
-  assert.deepEqual(scenarioOf('team').steps.map((x) => x.id), ['risk', 'expand', 'find', 'neighborhood', 'full']);
+// R11-11: 기본 순서는 D-29 판으로 되돌렸다(기본 판은 tests/w10-screen.test.js). 이 시험은 위험 요약 먼저 판(teamScenario('risk-first'), CR-17 K 승인 시 기본이 될 수 있음)을 그대로 고정한다
+test('team(risk-first) 완료 조건: 「자세히」로 인수인계 위험 열기 → 펼침 → 찾기로 선택 → 주변만 보기 → 전체 보기로 돌아옴', () => {
+  const [ins, exp, find, nb, full] = teamScenario('risk-first').steps;
+  assert.deepEqual(teamScenario('risk-first').steps.map((x) => x.id), ['risk', 'expand', 'find', 'neighborhood', 'full']);
   const s = emptyState('U-D1');
   assert.equal(exp.done(s), false);
   assert.equal(exp.done({ ...s, expandedCount: 1 }), true);
@@ -125,8 +127,8 @@ test('team 완료 조건(FU-33 순서): 「자세히」로 인수인계 위험 �
   assert.deepEqual(ins.target({ ...s, selected: 'U-A1/N-001' })[1], { sel: '#graph', hint: BLANK_HINT }); // 선택이 남아 있으면 요약이 가려지므로 빈 곳 표지도
 });
 
-test('team advance: 「자세히」(인수인계 위험)를 열기 전에는 첫 단계에서 멈추고, 주변만 보기를 누른 직후에는 「전체 보기」 단계에서 멈추며, 풀면 끝', () => {
-  const sc = scenarioOf('team');
+test('team(risk-first) advance: 「자세히」로 인수인계 위험을 열기 전에는 첫 단계에서 멈추고, 주변만 보기를 누른 직후에는 「전체 보기」 단계에서 멈추며, 풀면 끝', () => {
+  const sc = teamScenario('risk-first');
   const base = { ...emptyState('U-D1'), expandedCount: 1, foundGid: 'U-A1/N-001' };
   assert.equal(advance(sc, 0, { ...base, nbhd: true }), 0); // 위험 요약을 아직 열지 않았다
   assert.equal(advance(sc, 0, { ...emptyState('U-D1'), insightOpen: true, insightKind: 'similar' }), 0); // 다른 탭
@@ -147,10 +149,13 @@ test('「빈 곳을 누르세요」 표지: handover 3단계는 쓰지 않고(FU
   assert.equal(draft.target(sel)[0].sel, '[data-testid=btn-draft]'); // 선택한 노드 상세의 단추
   assert.match(draft.target(sel)[1].sel, /btn-draft-universe/);
   assert.equal(draft.target(sel)[2].sel, '#detail'); // 사람·산출물을 고른 경우 두 단추가 없으므로 패널만
-  const risk = scenarioOf('team').steps[0];
+  const risk = teamScenario('risk-first').steps[0];
+  const lastStep = scenarioOf('team').steps[4]; // 기본(D-29) 판의 마지막 단계도 선택이 있으면 빈 곳 표지
+  assert.ok(lastStep.target(emptyState()).every((x) => !x.hint));
+  assert.equal(lastStep.target(sel)[0].hint, BLANK_HINT);
   assert.ok(risk.target(emptyState()).every((x) => !x.hint), '선택이 없으면 표지 없음');
   // 표지가 있는 대상은 #graph 하나뿐
-  for (const id of TOUR_IDS) for (const st of scenarioOf(id).steps) for (const x of st.target(sel)) if (x.hint) assert.equal(x.sel, '#graph');
+  for (const sc of [...TOUR_IDS.map((id) => scenarioOf(id)), teamScenario('risk-first')]) for (const st of sc.steps) for (const x of st.target(sel)) if (x.hint) assert.equal(x.sel, '#graph');
 });
 
 test('handover 2단계 보조 문구: 「대사 확인」을 고른 상태면 없고, 선택을 풀었으면 다시 누르라고 안내하며 그 노드를 짚는다', () => {

@@ -37,6 +37,8 @@ export const DRAFT_NEXT_RISK = '혼자만 아는 일 보기';
 export const DRAFT_NEXT_OVERVIEW = '← 지도 전체 보기';
 /** 기록이 바뀌어 초안을 자동으로 다시 만들었을 때 결과 위 한 줄(rerun 옵션) */
 export const RERUN_NOTE = '기록이 바뀌어 초안을 다시 만들었습니다';
+/** 키가 있어도 자동으로 다시 만든 초안은 Claude를 부르지 않는다(과금) — 그때 「생성 중…」 자리에 남기는 안내 */
+export const LIVE_RERUN_NOTE = '자동으로 다시 만든 초안은 Claude를 부르지 않은 문장입니다. 「초안 만들기」를 누르면 Claude가 새로 씁니다';
 
 /** 응답으로 문장이 바뀌었을 때 「생성 중…」 자리에 남기는 안내 */
 export const LIVE_REPLACED_NOTE = '문장이 Claude API 문장으로 바뀌었습니다 — 확인 후 확정하세요';
@@ -116,23 +118,22 @@ export function draftPanel(o) {
   // 미리 채우는 순서(보내는 사람): 따라 하기 예시(이름) > 현재 담당자 한 명(위 showHolder) > 마지막으로 고른 사람(FU-17). 받는 사람: 예시 > 마지막으로 고른 사람.
   // 예시 이름이 없거나 기억한 사람이 지금 목록에 없으면 건드리지 않는다. 사람이 바꿀 수 있다
   const fromPreset = choosePeople({ people, preset: o.preset, remembered: null });
-  const fromMemory = choosePeople({ people, preset: null, remembered: recall(lastPeople, universeKey) });
+  // 다시 그려진 창(rerun)에 지금 칸 값(preset)이 넘어왔으면 그것이 우선이고, 일부러 비운 칸을 기억으로 다시 채우지 않는다(R11-7)
+  const fromMemory = o.rerun && o.preset ? { from: null, to: null } : choosePeople({ people, preset: null, remembered: recall(lastPeople, universeKey) });
   from.value = fromPreset.from || from.value || fromMemory.from || '';
   to.value = fromPreset.to || fromMemory.to || '';
   if (pend) {
-    // 앞서 고른 보내는 사람을 되살리고, 새로 넣은 사람을 받는 사람으로 고른다(같은 사람이면 건드리지 않음)
+    // 앞서 고른 보내는 사람을 되살리고, 새로 넣은 사람을 받는 사람으로 고른다(같은 사람이면 건드리지 않음). 같은 이름이 이미 있어도 넣기 전에 없던 사람을 고른다
     if (pend.from && people.some((p) => p.gid === pend.from)) from.value = pend.from;
-    const added = pickNewPerson(people, pend.label);
+    const added = pickNewPerson(people, pend.label, pend.before);
     if (added && added !== from.value) to.value = added;
     pendingPerson = null;
   }
-  // 기록이 바뀌어 다시 그려진 창(rerun): 마지막으로 초안을 만든 대상·보내는·받는 사람을 그대로 고른다(W7이 rerun:true를 넘김). 기억이 없거나 목록에 없으면 건드리지 않는다
-  if (o.rerun && !pend) {
+  // 기록이 바뀌어 다시 그려진 창(rerun): 지금 칸 값(main이 preset·target으로 넘김)이 우선이다(R11-7). 마지막으로 초안을 만든 대상은 대상 칸이 비었을 때만 쓰고,
+  // 사람은 위의 미리 채우기(예시·지금 칸 > 마지막으로 고른 사람)가 이미 정했다. 기억이 없거나 목록에 없으면 건드리지 않는다
+  if (o.rerun && !pend && !target.value) {
     const lt = lastTarget.get(universeKey);
     if (lt && targets.some((t) => t.gid === lt)) target.value = lt;
-    const again = choosePeople({ people, preset: null, remembered: recall(lastPeople, universeKey) });
-    if (again.from) from.value = again.from;
-    if (again.to) to.value = again.to;
     showHolder();
   }
   if (from.value && from.value === to.value) to.value = '';
@@ -152,7 +153,7 @@ export function draftPanel(o) {
       return;
     }
     const contact = newContact.value.trim();
-    pendingPerson = { key: universeKey, label, target: target.value, from: from.value };
+    pendingPerson = { key: universeKey, label, target: target.value, from: from.value, before: people.map((p) => p.gid) };
     newName.value = '';
     newContact.value = '';
     newBox.hidden = true;
@@ -220,7 +221,8 @@ export function draftPanel(o) {
 
   // 기록이 바뀌어 초안을 자동으로 다시 만들었다는 한 줄(결과 위). 사람이 「초안 만들기」를 직접 누르면 사라진다
   const rerunNote = el('p', { class: 'muted small', hidden: true, 'data-testid': 'draft-rerun-note', role: 'status' }, RERUN_NOTE);
-  const makeDraft = () => {
+  // auto: 기록이 바뀌어 창이 다시 그려지며 자동으로 다시 만드는 경우. 사람이 누르지 않았으므로 실시간 호출(과금)은 하지 않는다(R11-7)
+  const makeDraft = (auto = false) => {
     rerunNote.hidden = true;
     msg.replaceChildren();
     msg.className = 'form-message';
@@ -246,22 +248,24 @@ export function draftPanel(o) {
       return;
     }
     syncPersonHelp();
-    remember(lastPeople, universeKey, from.value, to.value); // 다시 만들 때 같은 두 사람을 미리 골라 준다(FU-17)
+    const labelOf = (gid) => (people.find((p) => p.gid === gid) || {}).label || '';
+    remember(lastPeople, universeKey, from.value, to.value, { from: labelOf(from.value), to: labelOf(to.value) }); // 다시 만들 때 같은 두 사람을 미리 골라 준다(FU-17, gid 먼저·이름은 대체)
     if (target.value) lastTarget.set(universeKey, target.value);
     // 실시간 공급자면 먼저 사전 생성(없으면 규칙 기반) 결과를 그리고, 응답이 오면 교체한다(R-04 ③)
     const first = refineDraft(r.draft, { provider: syncProvider(o.provider), exists: view.exists });
     renderDraft(result, first, view, o.onFocus, o);
     if (o.onDraft) o.onDraft(); // 따라 하기: 결과가 그려졌음을 알린다
-    if (live) runLive(r.draft, first);
+    if (live && !auto) runLive(r.draft, first);
+    else if (live) { liveSeq += 1; liveNote.textContent = LIVE_RERUN_NOTE; } // 자동으로 다시 만든 초안은 사전 생성·규칙 문장까지만. Claude 호출은 「초안 만들기」를 눌렀을 때만
   };
   form.addEventListener('submit', (evt) => {
     evt.preventDefault();
-    makeDraft();
+    makeDraft(false);
   });
   // 기록이 바뀌어 다시 그려진 창(rerun)은 같은 선택으로 바로 초안을 다시 만든다. 대상·보내는·받는 사람 중 하나라도 비면 만들지 않는다(오류 문구도 띄우지 않음)
   if (o.rerun && target.value && from.value && to.value && from.value !== to.value) {
-    makeDraft();
-    if (result.childNodes.length) rerunNote.hidden = false;
+    makeDraft(true);
+    if (result.childNodes.length && o.rerunNote !== false) rerunNote.hidden = false;
   }
 
   return el('div', { class: 'draft' }, el('h2', {}, '인수인계 초안'),
@@ -373,6 +377,6 @@ function renderDraft(box, d, view, onFocus, o = {}) {
     draftNext(),
     // 결과를 다 읽은 뒤 맨 아래에 한 줄. 키가 있으면 없고, 키 없음 안내(draft-fallback)가 이미 같은 말을 하면 중복이라 그리지 않는다
     !isLive(o.provider) && (d.method === 'pregen' || d.method === 'rule') && !(d.fallback && d.fallback.keyless)
-      ? el('p', { class: 'muted small', 'data-testid': 'draft-live-hint' }, liveHintFor(d.method)) : null,
+      ? el('p', { class: 'muted small', 'data-testid': 'draft-live-hint' }, liveHintFor(d.method, d.counts)) : null,
   ].filter(Boolean));
 }

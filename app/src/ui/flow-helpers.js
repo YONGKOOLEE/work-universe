@@ -7,7 +7,7 @@ import { normalizeLabel } from '../model/schema.js';
 export const LEGEND_COLLAPSED_TEXT = '숫자 = 접힌 팀(두 번 누르면 펼침) · 점선 = 팀 사이 요약 연결';
 
 /** 새 지도 창에서 작성 주체가 비었을 때의 안내(오류 코드는 E-REQUIRED 그대로, R-12 ②) */
-export const OWNER_REQUIRED_TEXT = '작성 주체(팀·부서 이름)를 적으세요. 모르면 「내 업무를 정리해 두고 싶어요」로 시작하면 자동으로 채웁니다.';
+export const OWNER_REQUIRED_TEXT = '작성 주체(팀·부서 이름, 예: 가상영업팀)를 적으세요. 모르면 창을 닫고 시작 화면의 「내 업무를 정리해 두고 싶어요」로 시작하면 자동으로 채웁니다.';
 
 /** 새 지도 창의 칸 제목 옆 안내 */
 export const OWNER_LABEL_HINT = '(이 지도를 책임질 팀·부서 이름, 예: 가상영업팀)';
@@ -46,7 +46,7 @@ export function assignOps(persons, name, workId) {
 }
 
 /**
- * 초안 창이 다시 그려지기 전에 지금 고른 대상·보내는·받는 사람을 preset({target, from, to}: from·to는 이름)으로 옮긴다.
+ * 초안 창이 다시 그려지기 전에 지금 고른 대상·보내는·받는 사람을 preset({target, from, to, from_gid, to_gid}: from·to는 이름, *_gid는 고른 사람의 gid)으로 옮긴다.
  * 고른 것이 없으면(빈 칸) 이전 preset을 그대로 둔다. 노드가 사라졌으면 이름은 빈 문자열.
  * @param {{target?:string,preset?:object}} drafting
  * @param {{target:string, from:string, to:string}} picked 화면 칸의 값(gid, 빈 문자열 가능)
@@ -55,8 +55,22 @@ export function assignOps(persons, name, workId) {
  */
 export function keepDraftPick(drafting, picked, nameOf) {
   const target = picked.target || drafting.target;
+  // gid를 먼저, 이름은 대체(R11-6): 같은 이름의 사람이 둘이어도 고른 사람이 유지된다. 노드가 사라졌으면 gid도 비운다
+  const gidOf = (gid) => (nameOf(gid) ? gid : '');
   return {
     target,
-    preset: { target, from: nameOf(picked.from) || '', to: nameOf(picked.to) || '' },
+    preset: { target, from: nameOf(picked.from) || '', to: nameOf(picked.to) || '', from_gid: gidOf(picked.from), to_gid: gidOf(picked.to) },
   };
+}
+
+/**
+ * 초안 창을 다시 그려야 하는지 가리는 "판 표지"(R11-5). 기록이 바뀌었을 때만 초안을 다시 만들고 안내 한 줄을 띄우기 위해,
+ * 마지막으로 창을 그린 때의 표지(문서 객체 참조·되감기 시점·노드·연결·이력 수)와 지금 것을 비교한다. 값이 모두 === 로 같으면 같은 판이다.
+ * @param {object|null} a
+ * @param {object|null} b
+ */
+export function sameMark(a, b) {
+  if (!a || !b) return false;
+  const ka = Object.keys(a);
+  return ka.length === Object.keys(b).length && ka.every((k) => a[k] === b[k]);
 }

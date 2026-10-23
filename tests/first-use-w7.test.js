@@ -75,9 +75,10 @@ test('keepDraftPick: 고른 대상·보내는·받는 사람을 이름으로 적
   const names = { 'U/N-1': '업무 가', 'U/P-1': '보내는이', 'U/P-2': '받는이' };
   const nameOf = (g) => names[g] || '';
   const k = keepDraftPick({ target: 'U/N-0' }, { target: 'U/N-1', from: 'U/P-1', to: 'U/P-2' }, nameOf);
-  assert.deepEqual(k, { target: 'U/N-1', preset: { target: 'U/N-1', from: '보내는이', to: '받는이' } });
+  // R11-6: 이름과 함께 gid도 적는다(같은 이름의 사람이 둘이어도 고른 사람이 유지된다)
+  assert.deepEqual(k, { target: 'U/N-1', preset: { target: 'U/N-1', from: '보내는이', to: '받는이', from_gid: 'U/P-1', to_gid: 'U/P-2' } });
   const gone = keepDraftPick({ target: 'U/N-0' }, { target: '', from: 'U/P-9', to: '' }, nameOf);
-  assert.deepEqual(gone, { target: 'U/N-0', preset: { target: 'U/N-0', from: '', to: '' } });
+  assert.deepEqual(gone, { target: 'U/N-0', preset: { target: 'U/N-0', from: '', to: '', from_gid: '', to_gid: '' } });
 });
 
 test('문구: 범례(접힌 팀·요약 연결)와 통합 확인 줄이 쉬운 말이고, 대기가 없으면 기존 문장 그대로', () => {
@@ -94,5 +95,6 @@ test('새 지도 창: 칸 제목 옆 안내·placeholder·누락 오류 문구(�
   assert.ok(html.includes(LEVEL_LABEL_HINT), '단위 옆 안내');
   assert.match(html, /id="create-owner"[^>]*placeholder="팀·부서 이름 \(예: 가상영업팀\)"/);
   for (const id of ['create-name', 'create-level', 'create-owner', 'create-description']) assert.ok(html.includes(`id="${id}"`), id);
-  assert.equal(OWNER_REQUIRED_TEXT, '작성 주체(팀·부서 이름)를 적으세요. 모르면 「내 업무를 정리해 두고 싶어요」로 시작하면 자동으로 채웁니다.');
+  // R11-10: 머리글 「새 유니버스」 창에는 「내 업무를 정리해 두고 싶어요」로 가는 길이 없으므로 창을 닫고 시작 화면에서 시작하라고 안내한다
+  assert.equal(OWNER_REQUIRED_TEXT, '작성 주체(팀·부서 이름, 예: 가상영업팀)를 적으세요. 모르면 창을 닫고 시작 화면의 「내 업무를 정리해 두고 싶어요」로 시작하면 자동으로 채웁니다.');
 });

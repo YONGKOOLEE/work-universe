@@ -25,7 +25,7 @@
 
 export const TOUR_IDS = ['handover', 'team'];
 
-// 「빈 곳을 누르세요」 표지 글(handover 5단계·team 1단계에서 선택이 남아 있을 때 그래프 안쪽에 띄운다. 2회차 FU-26: handover 3단계에서는 쓰지 않는다)
+// 「빈 곳을 누르세요」 표지 글(handover 5단계·team 마지막 단계(risk-first 순서에서는 1단계)에서 선택이 남아 있을 때 그래프 안쪽에 띄운다. 2회차 FU-26: handover 3단계에서는 쓰지 않는다)
 export const BLANK_HINT = '여기 빈 곳을 누르세요';
 
 // 시나리오 → 시작할 유니버스(따라 하기 카드가 열 때 쓴다)
@@ -94,45 +94,71 @@ const HANDOVER = {
   ],
 };
 
-const TEAM = {
-  id: 'team',
-  universeId: 'U-D1',
-  title: '팀 업무 한눈에 보기(가상 운영부 예시)',
-  story: '정산·행사·교육 세 팀을 묶은 부서 지도입니다. 75개 중 18개만 보이고 나머지는 접혀 있어요.',
-  steps: [
-    {
-      // 2회차 FU-33: 팀장의 질문(한 사람만 아는 일)에 바로 닿는다. 묶은 지도 위험 요약(FU-10)의 「자세히」가 인사이트를 「인수인계 위험」 탭으로 연다
-      id: 'risk',
-      task: '오른쪽 위 「혼자만 아는 일 …」 줄의 「자세히」를 누르세요. 한 사람만 해 봤고 인수인계 기록이 없는 일이 나옵니다.',
-      target: (s) => [{ sel: '[data-testid=btn-team-risk-more]' }, ...(s.selected || s.draftOpen ? [{ sel: '#graph', hint: BLANK_HINT }] : [])],
-      done: (s) => s.insightOpen && s.insightKind === 'risk',
-    },
-    {
-      id: 'expand',
-      task: '이중 테두리 동그라미(접힌 팀) 하나를 두 번 눌러 펼쳐 보세요.',
-      target: () => [{ cy: 'node[?collapsed]' }],
-      done: (s) => s.expandedCount > 0,
-    },
-    {
-      id: 'find',
-      task: '위의 「노드 찾기」에 "대사"를 넣고 결과 하나를 고르세요.',
-      target: () => [{ sel: '[data-testid=find-input]' }],
-      done: (s) => !!s.foundGid,
-    },
-    {
-      id: 'neighborhood',
-      task: '오른쪽 첫 줄의 「주변만 보기」를 누르세요. 이어진 동그라미만 남습니다.',
-      target: () => [{ sel: '[data-testid=btn-nbhd]' }, { sel: '[data-testid=more-tools] summary' }],
-      done: (s) => s.nbhd,
-    },
-    {
-      id: 'full',
-      task: '그래프 위의 「전체 보기」를 눌러 전체 지도로 돌아오세요.',
-      target: () => [{ sel: '#fit' }],
-      done: (s) => !s.nbhd,
-    },
-  ],
+// team 시나리오의 단계 순서(R11-11). 승인된 D-29는 "team 시나리오는 5단계, 마지막은 내용이 있는 「반복 비효율」 탭에서 끝"이므로 기본은 'd29'다.
+// 처음 사용 점검 2회차(FU-33)가 만든 'risk-first'(위험 요약 「자세히」 먼저, 마지막은 전체 보기)는 승인 문서(02 D-29)와 다르므로 CR-17 K 승인 전에는 쓰지 않는다.
+// 승인되면 이 상수 하나만 'risk-first'로 바꾼다(단위 테스트가 두 순서를 모두 고정한다).
+export const TEAM_ORDER = 'd29';
+export const TEAM_ORDERS = {
+  d29: ['expand', 'find', 'neighborhood', 'full', 'insight'],
+  'risk-first': ['risk', 'expand', 'find', 'neighborhood', 'full'],
 };
+
+const TEAM_STEPS = {
+  risk: {
+    // 2회차 FU-33: 팀장의 질문(한 사람만 아는 일)에 바로 닿는다. 묶은 지도 위험 요약(FU-10)의 「자세히」가 인사이트를 「인수인계 위험」 탭으로 연다
+    id: 'risk',
+    task: '오른쪽 위 「혼자만 아는 일 …」 줄의 「자세히」를 누르세요. 한 사람만 해 봤고 인수인계 기록이 없는 일이 나옵니다.',
+    target: (s) => [{ sel: '[data-testid=btn-team-risk-more]' }, ...(s.selected || s.draftOpen ? [{ sel: '#graph', hint: BLANK_HINT }] : [])],
+    done: (s) => s.insightOpen && s.insightKind === 'risk',
+  },
+  expand: {
+    id: 'expand',
+    task: '이중 테두리 동그라미(접힌 팀) 하나를 두 번 눌러 펼쳐 보세요.',
+    target: () => [{ cy: 'node[?collapsed]' }],
+    done: (s) => s.expandedCount > 0,
+  },
+  find: {
+    id: 'find',
+    task: '위의 「노드 찾기」에 "대사"를 넣고 결과 하나를 고르세요.',
+    target: () => [{ sel: '[data-testid=find-input]' }],
+    done: (s) => !!s.foundGid,
+  },
+  neighborhood: {
+    id: 'neighborhood',
+    task: '오른쪽 첫 줄의 「주변만 보기」를 누르세요. 이어진 동그라미만 남습니다.',
+    target: () => [{ sel: '[data-testid=btn-nbhd]' }, { sel: '[data-testid=more-tools] summary' }],
+    done: (s) => s.nbhd,
+  },
+  full: {
+    id: 'full',
+    task: '그래프 위의 「전체 보기」를 눌러 전체 지도로 돌아오세요.',
+    target: () => [{ sel: '#fit' }],
+    done: (s) => !s.nbhd,
+  },
+  insight: {
+    // 마지막 단계(D-29): 「인사이트 보기」 → 내용이 있는 「반복 비효율」 탭. 인사이트의 기본 탭은 「인수인계 위험」이라 열린 뒤 탭을 한 번 더 누른다
+    id: 'insight',
+    task: '「인사이트 보기」를 누르면 맨 먼저 「인수인계 위험」(한 사람만 해 본 일)이 열립니다. 이어서 「반복 비효율」 탭을 누르세요.',
+    target: (s) => (s.insightOpen ? [{ sel: '[data-testid=tab-repeat]' }]
+      : s.selected || s.draftOpen ? [{ sel: '#graph', hint: BLANK_HINT }]
+        : [{ sel: '[data-testid=btn-insight-universe]' }]),
+    done: (s) => s.insightOpen && s.insightKind === 'repeat',
+  },
+};
+
+/** 팀 시나리오(순서 order, 기본 TEAM_ORDER). 모르는 순서 이름이면 기본 순서 */
+export function teamScenario(order = TEAM_ORDER) {
+  const ids = Object.prototype.hasOwnProperty.call(TEAM_ORDERS, order) ? TEAM_ORDERS[order] : TEAM_ORDERS[TEAM_ORDER];
+  return {
+    id: 'team',
+    universeId: 'U-D1',
+    title: '팀 업무 한눈에 보기(가상 운영부 예시)',
+    story: '정산·행사·교육 세 팀을 묶은 부서 지도입니다. 75개 중 18개만 보이고 나머지는 접혀 있어요.',
+    steps: ids.map((id) => TEAM_STEPS[id]),
+  };
+}
+
+const TEAM = teamScenario();
 
 const SCENARIOS = { handover: HANDOVER, team: TEAM };
 

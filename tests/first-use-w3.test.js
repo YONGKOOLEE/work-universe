@@ -135,7 +135,7 @@ import { installDom, uninstallDom } from './dom-stub.js';
 import { renderUniverseSummary } from '../app/src/ui/detail.js';
 import { describeUniverse } from '../app/src/view/describe.js';
 
-test('FU-10·13 개요: 위험 요약 한 줄(+ 「자세히」)과 접힌 「확인할 것 n건」, 요약을 안 주면 그리지 않음', () => {
+test('FU-10·13 개요: 위험 요약 한 줄(+ 「자세히」)과 접힌 「사번 확인 필요 n건」, 요약을 안 주면 그리지 않음', () => {
   const body = installDom();
   try {
     const v = viewOf('U-D1');
@@ -152,7 +152,7 @@ test('FU-10·13 개요: 위험 요약 한 줄(+ 「자세히」)과 접힌 「�
     const fold = panel.querySelector('[data-testid=empno-conflicts]');
     assert.ok(fold, '사번 충돌이 있는 샘플');
     assert.equal(fold.tagName, 'DETAILS');
-    assert.equal(panel.querySelector('[data-testid=empno-conflicts-summary]').textContent, `확인할 것 ${s.empno_conflicts.length}건`);
+    assert.equal(panel.querySelector('[data-testid=empno-conflicts-summary]').textContent, `사번 확인 필요 ${s.empno_conflicts.length}건`);
     assert.ok(panel.querySelector('[data-testid=empno-conflict]').textContent.includes('V-1002'));
     // 요약을 주지 않으면(업무 하나짜리 지도) 줄이 없다
     const panel2 = document.createElement('div');

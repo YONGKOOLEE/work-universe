@@ -44,15 +44,16 @@ export function looksNotDefinition(report) {
   return codes.has('C-NO-STRUCTURE') && codes.has('C-NO-SCOPE');
 }
 
-function noteText(n) {
+export function noteText(n) {
   switch (n.code) {
     case 'C-NO-OWNER': return '원문에 작성 주체가 없습니다. 위 「작성 주체」 칸에 입력해야 가져올 수 있습니다.';
     case 'C-DATE-ASSUMED': return `원문에 작성일이 없어 메모(질문·리스크) 날짜를 변환한 날(${n.date})로 적었습니다.`;
     case 'C-TOPIC-GUESS': return `규칙에 없는 제목의 절 ${n.count}개를 주제로 만들었습니다(표에 「규칙 밖」 표시). 맞는지 확인하세요.`;
     case 'C-TOO-MANY': return `노드가 ${n.count}개로, 정한 세분화(월말 정산 수준, ${n.max}개 이하)보다 많습니다. 범위 항목을 묶을 수 있는지 확인하세요.`;
     case 'C-TOO-FEW': return `노드가 ${n.count}개로 적습니다. 업무 하나짜리 문서라면 정상입니다. 업무가 여러 개인 문서라면 「AI로 변환」(설정에서 키를 넣었을 때)을 쓰거나 업무별로 나눠 변환하세요. 제목(#)·표·번호 목록이 있는지도 확인하세요.`;
-    case 'C-ASSIGN-SKIPPED': return `담당 절에 「주 담당」으로 적힌 사람 ${n.count}명은 업무가 여러 개라 어느 업무의 담당인지 알 수 없어 업무에 잇지 않았습니다. 필요하면 연결을 직접 추가하세요.`;
-    case 'C-PERFORMS-GUESS': return `담당(수행) 연결 ${n.count}건을 추정했습니다 — 원문의 역할 「하는 일」 항목이 업무 이름과 같은 경우만이고(결재·검토처럼 이름이 일부만 들어간 항목은 잇지 않음), 기간이 없어 '지금 담당'으로 계산됩니다. 맞는지 확인하세요.`;
+    // 아래 두 알림 중 담당 절(「주 담당·담당·정」) 관련은 변환 스위치 CONVERT_RULES.cr17j.assignPerforms가 켜졌을 때만 나온다(기본 꺼짐)
+    case 'C-ASSIGN-SKIPPED': return `담당 절에 「주 담당·담당·정」으로 적힌 사람 ${n.count}명은 업무가 여러 개라 어느 업무의 담당인지 알 수 없어 업무에 잇지 않았습니다. 필요하면 연결을 직접 추가하세요.`;
+    case 'C-PERFORMS-GUESS': return `담당(수행) 연결 ${n.count}건을 추정했습니다 — ${n.assigned ? `${n.count - n.assigned > 0 ? `${n.count - n.assigned}건은 원문의 역할 「하는 일」 항목이 업무 이름과 같은 경우이고, ` : ''}${n.assigned}건은 담당 절에 「주 담당·담당·정」으로 적힌 사람을 업무가 하나뿐인 문서의 그 업무에 이은 것입니다` : '원문의 역할 「하는 일」 항목이 업무 이름과 같은 경우만이고(결재·검토처럼 이름이 일부만 들어간 항목은 잇지 않음)'}. 기간이 없어 '지금 담당'으로 계산됩니다. 맞는지 확인하세요.`;
     case 'C-ROW-NO-NAME': return `${n.ref} 표의 ${n.row}번째 행은 이름 칸이 비어 있어 건너뛰었습니다. 원문을 확인하세요.`;
     case 'C-NO-NAME': return `${n.ref}의 「${n.text}」는 이름이 없어(표시·번호·괄호뿐) 노드로 만들지 않았습니다. 원문을 확인하세요.`;
     case 'C-TABLE-NAME-COL': return `${n.ref} 표에서 ${n.col}번째 칸을 업무 이름으로 썼습니다(첫 칸은 구분·순서로 보임). 이름이 엉뚱하면 표 머리글을 「업무」로 바꿔 다시 변환하세요.`;
