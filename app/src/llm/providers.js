@@ -1,7 +1,7 @@
 // LLM 공급자(D-07 5.4, R-15, CR-1). 화면·기능 코드는 connector.js의 계약만 쓰고, 공급자는 이름으로 고른다.
 //   none      — 규칙 기반 그대로
 //   pregen    — 사전 생성(기본, CR-1): 개발 중 Claude Code가 작성한 결과(app/data/pregen.js, 12.3)를 조회 키로 찾는다
-//   claude_api — 키가 없으면 "연결 전"(규칙 기반으로 돌아가고 이유를 알림). 키가 있으면 실시간 호출(CR-15, D-33): 공식 SDK를 번들에 묶어 쓴다
+//   claude_api — 키가 없으면 사전 생성 → 규칙 기반 순으로 대체하고 이유를 알림(CR-17 H). 키가 있으면 실시간 호출(CR-15, D-33): 공식 SDK를 번들에 묶어 쓴다. 호출이 실패해도 호출 전 문장(사전 생성)을 유지한다
 //   internal — P2(1차 제출 범위 밖). 고르면 이유를 알리고 규칙 기반으로 돌아간다
 //   fail      — 점검용 "실패 흉내"(R-04 ③): 호출 실패를 흉내 내 규칙 기반 전환을 보여 준다
 // 브라우저 기능을 쓰지 않는다(12.7). 네트워크는 SDK만 부른다(이 파일에서 fetch를 직접 부르지 않는다 — 빌드가 검사).
@@ -27,7 +27,7 @@ export const LLM_CANDIDATES_TIMEOUT_MS = 60000;
 export const PROVIDERS = [
   { name: 'pregen', label: '사전 생성(Claude가 기록만 보고 써 둔 문장)', help: '기본값. 개발 중 Claude로 미리 작성한 문장을 씁니다. 결과가 없거나 데이터가 바뀐 항목은 규칙 기반 문장으로 보입니다.' },
   { name: 'none', label: '규칙 기반만', help: '기록을 규칙으로 옮겨 적은 문장만 씁니다(LLM 없음).' },
-  { name: 'claude_api', label: 'Claude API(키를 넣으면 실시간)', help: '키를 넣으면 초안·인사이트 설명 문장을 실시간으로 다듬습니다(근거와 원문 인용이 확인된 문장만 씁니다). 키가 없으면 규칙 기반으로 동작하고 이유를 표시합니다.' },
+  { name: 'claude_api', label: 'Claude API(키를 넣으면 실시간)', help: '키를 넣으면 초안·인사이트 설명 문장을 실시간으로 다듬습니다(근거와 원문 인용이 확인된 문장만 씁니다). 키가 없으면 미리 받아 둔 문장(사전 생성)으로, 그것도 없으면 규칙 기반으로 동작하고 이유를 표시합니다.' },
   { name: 'internal', label: '사내 LLM (다음 단계에서 연결)', help: '사용 방법이 정해지면 이 자리에 연결합니다. 지금은 규칙 기반으로 동작합니다.' },
   { name: 'fail', label: '실패 흉내(점검용)', help: 'LLM 호출이 실패한 상황을 흉내 냅니다. 규칙 기반으로 바뀌고 원인이 표시되는지 확인할 때 씁니다(개발 점검용).' },
 ];
@@ -37,9 +37,12 @@ export const DEFAULT_PROVIDER = 'pregen';
 
 /**
  * 키 없이 Claude API를 골랐을 때 알리는 이유(R10-13). 고장이 아니라 안내이므로 「오류」 머리말을 붙이지 않는다(처음 사용 점검 3회차).
- * 키가 없으면 공급자가 없는 것이라 문장은 항상 규칙 기반이다(사전 생성 문장도 쓰지 않는다) → 실제로 쓴 방식을 그대로 말한다.
+ * 키가 없으면 사전 생성 문장을 쓰고(CR-17 H), 쓸 사전 생성 문장이 하나도 없는 지도(내가 만든 지도 등)만 규칙 기반이다 → 실제로 쓴 방식을 그대로 말한다.
+ * KEYLESS_REASON: 사전 생성 문장을 하나도 못 쓴 경우(규칙 기반)
  */
 export const KEYLESS_REASON = '키가 없어 기록을 그대로 모은 문장(규칙 기반)으로 보여 줍니다 — 「설정」에서 키를 넣으면 Claude가 실시간으로 다시 씁니다';
+/** 키가 없지만 사전 생성 문장을 쓴 경우(CR-17 H). 문장은 앱이 근거·지문을 검사한 것만 쓴다 */
+export const KEYLESS_PREGEN_REASON = '키가 없어 미리 받아 둔 문장(사전 생성)으로 보여 줍니다 — 「설정」에서 키를 넣으면 Claude가 실시간으로 다시 씁니다';
 /** 키 없이 문서 변환을 할 때(문서 변환은 「기록을 모은 문장」이 아니라 규칙 변환 결과를 보여 준다) */
 export const KEYLESS_CONVERT_REASON = '키가 없어 규칙 변환 결과를 보여 줍니다 — 「설정」에서 키를 넣으면 「AI로 변환」을 쓸 수 있습니다';
 /** 진짜 오류(키 거부·한도·시간 초과·형식)의 이유 앞에 붙는 머리말. 원인 글은 그 뒤에 그대로 이어 붙인다 */
@@ -203,19 +206,31 @@ function claudeProvider({ apiKey, model, client = null, base = null, cache = nul
 
 /**
  * 연결되지 않은 공급자. 부르면 이유를 담은 오류를 던지고, 연결부(connector)가 그 이유를 규칙 기반 전환 사유로 남긴다.
- *  - keyless: 키가 없음(안내). noPrefix(머리말 없음)·keyless 표지가 붙는다. 문서 변환은 convertReason을 쓴다
  *  - notice: 아직 연결하지 않음(안내, noPrefix)
  *  - error: 호출 실패 흉내(점검용). 머리말 「연결 오류:」가 붙는다
  */
-function unavailable(name, reason, kind = 'error', convertReason = reason) {
-  const thrower = (why) => () => {
+function unavailable(name, reason, kind = 'error') {
+  const fail = thrower(reason, kind !== 'error');
+  return { name, method: 'llm', refine: fail, explain: fail, convert: fail, candidates: fail };
+}
+
+/** 호출하면 안내(noPrefix) 또는 오류를 던지는 함수. keyless: 키 없음 표지도 붙인다 */
+function thrower(why, noPrefix, keyless = false) {
+  return () => {
     const err = new Error(why);
-    if (kind !== 'error') err.noPrefix = true;
-    if (kind === 'keyless') err.keyless = true;
+    if (noPrefix) err.noPrefix = true;
+    if (keyless) err.keyless = true;
     throw err;
   };
-  const fail = thrower(reason);
-  return { name, method: 'llm', ...(kind === 'keyless' ? { keyless: true } : {}), refine: fail, explain: fail, convert: thrower(convertReason), candidates: fail };
+}
+
+/**
+ * 키 없이 Claude API를 고른 공급자(CR-17 H): 사전 생성 공급자와 같이 문장을 찾고(근거·지문 검사 그대로), 실시간 호출·문서 변환·연관 후보는 키가 없다고 알린다.
+ *  - keyless: 화면이 키 없음 안내를 한 번만 보이게 하는 표지. 안내 문구는 연결부(connector)·인사이트 화면이 쓴 방식(사전 생성/규칙 기반)에 맞춰 고른다
+ *  - live가 아니므로 비동기 실시간 경로는 아무것도 부르지 않는다
+ */
+function keylessProvider(pregen) {
+  return { ...pregenProvider(pregen), name: 'claude_api', keyless: true, convert: thrower(KEYLESS_CONVERT_REASON, true, true), candidates: thrower(KEYLESS_REASON, true, true) };
 }
 
 /**
@@ -228,8 +243,8 @@ export function createProvider(name, { pregen, apiKey = '', model = '', client =
     case 'none':
       return null;
     case 'claude_api':
-      // 키가 없으면 지금처럼 "연결 전"(규칙 기반 + 이유). 키가 있어야만 실시간 호출 경로가 생긴다
-      if (typeof apiKey !== 'string' || !apiKey.trim()) return unavailable(name, KEYLESS_REASON, 'keyless', KEYLESS_CONVERT_REASON);
+      // 키가 없으면 사전 생성 → 규칙 기반 순으로 대체한다(CR-17 H). 키가 있어야만 실시간 호출 경로가 생긴다
+      if (typeof apiKey !== 'string' || !apiKey.trim()) return keylessProvider(pregen);
       return claudeProvider({ apiKey: apiKey.trim(), model, client, base: pregenProvider(pregen), cache });
     case 'internal':
       return unavailable(name, '사내 LLM은 사용 방법이 정해지지 않아 연결하지 않았습니다(다음 단계)', 'notice');

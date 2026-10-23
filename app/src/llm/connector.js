@@ -10,7 +10,7 @@
 //   공급자가 live가 아니면(키 없음 등) 비동기 함수는 아무것도 부르지 않고 null을 돌려준다.
 // 브라우저 기능을 쓰지 않는다.
 
-import { REASON_PREFIX, fingerprint, itemEvidence, peopleKey } from './providers.js';
+import { KEYLESS_PREGEN_REASON, KEYLESS_REASON, REASON_PREFIX, fingerprint, itemEvidence, peopleKey } from './providers.js';
 import { validateDocument } from '../model/validate.js';
 import { describeEvidence, quoteInEvidence } from './evidence-text.js';
 import { buildDraftPrompt, buildExplainPrompt } from './prompts.js';
@@ -63,11 +63,16 @@ export function refineDraft(draft, { provider = null, exists }) {
     used += 1;
     return { ...ruleItem, sentences: got.sentences, method: provider.method };
   });
+  // 키 없이 Claude API를 고른 경우(CR-17 H): 사전 생성 문장을 썼으면 그렇게, 하나도 못 썼으면 규칙 기반이라고 사실대로 알린다(고장이 아니라 안내: keyless 표지)
+  const replacedNote = replaced ? `근거가 확인되지 않은 항목 ${replaced}개는 규칙 기반 문장으로 대체` : '';
+  const fallback = provider.keyless
+    ? { code: FALLBACK, reason: `${used ? KEYLESS_PREGEN_REASON : KEYLESS_REASON}${replacedNote ? `(${replacedNote})` : ''}`, keyless: true }
+    : replaced ? { code: FALLBACK, reason: replacedNote } : null;
   return {
     ...draft,
     items,
     method: used ? provider.method : 'rule',
-    fallback: replaced ? { code: FALLBACK, reason: `근거가 확인되지 않은 항목 ${replaced}개는 규칙 기반 문장으로 대체` } : null,
+    fallback,
     // 이력 부족 항목은 어느 쪽에도 세지 않는다(문장이 없음)
     counts: { provider: used, rule: items.filter((i) => !i.insufficient).length - used },
   };

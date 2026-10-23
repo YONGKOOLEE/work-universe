@@ -2681,8 +2681,8 @@ async function checkBrowser(browser, port) {
     await submitDraft();
     await sleep(300);
     const noKey = await evaluate(s.cdp, "({ live: !!document.querySelector('[data-testid=draft-live]'), calls: window.__wu.fakeLlm.calls.length, items: document.querySelectorAll('[data-testid^=draft-item-]').length, fb: (document.querySelector('[data-testid=draft-fallback]') || {}).textContent || '' })");
-    // 처음 사용 3회차(W6): 키 없음 이유는 고장이 아닌 안내 — 「공급자 오류」·「대체함」·사전 생성이라는 말 없이 실제 방식(규칙 기반)에 맞는 한 줄
-    check('CR-15 키가 없으면 「생성 중…」 표시도 호출도 없고 규칙 기반 + 키 없음 안내 한 줄(「공급자 오류」·「대체함」 없음)', !noKey.live && noKey.calls === 0 && noKey.items === 10 && noKey.fb === '키가 없어 기록을 그대로 모은 문장(규칙 기반)으로 보여 줍니다 — 「설정」에서 키를 넣으면 Claude가 실시간으로 다시 씁니다' && !noKey.fb.includes('공급자 오류') && !noKey.fb.includes('대체함'), JSON.stringify(noKey));
+    // 처음 사용 3회차(W6)·CR-17 H: 키 없음 이유는 고장이 아닌 안내 — 「공급자 오류」·「대체함」 없이 실제 방식에 맞는 한 줄. 사전 생성 문장이 있는 예시 지도라 사전 생성으로 보인다
+    check('CR-15·CR-17 H 키가 없으면 「생성 중…」 표시도 호출도 없고 사전 생성 문장 + 키 없음 안내 한 줄(「공급자 오류」·「대체함」 없음)', !noKey.live && noKey.calls === 0 && noKey.items === 10 && noKey.fb === '키가 없어 미리 받아 둔 문장(사전 생성)으로 보여 줍니다 — 「설정」에서 키를 넣으면 Claude가 실시간으로 다시 씁니다' && !noKey.fb.includes('공급자 오류') && !noKey.fb.includes('대체함'), JSON.stringify(noKey));
     check('처음 사용 W6 「Claude API」를 골랐지만 키가 없으면 키 없음 안내(draft-fallback, 노란 띠 아님)가 이미 같은 말을 하므로 맨 아래 한 줄(draft-live-hint)은 그리지 않음', await evaluate(s.cdp, "(() => { const f = document.querySelector('[data-testid=draft-fallback]'); return !!f && f.dataset.keyless === 'true' && !f.classList.contains('notice') && !document.querySelector('[data-testid=draft-live-hint]'); })()"));
     // 2) 키를 넣는다: 머리글 설명에 「(실시간)」, 저장은 이 브라우저 설정에만
     await settingsOpen();
@@ -2784,7 +2784,7 @@ async function checkBrowser(browser, port) {
     await pickProvider('claude_api'); // 키는 앞 단계에서 지웠다 = 키 없음
     await settingsOpen();
     const w6Key = await evaluate(s.cdp, "(() => { const n = document.querySelector('[data-testid=settings-key-note]'); const r = n ? n.getBoundingClientRect() : { width: 0, height: 0 }; return { text: n ? n.textContent : '', size: r.width > 0 && r.height > 0, status: (document.querySelector('[data-testid=settings-key-status]') || {}).textContent || '' }; })()");
-    check('처음 사용 W6 설정 「Claude API」 칸 안내(크기 있음): 암호화 없이 localStorage·근거 글(이름·설명·속성·사번·이력 메모)이 api.anthropic.com으로·회사의 외부 전송 기준, 상태 문구는 「기록을 그대로 모은 문장(규칙 기반)」', w6Key.size && ['암호화 없이', 'localStorage', 'api.anthropic.com', '사번', '이력 메모', '회사의 외부 전송 기준'].every((w) => w6Key.text.includes(w)) && w6Key.status === '키가 없습니다. 기록을 그대로 모은 문장(규칙 기반)으로 보여 줍니다.', JSON.stringify(w6Key));
+    check('처음 사용 W6 설정 「Claude API」 칸 안내(크기 있음): 암호화 없이 localStorage·근거 글(이름·설명·속성·사번·이력 메모)이 api.anthropic.com으로·회사의 외부 전송 기준, 상태 문구는 「미리 받아 둔 문장(사전 생성)」·「규칙 기반」', w6Key.size && ['암호화 없이', 'localStorage', 'api.anthropic.com', '사번', '이력 메모', '회사의 외부 전송 기준'].every((w) => w6Key.text.includes(w)) && w6Key.status === '키가 없습니다. 미리 받아 둔 문장(사전 생성)으로, 없으면 기록을 그대로 모은 문장(규칙 기반)으로 보여 줍니다.', JSON.stringify(w6Key));
     await settingsClose();
     // 인사이트: 키 없음 안내는 탭 맨 위에 한 번만, 설명 상자에는 노란 띠가 없다
     await evaluate(s.cdp, 'window.__wu.select(null)');
@@ -2792,12 +2792,12 @@ async function checkBrowser(browser, port) {
     await sleep(150);
     await clickTestId(s.cdp, 'tab-risk');
     await sleep(100);
-    const w6Ins = await evaluate(s.cdp, "(() => { const k = [...document.querySelectorAll('[data-testid=insight-keyless]')]; const r = k[0] ? k[0].getBoundingClientRect() : { width: 0, height: 0 }; return { keyless: k.length, text: k[0] ? k[0].textContent : '', size: r.width > 0 && r.height > 0, boxes: document.querySelectorAll('[data-testid=insight-explain]').length, fb: document.querySelectorAll('[data-testid=explain-fallback]').length, old: document.querySelector('.insight').textContent.includes('공급자 오류') }; })()");
-    check('처음 사용 W6 키 없이 Claude API: 인사이트 맨 위에 키 없음 안내가 한 번(크기 있음), 설명 상자(1개 이상)마다 되풀이하는 띠는 0개, 「공급자 오류」 글자 없음', w6Ins.keyless === 1 && w6Ins.size && w6Ins.text.startsWith('키가 없어 기록을 그대로 모은 문장(규칙 기반)으로 보여 줍니다') && w6Ins.boxes >= 1 && w6Ins.fb === 0 && !w6Ins.old, JSON.stringify(w6Ins));
+    const w6Ins = await evaluate(s.cdp, "(() => { const k = [...document.querySelectorAll('[data-testid=insight-keyless]')]; const r = k[0] ? k[0].getBoundingClientRect() : { width: 0, height: 0 }; return { keyless: k.length, text: k[0] ? k[0].textContent : '', size: r.width > 0 && r.height > 0, boxes: document.querySelectorAll('[data-testid=insight-explain]').length, pregen: [...document.querySelectorAll('[data-testid=insight-explain]')].some((b) => b.dataset.method === 'pregen'), fb: document.querySelectorAll('[data-testid=explain-fallback]').length, old: document.querySelector('.insight').textContent.includes('공급자 오류') }; })()");
+    check('처음 사용 W6 키 없이 Claude API: 인사이트 맨 위에 키 없음 안내가 한 번(크기 있음), 설명 상자(1개 이상)마다 되풀이하는 띠는 0개, 「공급자 오류」 글자 없음', w6Ins.keyless === 1 && w6Ins.size && w6Ins.text.startsWith(w6Ins.pregen ? '키가 없어 미리 받아 둔 문장(사전 생성)으로 보여 줍니다' : '키가 없어 기록을 그대로 모은 문장(규칙 기반)으로 보여 줍니다') && w6Ins.boxes >= 1 && w6Ins.fb === 0 && !w6Ins.old, JSON.stringify(w6Ins));
     await clickTestId(s.cdp, 'tab-repeat');
     await sleep(150);
-    const w6Rep = await evaluate(s.cdp, "(() => { const has = !!document.querySelector('[data-testid=repeat-patterns]'); const b = document.querySelector('[data-testid=insight-explain]'); return { has, dup: b ? b.dataset.dup : null, note: b && b.querySelector('[data-testid=explain-same-note]') ? b.querySelector('[data-testid=explain-same-note]').textContent : null, li: b ? b.querySelectorAll('li').length : 0 }; })()");
-    check('처음 사용 W6 반복 비효율: 규칙 기반 설명이 아래 카드와 같은 글이면 설명 상자에는 문장 없이 「아래 근거를 요약한 문장이 없습니다(규칙 기반)」만(패턴이 없는 지도면 해당 없음)', !w6Rep.has || (w6Rep.dup === 'true' && w6Rep.note === '아래 근거를 요약한 문장이 없습니다(규칙 기반)' && w6Rep.li === 0), JSON.stringify(w6Rep));
+    const w6Rep = await evaluate(s.cdp, "(() => { const has = !!document.querySelector('[data-testid=repeat-patterns]'); const b = document.querySelector('[data-testid=insight-explain]'); return { has, method: b ? b.dataset.method : null, dup: b ? b.dataset.dup : null, note: b && b.querySelector('[data-testid=explain-same-note]') ? b.querySelector('[data-testid=explain-same-note]').textContent : null, li: b ? b.querySelectorAll('li').length : 0 }; })()");
+    check('처음 사용 W6 반복 비효율: 규칙 기반 설명이 아래 카드와 같은 글이면 설명 상자에는 문장 없이 「아래 근거를 요약한 문장이 없습니다(규칙 기반)」만(패턴이 없는 지도·사전 생성 문장이 있는 설명 상자면 해당 없음 — CR-17 H)', !w6Rep.has || w6Rep.method === 'pregen' || (w6Rep.dup === 'true' && w6Rep.note === '아래 근거를 요약한 문장이 없습니다(규칙 기반)' && w6Rep.li === 0), JSON.stringify(w6Rep));
     await clickTestId(s.cdp, 'insight-close');
     await sleep(100);
     // 초안: 키 없음 안내, 「다음에 해 볼 것」 두 링크 → 인사이트 「인수인계 위험」·지도 전체 화면

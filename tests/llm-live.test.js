@@ -39,13 +39,16 @@ test('시나리오 전제: 초안에 쓸 수 있는 항목이 여럿이고 설�
 });
 
 // ── 공급자 ──
-test('공급자: 키가 없거나 공백이면 지금처럼 "연결 전"(실시간 아님), 키가 있어야만 live', async () => {
+test('공급자: 키가 없거나 공백이면 실시간이 아니라 사전 생성 공급자처럼 동작(CR-17 H), 키가 있어야만 live', async () => {
   const fake = createFakeClient();
   for (const apiKey of [undefined, '', '   ']) {
     const p = createProvider('claude_api', { pregen: PREGEN, apiKey, client: fake });
     assert.equal(p.live, undefined);
     assert.equal(isLive(p), false);
-    assert.throws(() => p.refine(), /^Error: 키가 없어 기록을 그대로 모은 문장\(규칙 기반\)으로 보여 줍니다 — 「설정」에서 키를 넣으면 Claude가 실시간으로 다시 씁니다$/);
+    assert.equal(p.method, 'pregen'); // CR-17 H: 키가 없으면 사전 생성 문장을 쓴다
+    assert.equal(p.name, 'claude_api');
+    assert.ok(Array.isArray(p.refine('handover', H1.draft).items), '사전 생성 조회는 던지지 않는다');
+    assert.throws(() => p.convert('x'), /^Error: 키가 없어 규칙 변환 결과를 보여 줍니다/);
     assert.equal(p.keyless, true); // 3회차: 화면이 키 없음 안내를 한 번만 보이게 하는 표지
   }
   const p = live(fake);
@@ -467,7 +470,7 @@ test('키 없음: 비동기 함수는 null을 돌려주고 가짜 클라이언�
   assert.equal(fake.calls.length, 0);
 });
 
-test('키 없음: 동기 경로는 지금과 같다(사전 생성 결과·규칙 기반·연결 전 이유 그대로)', async () => {
+test('키 없음(CR-17 H): 동기 경로는 사전 생성 결과를 쓰고 안내 문구가 사실대로 — 쓸 문장이 없으면 규칙 기반', async () => {
   const pregen = createProvider('pregen', { pregen: PREGEN });
   const a = refineDraft(H1.draft, { provider: pregen, exists: existsIn(H1.view) });
   const b = refineDraft(H1.draft, { provider: syncProvider(pregen), exists: existsIn(H1.view) });
@@ -475,13 +478,26 @@ test('키 없음: 동기 경로는 지금과 같다(사전 생성 결과·규칙
   assert.equal(a.method, 'pregen');
   const noKey = createProvider('claude_api', { pregen: PREGEN });
   const r = refineDraft(H1.draft, { provider: syncProvider(noKey), exists: existsIn(H1.view) });
-  assert.equal(r.method, 'rule');
-  assert.equal(r.fallback.reason, '키가 없어 기록을 그대로 모은 문장(규칙 기반)으로 보여 줍니다 — 「설정」에서 키를 넣으면 Claude가 실시간으로 다시 씁니다');
+  assert.equal(r.method, 'pregen');
+  assert.deepEqual(r.items.map((i) => [i.key, i.method, i.sentences]), a.items.map((i) => [i.key, i.method, i.sentences]), '문장은 사전 생성 공급자와 같다');
+  assert.equal(r.fallback.reason, '키가 없어 미리 받아 둔 문장(사전 생성)으로 보여 줍니다 — 「설정」에서 키를 넣으면 Claude가 실시간으로 다시 씁니다');
   assert.equal(r.fallback.keyless, true);
   assert.equal(r.fallback.code, 'W-LLM-FALLBACK'); // 원인 코드는 그대로
   assert.ok(!r.fallback.reason.includes('공급자 오류'));
   const e = explainInsight(X[0].req, { provider: syncProvider(noKey), exists: existsIn(X[0].view) });
-  assert.equal(e.method, 'rule');
+  const ep = explainInsight(X[0].req, { provider: pregen, exists: existsIn(X[0].view) });
+  assert.deepEqual(e, ep, '설명도 사전 생성 공급자와 같다');
+  // 사전 생성 파일이 없으면(쓸 문장이 하나도 없으면) 규칙 기반이라고 말한다
+  const bare = createProvider('claude_api', { apiKey: '' });
+  const rb = refineDraft(H1.draft, { provider: syncProvider(bare), exists: existsIn(H1.view) });
+  assert.equal(rb.method, 'rule');
+  assert.equal(rb.fallback.reason, '키가 없어 기록을 그대로 모은 문장(규칙 기반)으로 보여 줍니다 — 「설정」에서 키를 넣으면 Claude가 실시간으로 다시 씁니다');
+  assert.equal(rb.fallback.keyless, true);
+  // 기록이 바뀌어 지문이 달라진 항목은 사전 생성 문장을 쓰지 않는다(키 없음에서도 같은 검사)
+  const tampered = { ...H1.draft, items: H1.draft.items.map((i) => (i.insufficient || !Array.isArray(i.sentences) ? i : { ...i, sentences: i.sentences.map((s) => ({ ...s, text: `${s.text} 바뀜` })) })) };
+  const rt = refineDraft(tampered, { provider: syncProvider(noKey), exists: existsIn(H1.view) });
+  assert.equal(rt.method, 'rule');
+  assert.equal(rt.fallback.reason, '키가 없어 기록을 그대로 모은 문장(규칙 기반)으로 보여 줍니다 — 「설정」에서 키를 넣으면 Claude가 실시간으로 다시 씁니다');
   // 키가 있어도 동기 함수에는 base(사전 생성)를 넘겨 먼저 그린다
   const withKey = live(createFakeClient());
   assert.equal(refineDraft(H1.draft, { provider: syncProvider(withKey), exists: existsIn(H1.view) }).method, 'pregen');

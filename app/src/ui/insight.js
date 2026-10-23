@@ -10,7 +10,7 @@ import { el } from './dom.js';
 import { evidenceChips } from './evidence.js';
 import { todayLocal } from './time.js';
 import { SUBTYPE_ROLE } from '../model/schema.js';
-import { KEYLESS_REASON } from '../llm/providers.js';
+import { KEYLESS_PREGEN_REASON, KEYLESS_REASON } from '../llm/providers.js';
 import { EXPLAIN_SAME_AS_BELOW, PREGEN_CHIP_TITLE } from './ai-notes.js';
 
 // 밀집 기준 N. 화면에서 바꾸면 이 세션 동안 유지되고 사람 상세의 "밀집 기준에 해당" 판정도 같은 값을 쓴다(저장하지 않음)
@@ -74,6 +74,7 @@ export function insightPanel(o) {
   if (past) o = { ...o, provider: null };
   const asofNote = el('p', { class: 'notice', 'data-testid': 'insight-asof' });
   // 키 없이 Claude API를 골랐으면 설명 상자마다 되풀이하지 않고 여기 한 번만 알린다(고장이 아니라 안내라 노란 띠를 쓰지 않음). 지난 날짜 보기는 공급자를 쓰지 않으므로(위) 보이지 않는다
+  // 문구는 설명 상자가 실제로 쓴 방식에 맞춘다: 사전 생성 문장이 하나라도 있으면 사전 생성, 없으면 규칙 기반(CR-17 H)
   const keylessNote = o.provider && o.provider.keyless ? el('p', { class: 'muted small', 'data-testid': 'insight-keyless' }, KEYLESS_REASON) : null;
   const body = el('div', { 'data-testid': 'insight-body' });
   const tabs = el('div', { class: 'tabs', role: 'tablist' });
@@ -89,6 +90,7 @@ export function insightPanel(o) {
       ? `표는 전체 기간이고, 강조한 줄이 기준일(${o.asOf})입니다. 오늘 기준은 그래프 아래 「오늘로」.`
       : `${o.asOf} 기준으로 계산합니다(시간 보기). 오늘 기준은 그래프 아래 「오늘로」.`;
     body.replaceChildren(kind === 'similar' ? similarView(o, view) : kind === 'repeat' ? repeatView(view, o) : kind === 'density' ? densityView(o, view) : kind === 'risk' ? riskView(o, view) : flowView(o, view));
+    if (keylessNote) keylessNote.textContent = [...body.querySelectorAll('[data-testid=insight-explain]')].some((b) => b.dataset.method === 'pregen') ? KEYLESS_PREGEN_REASON : KEYLESS_REASON;
   }
   draw();
 

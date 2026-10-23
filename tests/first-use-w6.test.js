@@ -4,14 +4,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PREGEN } from '../app/data/pregen.js';
-import { KEYLESS_CONVERT_REASON, KEYLESS_REASON, REASON_PREFIX, createProvider } from '../app/src/llm/providers.js';
+import { KEYLESS_CONVERT_REASON, KEYLESS_PREGEN_REASON, KEYLESS_REASON, REASON_PREFIX, createProvider } from '../app/src/llm/providers.js';
 import { DRAFT_NEXT_OVERVIEW, DRAFT_NEXT_RISK, RERUN_NOTE, draftPanel, forgetLastPeople } from '../app/src/ui/draft.js';
 import { EXPLAIN_SAME_AS_BELOW, KEY_NOTE, PREGEN_NOTE, PREGEN_NOTE_FULL, SECURITY_ITEMS, pregenDate } from '../app/src/ui/ai-notes.js';
 import { HELP_GEN, helpPanel } from '../app/src/ui/help.js';
 import { insightPanel } from '../app/src/ui/insight.js';
 import { settingsPanel } from '../app/src/ui/settings.js';
 import { PREGEN_ASOF } from '../tools/pregen-scenarios.mjs';
-import { viewOf } from './helpers.js';
+import { allSamples, clone, viewOf } from './helpers.js';
 import { FakeEl, installDom, uninstallDom } from './dom-stub.js';
 
 // 설정 화면의 키 칸이 쓰는 after()를 흉내 내는 DOM 스텁에 없어서, 이 시험 파일 안에서만 채운다
@@ -24,6 +24,8 @@ if (!FakeEl.prototype.after) {
 }
 
 const keyless = createProvider('claude_api', { pregen: PREGEN, apiKey: '' });
+// 사전 생성 파일이 없는 경우(내가 만든 지도처럼 쓸 문장이 하나도 없음): 키 없음 → 규칙 기반
+const keylessNoPregen = createProvider('claude_api', { apiKey: '' });
 const pregen = createProvider('pregen', { pregen: PREGEN });
 const failing = createProvider('fail', {});
 const view = viewOf('U-A1');
@@ -48,18 +50,42 @@ const withDom = (fn) => async () => {
   try { await fn(); } finally { uninstallDom(); forgetLastPeople(); }
 };
 
-test('키 없음 안내(초안): 「공급자 오류」 머리말·「대체함」·노란 띠 없이 실제 방식에 맞는 한 줄, 원인 코드는 그대로', withDom(() => {
-  const { q, make } = openDraft(keyless);
+test('키 없음 안내(초안, CR-17 H): 사전 생성 문장이 있는 지도는 사전 생성으로 — 「공급자 오류」·「대체함」·노란 띠 없이 실제 방식에 맞는 한 줄, 원인 코드는 그대로', withDom(() => {
+  const { q, qa, make } = openDraft(keyless);
+  make();
+  const fb = q('draft-fallback');
+  assert.equal(fb.textContent, KEYLESS_PREGEN_REASON);
+  assert.equal(KEYLESS_PREGEN_REASON, '키가 없어 미리 받아 둔 문장(사전 생성)으로 보여 줍니다 — 「설정」에서 키를 넣으면 Claude가 실시간으로 다시 씁니다');
+  assert.ok(!fb.textContent.includes('공급자 오류') && !fb.textContent.includes('규칙 기반') && !fb.textContent.includes('대체함'));
+  assert.ok(!fb.className.includes('notice'), '고장처럼 읽히는 노란 띠가 아니다');
+  assert.equal(fb.dataset.keyless, 'true');
+  assert.equal(q('draft-method').textContent, '생성 방식: 사전 생성'); // 실제로 쓴 방식과 맞는다
+  assert.ok(qa('[data-testid=item-method]').some((c) => c.textContent === '사전 생성'), '항목 칩도 사전 생성');
+  assert.equal(q('draft-live-hint'), null, '같은 말을 하는 안내가 이미 있어 맨 아래 줄은 그리지 않는다');
+  assert.ok(q('draft-next'));
+}));
+
+test('키 없음 안내(초안, CR-17 H): 쓸 사전 생성 문장이 하나도 없으면 규칙 기반이라고 사실대로 말한다(예전과 같음)', withDom(() => {
+  const { q, make } = openDraft(keylessNoPregen);
   make();
   const fb = q('draft-fallback');
   assert.equal(fb.textContent, KEYLESS_REASON);
   assert.equal(KEYLESS_REASON, '키가 없어 기록을 그대로 모은 문장(규칙 기반)으로 보여 줍니다 — 「설정」에서 키를 넣으면 Claude가 실시간으로 다시 씁니다');
   assert.ok(!fb.textContent.includes('공급자 오류') && !fb.textContent.includes('사전 생성') && !fb.textContent.includes('대체함'));
-  assert.ok(!fb.className.includes('notice'), '고장처럼 읽히는 노란 띠가 아니다');
   assert.equal(fb.dataset.keyless, 'true');
-  assert.equal(q('draft-method').textContent, '생성 방식: 규칙 기반'); // 실제로 쓴 방식과 맞는다
-  assert.equal(q('draft-live-hint'), null, '같은 말을 하는 안내가 이미 있어 맨 아래 줄은 그리지 않는다');
-  assert.ok(q('draft-next'));
+  assert.equal(q('draft-method').textContent, '생성 방식: 규칙 기반');
+  assert.equal(q('draft-live-hint'), null);
+}));
+
+test('키 없음(CR-17 H): 사전 생성 문장도 지문 검사를 그대로 받는다 — 기록이 바뀐 항목은 규칙 기반으로 돌아가고 개수가 보인다', withDom(() => {
+  const doc = clone(allSamples()['U-A1']);
+  for (const n of doc.nodes) if (n.id === 'N-000' || n.core_type === 'work') n.description = `${n.description || ''} 추가`;
+  const { q, qa, make } = openDraft(keyless, { view: viewOf('U-A1', { 'U-A1': doc }) });
+  make();
+  const kinds = qa('[data-testid=item-method]').map((c) => c.textContent);
+  assert.ok(kinds.includes('사전 생성') && kinds.includes('규칙 기반'), kinds.join('|'));
+  assert.equal(q('draft-fallback').textContent, KEYLESS_PREGEN_REASON);
+  assert.match(q('draft-counts').textContent, /나머지 \d+개는 규칙 기반/);
 }));
 
 test('진짜 오류(호출 실패 흉내)는 지금처럼 노란 띠와 원인, 머리말은 「연결 오류」', withDom(() => {
@@ -131,10 +157,11 @@ test('키 없음 안내(인사이트): 탭 맨 위에 한 번만, 설명 상자�
   const panel = insight(keyless, 'risk');
   body.append(panel);
   assert.equal(panel.querySelectorAll('[data-testid=insight-keyless]').length, 1);
-  assert.equal(panel.querySelector('[data-testid=insight-keyless]').textContent, KEYLESS_REASON);
+  // CR-17 H: 설명 상자 중 사전 생성 문장이 있으면 사전 생성 안내, 없으면 규칙 기반 안내
+  assert.ok(panel.querySelectorAll('[data-testid=insight-explain]').some((b) => b.dataset.method === 'pregen'), '예시 지도의 인사이트 설명은 사전 생성 문장을 쓴다');
+  assert.equal(panel.querySelector('[data-testid=insight-keyless]').textContent, KEYLESS_PREGEN_REASON);
   assert.ok(panel.querySelectorAll('[data-testid=insight-explain]').length >= 2, '설명 상자는 여러 개');
   assert.equal(panel.querySelectorAll('[data-testid=explain-fallback]').length, 0);
-  assert.ok(panel.querySelectorAll('[data-testid=insight-explain]').every((b) => b.dataset.method === 'rule'), '상자의 방식은 규칙 기반 그대로');
   // 첫 번째 탭 버튼보다 앞
   const kids = panel.childNodes.filter((c) => c.nodeType === 1);
   assert.ok(kids.findIndex((k) => k.dataset.testid === 'insight-keyless') < kids.findIndex((k) => k.className === 'tabs'), '탭 줄보다 위');
@@ -144,6 +171,14 @@ test('키 없음 안내(인사이트): 탭 맨 위에 한 번만, 설명 상자�
   const plain = insight(pregen, 'risk');
   body2.append(plain);
   assert.equal(plain.querySelectorAll('[data-testid=insight-keyless]').length, 0);
+}));
+
+test('키 없음 안내(인사이트, CR-17 H): 쓸 사전 생성 문장이 없으면 규칙 기반 안내, 상자는 모두 규칙 기반', withDom(() => {
+  const body = installDom();
+  const panel = insight(keylessNoPregen, 'risk');
+  body.append(panel);
+  assert.equal(panel.querySelector('[data-testid=insight-keyless]').textContent, KEYLESS_REASON);
+  assert.ok(panel.querySelectorAll('[data-testid=insight-explain]').every((b) => b.dataset.method === 'rule'));
 }));
 
 test('진짜 오류(호출 실패 흉내)는 인사이트 상자마다 원인이 보인다(머리말 「연결 오류」)', withDom(() => {
@@ -158,7 +193,7 @@ test('진짜 오류(호출 실패 흉내)는 인사이트 상자마다 원인이
 
 test('반복 비효율: 규칙 기반 설명이 아래 카드와 같은 글이면 문장을 다시 쓰지 않고 안내만', withDom(() => {
   const body = installDom();
-  const panel = insight(keyless, 'repeat', 'U-D1');
+  const panel = insight(keylessNoPregen, 'repeat', 'U-D1');
   body.append(panel);
   const patterns = panel.querySelector('[data-testid=repeat-patterns]');
   assert.ok(patterns, '이 데이터에는 반복 패턴이 있다');
@@ -174,7 +209,7 @@ test('반복 비효율: 규칙 기반 설명이 아래 카드와 같은 글이�
 
 test('반복 비효율 외 탭은 규칙 기반 설명 문장을 그대로 보인다(카드와 다른 요약 문장)', withDom(() => {
   const body = installDom();
-  const panel = insight(keyless, 'density', 'U-D1');
+  const panel = insight(keylessNoPregen, 'density', 'U-D1');
   body.append(panel);
   const box = panel.querySelector('[data-testid=insight-explain]');
   if (box) {
@@ -197,7 +232,8 @@ test('사전 생성의 정체: 날짜는 pregen.js의 generated_at에서 읽고,
 test('키 없는 문서 변환 이유는 문서 변환에 맞는 말이다(기록을 모은 문장이 아님)', () => {
   assert.ok(KEYLESS_CONVERT_REASON.includes('규칙 변환 결과') && KEYLESS_CONVERT_REASON.includes('「AI로 변환」'));
   assert.throws(() => keyless.convert('x'), (e) => e.message === KEYLESS_CONVERT_REASON && e.keyless === true && e.noPrefix === true);
-  assert.throws(() => keyless.refine(), (e) => e.message === KEYLESS_REASON);
+  assert.throws(() => keyless.candidates([]), (e) => e.message === KEYLESS_REASON && e.keyless === true && e.noPrefix === true);
+  assert.equal(keyless.live, undefined, '실시간 공급자가 아니다');
 });
 
 test('도움말에 「키와 데이터」 절: 저장 위치·밖으로 나가는 것·받은 문장·회사 기준·사내 LLM', withDom(() => {
@@ -220,5 +256,5 @@ test('설정의 키 안내: 같은 사실(암호화 없이 localStorage, 보내�
   const note = panel.querySelector('[data-testid=settings-key-note]');
   assert.equal(note.textContent, KEY_NOTE);
   for (const must of ['localStorage', '암호화 없이', 'api.anthropic.com', '사번', '회사의 외부 전송 기준']) assert.ok(note.textContent.includes(must), must);
-  assert.equal(panel.querySelector('[data-testid=settings-key-status]').textContent, '키가 없습니다. 기록을 그대로 모은 문장(규칙 기반)으로 보여 줍니다.');
+  assert.equal(panel.querySelector('[data-testid=settings-key-status]').textContent, '키가 없습니다. 미리 받아 둔 문장(사전 생성)으로, 없으면 기록을 그대로 모은 문장(규칙 기반)으로 보여 줍니다.');
 }));

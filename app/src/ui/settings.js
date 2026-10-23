@@ -32,7 +32,7 @@ export function settingsPanel(o) {
     const keyInput = el('input', { type: 'password', autocomplete: 'off', spellcheck: 'false', maxlength: String(API_KEY_MAX), value: o.apiKey || '', placeholder: '키를 붙여 넣으세요', 'aria-label': 'API 키', 'data-testid': 'settings-apikey' });
     const modelInput = el('input', { type: 'text', autocomplete: 'off', spellcheck: 'false', maxlength: String(LLM_MODEL_MAX), value: o.llmModel || '', placeholder: DEFAULT_LLM_MODEL, 'aria-label': '모델', 'data-testid': 'settings-model' });
     const status = el('p', { class: 'muted small', 'aria-live': 'polite', 'data-testid': 'settings-key-status' });
-    const showStatus = (hasKey) => { status.textContent = hasKey ? '키가 입력되어 있습니다. 초안과 인사이트 설명을 실시간으로 다듬습니다.' : '키가 없습니다. 기록을 그대로 모은 문장(규칙 기반)으로 보여 줍니다.'; };
+    const showStatus = (hasKey) => { status.textContent = hasKey ? '키가 입력되어 있습니다. 초안과 인사이트 설명을 실시간으로 다듬습니다.' : '키가 없습니다. 미리 받아 둔 문장(사전 생성)으로, 없으면 기록을 그대로 모은 문장(규칙 기반)으로 보여 줍니다.'; };
     showStatus(!!(o.apiKey && o.apiKey.trim()));
     const sendKey = () => { if (o.onApiKey) o.onApiKey(keyInput.value); showStatus(!!keyInput.value.trim()); };
     keyInput.addEventListener('input', sendKey);
