@@ -9,6 +9,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { jsonSchemaOutputFormat } from '@anthropic-ai/sdk/helpers/json-schema';
 import { buildConvertPrompt } from './ai-convert.js';
+import { buildCandidatesPrompt } from './ai-candidates.js';
 
 // 실시간 호출 설정(한 곳). 모델은 설정 창에서 바꿀 수 있다
 export const DEFAULT_LLM_MODEL = 'claude-opus-5-5';
@@ -19,6 +20,9 @@ export const LLM_MAX_RETRIES = 1;
 // 문서 AI 변환(T-37): 응답이 길 수 있다. 재시도 없이 이 시간 안에 끝나야 한다(화면 문구 「최대 90초」와 같은 값)
 export const LLM_CONVERT_MAX_TOKENS = 32000;
 export const LLM_CONVERT_TIMEOUT_MS = 90000;
+// AI 연관 후보(T-38): 업무 글 수백 개를 읽고 쌍 목록을 낸다. 재시도 없이 이 시간 안에 끝나야 한다(화면 문구 「최대 60초」와 같은 값)
+export const LLM_CANDIDATES_MAX_TOKENS = 8000;
+export const LLM_CANDIDATES_TIMEOUT_MS = 60000;
 
 export const PROVIDERS = [
   { name: 'pregen', label: '사전 생성(개발 시 Claude로 작성)', help: '기본값. 개발 중 Claude로 미리 작성한 문장을 씁니다. 결과가 없거나 데이터가 바뀐 항목은 규칙 기반 문장으로 보입니다.' },
@@ -140,6 +144,10 @@ function claudeProvider({ apiKey, model, client = null, base = null, cache = nul
     async convert(text) {
       return request(buildConvertPrompt(text), LLM_CONVERT_MAX_TOKENS, { timeout: LLM_CONVERT_TIMEOUT_MS, maxRetries: 0 });
     },
+    // AI 연관 후보(T-38): works = llm/ai-candidates.js의 collectWorks 결과. 크기 상한을 넘으면 호출하지 않는다(buildCandidatesPrompt가 던짐). 재시도 0회
+    async candidates(works) {
+      return request(buildCandidatesPrompt(works), LLM_CANDIDATES_MAX_TOKENS, { timeout: LLM_CANDIDATES_TIMEOUT_MS, maxRetries: 0 });
+    },
   };
 
   async function request({ system, user, schema }, maxTokens, options) {
@@ -177,7 +185,7 @@ function unavailable(name, reason) {
   const fail = () => {
     throw new Error(reason);
   };
-  return { name, method: 'llm', refine: fail, explain: fail, convert: fail };
+  return { name, method: 'llm', refine: fail, explain: fail, convert: fail, candidates: fail };
 }
 
 /**

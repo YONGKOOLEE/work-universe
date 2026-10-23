@@ -746,3 +746,9 @@
   - 화면 `ui/import.js`: 키가 있을 때만 「AI로 변환」(초벌 변환 옆) → 「AI가 읽는 중… (최대 90초)」(aria-live) → 기존 미리 보기에 칩 「AI 변환 · 모델」과 「원문 인용이 확인되지 않아 뺀 항목 n개」(펼치면 목록) → 가져오기. 글을 바꾸거나 창을 닫으면 늦게 온 응답은 버림. 실패하면 「AI 변환 실패: 원인 — 규칙 변환 결과를 보여 줍니다」.
   - 검증: `tests/ai-convert.test.js` 29개(결함 주입 7종 모두 잡힘), 단위 전체 875, 빌드 1246KB(스크립트 1177KB → T-37 뒤 재측정 필요 없음: +4KB 수준), 비밀값 0건. 브라우저 점검은 가짜 client(`useFakeLlm('convert')`)로 — 가져오기는 페이지를 다시 읽어 가짜 client가 사라지므로 그 뒤 항목은 가짜를 다시 넣고 진행(어기면 실제 API가 불린다).
   - 미확인: 실제 모델의 인용 충실도(표 기호를 떼고 베끼면 항목이 버려짐), 긴 문서의 90초 안 응답, 구조화 출력의 스키마 제약(선택 칸 수·지원 키워드)은 공식 문서로 확인하지 못함 → limits L-52.
+- **T-38 구현 결과(2026-10-23, Sonnet 하위 에이전트 구현·Opus 메인 검증):**
+  - `llm/ai-candidates.js`(순수): `AI_CANDIDATES_SCHEMA`(`{pairs:[{a:{universe,node}, b:{universe,node}, reason, quote_a, quote_b, confidence}]}`, 전부 required·additionalProperties:false), `collectWorks(view)`(묶은 지도 자신을 뺀 하위 유니버스의 업무 노드 글 — 근거 ID를 떼어 ID 글자가 인용으로 통과하지 못하게 함), `buildCandidatesPrompt`, `verifyAiCandidates(works, parsed, {rejected, confirmed})`(쌍 단위 버림, `decidedSets`가 mergePlan과 같은 대표 노드 기준 pairKey), `withAiCandidates(plan, pairs)`(원본 불변 — 같은 쌍이면 기존 후보에 `ai:{reason, confidence, quotes}`만 덧붙이고 새 쌍은 끝에 `source:'ai'`·`score:0` 후보로).
+  - `providers.candidates(works)`: `convert`와 같은 요청 경로, max_tokens 8000·60초·재시도 0. `connector.findCandidatesAsync(works, …)`: 키 없으면 null, 성공 `{ok, pairs, dropped, counts, model}`, 실패 `{ok:false, fallback}`. 캐시는 메모리 1건.
+  - 화면 `ui/merge.js`: 「AI로 연관 찾기」(키 있고 읽기 전용 아닐 때) → 「AI가 업무를 비교하는 중… (최대 60초)」 → 「AI 후보」 칩·이유·인용 두 줄·확신·「같은 업무」/「다른 업무」, 요약 「AI 후보 n개(확인되지 않아 뺀 쌍 m개)」, 실패 「AI 연관 찾기 실패: 원인 — 기존 후보만 보여 줍니다」. 판정으로 다시 그려도 결과 유지·현재 판정으로 다시 거름. 닫기·다른 노드 선택 시 늦은 응답 버림. 키 없는 화면의 DOM은 이전과 같음.
+  - 검증: `tests/ai-candidates.test.js` 23개(결함 주입 3종 잡힘), 단위 전체 898, 브라우저 점검 항목 14개(U-D1 통합 확인 목록, 가짜 쌍 「참가자 모집 ↔ 신입 교육 운영」, 확정·거부는 누르지 않음).
+  - 미확인·한계: 실제 모델 품질(인용은 "그 업무 글에 있다"까지만 보증 — 같은 업무인지는 사람이 확정), 업무 300개 초과 묶음에서는 기능 없음(일부 선택 UI는 범위 밖), 응답 8000토큰 잘림 여부.

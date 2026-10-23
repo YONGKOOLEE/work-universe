@@ -15,6 +15,7 @@ import { validateDocument } from '../model/validate.js';
 import { describeEvidence, quoteInEvidence } from './evidence-text.js';
 import { buildDraftPrompt, buildExplainPrompt } from './prompts.js';
 import { aiResultToDocument, checkConvertInput, textFingerprint, verifyAiConvert } from './ai-convert.js';
+import { candidatesInputMessage, checkCandidatesInput, verifyAiCandidates, worksFingerprint } from './ai-candidates.js';
 
 export const METHOD_LABELS = { rule: '규칙 기반', pregen: '사전 생성(개발 시 Claude로 작성)', llm: 'Claude API(실시간)' };
 const FALLBACK = 'W-LLM-FALLBACK';
@@ -318,4 +319,40 @@ export async function convertDocumentAsync(text, { provider = null, now = () => 
   const built = aiResultToDocument(checked.kept, { now: now(), model: provider.model || '', dropped: checked.dropped, random });
   if (!built.ok) return fail('변환 결과가 형식 검증을 통과하지 못했습니다');
   return { ok: true, doc: built.doc, report: built.report, method: 'llm', model: provider.model || '', fallback: null, cached, dropped: checked.dropped };
+}
+
+// ── AI 연관 후보(CR-15 C, T-38) ──────────────────────────────────────────────
+// 캐시: 문서 변환과 같은 이유(C15-7)로 메모리에만, 공급자 하나당 마지막 1건(보낸 업무 목록 지문 + 모델). 업무 글이 저장소에 남지 않게 한다.
+// 캐시에 두는 것은 모델의 원 응답이고, 검증(끝 업무·인용·사람이 이미 판정한 쌍)은 부를 때마다 다시 한다 → 그 사이 판정이 바뀌어도 맞다.
+const candidatesMemo = new WeakMap();
+
+/**
+ * 뜻이 같은 업무 쌍 찾기의 실시간 판. 호출은 공급자의 candidates(works) 하나뿐이고, 모델 응답은 앱이 검증해 통과한 쌍만 돌려준다.
+ * 확정은 하지 않는다 — 돌려준 쌍은 통합 확인 목록에 「AI 후보」로 끼워 넣고 사람이 「같은 업무」/「다른 업무」를 고른다.
+ * @param {{universe:string, node:string, universe_name?:string, label?:string, text:string}[]} works llm/ai-candidates.js의 collectWorks 결과
+ * @param {{provider:object|null, rejected?:Set<string>, confirmed?:Set<string>, canon?:(gid:string)=>string}} opts rejected·confirmed·canon: decidedSets 결과
+ * @returns {Promise<null | {ok:true, pairs:object[], dropped:object[], counts:object, method:'llm', model:string, fallback:null, cached:boolean} | {ok:false, fallback:{code:string, reason:string}}>}
+ *   null: 실시간 공급자가 아님(키 없음). ok:false: 실패 — 화면이 기존 후보만 보여 준다(R-04 ③)
+ */
+export async function findCandidatesAsync(works, { provider = null, rejected, confirmed, canon } = {}) {
+  if (!isLive(provider) || typeof provider.candidates !== 'function') return null;
+  const fail = (reason, code = FALLBACK) => ({ ok: false, fallback: { code, reason } });
+  const input = checkCandidatesInput(works);
+  if (!input.ok) return fail(candidatesInputMessage(input));
+
+  const key = `${worksFingerprint(works)}|${provider.model || ''}`;
+  const memo = candidatesMemo.get(provider);
+  let parsed = memo && memo.key === key ? memo.parsed : null;
+  const cached = parsed !== null;
+  if (!cached) {
+    try {
+      parsed = await provider.candidates(works);
+    } catch (err) {
+      return fail(err && err.message ? err.message : '알 수 없는 오류');
+    }
+  }
+  const checked = verifyAiCandidates(works, parsed, { rejected, confirmed, canon });
+  if (!checked.ok) return fail('응답 형식 오류');
+  if (!cached) candidatesMemo.set(provider, { key, parsed });
+  return { ok: true, pairs: checked.pairs, dropped: checked.dropped, counts: checked.counts, method: 'llm', model: provider.model || '', fallback: null, cached };
 }

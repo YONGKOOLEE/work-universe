@@ -4,7 +4,7 @@
 // 키·네트워크를 쓰지 않는다. 브라우저 기능을 쓰지 않는다.
 
 import Anthropic from '@anthropic-ai/sdk';
-import { parseConvertUser, parsePrompt } from './prompts.js';
+import { parseCandidatesUser, parseConvertUser, parsePrompt } from './prompts.js';
 
 /** 근거 글 한 줄에서 gid 뒤의 앞부분을 quote로 쓴다(근거 글에 글자 그대로 있는 구절) */
 function quoteOf(line, gid) {
@@ -46,10 +46,46 @@ function convertAnswer(mode, doc) {
   return { name: heading.replace(/^#+\s*/, '').slice(0, 100), purpose: '', owner: '', date: '', works, people, artifacts, topics, memos, edges };
 }
 
+const isCandidates = (params) => !!(params.output_config && params.output_config.format && params.output_config.format.schema.properties.pairs);
+
+// ── AI 연관 후보 응답 흉내(T-38): 보낸 업무 목록을 되읽어 고른다. 모양은 llm/ai-candidates.js의 AI_CANDIDATES_SCHEMA ──
+const FAKE_BAD_PAIR_QUOTE = '업무 글 어디에도 없는 지어낸 구절입니다';
+const quoteOfWork = (w) => w.text.slice(0, 30).trim();
+const pairOf = (x, y, extra = {}) => ({
+  a: { universe: x.universe, node: x.node }, b: { universe: y.universe, node: y.node },
+  reason: '두 업무가 같은 일을 다른 이름으로 부르는 것으로 보임', quote_a: quoteOfWork(x), quote_b: quoteOfWork(y), confidence: 'high', ...extra,
+});
+
+/** 진짜 쌍 하나: 끝에서 두 번째 유니버스의 마지막 업무 ↔ 마지막 유니버스의 첫 업무(유니버스가 둘뿐이면 첫 유니버스의 마지막 ↔ 둘째의 첫) */
+function candidatesAnswer(mode, user) {
+  const works = parseCandidatesUser(user);
+  const order = [...new Set(works.map((w) => w.universe))];
+  if (order.length < 2) return { pairs: [] };
+  const lastOf = (u) => works.filter((w) => w.universe === u).pop();
+  const firstOf = (u) => works.find((w) => w.universe === u);
+  const x = lastOf(order[order.length - 2]);
+  const y = firstOf(order[order.length - 1]);
+  const good = pairOf(x, y);
+  if (mode === 'badquote' || mode === 'candidates-badquote') return { pairs: [pairOf(x, y, { quote_a: FAKE_BAD_PAIR_QUOTE })] };
+  if (mode !== 'candidates') return { pairs: [good] };
+  const same = works.filter((w) => w.universe === x.universe);
+  return {
+    pairs: [
+      good,
+      { ...good, a: { universe: 'U-ZZZ', node: 'N-999' }, reason: '지어낸 업무' }, // 입력에 없는 업무
+      pairOf(x, y, { quote_b: FAKE_BAD_PAIR_QUOTE }), // 인용이 틀림
+      ...(same.length > 1 ? [pairOf(same[0], same[same.length - 1])] : []), // 같은 유니버스 안의 쌍
+      pairOf(y, x), // 진짜 쌍과 같은 쌍(순서만 뒤집음)
+    ],
+  };
+}
+
 /** mode: ok(근거와 맞는 응답) · badquote(지어낸 quote) · garbage(JSON이 아님) · auth · rate · timeout · connect · server
+ *  AI 연관 후보(T-38) 요청에는: candidates(진짜 쌍 1 + 지어낸 업무 쌍 + 인용이 틀린 쌍 + 같은 유니버스 쌍 + 중복 쌍) · badquote(인용이 틀린 쌍만) · 그 밖(ok 포함)은 진짜 쌍 1. fake.candidatesOut에 객체를 넣으면 그것을 그대로 돌려준다
  *  문서 변환(T-37) 요청에는: convert(원문에서 따온 항목 + 원문에 없는 업무 하나) · convert-clean(원문에서 따온 항목만, ok도 같음) · convert-badquote(모든 항목이 지어낸 인용). fake.convertOut에 객체를 넣으면 그것을 그대로 돌려준다 */
 function answer(mode, params, fake) {
   const user = params.messages[0].content;
+  if (isCandidates(params)) return fake.candidatesOut || candidatesAnswer(mode, user);
   if (isConvert(params)) return fake.convertOut || convertAnswer(mode, parseConvertUser(user) || '');
   const sections = parsePrompt(user);
   const isDraft = !!(params.output_config && params.output_config.format && params.output_config.format.schema.properties.items);

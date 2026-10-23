@@ -2701,6 +2701,107 @@ async function checkBrowser(browser, port) {
     await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1'", 8000);
   }
 
+  // ── CR-15 T-38 C AI 연관 후보(가짜 클라이언트, 실제 호출 없음): 가상 운영부(U-D1) 통합 확인 목록 — 키가 없으면 단추 없음 → 키를 넣으면 「AI로 연관 찾기」 →
+  //    「비교하는 중」 → 「AI 후보」 칩·이유·인용 두 줄, 「AI 후보 n개(뺀 쌍 m개)」, 기존 후보 그대로(+AI) → 같은 업무 목록으로 다시 눌러도 호출 없음 → 닫았다 열면 처음 →
+  //    실패하면 「기존 후보만」 안내 → 응답을 기다리다 닫거나 다른 노드를 고르면 응답 버림 → 키 지우기 → 단추 없음. 확정·거부는 누르지 않는다(데이터 불변). 저장소는 끝에 되돌린다 ──
+  {
+    const fakeKey = ['sk', 'ant', 'x'.repeat(8), 'FAKEKEY', 'y'.repeat(12)].join('-');
+    const settingsOpen = async () => { await evaluate(s.cdp, "document.getElementById('settings-open').click()"); await sleep(150); };
+    const settingsClose = async () => { await clickTestId(s.cdp, 'settings-close'); await sleep(100); };
+    const typeInto = (testid, value) => evaluate(s.cdp, `(() => { const e = document.querySelector('[data-testid=${testid}]'); e.value = ${JSON.stringify(value)}; e.dispatchEvent(new Event('input')); e.dispatchEvent(new Event('change')); })()`);
+    const openMerge = async () => { await evaluate(s.cdp, 'window.__wu.select(null)'); await sleep(150); await clickTestId(s.cdp, 'btn-merge'); await sleep(200); };
+    const closeMerge = async () => { await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=merge-panel] button')].find((b) => b.textContent === '닫기').click()"); await sleep(150); };
+    const calls = () => evaluate(s.cdp, 'window.__wu.fakeLlm.calls.length');
+    const aiUi = () => evaluate(s.cdp, "({ btn: !!document.querySelector('[data-testid=btn-ai-candidates]'), live: !!document.querySelector('[data-testid=ai-candidates-live]'), chips: document.querySelectorAll('[data-testid=candidate-ai-chip]').length, summary: !!document.querySelector('[data-testid=ai-candidates-summary]'), fb: !!document.querySelector('[data-testid=ai-candidates-fallback]'), works: document.querySelectorAll('[data-testid=merge-works] li').length })");
+    await evaluate(s.cdp, "location.hash = 'U-D1'; location.reload()").catch(() => {});
+    await sleep(500);
+    await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-D1' && window.__wu.cy.nodes().length > 0", 8000);
+    const snap = await evaluate(s.cdp, 'JSON.stringify(Object.entries(localStorage))');
+    await evaluate(s.cdp, "window.__wu.useFakeLlm('candidates')");
+    const linksBefore = await evaluate(s.cdp, 'window.__wu.doc.identity_links.length');
+    // 1) 키가 없다: 단추도 안내 칸도 없고 업무 후보 4건은 지금과 같다
+    await openMerge();
+    const noKey = await aiUi();
+    const baseTexts = await evaluate(s.cdp, "JSON.stringify([...document.querySelectorAll('[data-testid=merge-works] li')].map((li) => li.textContent))");
+    const base = noKey.works; // 이 블록이 돌 때의 후보 수(앞 블록들이 판정 기록을 바꿀 수 있어 고정값을 쓰지 않는다)
+    check('CR-15 T-38 키가 없으면 통합 확인 목록에 「AI로 연관 찾기」도 안내 칸도 없고 업무 후보 4건이 지금과 같음', !noKey.btn && !noKey.live && noKey.chips === 0 && noKey.works >= 1, JSON.stringify(noKey));
+    await closeMerge();
+    // 2) 키를 넣는다: 「Claude API」 + 키 → 목록 머리에 「AI로 연관 찾기」
+    await settingsOpen();
+    await evaluate(s.cdp, "(() => { const r = document.querySelector('[data-testid=provider-claude_api]'); r.checked = true; r.dispatchEvent(new Event('change')); })()");
+    await sleep(100);
+    await typeInto('settings-apikey', fakeKey);
+    await sleep(100);
+    await settingsClose();
+    await openMerge();
+    const withKey = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=btn-ai-candidates]'); const h = [...document.querySelectorAll('[data-testid=merge-panel] h3')].find((x) => x.textContent.startsWith('업무 후보')); const r = b ? b.getBoundingClientRect() : { width: 0, height: 0 }; const live = document.querySelector('[data-testid=ai-candidates-live]'); return { text: b ? b.textContent : '', size: r.width > 0 && r.height > 0, enabled: b ? !b.disabled : false, below: !!b && !!h && h.compareDocumentPosition(b) === Node.DOCUMENT_POSITION_FOLLOWING, live: !!live, aria: live ? live.getAttribute('aria-live') : '', liveText: live ? live.textContent : '?', works: document.querySelectorAll('[data-testid=merge-works] li').length }; })()");
+    check('CR-15 T-38 키를 넣으면 「업무 후보」 제목 아래에 「AI로 연관 찾기」(크기 있음)와 안내 칸(aria-live=polite, 비어 있음)이 보이고 후보 4건은 그대로', withKey.text === 'AI로 연관 찾기' && withKey.size && withKey.enabled && withKey.below && withKey.live && withKey.aria === 'polite' && withKey.liveText === '' && withKey.works === base, JSON.stringify(withKey));
+    // 3) 누르면 「AI가 업무를 비교하는 중… (최대 60초)」 → 「AI 후보」
+    await evaluate(s.cdp, 'window.__wu.fakeLlm.delayMs = 700');
+    await clickTestId(s.cdp, 'btn-ai-candidates');
+    await sleep(250);
+    const during = await evaluate(s.cdp, "(() => { const n = document.querySelector('[data-testid=ai-candidates-live]'); const b = document.querySelector('[data-testid=btn-ai-candidates]'); return { note: n ? n.textContent : '', disabled: b ? b.disabled : null, chips: document.querySelectorAll('[data-testid=candidate-ai-chip]').length, calls: window.__wu.fakeLlm.calls.length }; })()");
+    check('CR-15 T-38 누르면 「AI가 업무를 비교하는 중… (최대 60초)」가 보이고 단추가 잠기며 아직 AI 후보는 없음, 호출 1회', during.note === 'AI가 업무를 비교하는 중… (최대 60초)' && during.disabled === true && during.chips === 0 && during.calls === 1, JSON.stringify(during));
+    const shown = await waitFor(s.cdp, "document.querySelectorAll('[data-testid=candidate-ai-chip]').length > 0", 5000);
+    const done = await evaluate(s.cdp, "(() => { const li = document.querySelector('[data-testid=merge-works] li[data-source=ai]'); const h = [...document.querySelectorAll('[data-testid=merge-panel] h3')].find((x) => x.textContent.startsWith('업무 후보')); const drop = document.querySelector('[data-testid=ai-candidates-dropped]'); return { chips: document.querySelectorAll('[data-testid=candidate-ai-chip]').length, works: document.querySelectorAll('[data-testid=merge-works] li').length, head: h ? h.textContent : '', summary: (document.querySelector('[data-testid=ai-candidates-summary]') || {}).textContent || '', live: (document.querySelector('[data-testid=ai-candidates-live]') || {}).textContent, title: li ? li.querySelector('strong').textContent : '', chipText: li ? li.querySelector('[data-testid=candidate-ai-chip]').textContent : '', quotes: li ? [...li.querySelectorAll('[data-testid=candidate-ai-quote]')].map((x) => x.textContent) : [], reason: li && li.querySelector('[data-testid=candidate-ai]') ? li.querySelector('[data-testid=candidate-ai]').textContent : '', score: li ? [...li.querySelectorAll('.who .chip')].map((x) => x.textContent) : [], btns: li ? li.querySelectorAll('[data-testid=merge-same], [data-testid=merge-diff]').length : 0, dropSummary: drop ? drop.querySelector('summary').textContent : '', dropText: drop ? drop.textContent : '', disabled: document.querySelector('[data-testid=btn-ai-candidates]').disabled, texts: JSON.stringify([...document.querySelectorAll('[data-testid=merge-works] li:not([data-source=ai])')].map((x) => x.textContent)) }; })()");
+    check('CR-15 T-38 「AI 후보」 칩이 1개 붙은 후보가 목록 끝에 더해짐(제목·칩·이유·인용 두 줄·「같은 업무」/「다른 업무」 단추, 점수 칩 없음)', shown && done.chips === 1 && done.works === base + 1 && done.head === `업무 후보 ${base + 1}건` && done.chipText === 'AI 후보' && done.title.includes('참가자 모집') && done.title.includes('신입 교육 운영') && done.quotes.length === 2 && done.quotes[0].includes('참가자 모집') && done.quotes[1].includes('신입 교육 운영') && done.reason.includes('같은 일을 다른 이름으로') && done.reason.includes('Claude API') && done.score.join() === 'AI 후보' && done.btns === 2, JSON.stringify(done));
+    check('CR-15 T-38 머리에 「AI 후보 1개(확인되지 않아 뺀 쌍 3개)」와 뺀 쌍 목록(지어낸 업무·틀린 인용·같은 유니버스), 안내 문구는 지워지고 단추는 다시 켜짐', shown && done.summary === 'AI 후보 1개(확인되지 않아 뺀 쌍 3개)' && done.dropSummary === '원문 인용·업무가 확인되지 않아 뺀 쌍 3개' && done.dropText.includes('지어낸 업무') && done.dropText.includes('인용을 찾지 못함') && done.dropText.includes('같은 유니버스 안의 쌍') && done.live === '' && done.disabled === false, JSON.stringify({ summary: done.summary, dropSummary: done.dropSummary, live: done.live, disabled: done.disabled }));
+    check('CR-15 T-38 기존 후보 4건은 순서·내용 그대로이고 AI 후보는 그 뒤에만 더해짐(판정 기록 수도 그대로 — 확정·거부를 누르지 않음)', shown && done.texts === baseTexts && (await evaluate(s.cdp, 'window.__wu.doc.identity_links.length')) === linksBefore, JSON.stringify({ base: JSON.parse(baseTexts).length, now: JSON.parse(done.texts).length, diff: JSON.parse(done.texts).map((t, i) => [t.slice(0, 60), (JSON.parse(baseTexts)[i] || "").slice(0, 60)]).filter(([a, b]) => a !== b).slice(0, 2) }));
+    const nullSpots = await nullTextSpots(s.cdp);
+    check('CR-15 T-38 AI 후보가 보이는 목록에 "null" 글자 없음', nullSpots.length === 0, JSON.stringify(nullSpots));
+    await shot(s.cdp, `${browser.name}-43-ai-candidates`);
+    // 4) 같은 업무 목록으로 다시 눌러도 호출이 늘지 않는다(메모리 캐시) — 결과는 그대로
+    const calls1 = await calls();
+    await clickTestId(s.cdp, 'btn-ai-candidates');
+    await waitFor(s.cdp, "(document.querySelector('[data-testid=ai-candidates-live]') || {}).textContent === '' && !!document.querySelector('[data-testid=ai-candidates-summary]')", 3000);
+    const again = await aiUi();
+    check('CR-15 T-38 다시 눌러도 호출이 늘지 않고(캐시) AI 후보는 그대로 1개', calls1 === 1 && (await calls()) === calls1 && again.chips === 1 && again.works === base + 1, `호출 ${calls1}→${await calls()} ${JSON.stringify(again)}`);
+    // 5) 닫았다가 다시 열면 처음 상태(결과를 남기지 않는다)
+    await closeMerge();
+    await openMerge();
+    const reopened = await aiUi();
+    check('CR-15 T-38 목록을 닫았다 다시 열면 AI 후보·요약이 없고 기존 후보 4건만(단추는 있음)', reopened.btn && reopened.chips === 0 && !reopened.summary && reopened.works === base, JSON.stringify(reopened));
+    // 6) 실패(시간 초과): 「AI 연관 찾기 실패: … — 기존 후보만 보여 줍니다」 + 기존 후보 4건 그대로
+    await evaluate(s.cdp, "window.__wu.useFakeLlm('timeout').delayMs = 100");
+    await closeMerge();
+    await openMerge();
+    await clickTestId(s.cdp, 'btn-ai-candidates');
+    const failedShown = await waitFor(s.cdp, "!!document.querySelector('[data-testid=ai-candidates-fallback]')", 5000);
+    const failed = await evaluate(s.cdp, "({ fb: (document.querySelector('[data-testid=ai-candidates-fallback]') || {}).textContent || '', chips: document.querySelectorAll('[data-testid=candidate-ai-chip]').length, summary: !!document.querySelector('[data-testid=ai-candidates-summary]'), works: document.querySelectorAll('[data-testid=merge-works] li').length, live: (document.querySelector('[data-testid=ai-candidates-live]') || {}).textContent, disabled: document.querySelector('[data-testid=btn-ai-candidates]').disabled })");
+    check('CR-15 T-38 실패(시간 초과) → 「AI 연관 찾기 실패: 연결 실패·시간 초과 — 기존 후보만 보여 줍니다」 + 후보 4건 그대로, AI 후보·요약 없음, 단추 다시 켜짐', failedShown && failed.fb === 'AI 연관 찾기 실패: 연결 실패·시간 초과 — 기존 후보만 보여 줍니다' && failed.chips === 0 && !failed.summary && failed.works === base && failed.live === '' && failed.disabled === false, JSON.stringify(failed));
+    // 7) 응답을 기다리다 닫으면 응답이 버려진다 / 다른 노드를 골라 목록을 벗어나도 버려진다
+    await evaluate(s.cdp, "window.__wu.fakeLlm.mode = 'candidates'; window.__wu.fakeLlm.delayMs = 600; window.__aiErr = []; window.addEventListener('error', (e) => window.__aiErr.push(String(e.message))); window.addEventListener('unhandledrejection', (e) => window.__aiErr.push(String(e.reason)))");
+    await clickTestId(s.cdp, 'btn-ai-candidates');
+    await sleep(150);
+    await closeMerge();
+    await sleep(900);
+    await openMerge();
+    const closedWhile = await aiUi();
+    const liveAfter = await evaluate(s.cdp, "({ live: (document.querySelector('[data-testid=ai-candidates-live]') || {}).textContent, disabled: document.querySelector('[data-testid=btn-ai-candidates]').disabled, err: window.__aiErr })");
+    check('CR-15 T-38 응답을 기다리다 닫으면 응답이 버려짐(다시 열면 AI 후보·요약 없음, 안내 지워짐, 단추 켜짐, 오류 없음)', closedWhile.chips === 0 && !closedWhile.summary && closedWhile.works === base && liveAfter.live === '' && liveAfter.disabled === false && liveAfter.err.length === 0, JSON.stringify({ closedWhile, liveAfter }));
+    await clickTestId(s.cdp, 'btn-ai-candidates');
+    await sleep(150);
+    await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+    await sleep(900);
+    await openMerge();
+    const leftWhile = await aiUi();
+    check('CR-15 T-38 응답을 기다리다 다른 노드를 골라 목록을 벗어나도 응답이 버려짐(다시 열면 처음 상태, 오류 없음)', leftWhile.chips === 0 && !leftWhile.summary && !leftWhile.fb && leftWhile.works === base && (await evaluate(s.cdp, 'window.__aiErr.length')) === 0, JSON.stringify(leftWhile));
+    await closeMerge();
+    // 8) 키 지우기 → 「AI로 연관 찾기」가 사라진다
+    await settingsOpen();
+    await clickTestId(s.cdp, 'settings-clear-key');
+    await sleep(100);
+    await settingsClose();
+    await openMerge();
+    const cleared = await aiUi();
+    check('CR-15 T-38 키를 지우면 「AI로 연관 찾기」와 안내 칸이 사라지고 업무 후보 4건이 지금과 같음', !cleared.btn && !cleared.live && cleared.chips === 0 && cleared.works === base, JSON.stringify(cleared));
+    await closeMerge();
+    // 저장소를 시작 때로 되돌리고 U-A1로 돌아간다(설정이 뒤 단계에 남지 않게)
+    await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(snap)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); location.hash = 'U-A1'; location.reload(); })()`).catch(() => {});
+    await sleep(500);
+    await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1'", 8000);
+  }
+
   // ── CR-14 A 편집 되감기(R-25, D-30): 이름 수정 → 개요 「편집 되감기」 → 이전 시점 → 읽기 전용 확인 → 지금으로 → 다시 → 되돌리기. 데이터를 바꾸므로 끝부분 ──
   await reloadApp();
   const rwOld = await evaluate(s.cdp, "window.__wu.doc.nodes.find((n) => n.id === 'N-002').label");
