@@ -2,6 +2,8 @@
 // 내장 샘플과 하위 유니버스를 묶은 유니버스, 업무가 아직 없는 유니버스(기존 빈 유니버스 안내가 있다)에는 쓰지 않는다. 막지 않는다.
 // DOM·저장소를 쓰지 않는다.
 import { workFormMissing } from './form.js';
+import { PREGEN } from '../../data/pregen.js';
+import { buildView } from '../view/view.js';
 
 /**
  * @param {object} doc 현재 유니버스 문서
@@ -32,4 +34,43 @@ export function starterSteps(doc, view) {
     },
   ];
   return steps.every((s) => s.done) ? null : { steps };
+}
+
+// ── 빈 출발 미리 보기(CR-16 ③, 2026-10-23) ──
+// 「처음 할 일」이 보이는 동안만, 월말 정산 샘플의 사전 생성 초안 한 토막을 「샘플」로 밝혀 보여 준다.
+// 새 문장을 만들지 않는다: 문장은 사전 생성 결과(data/pregen.js)에서 글자 그대로 가져온다(지문·사전 생성 파일은 건드리지 않음).
+
+// 어느 사전 생성 초안에서 어느 항목을 가져오는가. first=true면 첫 문장만
+export const PREVIEW_SOURCE = { task: 'handover', target: 'U-A1/N-000' };
+export const PREVIEW_ITEMS = [
+  { key: '업무_개요', title: '업무 개요', first: false },
+  { key: '세부_업무_절차', title: '세부 업무 절차', first: true },
+  { key: '주의사항', title: '주의사항·노하우', first: false },
+];
+export const PREVIEW_TEXT = {
+  summary: '기록이 이렇게 쌓이면 →',
+  head: '샘플 「월말 정산 점검」에서 만든 인수인계 초안의 일부입니다(미리 쓴 문장, 가상 데이터)',
+  chip: '샘플',
+  risk: '인수인계 위험: 한 사람만 해 봤고 인수인계 기록이 없는 업무를 「높음」으로 알려 줍니다',
+  note: '지금 지도에서 만들려면: 담당 이력과 메모를 쌓은 뒤 빈 곳을 누르고 「인수인계 초안 만들기」',
+};
+
+/** 미리 보기 내용. 사전 생성 항목이 없으면(낡음) 그 항목은 뺀다 */
+export function previewContent() {
+  const items = PREVIEW_ITEMS.map((spec) => {
+    const hit = PREGEN.items.find((it) => it.task === PREVIEW_SOURCE.task && it.target === PREVIEW_SOURCE.target && it.item === spec.key);
+    if (!hit || !hit.sentences.length) return null;
+    const sentences = spec.first ? hit.sentences.slice(0, 1) : hit.sentences;
+    return { key: spec.key, title: spec.title, text: sentences.map((s) => s.text).join(' ') };
+  }).filter(Boolean);
+  return { summary: PREVIEW_TEXT.summary, head: PREVIEW_TEXT.head, chip: PREVIEW_TEXT.chip, items, risk: PREVIEW_TEXT.risk, note: PREVIEW_TEXT.note };
+}
+
+/**
+ * 「처음 할 일」이 남아 있을 때만 미리 보기 내용을, 아니면 null(샘플·묶음·업무 없음·다 한 경우 포함).
+ * @param {object} doc 현재 유니버스 문서
+ * @param {object} [view] buildView 결과(없으면 doc로 만든다)
+ */
+export function starterPreview(doc, view) {
+  return starterSteps(doc, view || buildView(doc, () => null)) ? previewContent() : null;
 }
