@@ -334,6 +334,29 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
     focusOn(selectedGid ? cy.getElementById(selectedGid) : null);
   });
 
+  // 그래프 칸 크기가 그래프가 아는 크기와 달라지면(처음 자리 잡을 때, 위아래 줄이 늘고 줄 때) 캔버스를 다시 재고 가운데를 유지한다.
+  // 2026-10-24 처음 사용 점검: 1366×768에서 칸은 580px인데 그래프는 485px로 알고 있어 아래가 잘리고 「전체 보기」도 잘린 크기에 맞춤
+  // 다른 코드가 화면이 바뀌는 도중(시작 화면이 아직 남아 스크롤바가 있을 때 등)의 크기로 cy.resize()를 부르면, 그 뒤 칸 크기는 그대로라 관찰기가 다시 알리지 않는다
+  // → resize를 부를 때마다 다음 프레임에 한 번 더 맞춰 본다
+  const syncSize = () => {
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    if (!w || !h) return;
+    const dw = w - cy.width();
+    const dh = h - cy.height();
+    if (Math.abs(dw) < 1 && Math.abs(dh) < 1) return;
+    rawResize();
+    cy.panBy({ x: dw / 2, y: dh / 2 });
+  };
+  const rawResize = cy.resize.bind(cy);
+  let syncRaf = 0;
+  cy.resize = () => {
+    rawResize();
+    if (typeof requestAnimationFrame === 'function' && !syncRaf) syncRaf = requestAnimationFrame(() => { syncRaf = 0; syncSize(); });
+    return cy;
+  };
+  if (typeof ResizeObserver === 'function') new ResizeObserver(syncSize).observe(container);
+
   // 창 크기가 바뀌면 그래프를 다시 화면에 맞춘다
   let resizeTimer;
   window.addEventListener('resize', () => {
