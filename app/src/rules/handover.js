@@ -23,6 +23,9 @@ export const HANDOVER_ITEMS = [
   { key: '유사_경험자', title: '유사 경험자' },
 ];
 
+// 관계자·연락처에 협업자로 셀 수 있는 노드 유형(CR-17 F). 「참조」로 이은 상대 중 사람·조직만. 바꾸려면 여기 한 곳
+const COLLABORATOR_TYPES = ['person', 'org'];
+
 // 최근 이슈로 보여 줄 메모 수(D-09 "최근 메모 N건")
 export const RECENT_MEMO_COUNT = 3;
 
@@ -236,7 +239,7 @@ export function buildHandoverDraft(view, input) {
     return [...made.map((e) => artifactLine(w, e, '만듦')), ...referred.map((e) => artifactLine(w, e, '참조'))];
   });
 
-  // 7) 관계자·연락처: 범위 안 업무를 수행한 사람. 보내는 사람과 받는 사람은 뺀다(받는 사람에게 자신을 알려 줄 필요가 없음)
+  // 7) 관계자·연락처: 범위 안 업무를 수행한 사람 + 「참조」로 이은 협업자(사람·조직). 보내는 사람과 받는 사람은 뺀다(받는 사람에게 자신을 알려 줄 필요가 없음)
   const people = new Map();
   for (const e of view.edges) {
     if (!live(e) || e.core_type !== 'performs' || !workIds.has(e.target) || e.source === from || e.source === to) continue;
@@ -249,8 +252,22 @@ export function buildHandoverDraft(view, input) {
   const inquiry = sender && attr(sender, '연락처')
     ? [sentence(`문의: 보내는 사람 ${sender.label}${sender.emp_no ? `(${sender.emp_no})` : ''} — 연락: ${attr(sender, '연락처')}`, [sender.gid])]
     : [];
+  // 협업자(CR-17 F): 범위 업무와 「참조」로 이어진 사람·조직(업무 → 상대 또는 상대 → 업무). 수행자로 이미 나온 사람, 보내는·받는 사람은 뺀다
+  const collaborators = new Map();
+  for (const e of view.edges) {
+    if (!live(e) || e.core_type !== 'references') continue;
+    const [workEnd, otherEnd] = workIds.has(e.source) ? [e.source, e.target] : workIds.has(e.target) ? [e.target, e.source] : [null, null];
+    if (!workEnd || workIds.has(otherEnd) || otherEnd === from || otherEnd === to || people.has(otherEnd)) continue;
+    const o = view.getNode(otherEnd);
+    if (!o || o.hidden || !COLLABORATOR_TYPES.includes(o.core_type)) continue;
+    if (!collaborators.has(o.gid)) collaborators.set(o.gid, { other: o, works: [] });
+    const wn = name(view, workEnd);
+    if (!collaborators.get(o.gid).works.includes(wn)) collaborators.get(o.gid).works.push(wn);
+  }
   items.관계자_연락처 = inquiry.concat([...people.values()].map(({ person, roles }) =>
     sentence(`${person.label}${person.emp_no ? `(${person.emp_no})` : ''} — ${roles.join(', ')}${attr(person, '연락처') ? `. 연락: ${attr(person, '연락처')}` : ''}`, [person.gid]),
+  ), [...collaborators.values()].map(({ other, works: ws }) =>
+    sentence(`협업: ${other.label}${other.emp_no ? `(${other.emp_no})` : ''} — 참조 ${ws.join(', ')}${attr(other, '연락처') ? `. 연락: ${attr(other, '연락처')}` : ''}`, [other.gid]),
   ));
 
   // 8) 최근 이슈: 범주가 이슈(없으면 이슈)인 메모의 최근 N건

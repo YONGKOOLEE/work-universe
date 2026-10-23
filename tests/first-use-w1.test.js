@@ -61,7 +61,8 @@ test('FU-8: 「채우려면」 표는 초안 10개 항목의 key를 빠짐없이
 
 test('FU-8: 문구가 규칙이 실제로 세는 것과 맞다 — 관계자는 「수행」만, 산출물은 「산출」, 진행 중·이슈·주의사항은 메모 분류', () => {
   assert.match(FILL_HINTS.관계자_연락처, /「수행」\(사람 → 업무\)/);
-  assert.match(FILL_HINTS.관계자_연락처, /세지 않습니다/);
+  assert.match(FILL_HINTS.관계자_연락처, /「참조」/); // CR-17 F: 협업자도 센다(예전: 「참조」는 세지 않습니다)
+  assert.doesNotMatch(FILL_HINTS.관계자_연락처, /세지 않습니다/);
   assert.match(FILL_HINTS.산출물_문서, /「산출」\(만든 문서\) 또는 「참조」\(참고한 문서\)\(업무 → 산출물\)/); // CR-17 J ⑩: 참조도 읽는다
   assert.match(FILL_HINTS.산출물_문서, /「위치」/);
   assert.match(FILL_HINTS.진행_중, /분류 「진행 중」/);
@@ -94,18 +95,21 @@ test('FU-8: 이력 부족 항목마다 draft-fill-hint가 붙고, 내용이 있�
   assert.equal(q('draft-item-세부_업무_절차').querySelector('[data-testid=draft-fill-hint]'), null);
 }));
 
-// ── FU-18·19 조사의 근거(규칙은 고치지 않음) ──
-test('FU-18: 조직 노드를 업무에 이어도(참조) 「관계자·연락처」는 이력 부족이고, 「수행」으로 이은 사람이 있어야 채워진다', () => {
+// ── FU-18 조사의 근거 → CR-17 F로 규칙을 바꿈(2026-10-24, 승인 전 초안 브랜치) / FU-19는 아래에서 그대로(G는 별도 커밋) ──
+test('FU-18(CR-17 F로 바뀜): 조직·사람을 업무에 「참조」로 이으면 「관계자·연락처」에 협업자로 나온다 — 이으지 않으면 여전히 이력 부족', () => {
   const doc = smallDoc({ persons: 3, withOrg: true });
   const view = viewOfDoc(doc);
   const input = { target: gid(doc, 'N-000'), from: gid(doc, 'N-101'), to: gid(doc, 'N-102'), asOf: ASOF };
   const key = (r) => r.draft.items.find((i) => i.key === '관계자_연락처');
-  assert.equal(key(buildHandoverDraft(view, input)).insufficient, true);
-  // 같은 사람을 「참조」로 이어도 세지 않는다
-  const viaRef = mkDoc(doc.universe.id, doc.nodes.filter((n) => n.id !== 'N-000'), [...doc.edges, mkEdge('N-103', 'N-001', 'references')]);
-  assert.equal(key(buildHandoverDraft(viewOfDoc(viaRef), input)).insufficient, true);
-  // 보내는·받는 사람이 아닌 사람을 「수행」으로 이으면 센다
-  const viaPerforms = mkDoc(doc.universe.id, doc.nodes.filter((n) => n.id !== 'N-000'), [...doc.edges, mkEdge('N-103', 'N-001', 'performs')]);
+  // 조직(N-200)이 업무를 「참조」로 이은 문서: 이제 협업자로 센다(예전에는 이력 부족이었다)
+  const org = key(buildHandoverDraft(view, input));
+  assert.equal(org.insufficient, false);
+  assert.match(org.sentences[0].text, /^협업: 가상팀 — 참조 점검/);
+  // 아무도 잇지 않으면 이력 부족
+  const none = mkDoc(doc.universe.id, doc.nodes.filter((n) => n.id !== 'N-000' && n.id !== 'N-200'), doc.edges.filter((e) => e.source !== 'N-200'));
+  assert.equal(key(buildHandoverDraft(viewOfDoc(none), input)).insufficient, true);
+  // 보내는·받는 사람이 아닌 사람을 「수행」으로 이어도 센다
+  const viaPerforms = mkDoc(doc.universe.id, none.nodes.filter((n) => n.id !== 'N-000'), [...none.edges, mkEdge('N-103', 'N-001', 'performs')]);
   const hit = key(buildHandoverDraft(viewOfDoc(viaPerforms), input));
   assert.equal(hit.insufficient, false);
   assert.match(hit.sentences[0].text, /가상인3/);
