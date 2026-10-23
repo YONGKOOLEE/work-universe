@@ -2,7 +2,7 @@
 // dist/index.html을 file://로 열고, 네트워크를 막은 상태에서 흐름을 확인한다.
 // 사용: npm run build && npm run check:browser
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -708,7 +708,7 @@ async function checkBrowser(browser, port) {
     check('R-08 첫 화면의 세 갈래 카드 「인수인계를 앞두고 있어요」 한 번으로 월말 정산이 열려 탐색이 시작됨(CR-13 A로 확인 방법 변경)', opened);
     await sleep(400);
     let ti = await tourInfo();
-    check('CR-13 A 갈래 a → 따라 하기 1/4 카드: 이야기 한 줄(윤바다가 다음 달 서하늘에게…), 할 일 한 줄, 「건너뛰기」, 읽기 단계가 아니라 「다음」 없음, 주소의 ~tour 표시는 지워짐', !!ti && ti.mode === 'step' && ti.scenario === 'handover' && ti.index === 0 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 1/4' && (await text(s.cdp, '[data-testid=tour-story]')).includes('윤바다가 다음 달 서하늘에게 월말 정산을 넘깁니다') && (await text(s.cdp, '[data-testid=tour-task]')).includes('대사 확인') && (await text(s.cdp, '[data-testid=tour-skip]')) === '건너뛰기' && !(await hasNext()) && (await hashClean()), JSON.stringify(ti));
+    check('CR-13 A 갈래 a → 따라 하기 1/5 카드: 이야기 한 줄(윤바다가 다음 달 서하늘에게…), 할 일 한 줄, 「건너뛰기」, 읽기 단계가 아니라 「다음」 없음, 주소의 ~tour 표시는 지워짐', !!ti && ti.mode === 'step' && ti.scenario === 'handover' && ti.index === 0 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 1/5' && (await text(s.cdp, '[data-testid=tour-story]')).includes('윤바다가 다음 달 서하늘에게 월말 정산을 넘깁니다') && (await text(s.cdp, '[data-testid=tour-task]')).includes('대사 확인') && (await text(s.cdp, '[data-testid=tour-skip]')) === '건너뛰기' && !(await hasNext()) && (await hashClean()), JSON.stringify(ti));
     const sn1 = await stepNamesOk();
     check('CR-13 A 1단계 문구의 「」 이름(대사 확인)이 실제 화면에 있고, 깜빡이는 대상은 그래프의 「대사 확인」 노드', sn1.missing.length === 0 && sn1.names.length >= 1 && (await blinkIds()).join() === 'U-A1/N-001', JSON.stringify(sn1));
     await shot(s.cdp, `${browser.name}-36a-tour-handover-1`);
@@ -717,7 +717,7 @@ async function checkBrowser(browser, port) {
     check('CR-13 A 1단계: 다른 노드(자료 수집)를 누르면 진행하지 않음', (await tourInfo()).index === 0);
     await clickNode(s.cdp, 'U-A1/N-001');
     ti = await tourInfo();
-    check('CR-13 A 1단계 → 「대사 확인」을 실제로 누르면 2/4, 읽기 단계라 「다음」이 보임', ti.index === 1 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 2/4' && (await hasNext()), JSON.stringify(ti));
+    check('CR-13 A 1단계 → 「대사 확인」을 실제로 누르면 2/5, 읽기 단계라 「다음」이 보임', ti.index === 1 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 2/5' && (await hasNext()), JSON.stringify(ti));
     const sn2 = await stepNamesOk();
     check('CR-13 A 2단계 문구의 「」 이름(미해결·다음)이 실제 화면에 있음', sn2.missing.length === 0 && sn2.names.includes('미해결') && sn2.names.includes('다음'), JSON.stringify(sn2));
     await shot(s.cdp, `${browser.name}-36b-tour-handover-2`);
@@ -744,7 +744,7 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, "document.querySelector('[data-testid=tour-next]').click()");
     await sleep(250);
     ti = await tourInfo();
-    check('CR-13 A 「다음」 → 3/4(초안 만들기), 「다음」 단추는 사라짐', ti.index === 2 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 3/4' && !(await hasNext()), JSON.stringify(ti));
+    check('CR-13 A 「다음」 → 3/5(초안 만들기), 「다음」 단추는 사라짐', ti.index === 2 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 3/5' && !(await hasNext()), JSON.stringify(ti));
     const sn3 = await stepNamesOk();
     check('CR-13 A 3단계 문구의 「」 이름(인수인계 초안 만들기·초안 만들기)이 실제 화면에 있음', sn3.missing.length === 0 && sn3.names.length >= 2, JSON.stringify(sn3));
     // 재검증 N-2: 「빈 곳을 누르세요」 단계에서는 그래프 안쪽 아래 가운데에 표지가 보이고(크기 있음, 눌림을 막지 않음), 테두리는 안쪽(음수 오프셋)
@@ -762,13 +762,35 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, "document.querySelector('[data-testid=draft-form] button[type=submit]').click()");
     await sleep(400);
     ti = await tourInfo();
-    check('CR-13 A 「초안 만들기」로 초안 결과가 그려지면 4/4(근거 칩)', ti.index === 3 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 4/4' && (await evaluate(s.cdp, "document.querySelectorAll('.draft .evidence').length")) > 5, JSON.stringify(ti));
+    check('CR-13 A 「초안 만들기」로 초안 결과가 그려지면 4/5(근거 칩)', ti.index === 3 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 4/5' && (await evaluate(s.cdp, "document.querySelectorAll('.draft .evidence').length")) > 5, JSON.stringify(ti));
     const sn4 = await stepNamesOk();
     check('CR-13 A 4단계 문구의 「」 이름(근거:)이 실제 화면에 있고, 깜빡이는 대상은 근거 칩', sn4.missing.length === 0 && (await evaluate(s.cdp, "document.querySelector('.draft .evidence').classList.contains('tour-target')")), JSON.stringify(sn4));
     await shot(s.cdp, `${browser.name}-36d-tour-handover-4`);
     await evaluate(s.cdp, "document.querySelector('.draft .evidence').click()");
     await sleep(400);
     ti = await tourInfo();
+    check('R9-1 근거 칩을 누르면 5/5(직접 고쳐 보고 되감기), 끝 카드는 아직', ti.mode !== 'end' && ti.index === 4 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 5/5', JSON.stringify(ti));
+    await shot(s.cdp, `${browser.name}-36d2-tour-handover-5`);
+    // 5단계: 「대사 확인」 → 「수정」 → 설명 끝에 글자 하나 → 「저장」 → 빈 곳 → 「편집 되감기」
+    await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+    await sleep(200);
+    check('R9-1 5단계에서 노드를 고르면 짚는 대상이 「수정」 단추', await evaluate(s.cdp, "!!document.querySelector('[data-testid=btn-edit].tour-target')"));
+    await clickTestId(s.cdp, 'btn-edit');
+    await sleep(200);
+    const curDesc = await evaluate(s.cdp, "document.querySelector('[data-testid=node-description]').value");
+    await fillPanelForm(s.cdp, { 'node-description': curDesc + '.' });
+    await sleep(400);
+    ti = await tourInfo();
+    check('R9-1 저장만으로는 끝나지 않고 보조 문구 「고쳐서 저장했어요…」가 보임', ti.index === 4 && (await text(s.cdp, '[data-testid=tour-sub]')).includes('고쳐서 저장했어요'), JSON.stringify(ti));
+    await evaluate(s.cdp, "window.__wu.select(null)");
+    await sleep(200);
+    check('R9-1 빈 곳을 누르면 짚는 대상이 「편집 되감기」 단추(활성)', await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=btn-rewind]'); return !!b && !b.disabled && b.classList.contains('tour-target'); })()"));
+    await clickTestId(s.cdp, 'btn-rewind');
+    await sleep(500);
+    ti = await tourInfo();
+    check('R9-1 「편집 되감기」를 누르면 띠가 보이고 끝 카드: 「끝! 이제 내 업무로 해 볼까요?」', ti.mode === 'end' && !(await evaluate(s.cdp, "document.querySelector('[data-testid=rewind-band]').hidden")) && (await text(s.cdp, '[data-testid=tour-end]')) === '끝! 이제 내 업무로 해 볼까요?', JSON.stringify(ti));
+    await clickTestId(s.cdp, 'btn-rewind-back');
+    await sleep(300);
     check('CR-13 A 근거 칩을 누르면 끝 카드: 「끝! 이제 내 업무로 해 볼까요?」, 「내 업무 지도 만들기」, 「닫기」, 접힌 상태면 「도구 더 보기」 안내 한 줄(강제로 펼치지 않음)', ti.mode === 'end' && (await text(s.cdp, '[data-testid=tour-end]')) === '끝! 이제 내 업무로 해 볼까요?' && (await text(s.cdp, '[data-testid=tour-make]')) === '내 업무 지도 만들기' && (await text(s.cdp, '[data-testid=tour-skip]')) === '닫기' && (await text(s.cdp, '[data-testid=tour-tools-hint]')).includes('「도구 더 보기」에서 흐름 정렬·거르기도 써 보세요') && (await evaluate(s.cdp, 'window.__wu.toolsOpen')) === false, JSON.stringify(ti));
     await shot(s.cdp, `${browser.name}-36e-tour-end`);
     await evaluate(s.cdp, "document.querySelector('[data-testid=tour-make]').click()");
@@ -2530,8 +2552,8 @@ async function checkBrowser(browser, port) {
   await clickTestId(s.cdp, 'btn-edit');
   await fillPanelForm(s.cdp, { 'node-label': '폴더 거울 시험 이름' });
   await sleep(1500);
-  const fkMine = await evaluate(s.cdp, "(() => { const names = [...window.__fk.files.keys()]; const mine = names.filter((n) => n.endsWith('U-A1.json')); const d = mine.length ? JSON.parse(window.__fk.files.get(mine[0]).text) : null; return { names, id: d && d.universe.id, label: d && d.nodes.find((n) => n.id === 'N-002').label }; })()");
-  check('CR-14 C 저장 1.2초 뒤 폴더에 내 파일(…U-A1.json)이 생기고 내용이 방금 고친 지도', fkMine.names.length === 1 && fkMine.id === 'U-A1' && fkMine.label === '폴더 거울 시험 이름', JSON.stringify(fkMine));
+  const fkMine = await evaluate(s.cdp, "(() => { const names = [...window.__fk.files.keys()]; const mine = names.filter((n) => n.startsWith('월말_정산_점검') && n.endsWith('.json')); const d = mine.length ? JSON.parse(window.__fk.files.get(mine[0]).text) : null; return { names, id: d && d.universe.id, label: d && d.nodes.find((n) => n.id === 'N-002').label }; })()");
+  check('CR-14 C 저장 1.2초 뒤 폴더에 내 파일(월말_정산_점검(작성자).json 꼴)이 생기고 내용이 방금 고친 지도', fkMine.names.length === 1 && fkMine.id === 'U-A1' && fkMine.label === '폴더 거울 시험 이름', JSON.stringify(fkMine));
 
   // 동료 파일 2개(다른 샘플 유니버스)를 폴더에 넣고 새로 고침
   const peers = SAMPLES.filter((d) => d.universe.id !== 'U-A1' && !(d.refs || []).length).slice(0, 2);
@@ -2697,6 +2719,17 @@ if (!existsSync(join(root, 'dist/index.html'))) {
   console.error('dist/index.html이 없습니다. 먼저 npm run build를 실행하세요.');
   process.exit(1);
 }
+// O-1(검토9): 소스가 dist보다 새로우면 옛 판을 점검하게 된다. 알리기만 하고 멈추지 않는다(PAGE로 다른 파일을 점검할 때는 해당 없음)
+function newestMtime(p) {
+  const st = statSync(p);
+  if (!st.isDirectory()) return st.mtimeMs;
+  return readdirSync(p).reduce((m, name) => Math.max(m, newestMtime(join(p, name))), 0);
+}
+try {
+  if (!process.env.PAGE && Math.max(newestMtime(join(root, 'app/src')), newestMtime(join(root, 'app/index.html'))) > statSync(join(root, 'dist/index.html')).mtimeMs) {
+    console.warn('경고: dist가 옛 판입니다 — npm run build 먼저');
+  }
+} catch { /* 시각을 읽지 못하면 경고만 생략 */ }
 console.log(`대상: ${pageUrl}\n점검일: ${new Date().toISOString()}\n`);
 let failed = 0;
 let port = Number(process.env.CHECK_PORT) || 9333;

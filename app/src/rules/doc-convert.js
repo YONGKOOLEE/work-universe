@@ -14,11 +14,13 @@
 
 import { newId } from '../model/commands.js';
 import { ID_PREFIX, LABEL_MAX, SCHEMA_VERSION, SUBTYPE_ROLE, TEXT_MAX, normalizeLabel } from '../model/schema.js';
+import { josa } from '../model/josa.js';
 
 /** 변환 규칙의 값. 바꾸기 쉽게 한 곳에 둔다(CLAUDE.md 연속 진행 모드) */
 export const CONVERT_RULES = {
   version: 'v1',
   nodeTarget: { min: 10, max: 20 }, // 월말 정산 수준(사용자 결정 2026-10-03). 벗어나면 미리 보기에서 알린다
+  workLabelMax: 40, // 범위가 없어 문서 이름으로 만든 업무의 이름이 이보다 길면 앞부분만 이름으로, 전체는 설명으로(검토9 C-1)
   artifactLabelMax: 40, // 산출물 이름이 이보다 길면 앞부분만 이름으로, 전체는 설명으로
   roleLabelMax: 40, // 역할 절의 줄이 이보다 길면(「키: 값」이 아니면) 사람 이름이 아니라 문장으로 본다(F23-4)
   maxInput: 200000, // 붙여 넣을 수 있는 글자 수
@@ -666,7 +668,9 @@ export function convertDocument(text, ctx) {
   }
   if (!works.length) {
     // 범위가 없으면 업무 하나(문서 이름)로 만든다
-    works.push(pushNode('work', name, { ref: stepRefs[0] || (parsed.title ? '제목' : '전체') }));
+    // 이메일·뉴스처럼 업무정의서가 아닌 글이면 이름이 첫 줄 전체가 된다: 40자를 넘으면 앞부분만 이름으로 쓰고 전체는 설명에 둔다
+    const long = name.length > CONVERT_RULES.workLabelMax;
+    works.push(pushNode('work', long ? `${name.slice(0, CONVERT_RULES.workLabelMax - 1)}…` : name, { ref: stepRefs[0] || (parsed.title ? '제목' : '전체'), ...(long ? { description: name } : {}) }));
     notes.push({ code: 'C-NO-SCOPE' });
   }
   const main = works[0];
@@ -853,7 +857,7 @@ export function convertDocument(text, ctx) {
     const done = works.filter((w) => dutyItems.some((t) => dutyHit(t, w)));
     for (const w of done) {
       const d = dutyItems.find((t) => dutyHit(t, w));
-      pushEdge(r.id, w.id, 'performs', `규칙 기반 추정: 원문 ${d.ref}의 하는 일에 「${w.label}」이(가) 나옴(기간 미기재)`);
+      pushEdge(r.id, w.id, 'performs', `규칙 기반 추정: 원문 ${d.ref}의 하는 일에 「${w.label}」${josa(w.label, '이/가')} 나옴(기간 미기재)`);
       performs += 1;
     }
     if (!hits.length && !done.length) pushEdge(rootId, r.id, 'contains');

@@ -43,7 +43,13 @@ export function createFolderLink(o) {
 
   const notify = () => subs.forEach((f) => { try { f(); } catch { /* 화면 갱신 실패가 저장을 막지 않게 */ } });
   const authorName = () => (o.getAuthor && o.getAuthor()) || '';
-  const fileFor = (id) => myFileName({ authorName: authorName(), universeId: id });
+  // 파일 이름은 지금 연 유니버스의 것만 만든다(거울 저장·내 파일 구분). 같은 이름의 유니버스가 둘 이상이면 ID를 붙인다(R9-3)
+  const fileFor = (id) => {
+    const u = o.app.doc.universe;
+    const name = id === u.id ? u.name : '';
+    const dup = name ? o.app.universes().filter((x) => x.name === name).length > 1 : false;
+    return myFileName({ authorName: authorName(), universeName: name, universeId: id, withId: dup });
+  };
   const connected = () => !!st.handle && !st.needsPermission;
 
   function stopWatching() {

@@ -1,7 +1,7 @@
 // 가져오기 미리 보기(T-17, 12.9 흐름: 검증 → 미리 보기 → 사람이 "가져오기"). 순수 함수.
 // JSON 파일(내보낸 유니버스, 개발 중 변환한 문서 — CR-3 A)과 문서 초벌 변환 결과(CR-5 ②)를 같은 검사로 본다.
 
-import { CODES, NODE_TYPES, nodeTypeLabel, normalizeLabel } from './schema.js';
+import { CODES, NODE_TYPES, hasKey, nodeTypeLabel, normalizeLabel } from './schema.js';
 import { validateDocument } from './validate.js';
 import { reaches } from './commands.js';
 
@@ -74,7 +74,7 @@ export function previewImport(doc, { existing = [], resolve = null, sampleIds = 
   if (source && source.missing.length) warnings.push({ code: CODES.NO_SOURCE, count: source.missing.length, ids: source.missing });
 
   const marks = { 가정: 0, 미확인: 0 };
-  for (const n of nodes) if (markOf(n) in marks) marks[markOf(n)] += 1;
+  for (const n of nodes) if (hasKey(marks, markOf(n))) marks[markOf(n)] += 1;
 
   const ids = new Set(existing.map((u) => u.id));
   const missingChildren = (doc.refs || []).filter((r) => r && !r.hidden && !ids.has(r.child_universe_id) && r.child_universe_id !== doc.universe.id).map((r) => r.child_universe_id);

@@ -13,10 +13,13 @@ import {
   IDENTITY_KINDS,
   IDENTITY_METHODS,
   IDENTITY_STATUSES,
+  ATTRS_MAX_KEYS,
   LABEL_MAX,
   NODE_TYPES,
   SCHEMA_VERSION,
+  TAGS_MAX,
   TEXT_MAX,
+  UPDATE_KEYS,
   pairAllowed,
   DOC_COLLECTIONS,
 } from './schema.js';
@@ -29,6 +32,18 @@ const ID_PATTERN = /^[^\s/]+$/;
 const has = (obj, key) => typeof key === 'string' && Object.hasOwn(obj, key);
 // 값이 있을 때 글자이고 상한 이하인지(가져온 JSON의 숫자·배열·너무 긴 값을 막는다)
 const badText = (v, max) => v !== undefined && v !== null && (typeof v !== 'string' || v.length > max);
+// 태그 목록: 글자만, 개수·원소 길이 상한(검토9 S-2)
+const badTags = (t) => !(Array.isArray(t) && t.length <= TAGS_MAX && t.every((x) => typeof x === 'string' && x.length <= TEXT_MAX));
+// 이벤트 payload 안의 모든 글자(중첩·배열 포함)가 상한 이하인가(깊이 제한). 상한을 넘는 글자가 있으면 그 경로를 돌려준다
+function longTextPath(v, path = '', depth = 0) {
+  if (typeof v === 'string') return v.length > TEXT_MAX ? path : null;
+  if (depth >= 4 || v === null || typeof v !== 'object') return null;
+  for (const [k, x] of Object.entries(v)) {
+    const hit = longTextPath(x, path ? `${path}.${k}` : k, depth + 1);
+    if (hit) return hit;
+  }
+  return null;
+}
 
 /**
  * @param {object} doc 12.2 유니버스 문서
@@ -66,11 +81,15 @@ export function validateDocument(doc) {
     if (isObject(x) && badId(x.id)) err(CODES.SCHEMA, `${k}[${i}].id`, { bad_id: true });
   }));
   if (typeof u.name === 'string' && u.name.trim().length > LABEL_MAX) err(CODES.REQUIRED, 'universe.name');
+  // 단위·담당(commands.createUniverse와 같은 상한)·설명·태그 길이(검토9 S-2)
+  for (const k of ['level', 'owner']) if (typeof u[k] === 'string' && u[k].trim().length > LABEL_MAX) err(CODES.SCHEMA, `universe.${k}`, { too_long: LABEL_MAX });
+  if (badText(u.description, TEXT_MAX)) err(CODES.SCHEMA, 'universe.description');
+  if (u.tags !== undefined && badTags(u.tags)) err(CODES.SCHEMA, 'universe.tags');
   if (u.subtypes !== undefined && !Array.isArray(u.subtypes)) err(CODES.SCHEMA, 'universe.subtypes');
   const seenSubtypes = new Set();
   (Array.isArray(u.subtypes) ? u.subtypes : []).forEach((s, i) => {
     const path = `universe.subtypes[${i}]`;
-    if (!isObject(s) || isBlank(s.name)) return err(CODES.REQUIRED, path);
+    if (!isObject(s) || isBlank(s.name) || s.name.length > LABEL_MAX) return err(CODES.REQUIRED, path);
     if (!has(NODE_TYPES, s.core_type) && !has(EDGE_TYPES, s.core_type)) return err(CODES.SCHEMA, path);
     const key = `${s.core_type}|${s.name}`;
     if (seenSubtypes.has(key)) err(CODES.DUP, path);
@@ -98,9 +117,10 @@ export function validateDocument(doc) {
     if (periodError(n.period)) err(CODES.SCHEMA, `${path}.period`);
     if (n.attrs !== undefined) {
       const okAttrs = isObject(n.attrs) && Object.values(n.attrs).every((v) => typeof v === 'string' || typeof v === 'number');
-      if (!okAttrs) err(CODES.SCHEMA, `${path}.attrs`);
+      const tooBig = okAttrs && (Object.keys(n.attrs).length > ATTRS_MAX_KEYS || Object.values(n.attrs).some((v) => String(v).length > TEXT_MAX));
+      if (!okAttrs || tooBig) err(CODES.SCHEMA, `${path}.attrs`);
     }
-    if (n.tags !== undefined && !(Array.isArray(n.tags) && n.tags.every((t) => typeof t === 'string'))) {
+    if (n.tags !== undefined && badTags(n.tags)) {
       err(CODES.SCHEMA, `${path}.tags`);
     }
   });
@@ -167,6 +187,8 @@ export function validateDocument(doc) {
     else if (!isDate(ev.occurred_at)) err(CODES.SCHEMA, `${path}.occurred_at`);
     if (ev.source !== undefined && !EVENT_SOURCES.includes(ev.source)) err(CODES.SCHEMA, `${path}.source`);
     for (const e of eventPayloadErrors(doc, nodesById, edgeIds, ev)) err(e.code, `${path}.payload.${e.field}`);
+    const longAt = ev.payload === undefined ? null : longTextPath(ev.payload);
+    if (longAt !== null) err(CODES.SCHEMA, `${path}.payload${longAt ? '.' + longAt : ''}`, { too_long: TEXT_MAX });
   });
   // previous_handover_id는 같은 문서의 이벤트를 가리킨다(전역 참조는 다른 유니버스)
   doc.events.forEach((ev, i) => {
@@ -194,6 +216,7 @@ export function validateDocument(doc) {
     if (linkIds.has(l.id)) err(CODES.DUP, `${path}.id`);
     linkIds.add(l.id);
     if (!isGlobalRef(l.a) || !isGlobalRef(l.b)) err(CODES.SCHEMA, `${path}.a`);
+    if (badText(l.reason, TEXT_MAX)) err(CODES.SCHEMA, `${path}.reason`);
     if (!IDENTITY_KINDS.includes(l.kind)) err(CODES.SCHEMA, `${path}.kind`);
     if (!IDENTITY_METHODS.includes(l.method)) err(CODES.SCHEMA, `${path}.method`);
     if (!IDENTITY_STATUSES.includes(l.status)) err(CODES.SCHEMA, `${path}.status`);
@@ -246,6 +269,12 @@ export function eventPayloadErrors(doc, nodesById, edgeIds, ev) {
     }
     if (ev.type === 'updated' && (!isObject(payload.before) || !isObject(payload.after))) {
       out.push({ code: CODES.SCHEMA, field: 'before' });
+    } else if (ev.type === 'updated' && has(UPDATE_KEYS, payload.target_kind)) {
+      // 수정 이력의 before/after는 그 대상의 편집 필드만 가진다(검토9 S-1: __proto__·허용 밖 키 거부)
+      const allowed = UPDATE_KEYS[payload.target_kind];
+      for (const side of ['before', 'after']) {
+        if (Object.keys(payload[side]).some((k) => !allowed.includes(k))) out.push({ code: CODES.SCHEMA, field: side });
+      }
     }
     return out;
   }

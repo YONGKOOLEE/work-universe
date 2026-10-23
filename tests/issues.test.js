@@ -27,10 +27,11 @@ function memoryStorage(failing = () => false) {
 }
 const open = (currentId, storage = memoryStorage()) => createApp({ store: createStore(storage), samples: SAMPLES, currentId, now: () => '2026-10-02T09:00:00+09:00' });
 
-test('월말 정산 샘플: 미해결은 이슈 2건·진행 중 2건, 6월 진행 중(해결됨이 뒤에 있음)·해결됨·주의사항은 빠진다', () => {
+// 검토9 D-1(a): 샘플 E-012 「…→ 양식을 수정함」은 이미 고친 일인데 미해결로 셌다 → 해결 메모 E-020(resolves_id)을 샘플에 추가. 이슈 2건 → 1건. 영향 ID: R-20
+test('월말 정산 샘플: 미해결은 이슈 1건·진행 중 2건, 6월 진행 중(해결됨이 뒤에 있음)·해결됨·주의사항·양식 수정으로 닫힌 7월 이슈는 빠진다', () => {
   const got = ids(openMemos(viewOf('U-A1')));
-  assert.deepEqual([...got].sort(), ['E-006', 'E-012', 'E-014', 'E-015']);
-  for (const x of ['E-010', 'E-011', 'E-013']) assert.ok(!got.includes(x), x);
+  assert.deepEqual([...got].sort(), ['E-006', 'E-014', 'E-015']);
+  for (const x of ['E-010', 'E-011', 'E-012', 'E-013']) assert.ok(!got.includes(x), x);
 });
 
 test('초안의 「진행 중」과 같은 결과: 대사 확인 업무의 진행 중 범주 미해결이 초안 문장과 일치한다', () => {
@@ -103,7 +104,7 @@ test('해결로 표시: 새 해결됨 메모가 하나 생기고 목록에서 �
   // (이전 판의 단언 "E-006도 닫힌다"는 이 요구사항 변경으로 뒤집었다)
   assert.ok(rest.includes('E-006'));
   assert.equal(added.payload.resolves_id, 'E-014');
-  assert.ok(rest.includes('E-015') && rest.includes('E-012'));
+  assert.ok(rest.includes('E-015') && !rest.includes('E-012')); // E-012는 샘플의 해결 메모 E-020이 이미 닫았다(검토9 D-1(a))
 });
 
 test('같은 메모를 두 번 해결로 표시해도 해결 메모는 하나만 는다', () => {

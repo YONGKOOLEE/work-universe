@@ -94,7 +94,7 @@ export function renderUniverseSummary(panel, s, shown = null, extras = {}) {
   panel.append(dl);
   if (s.missing.length) panel.append(el('p', { class: 'notice' }, `찾을 수 없는 하위 유니버스: ${s.missing.join(', ')}`));
   for (const c of s.empno_conflicts) {
-    panel.append(el('p', { class: 'notice', 'data-testid': 'empno-conflict' }, `사번 충돌: ${c.emp_no}가 서로 다른 이름으로 있습니다(${c.nodes.map((n) => `${n.label}·${n.universe_name}`).join(', ')}). 자동으로 합치지 않습니다. 확인이 필요합니다.`));
+    panel.append(el('p', { class: 'notice', 'data-testid': 'empno-conflict' }, `확인할 것: 사번 충돌 — ${c.emp_no}가 서로 다른 이름으로 있습니다(${c.nodes.map((n) => `${n.label}·${n.universe_name}`).join(', ')}). 자동으로 합치지 않았으니 같은 사람인지 확인해 주세요.`));
   }
   if (s.stale_links.length) panel.append(el('p', { class: 'notice', 'data-testid': 'stale-links' }, `사번이 바뀌어 더는 맞지 않는 사번 자동 연결 ${s.stale_links.length}건은 합치지 않았습니다. 다시 확인이 필요합니다.`));
   // 큰 유니버스: 업무별로 나누라는 안내(막지 않는다)

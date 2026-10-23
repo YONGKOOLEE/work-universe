@@ -231,7 +231,7 @@ test('담당(수행) 추정: 역할의 하는 일에 업무 이름이 있으면 
   const perf = doc.edges.filter((e) => e.core_type === 'performs');
   const id = (l) => byLabel(doc, l).id;
   assert.deepEqual(perf.map((e) => `${e.source}>${e.target}`), [`${id('정산 담당')}>${id('자료 수집')}`, `${id('정산 담당')}>${id('대사 확인')}`]);
-  assert.ok(perf.every((e) => !e.period && /^규칙 기반 추정: 원문 「이해관계자」의 하는 일에 「.+」이\(가\) 나옴\(기간 미기재\)$/.test(e.note)));
+  assert.ok(perf.every((e) => !e.period && /^규칙 기반 추정: 원문 「이해관계자」의 하는 일에 「.+」(이|가) 나옴\(기간 미기재\)$/.test(e.note)));
   assert.ok(report.notes.some((n) => n.code === 'C-PERFORMS-GUESS' && n.count === 2));
   // 근거 없는 역할(팀장)은 담당 없이 꼭지에 포함, 담당이 있는 역할은 꼭지에 따로 매달지 않는다
   assert.ok(doc.edges.some((e) => e.core_type === 'contains' && e.source === 'N-000' && e.target === id('팀장')));

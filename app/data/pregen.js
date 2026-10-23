@@ -51,7 +51,7 @@ const handoverA1 = [
     item: '산출물_문서',
     evidence_ids: g(A1, 'N-020', 'N-021'),
     sentences: [
-      { text: '점검표 양식은 공용 문서함 > 정산 > 점검표에 있으며, 자료 수집 단계에서 씁니다.', evidence_ids: g(A1, 'N-021') },
+      { text: '점검표 양식은 공용 문서함 > 정산 > 점검표에 있으며, 자료 수집 단계에서 만들어집니다.', evidence_ids: g(A1, 'N-021') },
       { text: '이전 담당자 한가람이 남긴 2026-06 인수인계서는 공용 문서함 > 정산 > 인수인계에 있습니다.', evidence_ids: g(A1, 'N-020') },
     ],
   },
@@ -85,7 +85,7 @@ const handoverA1 = [
     // D3-31: 보내는 사람(윤바다)은 「문의」로 이미 나오므로 뺀다
     evidence_ids: ['U-A1/N-030', 'U-K1/N-104', 'U-K1/N-105', 'U-K1/N-503', 'U-K1/N-505'],
     sentences: [
-      { text: '카드승인 업무에서 같은 「대사 불일치」 주제를 다루는 「장애 시 재처리」의 운영 담당(V-4002)과 「거래 조회」의 정산 담당(V-4004)에게 물어볼 수 있습니다.', evidence_ids: ['U-K1/N-503', 'U-K1/N-105', 'U-K1/N-505', 'U-K1/N-104', 'U-A1/N-030'] },
+      { text: '카드승인 업무에서 같은 「대사 불일치」 주제를 다루는 「장애 시 재처리」의 운영 담당(V-4002)과 「거래 조회」의 정산 담당(V-4004)이 해당하지만, 둘 다 역할 이름이라 실제 담당자는 연결되어 있지 않아 누구에게 물어볼지는 먼저 확인해야 합니다.', evidence_ids: ['U-K1/N-503', 'U-K1/N-105', 'U-K1/N-505', 'U-K1/N-104', 'U-A1/N-030'] },
     ],
   },
 ].map((x) => ({ task: 'handover', target: 'U-A1/N-000', from: 'U-A1/N-011', to: 'U-A1/N-012', ...x }));
@@ -166,7 +166,7 @@ const explain = [
     target: 'similar|U-A1/N-001',
     evidence_ids: ['U-A1/N-011', 'U-A1/N-030', 'U-B/N-101', 'U-B/N-302', 'U-K1/N-104', 'U-K1/N-105', 'U-K1/N-503', 'U-K1/N-505'],
     sentences: [
-      { text: '「대사 확인」과 비슷한 일을 해 본 사람은 세 명이고, 모두 「대사 불일치」 주제로 이어집니다.', evidence_ids: ['U-A1/N-030', 'U-A1/N-011', 'U-K1/N-503', 'U-K1/N-505'] },
+      { text: '「대사 확인」과 비슷한 일을 해 본 사람은 세 명이며, 그중 둘(운영 담당·정산 담당)은 역할 이름이라 실제 담당자는 연결되어 있지 않습니다. 세 명 모두 「대사 불일치」 주제로 이어집니다.', evidence_ids: ['U-A1/N-030', 'U-A1/N-011', 'U-K1/N-503', 'U-K1/N-505'] },
       { text: '윤바다는 행사팀 「2025 행사」에서 이름이 같은 주제를 다뤘고(같은 주제인지는 확인 전), 운영 담당과 정산 담당은 카드승인 업무의 「장애 시 재처리」와 「거래 조회」를 맡고 있습니다.', evidence_ids: ['U-A1/N-011', 'U-B/N-101', 'U-B/N-302', 'U-K1/N-503', 'U-K1/N-105', 'U-K1/N-505', 'U-K1/N-104'] },
     ],
   },
@@ -184,7 +184,7 @@ const explain = [
     evidence_ids: ['U-A1/E-002', 'U-A1/E-006', 'U-A1/E-007', 'U-A1/E-010', 'U-A1/E-014', 'U-A1/N-030', 'U-B/E-002', 'U-B/N-302', 'U-K1/E-005', 'U-K1/E-006'],
     sentences: [
       { text: '월말 정산의 「대사 확인」은 마지막 인수인계(2026-09-30)가 이전 인수인계서를 이어받지 않았습니다.', evidence_ids: ['U-A1/E-002', 'U-A1/E-007'] },
-      { text: '「대사 불일치」 주제는 월말 정산·행사·카드승인의 네 업무에서 되풀이되어, 여러 팀이 같은 문제를 따로 다루고 있을 가능성이 있습니다.', evidence_ids: ['U-A1/N-030', 'U-B/N-302', 'U-A1/E-006', 'U-B/E-002', 'U-K1/E-006'] },
+      { text: '「대사 불일치」 주제는 월말 정산·행사·카드승인의 네 업무에서 되풀이되어, 여러 팀이 같은 문제를 따로 다루고 있을 가능성이 있습니다(행사팀의 주제는 이름만 같고 연결은 확인 전입니다).', evidence_ids: ['U-A1/N-030', 'U-B/N-302', 'U-A1/E-006', 'U-B/E-002', 'U-K1/E-006'] },
     ],
   },
   {
@@ -203,7 +203,7 @@ const explain = [
   },
   {
     target: 'flow|U-A1|month',
-    evidence_ids: g(A1, 'E-001', 'E-002', 'E-003', 'E-004', 'E-005', 'E-006', 'E-007', 'E-008', 'E-009', 'E-010', 'E-011', 'E-012', 'E-013', 'E-014', 'E-015', 'E-016', 'E-017', 'E-018', 'E-019'),
+    evidence_ids: g(A1, 'E-001', 'E-002', 'E-003', 'E-004', 'E-005', 'E-006', 'E-007', 'E-008', 'E-009', 'E-010', 'E-011', 'E-012', 'E-013', 'E-014', 'E-015', 'E-016', 'E-017', 'E-018', 'E-019', 'E-020', 'E-021', 'E-022'),
     sentences: [
       { text: '기록은 2025-03 담당 시작 뒤로 드문드문 이어지다가, 담당자가 바뀐 2026-06과 2026-09에 몰렸습니다. 가장 많은 2026-09에는 불일치 재발과 구두 인수인계, 윤바다의 담당 종료가 겹칩니다.', evidence_ids: g(A1, 'E-003', 'E-002', 'E-005', 'E-016', 'E-017', 'E-010', 'E-011', 'E-006', 'E-007', 'E-008', 'E-014', 'E-015', 'E-018', 'E-019') },
       { text: '2026-09-30의 구두 인수인계는 대사 확인만 다뤘고, 같은 날 담당이 끝난 자료 수집과 보고는 이어받은 사람이 아직 없습니다.', evidence_ids: g(A1, 'E-007', 'E-018', 'E-019') },
@@ -229,11 +229,11 @@ const explain = [
   },
   {
     target: 'risk_readiness|U-A1',
-    evidence_ids: g(A1, 'E-006', 'E-012', 'E-014', 'E-015', 'N-001', 'N-002', 'N-003'),
+    evidence_ids: g(A1, 'E-006', 'E-014', 'E-015', 'N-001', 'N-002', 'N-003'),
     sentences: [
       { text: '월말 정산 점검의 세 업무 중 6항목을 모두 갖춘 업무는 아직 없습니다.', evidence_ids: g(A1, 'N-001', 'N-002', 'N-003') },
       { text: '「보고」가 2/6으로 가장 낮습니다. 9월 보고서가 잠정본인 채 진행 중이고, 산출물 연결·현재 담당자·인수인계 기록이 비어 있습니다.', evidence_ids: g(A1, 'N-003', 'E-015') },
-      { text: '「자료 수집」은 3/6입니다. 7월 점검표 양식 메모가 해결 표시되지 않았고, 현재 담당자와 인수인계 기록이 없습니다.', evidence_ids: g(A1, 'N-002', 'E-012') },
+      { text: '「자료 수집」은 4/6입니다. 현재 담당자와 인수인계 기록이 없습니다.', evidence_ids: g(A1, 'N-002') },
       { text: '「대사 확인」은 5/6으로 준비가 가장 잘 돼 있지만, 9월 불일치 관련 메모 2건이 아직 해결 표시되지 않았습니다.', evidence_ids: g(A1, 'N-001', 'E-006', 'E-014') },
     ],
   },
@@ -279,7 +279,7 @@ const candidate = [
     pair: ['U-A1/N-001', 'U-K1/N-104'],
     evidence_ids: ['U-A1/N-001', 'U-K1/N-104', 'U-A1/N-030'],
     sentences: [
-      { text: '「대사 확인」과 카드승인의 「거래 조회」는 정산팀에서 사람이 이어 둔 같은 주제 「대사 불일치」를 다룹니다.', evidence_ids: ['U-A1/N-001', 'U-K1/N-104', 'U-A1/N-030'] },
+      { text: '「대사 확인」과 카드승인의 「거래 조회」는 같은 주제 「대사 불일치」를 다룹니다.', evidence_ids: ['U-A1/N-001', 'U-K1/N-104', 'U-A1/N-030'] },
       { text: '「거래 조회」는 업무 설명이 없어, 같은 업무인지는 담당자에게 확인해야 합니다.', evidence_ids: ['U-K1/N-104'] },
     ],
   },
@@ -333,17 +333,17 @@ const FP = {
   "handover|U-C/N-101|이전_인수인계|U-C/N-202>U-C/N-201": 'a5e69b9d',
   "insight_explain|similar|U-A1/N-001||": 'e2a4a3e7',
   "insight_explain|repeat|U-A1||": '0d20fb69',
-  "insight_explain|repeat|U-D1||": '79ac9b60',
+  "insight_explain|repeat|U-D1||": '1b3ccbc6',
   "insight_explain|density|U-D1|n=3||": '5d65ae56',
   "insight_explain|density|U-C|n=3||": '20f66f7b',
   "insight_explain|flow|U-A1|month||": 'c78f93fa',
   "insight_explain|flow|U-O|month||": '6e8d1326',
   "insight_explain|risk_concentration|U-A1||": '64b77fed',
-  "insight_explain|risk_readiness|U-A1||": '1b0e4846',
-  "insight_explain|risk_ripple|U-A1||": '080f0b26',
+  "insight_explain|risk_readiness|U-A1||": 'd73fe237',
+  "insight_explain|risk_ripple|U-A1||": 'dc503d4d',
   "insight_explain|risk_concentration|U-D1||": 'e6412c21',
   "insight_explain|risk_readiness|U-D1||": '47eda5b6',
-  "insight_explain|risk_ripple|U-D1||": 'd5a64fa4',
+  "insight_explain|risk_ripple|U-D1||": '7fb7ac27',
   "work_candidate_reason|work_candidate|U-A1/N-001|U-K1/N-104||": 'b1db6c11',
   "work_candidate_reason|work_candidate|U-A1/N-001|U-K1/N-105||": 'b1db6c11',
   "work_candidate_reason|work_candidate|U-A1/N-003|U-C/N-104||": '47aa15ea',
@@ -355,7 +355,8 @@ const fpKey = (it) => [it.task, it.target, it.item || '', it.from && it.to ? `${
 export const PREGEN = {
   schema_version: '1.0',
   generator: 'Claude Code (개발 시 작성)',
-  generated_at: '2026-10-02T15:00:00+09:00',
+  // 첫 작성 2026-10-02, 위험 인사이트(CR-14 B) 줄 2026-10-23 추가, 검토9에서 일부 문장 손질(2026-10-23)
+  generated_at: '2026-10-23T14:00:00+09:00',
   data_version: 'v2',
   items: [...handoverA1, ...handoverC, ...explain, ...candidate].map((it) => ({ ...it, fp: FP[fpKey(it)] })),
 };

@@ -52,17 +52,28 @@ function fakeDir(initial = {}, { failWrite = false, failRead = [] } = {}) {
 }
 
 // ── 이름 규칙 ──
-test('myFileName: 이름이 있으면 이름-ID.json, 없으면 ID.json, 못 쓰는 글자는 _', () => {
-  assert.equal(myFileName({ authorName: '가상 담당', universeId: 'U-A1' }), '가상_담당-U-A1.json');
-  assert.equal(myFileName({ authorName: '', universeId: 'U-A1' }), 'U-A1.json');
+test('myFileName: 유니버스 이름(작성자).json, 작성자가 없으면 유니버스 이름.json, 못 쓰는 글자는 _', () => {
+  assert.equal(myFileName({ authorName: '가상 담당', universeName: '월말 정산 점검', universeId: 'U-A1' }), '월말_정산_점검(가상_담당).json');
+  assert.equal(myFileName({ authorName: '', universeName: '월말 정산 점검', universeId: 'U-A1' }), '월말_정산_점검.json');
+  assert.equal(myFileName({ universeName: '월말 정산 점검', universeId: 'U-A1' }), '월말_정산_점검.json');
+  // 유니버스 이름이 비면 ID로 대신한다
+  assert.equal(myFileName({ authorName: '가상 담당', universeId: 'U-A1' }), 'U-A1(가상_담당).json');
   assert.equal(myFileName({ universeId: 'U-A1' }), 'U-A1.json');
-  const bad = myFileName({ authorName: 'a\\b/c:d*e?f"g<h>i|j', universeId: 'U-1' });
-  assert.equal(bad, 'a_b_c_d_e_f_g_h_i_j-U-1.json');
+  const bad = myFileName({ authorName: 'a\\b/c:d*e?f"g<h>i|j', universeName: 'x*y?z', universeId: 'U-1' });
+  assert.equal(bad, 'x_y_z(a_b_c_d_e_f_g_h_i_j).json');
   assert.ok(!/[\\/:*?"<>|]/.test(bad));
-  // 같은 사람의 유니버스가 둘이면 파일 이름이 서로 다르다(덮어쓰지 않음)
-  assert.notEqual(myFileName({ authorName: '가', universeId: 'U-1' }), myFileName({ authorName: '가', universeId: 'U-2' }));
-  // 점·밑줄만 남는 이름은 이름이 없는 것으로 본다(숨김 파일·상위 경로 방지)
-  assert.equal(myFileName({ authorName: '..', universeId: 'U-1' }), 'U-1.json');
+  // 같은 이름이 둘 이상이면(withId) ID를 붙여 서로 덮어쓰지 않는다. 이름이 없으면 이미 ID이므로 붙이지 않는다
+  const one = myFileName({ authorName: '가', universeName: '정산', universeId: 'U-1', withId: true });
+  const two = myFileName({ authorName: '가', universeName: '정산', universeId: 'U-2', withId: true });
+  assert.equal(one, '정산(가)-U-1.json');
+  assert.notEqual(one, two);
+  assert.equal(myFileName({ authorName: '가', universeId: 'U-1', withId: true }), 'U-1(가).json');
+  // 점·밑줄만 남는 이름은 없는 것으로 본다(숨김 파일·상위 경로 방지)
+  assert.equal(myFileName({ authorName: '..', universeName: '정산', universeId: 'U-1' }), '정산.json');
+  assert.equal(myFileName({ authorName: '가', universeName: '..', universeId: 'U-1' }), 'U-1(가).json');
+  // 각 부분은 60자까지
+  const long = myFileName({ authorName: '가'.repeat(100), universeName: '나'.repeat(100), universeId: 'U-1' });
+  assert.equal(long, `${'나'.repeat(60)}(${'가'.repeat(60)}).json`);
 });
 
 // ── 목록 판정 ──
@@ -235,8 +246,8 @@ test('거울 저장: 연결 전·허락 필요·거울 금지(canMirror false)�
   assert.equal(timers.pending(), 1); // 앞의 두 번은 취소
   assert.equal(dir.writes.length, 0);
   await timers.fire();
-  assert.deepEqual(dir.writes, ['가상_담당-U-A1.json']);
-  const written = JSON.parse(dir.files.get('가상_담당-U-A1.json').text);
+  assert.deepEqual(dir.writes, ['월말_정산_점검(가상_담당).json']);
+  const written = JSON.parse(dir.files.get('월말_정산_점검(가상_담당).json').text);
   assert.equal(written.universe.id, 'U-A1');
   assert.equal(written.nodes.find((n) => n.id === 'N-002').label, '마지막 이름');
   assert.equal(link.state.warning, '');
@@ -287,12 +298,12 @@ test('팀 지도로 묶기: 체크한 동료 파일만 가져와 지금 유니�
     'card.json': json(SAMPLE_CARD),
     'team.json': json(SAMPLE_TEAM),
     'broken.json': '{"universe":',
-    '가상_담당-U-A1.json': json(SAMPLE_A1),
+    '월말_정산_점검(가상_담당).json': json(SAMPLE_A1),
   });
   const { app, link } = mkLink('U-A1');
   await link.useHandle(dir);
   const names = link.state.plan.map((p) => `${p.name}:${p.ok ? (p.mine ? 'mine' : 'peer') : 'bad'}`).sort();
-  assert.deepEqual(names, ['broken.json:bad', 'card.json:peer', 'team.json:peer', '가상_담당-U-A1.json:mine']);
+  assert.deepEqual(names, ['broken.json:bad', 'card.json:peer', 'team.json:peer', '월말_정산_점검(가상_담당).json:mine']);
   link.setSelected('team.json', false);
   let asked = '';
   const r = await link.bundle({ confirm: (m) => { asked = m; return true; } });
@@ -345,7 +356,7 @@ test('변화 알림: 남의 .json 변화만 changed로, 내 파일·임시 파�
   const observed = (handle, fn) => { cb = fn; return () => {}; };
   const { link } = mkLink('U-A1', { api: { ...folderApi, folderSupported: () => true, observeFolder: observed } });
   await link.useHandle(dir);
-  cb(['가상_담당-U-A1.json', '가상_담당-U-A1.json.crswap']);
+  cb(['월말_정산_점검(가상_담당).json', '월말_정산_점검(가상_담당).json.crswap']);
   assert.equal(link.state.changed, false);
   cb(['card.json']);
   assert.equal(link.state.changed, true);
@@ -364,4 +375,12 @@ test('연결 끊기: 손잡이를 잊고 보류 중인 저장을 취소, 폴더 
   assert.equal(dir.writes.length, 0);
   assert.equal(dir.files.size, 1);
   assert.equal(link.mirror(), false);
+});
+
+test('내 파일 이름: 같은 이름의 유니버스가 이 브라우저에 하나면 이름(작성자).json, 둘 이상이면 ID를 붙임(R9-3)', () => {
+  const { app, link } = mkLink('U-A1');
+  assert.equal(link.myFile(), '월말_정산_점검(가상_담당).json');
+  const made = app.createUniverse({ name: SAMPLE_A1.universe.name, level: '팀', owner: '가상 담당' });
+  assert.equal(made.ok, true, JSON.stringify(made));
+  assert.equal(link.myFile(), '월말_정산_점검(가상_담당)-U-A1.json'); // 지금 연 유니버스(U-A1)에 ID가 붙는다
 });

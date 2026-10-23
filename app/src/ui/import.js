@@ -4,7 +4,7 @@
 import { el } from './dom.js';
 import { josa, messageFor } from './messages.js';
 import { SCHEMA_VERSION, nodeTypeLabel } from '../model/schema.js';
-import { parseImportText } from '../model/import.js';
+import { IMPORT_MAX_CHARS, parseImportText } from '../model/import.js';
 import { METHOD_LABELS } from '../llm/connector.js';
 import { folderTab } from './folder-tab.js';
 
@@ -21,6 +21,18 @@ const KIND_TEXT = {
   toc: () => '목차 → 건너뜀(노드로 만들지 않음)',
   outline: () => '아래 절 제목의 목록 → 건너뜀(아래 절에서 만듦)',
 };
+
+// 파일을 읽기 전에 크기만 본다(검토9 S-3): 글자 수 상한(IMPORT_MAX_CHARS)은 읽은 뒤에만 알 수 있어, 수백 MB 파일은 읽다가 탭이 멈춘다.
+// 한글은 UTF-8에서 글자당 3바이트라 상한 × 3바이트를 넘으면 글자 수 상한도 반드시 넘는다
+export const IMPORT_FILE_MAX_BYTES = IMPORT_MAX_CHARS * 3;
+export const fileTooBig = (size) => Number.isFinite(size) && size > IMPORT_FILE_MAX_BYTES;
+
+// 변환 결과가 「제목도 범위도 못 찾음」이면 업무정의서가 아닌 글을 붙였을 가능성이 크다(검토9 C-1·C-2)
+export const NOT_A_DEFINITION_NOTICE = '제목·범위를 찾지 못했습니다. 업무정의서가 아니거나 모양이 다른 글입니다 — 「예시 문서 넣기」로 모양을 먼저 보세요.';
+export function looksNotDefinition(report) {
+  const codes = new Set(((report && report.notes) || []).map((n) => n.code));
+  return codes.has('C-NO-STRUCTURE') && codes.has('C-NO-SCOPE');
+}
 
 function noteText(n) {
   switch (n.code) {
@@ -93,6 +105,12 @@ export function importDialog(o) {
   async function readFile(input, key) {
     const f = input.files && input.files[0];
     if (!f) return;
+    if (fileTooBig(f.size)) {
+      st.result = null;
+      st.message = `파일이 너무 큽니다(${Math.round(f.size / 1048576).toLocaleString()}MB). 읽지 않았습니다 — 글 ${IMPORT_MAX_CHARS.toLocaleString()}자 이하의 파일만 가져올 수 있습니다.`;
+      render();
+      return;
+    }
     try {
       st[key] = await f.text();
       st.result = null; // 새 파일을 고르면 이전 미리 보기를 지운다(다른 파일이 가져와지지 않게)
@@ -152,6 +170,7 @@ export function importDialog(o) {
     const { doc, report, from } = st.result;
     const u = doc.universe || {};
     const blocks = [el('h3', {}, '미리 보기')];
+    if (from === 'doc' && looksNotDefinition(report)) blocks.push(el('p', { class: 'notice', 'data-testid': 'import-not-definition' }, NOT_A_DEFINITION_NOTICE));
     if (from === 'doc') {
       blocks.push(el('p', { class: 'muted small', 'data-testid': 'import-method' }, `만든 방식: ${METHOD_LABELS[st.result.method] || st.result.method} 초벌(규칙 ${report ? report.rules_version : '-'}). 원문 구조를 규칙으로 옮긴 것이라 사람이 확인해야 합니다.`));
       if (st.result.fallback) blocks.push(el('p', { class: 'notice', 'data-testid': 'import-fallback' }, st.result.fallback.reason));
@@ -278,6 +297,7 @@ export function importDialog(o) {
     const body = st.tab === 'folder' ? folderTab(o, render) : st.tab === 'export' ? exportBody() : st.tab === 'doc'
       ? el('div', { class: 'editor' },
         el('p', { class: 'muted small' }, '업무정의서 같은 문서를 붙여 넣으면 제목(#)·표·번호 목록을 규칙으로 읽어 유니버스 초벌을 만듭니다. 업무 흐름은 절차 속성으로, 요건·예외 같은 절은 주제 하나로 묶어 노드를 10~20개 정도로 만듭니다(월말 정산 수준).'),
+        el('p', { class: 'muted small', 'data-testid': 'import-plain-note' }, '한글·워드에서 복사한 일반 글(1. 개요 / 가. …)도 됩니다.'),
         el('textarea', { id: 'import-doc', rows: '9', 'aria-label': '문서 원문', placeholder: '# 업무 이름\n## 1. 개요\n| 항목 | 내용 |\n…' }, st.docText),
         el('div', { class: 'row' },
           el('label', { class: 'file-pick' }, '파일 열기(.md, .txt) ', el('input', { type: 'file', accept: '.md,.txt,.markdown,text/plain,text/markdown', 'data-testid': 'import-doc-file', onchange: (e) => readFile(e.target, 'docText') })),

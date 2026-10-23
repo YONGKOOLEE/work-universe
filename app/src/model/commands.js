@@ -4,6 +4,7 @@
 
 import { findDuplicateEdge, findDuplicateNode, isDate, periodError, subtypeRegistered } from './checks.js';
 import {
+  ATTRS_MAX_KEYS,
   BATCH_MAX_ROWS,
   CODES,
   EDGE_TYPES,
@@ -15,6 +16,7 @@ import {
   LABEL_MAX,
   NODE_TYPES,
   SCHEMA_VERSION,
+  TAGS_MAX,
   TEXT_MAX,
   USER_EVENT_TYPES,
   hasKey,
@@ -89,6 +91,9 @@ function nodeFieldError(doc, f, { excludeId, isUpdate = false } = {}) {
   if (periodError(f.period)) return { code: CODES.SCHEMA, field: 'period' };
   if (f.description && f.description.length > TEXT_MAX) return { code: CODES.SCHEMA, field: 'description', too_long: TEXT_MAX };
   if (f.attrs && Object.values(f.attrs).some((v) => String(v).length > TEXT_MAX)) return { code: CODES.SCHEMA, field: 'attrs', too_long: TEXT_MAX };
+  // 가져오기 검증(validate.js, 검토9 S-2)과 같은 개수·길이 상한: 앱이 저장한 문서를 다시 가져오지 못하는 일을 막는다
+  if (f.attrs && Object.keys(f.attrs).length > ATTRS_MAX_KEYS) return { code: CODES.SCHEMA, field: 'attrs', too_many: ATTRS_MAX_KEYS };
+  if (Array.isArray(f.tags) && (f.tags.length > TAGS_MAX || f.tags.some((t) => typeof t === 'string' && t.length > TEXT_MAX))) return { code: CODES.SCHEMA, field: 'tags', too_many: TAGS_MAX };
   const dup = findDuplicateNode(doc.nodes, f, excludeId);
   if (dup) return { code: CODES.DUP, existing_id: dup.id };
   return null;

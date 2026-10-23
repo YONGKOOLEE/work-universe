@@ -63,7 +63,10 @@ export function eventText(view, ev) {
     }
     case 'affiliation_change': {
       // 조직 노드가 다른 유니버스에 있으면 ID가 없다. 없는 값은 "미기재"(R-14)
-      const orgs = ` (${name(p.from_org_id) || '미기재'} → ${name(p.to_org_id) || '미기재'})`;
+      // 둘 다 없으면 괄호를 생략한다(「(미기재 → 미기재): 조직개편: …」처럼 같은 말이 겹쳐 보이지 않게, 검토9 R-6)
+      const fromOrg = name(p.from_org_id);
+      const toOrg = name(p.to_org_id);
+      const orgs = !fromOrg && !toOrg ? '' : ` (${fromOrg || '미기재'} → ${toOrg || '미기재'})`;
       return `${name(p.person_id)} 소속 변경${orgs}${ev.note ? `: ${ev.note}` : ''}`;
     }
     case 'memo': {

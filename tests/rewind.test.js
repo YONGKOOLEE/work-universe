@@ -30,7 +30,8 @@ const canon = (x) => {
 };
 const REFS = { 'U-X1': { universe: { id: 'U-X1' }, refs: [] }, 'U-X2': { universe: { id: 'U-X2' }, refs: [] } };
 const resolve = (id) => REFS[id] || null;
-const maxTime = (doc) => [...doc.events.map((e) => e.recorded_at), doc.universe.created_at].filter(Boolean).sort().pop();
+// 시각은 문자열이 아니라 순간으로 비교한다: 샘플은 +09:00, 시험이 만드는 시각은 Z라 문자열 순서가 어긋난다(검토9: 샘플 판 표시가 10-20 이후로 가며 드러남)
+const maxTime = (doc) => [...doc.events.map((e) => e.recorded_at), doc.universe.created_at].filter(Boolean).sort((a, b) => Date.parse(a) - Date.parse(b)).pop();
 
 // 빈 유니버스(꼭지 + 이력 한 줄)
 const emptyDoc = () => createUniverse({ name: '빈 유니버스', level: '팀', owner: '시험' }, { now: '2026-10-01T00:00:00Z', random: rng(7) }).doc;
@@ -345,8 +346,9 @@ test('오류: 시점 하나·잘못된 at·되돌릴 것 없음', () => {
   assert.ok(same.ok);
   assert.equal(same.ops.length, 0);
   assert.equal(applyRewindOps(d0, [], { now: '2026-10-01T00:00:00Z' }, {}).ok, false);
-  // 가장 오래된 샘플은 이력이 한 시각뿐
-  assert.equal(editPoints(SAMPLES[0]).length, 1);
+  // 가장 오래된 샘플(월말 정산 점검)은 되감기 시연용 수정 이력 둘이 있어 시점이 셋(처음 입력, 마감 수정, 보고 설명 보강, 검토9 R9-1 가). 다른 샘플은 한 시각뿐
+  assert.equal(editPoints(SAMPLES[0]).length, 3);
+  assert.equal(editPoints(SAMPLES.find((x) => x.universe.id === 'U-C')).length, 1);
 });
 
 test('앱: editPoints·viewAt·rewindTo — 읽기 전용이면 거부, 성공하면 저장, 저장 실패는 문서 그대로', () => {
@@ -360,24 +362,26 @@ test('앱: editPoints·viewAt·rewindTo — 읽기 전용이면 거부, 성공�
   let clock = 0;
   const now = () => stamp('2026-10-23T00:00:00Z', (clock += 1));
   const app = createApp({ store: mkStore(), samples: SAMPLES, currentId: 'U-A1', now });
-  assert.equal(app.editPoints().length, 1);
+  const k = app.editPoints().length; // 샘플 자체의 시점 수(월말 정산 점검은 3, 검토9 R9-1 가). 아래 「직전 시점」은 샘플의 마지막 시점이다
+  assert.equal(k, 3);
   const node = app.doc.nodes.find((n) => !n.hidden && n.core_type === 'work');
   const oldLabel = node.label;
   assert.ok(app.updateNode('U-A1', node.id, { label: '고친 이름' }).ok);
   const pts = app.editPoints();
-  assert.equal(pts.length, 2);
-  const past = app.viewAt(pts[0].at);
+  assert.equal(pts.length, k + 1);
+  const before = pts[k - 1];
+  const past = app.viewAt(before.at);
   assert.ok(past.ok);
   assert.equal(past.view.getNode(`U-A1/${node.id}`).label, oldLabel);
   assert.equal(past.diff.changed.length, 1);
   assert.equal(app.viewAt('이상한 값').ok, false);
   assert.equal(app.doc.nodes.find((n) => n.id === node.id).label, '고친 이름'); // 보기만 한다
-  assert.equal(app.rewindPreview(pts[0].at).counts.update_nodes, 1);
-  const done = app.rewindTo(pts[0].at);
+  assert.equal(app.rewindPreview(before.at).counts.update_nodes, 1);
+  const done = app.rewindTo(before.at);
   assert.ok(done.ok, JSON.stringify(done));
   assert.equal(app.doc.nodes.find((n) => n.id === node.id).label, oldLabel);
-  assert.equal(app.editPoints().length, 3);
-  assert.equal(app.rewindTo(app.editPoints()[2].at).ok, false); // 되돌릴 것 없음
+  assert.equal(app.editPoints().length, k + 2);
+  assert.equal(app.rewindTo(app.editPoints()[k + 1].at).ok, false); // 되돌릴 것 없음
   // 저장 실패: 문서 그대로
   const base = mkStore();
   const flaky = createApp({ store: base, samples: SAMPLES, currentId: 'U-A1', now });
@@ -386,7 +390,7 @@ test('앱: editPoints·viewAt·rewindTo — 읽기 전용이면 거부, 성공�
   const p2 = flaky.editPoints();
   const keep = JSON.stringify(flaky.doc);
   base.saveUniverse = () => { throw Object.assign(new Error('q'), { name: 'QuotaExceededError', code: 22 }); };
-  const bad = flaky.rewindTo(p2[0].at);
+  const bad = flaky.rewindTo(p2[p2.length - 2].at);
   assert.equal(bad.ok, false);
   assert.equal(bad.error.code, 'W-STORAGE');
   assert.equal(JSON.stringify(flaky.doc), keep);
@@ -435,7 +439,7 @@ test('결함 주입: 정순 적용·after 사용·숨김 되돌리기 누락을 
   // 재검증(2026-10-23)으로 코드가 바뀌어(기록 순서로 자르기, 자리표시 숨김 유지) 같은 결함을 새 코드에 넣는다
   const forward = await mutated((s) => s.replace('for (let i = work.events.length - 1; i >= cut; i -= 1) reverseEvent', 'for (let i = cut; i < work.events.length; i += 1) reverseEvent'));
   assert.equal(propertyHolds(forward), false, '정순 적용을 잡아야 한다');
-  const useAfter = await mutated((s) => s.replace('setBefore(n, p.before, [\'deleted\']);', 'setBefore(n, p.after, [\'deleted\']);'));
+  const useAfter = await mutated((s) => s.replace('setBefore(n, p.before, NODE_REWIND_KEYS, [\'deleted\']);', 'setBefore(n, p.after, NODE_REWIND_KEYS, [\'deleted\']);'));
   assert.equal(propertyHolds(useAfter), false, 'before 대신 after를 잡아야 한다');
   const noHidden = await mutated((s) => s.replace('      if (!n.deleted) n.hidden = false;\n', ''));
   assert.equal(propertyHolds(noHidden), false, '숨김 되돌리기 누락을 잡아야 한다');
@@ -631,4 +635,34 @@ test('결함 1: 같은 이름으로 숨겨진 노드 둘(하나는 그때 다른
   assert.ok(res.ok, JSON.stringify(res.error));
   assert.deepEqual(res.skipped, []);
   assert.deepEqual(visibleOf(res.doc), visibleOf(rewind(d, '2026-10-07T00:02:00Z').doc));
+});
+
+// ── 시점 라벨(9차 검토 U9-8b): 같은 분에 시점이 둘 이상이면 초까지 보인다 ──
+import { pointLabeler, pointText } from '../app/src/ui/rewind.js';
+
+test('pointLabeler: 분이 겹치지 않으면 기존 분 표시 그대로, 겹치는 시점만 초까지, 초까지 같으면 순번', () => {
+  const pt = (at) => ({ at, count: 1, kinds: ['updated'] });
+  // 겹치지 않음: 기존 pointLabel과 같다
+  const plain = pointLabeler([pt('2026-10-23T14:05:10+09:00'), pt('2026-10-23T14:06:10+09:00')]);
+  assert.equal(plain('2026-10-23T14:05:10+09:00'), '2026-10-23 14:05');
+  assert.equal(plain('2026-10-23T14:06:10+09:00'), '2026-10-23 14:06');
+  // 같은 분에 둘: 그 둘만 초까지(다른 분은 그대로)
+  const mixed = pointLabeler([pt('2026-10-23T14:04:59+09:00'), pt('2026-10-23T14:05:10+09:00'), pt('2026-10-23T14:05:42+09:00')]);
+  assert.equal(mixed('2026-10-23T14:04:59+09:00'), '2026-10-23 14:04');
+  assert.equal(mixed('2026-10-23T14:05:10+09:00'), '2026-10-23 14:05:10');
+  assert.equal(mixed('2026-10-23T14:05:42+09:00'), '2026-10-23 14:05:42');
+  // 초까지 같고 밀리초만 다름: 오래된 순으로 순번
+  const ms = pointLabeler([pt('2026-10-23T14:05:10.100+09:00'), pt('2026-10-23T14:05:10.700+09:00')]);
+  assert.equal(ms('2026-10-23T14:05:10.100+09:00'), '2026-10-23 14:05:10 (1번째)');
+  assert.equal(ms('2026-10-23T14:05:10.700+09:00'), '2026-10-23 14:05:10 (2번째)');
+  // 목록에 없는 시점·빈 목록·읽히지 않는 값은 안전하게 분까지/원문
+  assert.equal(mixed('2026-10-23T09:00:00Z'), '2026-10-23 09:00');
+  assert.equal(pointLabeler([])('2026-10-23T14:05:10+09:00'), '2026-10-23 14:05');
+  assert.equal(pointLabeler(null)('이상한 값'), '이상한 값');
+  // 목록 한 줄과 확인·완료 문구가 같은 라벨을 쓴다
+  assert.equal(pointText(pt('2026-10-23T14:05:10+09:00'), mixed), '2026-10-23 14:05:10 · 바뀐 1건');
+  assert.equal(pointText(pt('2026-10-23T14:05:10+09:00')), '2026-10-23 14:05 · 바뀐 1건'); // labelOf를 안 주면 기존 표시
+  const counts = { hide_nodes: 0, restore_nodes: 0, update_nodes: 1, hide_edges: 0, add_edges: 0, update_edges: 0, hide_refs: 0, add_refs: 0, identity: 0 };
+  assert.match(confirmText({ counts, limits: [] }, '2026-10-23T14:05:42+09:00', mixed), /2026-10-23 14:05:42 시점으로 되돌립니다/);
+  assert.match(doneText('2026-10-23T14:05:42+09:00', counts, 0, mixed), /^2026-10-23 14:05:42 시점으로 되돌렸습니다/);
 });

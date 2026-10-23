@@ -57,6 +57,7 @@
 - 50. CR-13 A: 처음 3분의 길(시작 세 갈래·따라 하기·도구 접기·내 업무 모드) (2026-10-18)
 - 51. 오른쪽 패널 폭 끌기·문서 변환 진단(실제 공개 문서 2건) (2026-10-23)
 - 52. CR-14: 편집 되감기·인수인계 위험 인사이트·폴더 연결 사전 시험 (2026-10-23)
+- 53. 아홉 번째 검토 반영: 보안 상한·초안 사슬 분리·조사·되감기 시연 데이터·따라 하기 5단계·폴더 파일 이름 (2026-10-23)
 <!-- toc:end -->
 
 ## 1. 도구·라이브러리 (확인일 2026-09-30)
@@ -709,3 +710,15 @@
 - **폴더 연결 사전 시험(C, D-32):** Chrome 156·Edge 155 헤드리스에서 file:// 페이지가 보안 문맥(isSecureContext true)이고 showDirectoryPicker·FileSystemObserver가 있다. 실제 폴더 고르기·동기화 폴더·네트워크 드라이브·허락 기억은 사람 시험 대기(.tmp/guide/폴더연결-시험.html).
   - **추가 시험(2026-10-23, 사용자 "로컬로 해서 니가 해봐"):** 점검용 임시 프로필 Chrome·Edge(창 있음)에서 CDP 클릭으로 showDirectoryPicker를 부르면 **file://과 http://localhost 모두 거부되지 않고 고르기 창이 뜬 채 대기**(2.5초 안에 오류 없음). file://에서 navigator.storage.getDirectory(브라우저 전용 폴더)는 SecurityError(출처 없는 페이지) — 폴더 연결에는 쓰지 않으므로 무관. CDP 끌어다 놓기(Input.dispatchDragEvent files)로는 폴더 손잡이가 나오지 않음(자동화 대체 수단 없음). 고르기 창에서 실제로 고르는 동작은 운영체제 창이라 자동화하지 않음(사용자 화면에 키 입력을 보내야 해 다른 프로그램 보호 원칙과 충돌) → 구현 뒤 사람이 1분 확인. 시험 도구: scratchpad fsa-probe(pick.mjs, run.mjs). 시험 뒤 그 프로필로 남은 브라우저 8개를 PID로 정리(이름으로 끄지 않음).
 - **점검 교훈:** check:chrome은 빌드하지 않는다(고친 뒤 npm run build 먼저). 샘플 원본 값을 보는 점검은 「가상 데이터 초기화」 직후에 둔다.
+
+## 53. 아홉 번째 검토 반영: 보안 상한·초안 사슬 분리·조사·되감기 시연 데이터·따라 하기 5단계·폴더 파일 이름 (2026-10-23)
+
+- **근거:** docs/review-2026-10-23.md 1절·2절, 사용자 "전부 추천대로"(R9-1~6·8~10). Sonnet 하위 에이전트 셋(B 보안·검증 / C 규칙·사전 생성·데이터·변환기 / D 화면·따라 하기·폴더 입구), 문서 정리·점검 항목·통합은 메인.
+- **보안·검증(B):** 수정 이력 before/after 허용 키를 schema.js UPDATE_KEYS 한 곳에(노드 label·description·attrs·tags·period·subtype·emp_no·exposed·hidden·deleted, 연결 subtype·period·note·hidden, 동일성 status·method). validate는 그 밖·__proto__·constructor·prototype을 E-SCHEMA, rewind setBefore는 건너뜀. 길이·개수 상한: attrs 값·tags·universe.description·이벤트 payload 문자열(깊이 4) ≤ TEXT_MAX 2000, level·owner·subtypes[].name ≤ LABEL_MAX 100, attrs 키·tags ≤ 50(ATTRS_MAX_KEYS·TAGS_MAX). commands.js nodeFieldError도 같은 상한. JSON·문서 파일은 15,000,000바이트(IMPORT_MAX_CHARS×3) 넘으면 읽지 않음. 비밀값 패턴 +3(GitHub·Slack·api_key=). check:chrome은 app/src가 dist보다 새로우면 경고.
+- **초안 진행 순서(R-1):** 선후행 연결 성분이 둘 이상이면 성분마다 "진행 순서 ①: …" 문장. 단일 성분은 그대로(사전 생성 H1~H3 지문 유지). 부서 샘플은 4묶음.
+- **조사(R-2):** model/josa.js(받침 판정, 한글 아니면 "이(가)" 유지). rules·merge·doc-convert에서 사용. ui/messages.js josa는 별개로 둠. 스냅숏 2건(E16·E18 "가 나옴")·지문 4건 갱신.
+- **되감기 시연 데이터(R9-1 가):** sample-a1.js에 BASE(10-12 20:00)·T1(10-15 10:20, 대사 확인 마감 5→3영업일)·T2(10-19 15:40, 보고 설명 보강) 수정 이력, universe.created_at만 STAMP(10-22 20:00). editPoints = 3. occurred_at은 10-01(시간 보기·흐름 변화 고정). E-020 해결 메모(E-012 닫음) → 자료 수집 준비도 3/6 → 4/6, 미해결 2건. 팀·부서 꼭지 description 추가, STAMP 갱신. 따라 하기 5단계(edit-rewind: 수정→저장→빈 곳→편집 되감기, 완료 = 되감기 모드 켜짐 또는 읽기 전용).
+- **폴더 파일 이름(R9-3):** 「유니버스이름(작성자).json」, 작성자 없으면 「유니버스이름.json」, 이 브라우저에 같은 이름 유니버스가 둘이면 -ID 접미(view/folder-plan.js myFileName withId). 개요에 「폴더로 함께 쓰기」 입구(folderSupported·쓰기 가능·되감기 아님일 때만). 되감기 시점 라벨은 같은 분이 겹칠 때만 초 표시, 초까지 같으면 (n번째).
+- **인사이트 탭:** 「인수인계 위험」 첫 자리(기본 탭은 반복 비효율 유지). 1366 한 줄은 CSS로 맞춤(flex-wrap 유지).
+- **변환기:** C-NO-STRUCTURE+C-NO-SCOPE면 미리 보기 맨 위에 "업무정의서가 아니거나 모양이 다른 글" 판정, 대표 업무 이름 40자(workLabelMax) 초과는 자르고 설명에.
+- **교훈:** 셸 명령 문자열 안의 백틱은 Bash가 실행한다(소개자료 치환 1건이 조용히 빠짐 → Edit 도구로 재적용). 세 에이전트가 같은 저장소에서 나란히 작업하면 중간에 서로의 테스트가 깨져 보인다 — 각 보고의 "다른 에이전트 영역 실패"는 셋이 끝난 뒤 전체 재실행으로만 판정한다(806 통과).

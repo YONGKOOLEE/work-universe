@@ -135,7 +135,7 @@ test('인수인계 초안의 "유사 경험자" 항목: 근거가 있는 문장�
   const item = draft.items.find((i) => i.key === '유사_경험자');
   assert.equal(item.insufficient, false);
   const mine = item.sentences.find((s) => s.text.startsWith('윤바다'));
-  assert.match(mine.text, /^윤바다\(V-1002\) — 「2025 행사」 2025-05-01 ~ 2025-12-15 수행\. 같은 주제 「대사 불일치」/);
+  assert.match(mine.text, /^윤바다\(V-1002\) — 「2025 행사」 수행\(2025-05-01 ~ 2025-12-15\)\. 같은 주제 「대사 불일치」/);
   for (const s of item.sentences) {
     assert.ok(s.evidence_ids.length > 0);
     for (const g of s.evidence_ids) assert.ok(v.lookup(g).found, g);

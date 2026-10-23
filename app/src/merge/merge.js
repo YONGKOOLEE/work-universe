@@ -5,6 +5,7 @@
 //   ③ 업무 후보: 다른 유니버스의 업무 쌍을 규칙으로 점수 매긴 목록(R-11 ②). 이유 문장은 역할 (c)의 규칙 기반 문장
 // 을 만든다. 사람이 이미 판정한 쌍(확정·거부)과 이미 합쳐진 쌍은 다시 내지 않는다(12.2 "거부한 쌍은 다시 제안하지 않는다").
 
+import { josa } from '../model/josa.js';
 import { SUBTYPE_ROLE, normalizeEmpNo, normalizeLabel, pairKey } from '../model/schema.js';
 // 업무 후보 점수(주제 3, 산출물 유형 2, 라벨 낱말 1)·라벨 토큰·일반 산출물 유형은 유사 경험자(D-08)와 같은 것을 쓴다(검토5 C-6)
 import { GENERIC_ARTIFACT_TYPES, WEIGHTS, tokensOf } from '../rules/insight.js';
@@ -49,7 +50,7 @@ export function mergePlan(view, links = []) {
         if (x.universe_id === y.universe_id || sameNow(x.gid, y.gid) || isDecided(x.gid, y.gid)) continue;
         if (!once(x.gid, y.gid)) continue;
         if (normalizeLabel(x.label) === normalizeLabel(y.label)) {
-          auto.push({ kind: 'person', a: x.gid, b: y.gid, method: 'emp_no_auto', status: 'confirmed', reason: `사번 ${emp}, 이름 ${x.label}이(가) 같음` });
+          auto.push({ kind: 'person', a: x.gid, b: y.gid, method: 'emp_no_auto', status: 'confirmed', reason: `사번 ${emp}, 이름 ${x.label}${josa(x.label, '이/가')} 같음` });
         } else {
           personItems.push({
             type: 'conflict', kind: 'person', a: x.gid, b: y.gid,

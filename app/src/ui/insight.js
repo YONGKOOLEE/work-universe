@@ -1,4 +1,4 @@
-// 인사이트 화면(R-05, T-08·T-11). 탭 다섯: 유사 경험자 / 반복 비효율 / 밀집·공백 / 흐름 변화 / 인수인계 위험. 모두 규칙으로 계산하고 근거를 함께 보여 준다.
+// 인사이트 화면(R-05, T-08·T-11). 탭 다섯(왼쪽부터): 인수인계 위험 / 유사 경험자 / 반복 비효율 / 밀집·공백 / 흐름 변화. 모두 규칙으로 계산하고 근거를 함께 보여 준다.
 // 해석과 인력 배치는 사람이 한다(R-05 ③): 화면은 참고 정보임을 밝히고 자동 결정을 하지 않는다.
 
 import { DENSE_DEFAULT_N, denseLimit, densityGaps, repeatInefficiency, similarExperts } from '../rules/insight.js';
@@ -48,7 +48,8 @@ export function insightPanel(o) {
     el('button', { type: 'button', role: 'tab', class: kind === key ? 'tab active' : 'tab', 'data-testid': testid, onclick: () => { kind = key; if (o.onKind) o.onKind(key); draw(); } }, label);
 
   function draw() {
-    tabs.replaceChildren(tabButton('similar', '유사 경험자', 'tab-similar'), tabButton('repeat', '반복 비효율', 'tab-repeat'), tabButton('density', '밀집·공백', 'tab-density'), tabButton('flow', '흐름 변화', 'tab-flow'), tabButton('risk', '인수인계 위험', 'tab-risk'));
+    // 탭 순서(R9-2): 인수인계 위험을 첫 자리에(핵심 인사이트). 열릴 때 기본으로 보이는 탭은 호출하는 쪽의 kind가 정한다
+    tabs.replaceChildren(tabButton('risk', '인수인계 위험', 'tab-risk'), tabButton('similar', '유사 경험자', 'tab-similar'), tabButton('repeat', '반복 비효율', 'tab-repeat'), tabButton('density', '밀집·공백', 'tab-density'), tabButton('flow', '흐름 변화', 'tab-flow'));
     asofNote.hidden = !past;
     asofNote.textContent = kind === 'flow'
       ? `표는 전체 기간이고, 강조한 줄이 기준일(${o.asOf})입니다. 오늘 기준은 그래프 아래 「오늘로」.`

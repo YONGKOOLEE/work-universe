@@ -26,6 +26,7 @@ export const HANDOVER_ITEMS = [
 // 최근 이슈로 보여 줄 메모 수(D-09 "최근 메모 N건")
 export const RECENT_MEMO_COUNT = 3;
 
+const CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳'.split('');
 const live = (e) => !e.hidden;
 const attr = (node, key) => {
   const v = node.attrs && node.attrs[key];
@@ -96,8 +97,11 @@ export function scopeWorks(view, targetGid) {
 }
 
 // 선후행 연결을 따라 업무를 진행 순서로 정렬한다. 연결이 없는 업무는 원래 순서를 지킨다. 순환이면 원래 순서
+// chains: 선후행으로 이어진 묶음(연결 성분)마다 진행 순서 한 줄. 서로 이어지지 않은 사슬을 한 줄로 섞지 않는다(검토9 R-1)
 function flowOrder(view, works, workIds) {
   const next = new Map(works.map((w) => [w.gid, []]));
+  const comp = new Map(); // 연결 성분의 대표(합집합 찾기)
+  const root = (g) => { let r = g; while (comp.has(r) && comp.get(r) !== r) r = comp.get(r); return r; };
   const indegree = new Map(works.map((w) => [w.gid, 0]));
   const linked = new Set();
   for (const e of view.edges) {
@@ -105,6 +109,9 @@ function flowOrder(view, works, workIds) {
     next.get(e.source).push(e.target);
     indegree.set(e.target, indegree.get(e.target) + 1);
     linked.add(e.source).add(e.target);
+    if (!comp.has(e.source)) comp.set(e.source, e.source);
+    if (!comp.has(e.target)) comp.set(e.target, e.target);
+    comp.set(root(e.target), root(e.source));
   }
   const order = [];
   const ready = works.filter((w) => indegree.get(w.gid) === 0).map((w) => w.gid);
@@ -116,9 +123,16 @@ function flowOrder(view, works, workIds) {
       if (indegree.get(t) === 0) ready.push(t);
     }
   }
-  if (order.length !== works.length) return { ordered: works, chain: [] }; // 순환: 순서를 정하지 않는다
+  if (order.length !== works.length) return { ordered: works, chains: [] }; // 순환: 순서를 정하지 않는다
   const byGid = new Map(works.map((w) => [w.gid, w]));
-  return { ordered: order.map((g) => byGid.get(g)), chain: order.filter((g) => linked.has(g)).map((g) => byGid.get(g)) };
+  const groups = new Map(); // 성분 대표 → 진행 순서(Map은 넣은 순서를 지키므로 먼저 나오는 묶음이 앞)
+  for (const g of order) {
+    if (!linked.has(g)) continue;
+    const r = root(g);
+    if (!groups.has(r)) groups.set(r, []);
+    groups.get(r).push(byGid.get(g));
+  }
+  return { ordered: order.map((g) => byGid.get(g)), chains: [...groups.values()] };
 }
 
 const sentence = (text, evidence) => ({ text, evidence_ids: [...new Set(evidence)] });
@@ -159,10 +173,15 @@ export function buildHandoverDraft(view, input) {
   // 1) 업무 개요: 꼭지 또는 대상 업무의 설명
   items.업무_개요 = start.description ? [sentence(`${start.label}: ${start.description}`, [start.gid])] : [];
 
-  // 2) 세부 업무·절차: 진행 순서로 나열. 업무별 설명·절차·사용 시스템. 선후행이 있으면 "진행 순서" 문장을 맨 앞에
-  const { ordered, chain } = flowOrder(view, works, workIds);
+  // 2) 세부 업무·절차: 진행 순서로 나열. 업무별 설명·절차·사용 시스템. 선후행이 있으면 "진행 순서" 문장을 맨 앞에.
+  //    이어진 묶음이 둘 이상이면 묶음마다 "진행 순서 ①: …" "진행 순서 ②: …"로 따로 쓴다(서로 무관한 사슬을 한 줄로 이으면 없는 순서를 말하게 된다, 검토9 R-1)
+  const { ordered, chains } = flowOrder(view, works, workIds);
   items.세부_업무_절차 = [];
-  if (chain.length >= 2) items.세부_업무_절차.push(sentence(`진행 순서: ${chain.map((w) => w.label).join(' → ')}`, chain.map((w) => w.gid)));
+  const flows = chains.filter((c) => c.length >= 2);
+  flows.forEach((chain, i) => {
+    const head = flows.length === 1 ? '진행 순서' : `진행 순서 ${CIRCLED[i] || `(${i + 1})`}`;
+    items.세부_업무_절차.push(sentence(`${head}: ${chain.map((w) => w.label).join(' → ')}`, chain.map((w) => w.gid)));
+  });
   for (const w of ordered) {
     if (w.gid === start.gid && !attr(w, '절차') && !attr(w, '사용 시스템')) continue; // 대상 업무 자신은 개요에 이미 있다
     const parts = [w.label];

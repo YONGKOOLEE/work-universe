@@ -21,6 +21,8 @@ const groupKey = (recordedAt) => Date.parse(recordedAt);
 
 const NODE_FIELDS = ['label', 'description', 'attrs', 'tags', 'period', 'subtype', 'emp_no', 'exposed'];
 const EDGE_FIELDS = ['subtype', 'period', 'note'];
+const NODE_REWIND_KEYS = [...NODE_FIELDS, 'hidden'];
+const EDGE_REWIND_KEYS = [...EDGE_FIELDS, 'hidden'];
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 const copy = (x) => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
 const bad = (field) => ({ ok: false, error: { code: 'E-SCHEMA', field } });
@@ -53,9 +55,10 @@ export function editPoints(doc) {
   return [...groups.entries()].sort((a, b) => a[0] - b[0]).map(([, g]) => g);
 }
 
-function setBefore(target, before, skip = []) {
+// 가져온 JSON 이력의 키는 믿지 않는다(S-1): __proto__·constructor 같은 이름이나 편집 대상 밖 키는 건너뛴다
+function setBefore(target, before, allowed, skip = []) {
   for (const [k, v] of Object.entries(before || {})) {
-    if (skip.includes(k)) continue;
+    if (skip.includes(k) || !allowed.includes(k) || !Object.hasOwn(before, k)) continue;
     if (v === null || v === undefined) delete target[k];
     else target[k] = copy(v);
   }
@@ -86,7 +89,7 @@ function reverseEvent(work, ev, ctx) {
       }
       return; // 지운 내용은 되살릴 수 없다
     }
-    setBefore(n, p.before, ['deleted']);
+    setBefore(n, p.before, NODE_REWIND_KEYS, ['deleted']);
     return;
   }
   if (p.target_kind === 'edge') {
@@ -97,7 +100,7 @@ function reverseEvent(work, ev, ctx) {
     const e = work.edges.find((x) => x.id === id);
     if (!e) return;
     if (ev.type === 'hidden') e.hidden = false;
-    else setBefore(e, p.before);
+    else setBefore(e, p.before, EDGE_REWIND_KEYS);
     return;
   }
   if (p.target_kind === 'ref') {

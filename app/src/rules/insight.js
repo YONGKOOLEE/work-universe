@@ -5,6 +5,7 @@
 import { periodStatus, periodText } from '../view/describe.js';
 import { refGid } from '../view/view.js';
 import { SUBTYPE_HANDOVER_DOC, normalizeLabel, memoCategoryOf } from '../model/schema.js';
+import { josa } from '../model/josa.js';
 import { lastInput } from './flow.js';
 
 // 점수 가중치(D-08에 수치가 없어 정함): 주제 3, 산출물 유형 2, 라벨 토큰 1
@@ -168,7 +169,8 @@ export function similarSentences(result) {
     const w = p.works[0];
     const more = p.works.length > 1 ? ` 외 ${p.works.length - 1}건` : '';
     return {
-      text: `${p.label}${p.emp_no ? `(${p.emp_no})` : ''} — 「${w.label}」${w.period ? ` ${w.period}` : ''}${more} 수행. ${w.reasons.join(', ')}`,
+      // 「…」 수행(기간) 외 N건 — 기간이 이름 바로 뒤에 붙어 「…」 2026-04-01 ~ 진행 중 수행처럼 읽히지 않게(검토9 R-4)
+      text: `${p.label}${p.emp_no ? `(${p.emp_no})` : ''} — 「${w.label}」 수행${w.period ? `(${w.period})` : ''}${more}. ${w.reasons.join(', ')}`,
       evidence_ids: p.evidence_ids,
     };
   });
@@ -310,7 +312,8 @@ export function repeatInefficiency(view, { asOf = null } = {}) {
       kind: 'topic_repeat',
       topic: { label: t.label, gids: [...t.topics] },
       works,
-      summary: `주제 「${t.label}」이(가) ${works.length}개 업무에서 반복됩니다: ${shown}${works.length > 5 ? ` 외 ${works.length - 5}개` : ''}`,
+      // 이름만 같은 주제가 섞였으면 그렇다고 밝힌다(유사 경험자 이유와 같은 단서, 검토9 E-1 ①)
+      summary: `주제 「${t.label}」${josa(t.label, '이/가')} ${works.length}개 업무에서 반복됩니다${t.topics.size > 1 ? `(이름이 같은 주제 ${t.topics.size}개 포함, 연결 확인 전)` : ''}: ${shown}${works.length > 5 ? ` 외 ${works.length - 5}개` : ''}`,
       evidence_ids: [...new Set([...works.flatMap((w) => w.evidence_ids), ...t.topics])],
     });
   }

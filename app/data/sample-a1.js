@@ -2,23 +2,38 @@
 // 모든 이름·사번·조직명은 가상이다(R-06). 사번은 V- + 숫자 4자리. 12.2 형식이고, 12.1에 따라 JS로 감싸 넣는다(P-1).
 // 12.6 예시의 ID(N-000, N-001, N-010, N-011, N-020, N-030, L-001~003, E-001·E-002)를 그대로 쓴다.
 //
-// STAMP(기록 시각)는 반드시 "지금보다 과거"여야 한다. 미래이면 같은 날짜에 사용자가 입력한 이력이 샘플 이력보다 앞에 정렬된다(tests/data.test.js).
+// 기록 시각(BASE, 수정 이력 T1·T2, STAMP)은 반드시 "지금보다 과거"여야 한다. 미래이면 같은 날짜에 사용자가 입력한 이력이 샘플 이력보다 앞에 정렬된다(tests/data.test.js).
+// 편집 되감기(R-25) 시연용으로 지난 수정 이력 둘을 심었다: BASE(처음 입력) < T1(대사 확인 마감 수정) < T2(보고 설명 보강) < STAMP(이 판의 표시).
+// 이력 배열은 시간순이어야 한다(되감기는 기록 순서로 자른다). 노드의 지금 값은 마지막 수정의 after와 같고, before는 그 앞 값이다.
 // 업무 속성은 02-design 5.6의 약속을 따른다: 업무(절차, 사용 시스템, 주기, 마감, 주의사항), 산출물(위치), 사람(연락처),
 // 메모(payload.category). 내용은 실제 업무를 모르는 사람이 읽어도 이해되는 수준의 가상 내용이다.
 // 이 파일을 고쳐 내장 샘플이 바뀌면 universe.created_at을 새 값으로 바꾼다.
 // 앱은 그 값이 저장된 것과 다르면 샘플을 새로 넣는다(app/src/app/app.js).
 
-const STAMP = '2026-10-12T20:00:00+09:00'; // 검토6 P-2: 자료 수집·보고의 담당 이력 추가(앞서 검토5 V-5: 작성 주체를 조직관리(U-O)의 현재 팀으로)
+const BASE = '2026-10-12T20:00:00+09:00'; // 처음 입력한 시각(노드·연결·이력). 검토6 P-2: 자료 수집·보고의 담당 이력 추가(앞서 검토5 V-5: 작성 주체를 조직관리(U-O)의 현재 팀으로)
+const T1 = '2026-10-15T10:20:00+09:00'; // 대사 확인 마감 5영업일 → 3영업일
+const T2 = '2026-10-19T15:40:00+09:00'; // 보고 설명 보강
+const STAMP = '2026-10-22T20:00:00+09:00'; // 검토9 R9-1(가): 되감기 시연용 수정 이력 2시점, D-1(a) E-020, 고친 판의 표시(universe.created_at)
 
 const node = (id, core_type, label, rest = {}) => ({
-  id, core_type, label, ...rest, hidden: false, created_at: STAMP, updated_at: STAMP,
+  id, core_type, label, ...rest, hidden: false, created_at: BASE, updated_at: rest.updated_at || BASE,
 });
 const edge = (id, source, target, core_type, rest = {}) => ({
-  id, source, target, core_type, ...rest, hidden: false, created_at: STAMP,
+  id, source, target, core_type, ...rest, hidden: false, created_at: BASE,
 });
-const event = (id, type, occurred_at, payload, note) => ({
-  id, type, occurred_at, recorded_at: STAMP, source: 'sample', payload, ...(note ? { note } : {}),
+const event = (id, type, occurred_at, payload, note, recorded_at = BASE) => ({
+  id, type, occurred_at, recorded_at, source: 'sample', payload, ...(note ? { note } : {}),
 });
+
+// 수정 이력(E-021·E-022)의 after와 노드의 지금 값을 같게 두려고 한 곳에 둔다
+const ATTRS_DAESA = {
+  주기: '매월',
+  마감: '월 마감 후 3영업일 이내',
+  절차: '① 점검표의 정산 합계와 원천 합계를 대조 ② 차이가 나는 건을 건별로 찾음 ③ 환불·재처리 건의 반영 여부 확인 ④ 차이 사유를 점검표에 기록',
+  '사용 시스템': '가상정산시스템, 가상원천조회, 점검표 양식',
+  주의사항: '환불 건이 다음 달에 반영되는 경우가 있어 월 경계 건은 따로 표시한다',
+};
+const DESC_BOGO = '점검 결과를 정리해 보고한다';
 
 export const SAMPLE_A1 = {
   schema_version: '1.0',
@@ -36,14 +51,9 @@ export const SAMPLE_A1 = {
   nodes: [
     node('N-000', 'root', '월말 정산 점검', { description: '매월 말 정산 결과를 모아 대사(대조)하고 보고하는 반복 업무(가상)' }),
     node('N-001', 'work', '대사 확인', {
+      updated_at: T1, // 마지막 수정 이력(E-021)의 시각
       description: '정산 결과를 원천 자료와 대조해 불일치를 찾는다',
-      attrs: {
-        주기: '매월',
-        마감: '월 마감 후 3영업일 이내',
-        절차: '① 점검표의 정산 합계와 원천 합계를 대조 ② 차이가 나는 건을 건별로 찾음 ③ 환불·재처리 건의 반영 여부 확인 ④ 차이 사유를 점검표에 기록',
-        '사용 시스템': '가상정산시스템, 가상원천조회, 점검표 양식',
-        주의사항: '환불 건이 다음 달에 반영되는 경우가 있어 월 경계 건은 따로 표시한다',
-      },
+      attrs: { ...ATTRS_DAESA },
     }),
     node('N-002', 'work', '자료 수집', {
       description: '점검에 쓸 정산 자료를 모은다',
@@ -56,7 +66,8 @@ export const SAMPLE_A1 = {
       },
     }),
     node('N-003', 'work', '보고', {
-      description: '점검 결과를 정리해 보고한다',
+      updated_at: T2, // 마지막 수정 이력(E-022)의 시각
+      description: DESC_BOGO,
       attrs: {
         주기: '매월',
         마감: '월 마감 후 5영업일 이내',
@@ -113,6 +124,22 @@ export const SAMPLE_A1 = {
     event('E-018', 'assign_end', '2026-09-30', { person_id: 'N-011', work_id: 'N-002' }, '윤바다가 떠나면서 종료. 후임은 아직 정해지지 않음(구두 인수인계에 포함되지 않음)'),
     event('E-019', 'assign_end', '2026-09-30', { person_id: 'N-011', work_id: 'N-003' }, '윤바다가 떠나면서 종료. 후임은 아직 정해지지 않음(구두 인수인계에 포함되지 않음)'),
     event('E-009', 'assign_start', '2026-10-01', { person_id: 'N-012', work_id: 'N-001' }),
+    // D-1(a): E-012의 이슈는 같은 글에 "양식을 수정함"이라 적혀 있으므로 해결 메모로 닫는다(「해결로 표시」가 남기는 모양: 범주 resolved + resolves_id)
+    event('E-020', 'memo', '2026-07-12', { target_id: 'N-002', category: 'resolved', resolves_id: 'E-012' }, '해결: 7월 점검표 양식의 항목 순서가 바뀌어 자료 붙여넣기가 어긋남'),
+    // 편집 되감기 시연용 수정 이력(R9-1 가). 앱의 노드 수정이 남기는 모양(updated, before·after)이며 시간순으로 맨 끝에 둔다.
+    // occurred_at은 고친 내용이 적용되는 날(10월 1일부터)로 두어 기록 시각(T1·T2)과 다르다. 이력 기간·월별 기록 수(흐름 인사이트)가 달라지지 않게 마지막 이력일(10-01)에 맞춘다
+    event('E-021', 'updated', '2026-10-01', {
+      target_kind: 'node',
+      target_id: 'N-001',
+      before: { attrs: { ...ATTRS_DAESA, 마감: '월 마감 후 5영업일 이내' } },
+      after: { attrs: { ...ATTRS_DAESA } },
+    }, undefined, T1),
+    event('E-022', 'updated', '2026-10-01', {
+      target_kind: 'node',
+      target_id: 'N-003',
+      before: { description: '점검 결과를 보고한다' },
+      after: { description: DESC_BOGO },
+    }, undefined, T2),
   ],
   refs: [],
   identity_links: [],

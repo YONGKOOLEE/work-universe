@@ -9,6 +9,7 @@ import { el } from './dom.js';
 import { downloadWithNotice, draftDoc, printHtml } from './doc-output.js';
 import { evidenceChips } from './evidence.js';
 import { josa, messageFor } from './messages.js';
+import { SUBTYPE_ROLE } from '../model/schema.js';
 
 const DRAFT_FIELDS = { target: '대상', from: '보내는 사람', to: '받는 사람' };
 
@@ -163,6 +164,17 @@ function confirmBox(d, view, o) {
     btn, msg);
 }
 
+// 「관계자」「유사 경험자」 문장의 근거에 역할 이름으로 만든 노드(실제 사람이 아님)가 있으면 밝힌다 — 인사이트 화면과 같은 표시(검토9 P-2)
+const ROLE_ITEMS = new Set(['관계자_연락처', '유사_경험자']);
+function roleChip(view, itemKey, sentence) {
+  if (!ROLE_ITEMS.has(itemKey)) return null;
+  const hasRole = sentence.evidence_ids.some((g) => {
+    const n = view.getNode(g);
+    return n && n.core_type === 'person' && n.subtype === SUBTYPE_ROLE;
+  });
+  return hasRole ? el('span', { class: 'chip', 'data-testid': 'role-chip', title: '원문에 사람 이름이 없어 역할 이름으로 만든 노드입니다. 실제 담당자는 연결되어 있지 않습니다.' }, '역할 · 담당자 미연결') : null;
+}
+
 function renderDraft(box, d, view, onFocus, o = {}) {
   const copyBtn = el('button', { type: 'button', class: 'small-btn', 'data-testid': 'draft-copy' }, '글로 복사');
   copyBtn.addEventListener('click', async () => {
@@ -200,7 +212,7 @@ function renderDraft(box, d, view, onFocus, o = {}) {
           ? el('p', { class: 'muted', 'data-testid': 'not-found' }, `해당 없음 — ${i.empty_reason}`)
           : i.insufficient
           ? el('p', { class: 'muted', 'data-testid': 'insufficient' }, '이력 부족 — 근거가 되는 기록이 없어 내용을 만들지 않았습니다.')
-          : el('ul', {}, ...i.sentences.map((s) => el('li', {}, el('span', {}, s.text), el('span', { class: 'evidence-row' }, el('span', { class: 'evidence-label' }, '근거:'), evidenceChips(view, s.evidence_ids, onFocus, { dedupe: false, unknown: true }))))),
+          : el('ul', {}, ...i.sentences.map((s) => el('li', {}, el('span', {}, s.text), roleChip(view, i.key, s), el('span', { class: 'evidence-row' }, el('span', { class: 'evidence-label' }, '근거:'), evidenceChips(view, s.evidence_ids, onFocus, { dedupe: false, unknown: true }))))),
       ),
     ),
     el('p', { class: 'muted small' }, '축적된 이력으로 만든 초안입니다. 근거를 눌러 확인하고, 담당자가 검토해 확정하세요.'),

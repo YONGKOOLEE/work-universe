@@ -1,4 +1,4 @@
-// 앱 안 따라 하기(CR-13 A, 2026-10-18): 이야기형 시나리오(handover 4단계·team 5단계)의 문구·완료 조건·짚을 대상을 한 곳에 둔다.
+// 앱 안 따라 하기(CR-13 A, 2026-10-18): 이야기형 시나리오(handover 5단계·team 5단계)의 문구·완료 조건·짚을 대상을 한 곳에 둔다.
 // 이 파일은 DOM·저장소를 쓰지 않는다(rules). 화면(ui/tour.js)이 앱 상태를 아래 state 모양으로 만들어 넘기고, 여기 함수가 참/거짓·대상을 돌려준다.
 //
 // state = {
@@ -11,7 +11,11 @@
 //   foundGid: string|null,     // 「노드 찾기」로 고른 노드
 //   nbhd: boolean,             // 주변만 보기 중
 //   insightOpen: boolean,      // 인사이트 화면이 열려 있음
-//   insightKind: string|null,  // 인사이트에서 고른 탭(similar|repeat|density|flow)
+//   insightKind: string|null,  // 인사이트에서 고른 탭(risk|similar|repeat|density|flow)
+//   editing: boolean,          // 노드 수정 양식이 열려 있음
+//   saved: boolean,            // 따라 하기를 시작한 뒤 저장(수정·추가 등)이 한 번 성공했음
+//   rewinding: boolean,        // 편집 되감기 모드가 켜져 있음(머리 띠가 보임)
+//   readOnly: boolean,         // 이 유니버스를 고칠 수 없음(읽기 전용)
 // }
 // target(state) = 짚을 대상 후보 목록. 앞에서부터 화면에 보이는 첫 번째를 쓴다.
 //   {sel: CSS 선택자, noScroll?}  화면의 요소(단추 등). 가려져 있으면 패널을 스크롤해 보이게 하지만 noScroll이면 하지 않는다
@@ -49,7 +53,9 @@ const HANDOVER = {
     },
     {
       id: 'make-draft',
-      task: '빈 곳을 누르고 「인수인계 초안 만들기」를 누른 뒤, 보내는 사람 윤바다·받는 사람 서하늘로 「초안 만들기」를 누르세요.',
+      // 9차 검토 R9-4: 보내는·받는 사람은 미리 골라 두므로(preset) 동작은 둘 — 「인수인계 초안 만들기」 → 「초안 만들기」
+      task: '빈 곳을 누르고 「인수인계 초안 만들기」를 누른 뒤, 「초안 만들기」를 누르세요.',
+      sub: () => '보내는·받는 사람은 이미 골라져 있어요',
       preset: { from: '윤바다', to: '서하늘' },
       target: (s) => (s.draftOpen ? [{ sel: '[data-testid=draft-form] button[type=submit]' }]
         : s.selected ? [{ sel: '#graph', hint: BLANK_HINT }]
@@ -61,6 +67,23 @@ const HANDOVER = {
       task: '문장 밑의 「근거:」 칩을 하나 눌러 보세요. 그래프에서 근거가 빛납니다.',
       target: () => [{ sel: '.draft .evidence' }],
       done: (s) => s.evidenceUsed,
+    },
+    {
+      // 9차 검토 R9-1(나): 고친 기록을 되감아 보는 단계. 샘플에 수정 이력이 미리 있어도 「직접 고쳐 보기」로 안내한다.
+      // 완료는 상태로 판정: 되감기 모드가 켜지면(머리 띠가 보임) 끝. 읽기 전용이면 고칠 수 없으므로 이 단계를 건너뛴다
+      id: 'edit-rewind',
+      task: '이번엔 직접 고쳐 보고 되감아 봅니다. 「대사 확인」을 누르고 「수정」에서 설명 끝에 글자 하나를 더해 「저장」을 누르세요. 그다음 빈 곳을 누르고 「편집 되감기」를 눌러 시점을 고르면, 그때의 지도가 읽기 전용으로 보입니다.',
+      sub: (s) => (s.saved ? '고쳐서 저장했어요. 이제 빈 곳을 누르고 「편집 되감기」를 누르세요' : null),
+      target: (s) => {
+        if (s.rewinding) return [{ sel: '[data-testid=rewind-bar]' }, { sel: '[data-testid=rewind-band]' }];
+        const blank = { sel: '#graph', hint: BLANK_HINT };
+        const panelBusy = s.draftOpen || s.insightOpen; // 초안·인사이트가 열려 있으면 빈 곳을 눌러 개요로 돌아가야 한다
+        if (s.saved) return s.selected || panelBusy ? [blank] : [{ sel: '[data-testid=btn-rewind]' }, blank];
+        if (s.editing) return [{ sel: '[data-testid=node-form-edit] button[type=submit]' }];
+        if (s.selected && !panelBusy) return [{ sel: '[data-testid=btn-edit]' }, { cy: 'node[label = "대사 확인"]' }];
+        return [{ cy: 'node[label = "대사 확인"]' }];
+      },
+      done: (s) => s.rewinding || s.readOnly,
     },
   ],
 };
@@ -140,5 +163,5 @@ export function advance(scenario, index, state) {
 
 /** 시작할 때 쓰는 빈 상태(점검·단위 테스트에서도 쓴다) */
 export function emptyState(universeId = '') {
-  return { universeId, selected: null, draftOpen: false, draftShown: false, evidenceUsed: false, expandedCount: 0, foundGid: null, nbhd: false, insightOpen: false, insightKind: null };
+  return { universeId, selected: null, draftOpen: false, draftShown: false, evidenceUsed: false, expandedCount: 0, foundGid: null, nbhd: false, insightOpen: false, insightKind: null, editing: false, saved: false, rewinding: false, readOnly: false };
 }

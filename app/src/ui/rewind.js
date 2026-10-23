@@ -22,8 +22,36 @@ export function valueText(v) {
   return s.length > 80 ? `${s.slice(0, 80)}…` : s;
 }
 
-/** 시점 한 줄: 「2026-10-23 14:05 · 바뀐 3건」 */
-export const pointText = (p) => `${pointLabel(p.at)} · 바뀐 ${p.count}건`;
+/**
+ * 시점 라벨 만들기(9차 검토 U9-8b). 기본은 분까지("2026-10-23 14:05")이고, 같은 분에 시점이 둘 이상이면 그 시점들만 초까지 보인다.
+ * 초까지 같으면(밀리초만 다름) 오래된 순으로 " (2번째)" 같은 순번을 붙인다. 목록에 없는 시점은 분까지.
+ * @param {{at:string}[]} points editPoints 결과(오래된 순)
+ * @returns {(at:string)=>string}
+ */
+export function pointLabeler(points) {
+  const list = Array.isArray(points) ? points : [];
+  const byMinute = new Map();
+  for (const p of list) byMinute.set(pointLabel(p.at), (byMinute.get(pointLabel(p.at)) || 0) + 1);
+  const secLabel = (at) => {
+    const m = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/.exec(String(at));
+    return m ? `${m[1]} ${m[2]}` : pointLabel(at);
+  };
+  const base = (at) => (byMinute.get(pointLabel(at)) > 1 ? secLabel(at) : pointLabel(at));
+  const seen = new Map(); // 초까지 같은 라벨이 몇 번째인가
+  const total = new Map();
+  for (const p of list) total.set(base(p.at), (total.get(base(p.at)) || 0) + 1);
+  const label = new Map();
+  for (const p of list) {
+    const b = base(p.at);
+    const n = (seen.get(b) || 0) + 1;
+    seen.set(b, n);
+    label.set(p.at, total.get(b) > 1 ? `${b} (${n}번째)` : b);
+  }
+  return (at) => (label.has(at) ? label.get(at) : pointLabel(at));
+}
+
+/** 시점 한 줄: 「2026-10-23 14:05 · 바뀐 3건」. labelOf는 pointLabeler 결과(없으면 분까지) */
+export const pointText = (p, labelOf = pointLabel) => `${labelOf(p.at)} · 바뀐 ${p.count}건`;
 
 /** 시점의 바뀐 종류 요약: 「생성·수정·숨김」 */
 export const kindsText = (p) => p.kinds.map(eventTypeLabel).join('·');
@@ -43,12 +71,12 @@ export function limitTexts(limits) {
 }
 
 /** 되돌리기 확인 문구. preview는 app.rewindPreview 결과 */
-export function confirmText(preview, at) {
+export function confirmText(preview, at, labelOf = pointLabel) {
   const c = preview.counts;
   const hidden = c.hide_nodes + c.hide_edges;
   const shown = c.restore_nodes + c.add_edges;
   const edited = c.update_nodes + c.update_edges;
-  const lines = [`지도를 ${pointLabel(at)} 시점으로 되돌립니다.`];
+  const lines = [`지도를 ${labelOf(at)} 시점으로 되돌립니다.`];
   lines.push(`- 그 뒤 생기거나 그때 숨겨져 있던 노드·연결 ${hidden}개는 숨겨집니다(지워지지 않습니다).`);
   lines.push(`- 그 뒤 숨긴 노드·연결 ${shown}개는 다시 보입니다.`);
   lines.push(`- 그 뒤 바뀐 내용 ${edited}건은 그때 값으로 돌아갑니다.`);
@@ -70,12 +98,12 @@ export function failText(error) {
 
 /** 되돌린 뒤 알림 */
 // skipped: 묶음 안에서 건너뛴 명령 수(이름이 겹쳐 되살리지 못한 노드, 끝 노드를 되살리지 못한 연결, 묶기·통합 판정). 사용자가 모르고 지나가지 않게 알린다(재검증)
-export const doneText = (at, counts, skipped = 0) => {
+export const doneText = (at, counts, skipped = 0, labelOf = pointLabel) => {
   const hidden = counts.hide_nodes + counts.hide_edges;
   const shown = counts.restore_nodes + counts.add_edges;
   const edited = counts.update_nodes + counts.update_edges;
   const skip = skipped ? ` 다만 ${skipped}건은 이름이 겹치거나 연결의 끝이 없어 되돌리지 못하고 그대로 두었습니다.` : '';
-  return `${pointLabel(at)} 시점으로 되돌렸습니다 — 숨김 ${hidden} · 다시 보임 ${shown} · 값 되돌림 ${edited}.${skip} 이력에 「편집 되감기」로 남았고, 다시 되감을 수도 있습니다.`;
+  return `${labelOf(at)} 시점으로 되돌렸습니다 — 숨김 ${hidden} · 다시 보임 ${shown} · 값 되돌림 ${edited}.${skip} 이력에 「편집 되감기」로 남았고, 다시 되감을 수도 있습니다.`;
 };
 
 /** 되돌릴 수 없는 이유(없으면 ''). baseReadOnly: 저장소·형식·내용 포함 HTML, nothing: 되돌릴 것이 없음 */
@@ -97,11 +125,11 @@ export function rewindEntry({ points, onOpen }) {
 }
 
 /** 머리 띠(그래프 위). 같은 요소를 다시 채운다 */
-export function fillBand(band, { at, diff, canRevert, reason, onRevert, onBack }) {
+export function fillBand(band, { at, diff, canRevert, reason, onRevert, onBack, labelOf = pointLabel }) {
   band.hidden = false;
   // replaceChildren(…, null)은 "null" 글자를 넣으므로 빈 값을 거른다(HANDOFF 4절)
   band.replaceChildren(...[
-    el('span', { class: 'rewind-title', 'data-testid': 'rewind-title' }, `편집 되감기 중 — ${pointLabel(at)} (읽기 전용)`),
+    el('span', { class: 'rewind-title', 'data-testid': 'rewind-title' }, `편집 되감기 중 — ${labelOf(at)} (읽기 전용)`),
     el('span', { class: 'rewind-counts', 'data-testid': 'rewind-counts' }, diffText(diff)),
     el('span', { class: 'rewind-actions' },
       el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-rewind-revert', disabled: !canRevert, title: canRevert ? '' : reason, onclick: onRevert }, '이 시점으로 되돌리기'),
@@ -117,9 +145,10 @@ export function hideBand(band) {
 
 /**
  * 오른쪽 패널(아무것도 고르지 않았을 때): 시점 막대·목록·요약·지금과 다른 노드 목록.
- * @param {{points:object[], at:string, diff:object, limits:object[], labelOf:(id:string)=>string, isNode:(id:string)=>boolean, gidOf:(id:string)=>string, onPick:(at:string)=>void, onSelect:(gid:string)=>void}} o
+ * @param {{points:object[], at:string, diff:object, limits:object[], labelOf:(id:string)=>string, timeLabel?:(at:string)=>string, isNode:(id:string)=>boolean, gidOf:(id:string)=>string, onPick:(at:string)=>void, onSelect:(gid:string)=>void}} o
  */
 export function rewindPanel(o) {
+  const timeLabel = o.timeLabel || pointLabeler(o.points);
   const idx = Math.max(0, o.points.findIndex((p) => p.at === o.at));
   const bar = el('input', { type: 'range', min: '0', max: String(o.points.length - 1), step: '1', value: String(idx), class: 'rewind-bar', 'data-testid': 'rewind-bar', 'aria-label': '되감기 시점 막대(왼쪽이 오래된 시점)' });
   bar.addEventListener('input', () => o.onPick(o.points[Number(bar.value)].at));
@@ -128,7 +157,7 @@ export function rewindPanel(o) {
     const chosen = p.at === o.at;
     list.append(el('li', {},
       el('button', { type: 'button', class: 'rewind-point', 'data-testid': 'rewind-point', 'data-at': p.at, 'aria-pressed': String(chosen), onclick: () => o.onPick(p.at) },
-        pointText(p), k === 0 ? ' (가장 최근)' : '', el('span', { class: 'muted small' }, ` ${kindsText(p)}`))));
+        pointText(p, timeLabel), k === 0 ? ' (가장 최근)' : '', el('span', { class: 'muted small' }, ` ${kindsText(p)}`))));
   });
   const nodeChanges = [
     ...o.diff.changed.filter((c) => c.kind === 'node').map((c) => ({ id: c.id, note: `바뀜: ${c.fields.map(fieldName).join('·')}` })),
@@ -140,7 +169,7 @@ export function rewindPanel(o) {
     el('h2', {}, '편집 되감기'),
     el('p', { class: 'muted small' }, '시점을 고르면 그때의 지도를 읽기 전용으로 그립니다. 주황 테두리는 지금과 달라진 노드입니다. 노드를 누르면 그때 값이 보입니다.'),
     el('label', { class: 'rewind-bar-label' }, '시점 막대 ', bar),
-    el('p', { class: 'rewind-now', 'data-testid': 'rewind-now' }, `고른 시점: ${pointLabel(o.at)}`),
+    el('p', { class: 'rewind-now', 'data-testid': 'rewind-now' }, `고른 시점: ${timeLabel(o.at)}`),
     el('p', { class: 'rewind-summary', 'data-testid': 'rewind-summary' }, diffText(o.diff)),
     nodeChanges.length ? el('div', {}, el('h3', {}, '지금과 다른 노드'), changed) : null,
     el('h3', {}, '고친 시점'),

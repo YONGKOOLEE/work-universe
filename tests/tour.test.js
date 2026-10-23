@@ -9,11 +9,11 @@ const memoryStorage = (init = {}) => {
   return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k), map: m };
 };
 
-test('시나리오는 handover·team 둘(handover 4단계, team 5단계), 이야기·문구가 있다', () => {
+test('시나리오는 handover·team 둘(handover·team 모두 5단계), 이야기·문구가 있다', () => {
   assert.deepEqual(TOUR_IDS, ['handover', 'team']);
   for (const id of TOUR_IDS) {
     const sc = scenarioOf(id);
-    assert.equal(sc.steps.length, id === 'team' ? 5 : 4, id);
+    assert.equal(sc.steps.length, 5, id);
     assert.ok(sc.story.length > 10 && sc.universeId, id);
     for (const st of sc.steps) {
       assert.ok(st.task.length > 5, `${id}/${st.id}`);
@@ -26,7 +26,7 @@ test('시나리오는 handover·team 둘(handover 4단계, team 5단계), 이야
 });
 
 test('단계 문구에 「」 화면 이름이 있고, 실제 화면의 단추·칸 이름과 같은 글자다', () => {
-  const known = new Set(['대사 확인', '미해결', '다음', '인수인계 초안 만들기', '초안 만들기', '근거:', '노드 찾기', '주변만 보기', '전체 보기', '인사이트 보기', '유사 경험자']);
+  const known = new Set(['대사 확인', '미해결', '다음', '인수인계 초안 만들기', '초안 만들기', '근거:', '노드 찾기', '주변만 보기', '전체 보기', '인사이트 보기', '유사 경험자', '수정', '저장', '편집 되감기']);
   for (const id of TOUR_IDS) {
     const names = scenarioOf(id).steps.flatMap((st) => quotedNames(st.task));
     assert.ok(names.length >= 4, id);
@@ -36,9 +36,9 @@ test('단계 문구에 「」 화면 이름이 있고, 실제 화면의 단추·
   assert.deepEqual(quotedNames('없음'), []);
 });
 
-test('handover 완료 조건: 대사 확인 선택 → (읽기, 다음) → 초안 결과 → 근거 칩', () => {
+test('handover 완료 조건: 대사 확인 선택 → (읽기, 다음) → 초안 결과 → 근거 칩 → 되감기 모드', () => {
   const sc = scenarioOf('handover');
-  const [pick, read, draft, evid] = sc.steps;
+  const [pick, read, draft, evid, rew] = sc.steps;
   const s = emptyState('U-A1');
   assert.equal(pick.done(s), false);
   assert.equal(pick.done({ ...s, selected: 'U-A1/N-002' }), false);
@@ -49,6 +49,41 @@ test('handover 완료 조건: 대사 확인 선택 → (읽기, 다음) → 초�
   assert.equal(evid.done({ ...s, draftShown: true }), false);
   assert.equal(evid.done({ ...s, evidenceUsed: true }), true);
   assert.deepEqual(draft.preset, { from: '윤바다', to: '서하늘' });
+  // 5단계(R9-1 나): 고쳐 저장하는 것만으로는 완료가 아니고, 되감기 모드가 켜져야 완료. 읽기 전용이면 고칠 수 없으므로 건너뛴다
+  assert.equal(rew.id, 'edit-rewind');
+  assert.equal(rew.done(s), false);
+  assert.equal(rew.done({ ...s, saved: true, editing: false }), false);
+  assert.equal(rew.done({ ...s, rewinding: true }), true);
+  assert.equal(rew.done({ ...s, readOnly: true }), true);
+  assert.equal(rew.next, undefined);
+});
+
+test('handover 3단계(R9-4): 동작은 「인수인계 초안 만들기」 → 「초안 만들기」 둘이고, 사람 고르기는 보조 문구로', () => {
+  const draft = scenarioOf('handover').steps[2];
+  assert.deepEqual(quotedNames(draft.task), ['인수인계 초안 만들기', '초안 만들기']);
+  assert.doesNotMatch(draft.task, /윤바다|서하늘/); // 사람 이름은 본문에서 뺐다
+  assert.equal(draft.sub(emptyState()), '보내는·받는 사람은 이미 골라져 있어요');
+  assert.equal(draft.sub({ ...emptyState(), draftOpen: true }), '보내는·받는 사람은 이미 골라져 있어요');
+  assert.deepEqual(draft.preset, { from: '윤바다', to: '서하늘' }); // 미리 골라 두는 값은 그대로
+});
+
+test('handover 5단계(R9-1 나) 문구·보조 문구·짚기: 대사 확인 → 수정 → 저장 → 빈 곳 → 편집 되감기', () => {
+  const rew = scenarioOf('handover').steps[4];
+  assert.deepEqual(quotedNames(rew.task), ['대사 확인', '수정', '저장', '편집 되감기']);
+  const base = emptyState('U-A1');
+  assert.equal(rew.sub(base), null);
+  assert.match(rew.sub({ ...base, saved: true }), /편집 되감기/);
+  // 아직 고치지 않음: 고른 게 없으면 노드를, 고르면 「수정」 단추를, 양식이 열려 있으면 저장 단추를 짚는다
+  assert.equal(rew.target(base)[0].cy, 'node[label = "대사 확인"]');
+  assert.equal(rew.target({ ...base, selected: 'U-A1/N-001' })[0].sel, '[data-testid=btn-edit]');
+  assert.equal(rew.target({ ...base, selected: 'U-A1/N-001', draftOpen: true })[0].cy, 'node[label = "대사 확인"]'); // 초안이 열려 있으면 노드를 다시 눌러야 수정 단추가 보인다
+  assert.match(rew.target({ ...base, selected: 'U-A1/N-001', editing: true })[0].sel, /node-form-edit.*submit/);
+  // 저장 뒤: 노드가 골라져 있으면 빈 곳(표지), 개요면 「편집 되감기」 단추(안 보이면 빈 곳)
+  const saved = { ...base, saved: true };
+  assert.deepEqual(rew.target({ ...saved, selected: 'U-A1/N-001' }), [{ sel: '#graph', hint: BLANK_HINT }]);
+  assert.deepEqual(rew.target({ ...saved, draftOpen: true }), [{ sel: '#graph', hint: BLANK_HINT }]);
+  assert.equal(rew.target(saved)[0].sel, '[data-testid=btn-rewind]');
+  assert.equal(rew.target(saved)[1].hint, BLANK_HINT);
 });
 
 test('team 완료 조건: 펼침 → 찾기로 선택 → 주변만 보기 → 전체 보기로 돌아옴 → 인사이트 열기', () => {
@@ -103,13 +138,13 @@ test('handover 2단계 보조 문구: 「대사 확인」을 고른 상태면 �
   assert.ok(read.target({ ...emptyState(), selected: 'U-A1/N-001' })[0].sel);
   assert.equal(read.target(emptyState())[0].cy, 'node[label = "대사 확인"]');
   assert.match(read.task, /오른쪽을 아래로 내려/);
-  assert.equal(scenarioOf('handover').steps.filter((s) => s.sub).length, 1);
+  assert.equal(scenarioOf('handover').steps.filter((s) => s.sub).length, 3); // 2단계(다시 누르기)·3단계(미리 골라 둠)·5단계(저장 뒤 안내)
 });
 
 test('대상 짚기: 상태에 따라 후보가 바뀌고 모두 sel 또는 cy 선택자다', () => {
   for (const id of TOUR_IDS) {
     for (const st of scenarioOf(id).steps) {
-      for (const s of [emptyState(), { ...emptyState(), selected: 'U-A1/N-001' }, { ...emptyState(), draftOpen: true }, { ...emptyState(), insightOpen: true }, { ...emptyState(), nbhd: true }]) {
+      for (const s of [emptyState(), { ...emptyState(), selected: 'U-A1/N-001' }, { ...emptyState(), draftOpen: true }, { ...emptyState(), insightOpen: true }, { ...emptyState(), nbhd: true }, { ...emptyState(), saved: true }, { ...emptyState(), saved: true, selected: 'U-A1/N-001' }, { ...emptyState(), selected: 'U-A1/N-001', editing: true }, { ...emptyState(), rewinding: true }]) {
         const t = st.target(s);
         assert.ok(Array.isArray(t) && t.length > 0, `${id}/${st.id}`);
         for (const x of t) assert.ok(typeof x.sel === 'string' || typeof x.cy === 'string');
@@ -127,8 +162,11 @@ test('advance: 완료된 단계는 건너뛰고, 읽기(다음) 단계에서 멈
   assert.equal(advance(sc, 0, emptyState('U-A1')), 0);
   assert.equal(advance(sc, 0, { ...emptyState('U-A1'), selected: 'U-A1/N-001' }), 1); // 읽기 단계에서 멈춤
   assert.equal(advance(sc, 2, { ...emptyState('U-A1'), draftShown: true }), 3);
-  assert.equal(advance(sc, 2, { ...emptyState('U-A1'), draftShown: true, evidenceUsed: true }), 4);
+  assert.equal(advance(sc, 2, { ...emptyState('U-A1'), draftShown: true, evidenceUsed: true }), 4); // 5단계(되감기)에서 멈춤
   assert.equal(advance(sc, 4, emptyState()), 4);
+  assert.equal(advance(sc, 4, { ...emptyState('U-A1'), saved: true }), 4); // 저장만으로는 끝나지 않음
+  assert.equal(advance(sc, 4, { ...emptyState('U-A1'), rewinding: true }), 5); // 되감기 모드가 켜지면 끝 카드
+  assert.equal(advance(sc, 4, { ...emptyState('U-A1'), readOnly: true }), 5); // 읽기 전용이면 건너뜀
 });
 
 test('「?」: U-A1이면 handover, U-D1이면 team, 그 밖이면 고르기(null)', () => {

@@ -22,7 +22,7 @@ import { draftPanel } from './draft.js';
 import { currentDenseN, insightPanel } from './insight.js';
 import { issueEntry, issuePanel } from './issues.js';
 import { hiddenEntry, hiddenPanel } from './hidden.js';
-import { confirmText, doneText, failText, fillBand, hideBand, nodeChangeNote, revertBlock, rewindEntry, rewindPanel } from './rewind.js';
+import { confirmText, doneText, failText, fillBand, hideBand, nodeChangeNote, pointLabeler, revertBlock, rewindEntry, rewindPanel } from './rewind.js';
 import { renderBackupNudge } from './backup.js';
 import { backupAdvice, userChangeTimes } from '../rules/backup.js';
 import { hiddenNodesOf } from '../rules/hidden.js';
@@ -314,6 +314,7 @@ function start() {
   let draftShown = false; // 초안 결과가 그려졌음
   let evidenceUsed = false; // 초안의 근거 칩을 눌렀음
   let foundGid = null; // 「노드 찾기」로 고른 노드
+  let tourSaved = false; // 따라 하기를 시작한 뒤 저장이 한 번 성공했음(handover 5단계 안내용)
   let tour = null;
   const tourHook = () => { if (tour) tour.check(); };
   // 미해결·숨긴 노드·인사이트 패널(U-3): 열 때 「닫기」에 포커스, 닫으면 연 단추로 돌아간다(표 대화상자와 같게)
@@ -476,6 +477,7 @@ function start() {
 
   function afterSave(result, nextSelected = selected) {
     if (!result.ok) return result;
+    tourSaved = true;
     editing = null;
     selected = nextSelected;
     refresh();
@@ -487,6 +489,21 @@ function start() {
     const node = view.getNode(gid);
     if (!node || !DRAFT_TARGET_TYPES.includes(node.core_type)) return null;
     return el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft', onclick: () => openDraft(node.gid) }, '인수인계 초안 만들기');
+  }
+
+  // 「가져오기·내보내기」 창의 「폴더 연결」 탭을 바로 연다(import.js의 열기 함수는 탭 인자가 없어, 창을 연 뒤 탭 단추를 누른다)
+  function openFolderTab() {
+    openImport();
+    const tab = document.querySelector('[data-testid=import-tab-folder]');
+    if (tab) tab.click();
+  }
+
+  // 유니버스 개요의 폴더 연결 입구(9차 검토 R9-3): 탭이 창 안쪽에 있어 못 찾는 문제. 폴더를 쓸 수 없는 브라우저·읽기 전용·되감기 중에는 숨긴다
+  function folderEntry() {
+    if (!folder || !folder.state.supported || rw || app.readOnly) return null;
+    return el('p', { class: 'muted small', 'data-testid': 'folder-entry' },
+      '폴더로 함께 쓰기 — 공유 폴더에 두면 동료 지도와 묶입니다 ',
+      el('button', { type: 'button', class: 'link', 'data-testid': 'btn-folder-entry', onclick: openFolderTab }, '「폴더 연결」'));
   }
 
   function openDraft(targetGid) {
@@ -911,6 +928,7 @@ function start() {
         el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft-universe', onclick: () => openDraft(rootGid) }, '인수인계 초안 만들기'),
         el('button', { type: 'button', 'data-testid': 'btn-insight-universe', onclick: () => openInsight('', 'repeat') }, '인사이트 보기')),
         mergeButton(),
+        folderEntry(),
         el('p', { class: 'muted small', 'data-testid': 'insight-hint' }, '인사이트(반복 비효율 탭부터 열림): 유사 경험자 · 반복 비효율 · 밀집·공백(일이 몰린 사람, 담당자 없는 업무) · 흐름 변화 · 인수인계 위험(혼자만 아는 업무, 준비도, 파급 영향)')].filter(Boolean)); // append(null)은 "null" 글자를 넣으므로 거른다
       return;
     }
@@ -1142,7 +1160,7 @@ function start() {
     if (!rw || !rwPast) return hideBand(band);
     const pv = app.rewindPreview(rw.at);
     const reason = revertBlock({ baseReadOnly: app.baseReadOnly, nothing: !pv.ok || pv.ops.length === 0 });
-    fillBand(band, { at: rw.at, diff: rwPast.diff, canRevert: !reason, reason, onRevert: revertRewind, onBack: leaveRewind });
+    fillBand(band, { at: rw.at, diff: rwPast.diff, canRevert: !reason, reason, onRevert: revertRewind, onBack: leaveRewind, labelOf: pointLabeler(app.editPoints()) });
   }
 
   // 되감기를 켜고 끌 때 한 번: 편집으로 이어지는 머리 단추와 노드 추가 칸을 읽기 전용 상태에 맞춘다
@@ -1189,9 +1207,10 @@ function start() {
   function revertRewind() {
     if (!rw) return;
     const at = rw.at;
+    const labelOf = pointLabeler(app.editPoints()); // 같은 분의 시점은 초까지 보인다(되돌리면 시점이 늘어나므로 되돌리기 전에 만든다)
     const pv = app.rewindPreview(at);
     if (!pv.ok || !pv.ops.length) return window.alert(failText({ nothing: true }));
-    if (!window.confirm(confirmText(pv, at))) return;
+    if (!window.confirm(confirmText(pv, at, labelOf))) return;
     const r = app.rewindTo(at);
     if (!r.ok) return window.alert(failText(r.error));
     rw = null;
@@ -1200,7 +1219,7 @@ function start() {
     selected = null;
     syncRewindShell();
     refresh();
-    $('detail').prepend(el('p', { class: 'ok-notice', role: 'status', 'data-testid': 'rewind-done' }, doneText(at, r.counts, (r.skipped || []).length)));
+    $('detail').prepend(el('p', { class: 'ok-notice', role: 'status', 'data-testid': 'rewind-done' }, doneText(at, r.counts, (r.skipped || []).length, labelOf)));
   }
 
   function refresh() {
@@ -1496,6 +1515,10 @@ function start() {
     nbhd: !!nbhd,
     insightOpen: !!insight,
     insightKind: insight ? insight.kind : null,
+    editing: !!editing && editing.kind === 'node', // 노드 수정 양식이 열려 있음
+    saved: tourSaved,
+    rewinding: !!rw,
+    readOnly: app.readOnly,
   });
   if (embedMode) $('tour-open').hidden = true;
   else {
@@ -1505,7 +1528,7 @@ function start() {
       getCy: () => graph.cy,
       universeId: currentId,
       onOpenUniverse: openUniverse,
-      onStart: () => { draftShown = false; evidenceUsed = false; foundGid = null; },
+      onStart: () => { draftShown = false; evidenceUsed = false; foundGid = null; tourSaved = false; },
       onMake: () => createDialog.openMine(),
       canMake: !app.readOnly,
       toolsHint: () => !toolsOpen,

@@ -4,16 +4,20 @@ import { parseImportText } from '../model/import.js';
 import { validateDocument } from '../model/validate.js';
 
 /**
- * 내 파일 이름. 이름이 있으면 `이름-유니버스ID.json`, 없으면 `유니버스ID.json`.
- * 파일 이름에 못 쓰는 글자(\ / : * ? " < > |)와 공백 덩어리는 _로 바꾼다.
- * (CR-14 초안 C14-7은 "작성자 이름.json"이었으나 한 사람이 유니버스를 여럿 가질 수 있어 ID를 붙여 서로 덮어쓰지 않게 한다)
- * @param {{authorName?:string, universeId:string}} p
+ * 내 파일 이름(9차 검토 R9-3): 공유 폴더에서 한눈에 알아보도록 `유니버스 이름(작성자).json`.
+ * 작성자가 없으면 `유니버스 이름.json`, 유니버스 이름이 비면 ID로 대신한다.
+ * 같은 이름의 유니버스가 이 브라우저에 둘 이상이면(withId) 서로 덮어쓰지 않게 `…-유니버스ID.json`으로 ID를 붙인다.
+ * 파일 이름에 못 쓰는 글자(\ / : * ? " < > |)와 공백 덩어리는 _로 바꾸고, 앞뒤의 점·밑줄은 떼며, 각 부분은 60자까지.
+ * (CR-14 초안 C14-7은 "작성자 이름.json", 처음 구현은 `작성자-ID.json`이었다)
+ * @param {{authorName?:string, universeName?:string, universeId:string, withId?:boolean}} p
  */
-export function myFileName({ authorName, universeId }) {
+export function myFileName({ authorName, universeName, universeId, withId = false }) {
   const clean = (s) => String(s ?? '').replace(/[\\/:*?"<>|\s]+/g, '_').replace(/^[_.]+|[_.]+$/g, '').slice(0, 60);
   const id = clean(universeId) || 'universe';
-  const name = clean(authorName);
-  return name ? `${name}-${id}.json` : `${id}.json`;
+  const title = clean(universeName);
+  const author = clean(authorName);
+  const base = `${title || id}${author ? `(${author})` : ''}`;
+  return withId && title ? `${base}-${id}.json` : `${base}.json`;
 }
 
 /**

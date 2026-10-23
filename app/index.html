@@ -199,6 +199,8 @@
   .why { display: grid; gap: 2px; }
   .tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 10px; }
   .tab { padding: 4px 8px; font-size: 12px; white-space: nowrap; } /* 화면 점검 S-5: 탭 4개가 한 줄에 */
+  .insight .tabs { gap: 2px; } /* 9차 검토 U9-6: 인사이트 탭 5개가 기본 패널 폭(380px)에서 한 줄에 들어가게 촘촘히 */
+  .insight .tab { padding: 4px 3px; font-size: 11px; letter-spacing: -0.02em; }
   .tab.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: bold; }
   .patterns { display: grid; gap: 12px; margin-top: 8px; padding: 0; }
   .patterns > li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; gap: 6px; }

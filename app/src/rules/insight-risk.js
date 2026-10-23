@@ -8,6 +8,7 @@
 import { periodStatus } from '../view/describe.js';
 import { refGid } from '../view/view.js';
 import { SUBTYPE_HANDOVER_DOC, SUBTYPE_ROLE } from '../model/schema.js';
+import { josa } from '../model/josa.js';
 import { workFormMissing } from './form.js';
 import { openMemos, memoTarget } from './issues.js';
 
@@ -349,7 +350,7 @@ export function rippleExplain(result, universeId) {
   const w = result.works[0];
   if (w) rule.push({ text: `가장 많은 업무에 닿는 길목 업무: 「${w.work.label}」(${w.count}개 업무에 이어짐). 예: ${w.path.text}.`, evidence_ids: sorted(w.evidence) });
   const p = result.people[0];
-  if (p) rule.push({ text: `${p.person.label}이(가) 혼자 맡은 업무 ${p.sole_works}개가 막히면 ${p.count}개 업무가 함께 영향을 받습니다.`, evidence_ids: sorted(p.evidence) });
+  if (p) rule.push({ text: `${p.person.label}${josa(p.person.label, '이/가')} 혼자 맡은 업무 ${p.sole_works}개가 막히면 ${p.count}개 업무가 함께 영향을 받습니다.`, evidence_ids: sorted(p.evidence) });
   if (!rule.length) return null;
   return { target: `risk_ripple|${universeId}`, evidence_ids: sorted(rule.flatMap((s) => s.evidence_ids)), rule };
 }

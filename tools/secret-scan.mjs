@@ -12,6 +12,9 @@ export const SECRET_PATTERNS = [
   ['키 헤더에 넣은 값', /x-api-key["'\s:=]+["'][A-Za-z0-9_-]{20,}["']/gi],
   ['Bearer 토큰', /Bearer\s+[A-Za-z0-9._-]{30,}/g],
   ['AWS 액세스 키', /\bAKIA[0-9A-Z]{16}\b/g],
+  ['GitHub 토큰', /\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,})/g],
+  ['Slack 토큰', /\bxox[baprs]-[A-Za-z0-9-]{10,}/g],
+  ['api_key 대입(긴 값)', /api[_-]?key\s*[:=]\s*['"][A-Za-z0-9_-]{16,}/gi],
 ];
 
 const SKIP_DIRS = new Set(['node_modules', '.git', '.tmp']);

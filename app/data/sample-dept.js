@@ -3,7 +3,7 @@
 // 두 팀에 있는 윤바다(V-1002)는 사번 자동으로 같은 사람으로 이었다(D-03). 이 연결이 있어야 유사 경험자 계산이 팀을 넘어 동작한다(T-08).
 // 고치면 STAMP를 바꾼다.
 
-const STAMP = '2026-10-17T00:10:00+09:00'; // D8-2 다른 업무 판정 3건
+const STAMP = '2026-10-22T20:20:00+09:00'; // 검토9 D-1(b): 꼭지 노드에 설명(유니버스 설명과 같은 글). 앞서 D8-2 다른 업무 판정 3건
 
 export const SAMPLE_DEPT = {
   schema_version: '1.0',
@@ -18,7 +18,7 @@ export const SAMPLE_DEPT = {
     is_sample: true,
     created_at: STAMP,
   },
-  nodes: [{ id: 'N-000', core_type: 'root', label: '가상 운영부', hidden: false, created_at: STAMP, updated_at: STAMP }],
+  nodes: [{ id: 'N-000', core_type: 'root', label: '가상 운영부', description: '정산팀·행사팀·교육팀을 묶은 부서 유니버스. 여러 단계로 묶은 사례.', hidden: false, created_at: STAMP, updated_at: STAMP }],
   edges: [],
   events: [
     { id: 'E-001', type: 'created', occurred_at: '2026-10-01', recorded_at: STAMP, source: 'sample', payload: { target_kind: 'ref', target_id: 'U-T1' } },

@@ -93,6 +93,17 @@ export function normalizeEmpNo(empNo) {
 
 // 긴 글 상한(설명·메모·속성 값·단위·작성 주체). 저장소 용량을 지키기 위한 값이다
 export const TEXT_MAX = 2000;
+// 가져온 JSON의 모양 상한(검토9 S-2): 속성 키 수·태그 개수. 바꾸려면 여기 한 곳만 고친다
+export const ATTRS_MAX_KEYS = 50;
+export const TAGS_MAX = 50;
+
+// 수정 이력(updated)의 before/after에 올 수 있는 키(검토9 S-1). 노드·연결의 편집 필드는 commands.js의 NODE_EDITABLE·EDGE_EDITABLE과 같다.
+// hidden: 숨김·되살림, deleted: 완전히 삭제(노드만). 동일성 연결은 판정 값 status·method
+export const UPDATE_KEYS = {
+  node: ['label', 'description', 'attrs', 'tags', 'period', 'subtype', 'emp_no', 'exposed', 'hidden', 'deleted'],
+  edge: ['subtype', 'period', 'note', 'hidden'],
+  identity_link: ['status', 'method'],
+};
 
 // 12.2 events[].type → 화면 표시 이름(1.4)
 export const EVENT_TYPES = {
