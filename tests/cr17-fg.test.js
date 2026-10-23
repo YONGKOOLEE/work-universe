@@ -1,4 +1,6 @@
-// CR-17 F(승인 전 초안 브랜치 cr17-prep): 「관계자·연락처」에 업무와 「참조」로 이은 사람·조직(협업자)을 센다. 가상 문서로 고정한다.
+// CR-17 F·G(승인 전 초안 브랜치 cr17-prep): 인수인계 초안 규칙의 두 가지 변경을 가상 문서로 고정한다.
+//  F: 「관계자·연락처」에 업무와 「참조」로 이은 사람·조직(협업자)을 센다
+//  G: 「세부 업무·절차」의 대상 업무 자신 줄에서는 설명을 빼고 절차·사용 시스템만 남긴다
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildView } from '../app/src/view/view.js';
@@ -82,4 +84,30 @@ test('F: 참조도 수행도 없으면 지금처럼 이력 부족(받는 사람�
   assert.equal(item(none, '관계자_연락처').sentences.filter((s) => !s.text.startsWith('문의:')).length, 0);
   const noContact = mkDoc(U, [mkNode('N-001', 'work', '대사 확인'), mkNode('N-101', 'person', '가상인1'), mkNode('N-102', 'person', '가상인2')], [mkEdge('N-000', 'N-001', 'contains')]);
   assert.equal(item(draft(noContact, 'N-000'), '관계자_연락처').insufficient, true);
+});
+
+// ── G ──
+test('G: 대상이 업무이면 「세부 업무·절차」 대상 줄에 설명이 없고 절차·사용 시스템만, 「업무 개요」에는 설명이 그대로', () => {
+  const r = draft(docWith(), 'N-001');
+  assert.deepEqual(texts(r, '세부_업무_절차'), ['대사 확인 / 절차: 수집 후 대조 / 사용 시스템: 가상정산시스템']);
+  assert.deepEqual(texts(r, '업무_개요'), ['대사 확인: 매월 말 대조한다']);
+});
+
+test('G: 대상이 꼭지이면 업무마다 설명도 그대로 나온다(기존 동작)', () => {
+  const r = draft(docWith(), 'N-000');
+  const t = texts(r, '세부_업무_절차');
+  assert.ok(t.includes('대사 확인 — 매월 말 대조한다 / 절차: 수집 후 대조 / 사용 시스템: 가상정산시스템'));
+  assert.ok(t.includes('보고 작성 — 결과를 보고한다'));
+});
+
+test('G: 대상이 업무이고 절차·사용 시스템이 둘 다 없으면 세부에서 빠진다(개요에만, 기존 동작)', () => {
+  const r = draft(docWith(), 'N-002');
+  assert.equal(item(r, '세부_업무_절차').insufficient, true);
+  assert.deepEqual(texts(r, '업무_개요'), ['보고 작성: 결과를 보고한다']);
+});
+
+test('G: 대상 업무 아래 하위 업무는 설명을 그대로 쓴다', () => {
+  const doc = docWith([mkEdge('N-001', 'N-002', 'contains')]);
+  const r = draft(doc, 'N-001');
+  assert.deepEqual(texts(r, '세부_업무_절차'), ['대사 확인 / 절차: 수집 후 대조 / 사용 시스템: 가상정산시스템', '보고 작성 — 결과를 보고한다']);
 });

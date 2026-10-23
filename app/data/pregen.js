@@ -323,7 +323,7 @@ const FP = {
   "handover|U-A1/N-000|이전_인수인계|U-A1/N-011>U-A1/N-012": '699c8b7f',
   "handover|U-A1/N-000|유사_경험자|U-A1/N-011>U-A1/N-012": 'cf156094',
   "handover|U-C/N-101|업무_개요|U-C/N-202>U-C/N-201": 'fa081938',
-  "handover|U-C/N-101|세부_업무_절차|U-C/N-202>U-C/N-201": 'fb082476',
+  "handover|U-C/N-101|세부_업무_절차|U-C/N-202>U-C/N-201": 'b28c6b50',
   "handover|U-C/N-101|일정_마감|U-C/N-202>U-C/N-201": 'f0da42b5',
   "handover|U-C/N-101|주의사항|U-C/N-202>U-C/N-201": '041f61b4',
   "handover|U-C/N-101|진행_중|U-C/N-202>U-C/N-201": '0dc0f762',

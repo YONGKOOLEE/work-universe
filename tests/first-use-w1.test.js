@@ -95,7 +95,7 @@ test('FU-8: 이력 부족 항목마다 draft-fill-hint가 붙고, 내용이 있�
   assert.equal(q('draft-item-세부_업무_절차').querySelector('[data-testid=draft-fill-hint]'), null);
 }));
 
-// ── FU-18 조사의 근거 → CR-17 F로 규칙을 바꿈(2026-10-24, 승인 전 초안 브랜치) / FU-19는 아래에서 그대로(G는 별도 커밋) ──
+// ── FU-18·19 조사의 근거 → CR-17 F·G로 규칙을 바꿈(2026-10-24, 승인 전 초안 브랜치) ──
 test('FU-18(CR-17 F로 바뀜): 조직·사람을 업무에 「참조」로 이으면 「관계자·연락처」에 협업자로 나온다 — 이으지 않으면 여전히 이력 부족', () => {
   const doc = smallDoc({ persons: 3, withOrg: true });
   const view = viewOfDoc(doc);
@@ -115,14 +115,14 @@ test('FU-18(CR-17 F로 바뀜): 조직·사람을 업무에 「참조」로 이�
   assert.match(hit.sentences[0].text, /가상인3/);
 });
 
-test('FU-19: 대상이 업무이고 「절차」나 「사용 시스템」이 있으면 「업무 개요」와 「세부 업무·절차」에 같은 설명이 함께 나온다', () => {
+test('FU-19(CR-17 G로 바뀜): 대상이 업무이고 「절차」나 「사용 시스템」이 있으면 「세부 업무·절차」 대상 줄에는 설명 없이 절차·시스템만 나온다', () => {
   const doc = smallDoc({ workDescription: '매월 말 자료를 모아 대조한다', workAttrs: { 절차: '수집 후 대조' } });
   const view = viewOfDoc(doc);
   const base = { from: gid(doc, 'N-101'), to: gid(doc, 'N-102'), asOf: ASOF };
   const item = (r, k) => r.draft.items.find((i) => i.key === k).sentences.map((s) => s.text).join('|');
   const withAttr = buildHandoverDraft(view, { ...base, target: gid(doc, 'N-001') });
   assert.match(item(withAttr, '업무_개요'), /매월 말 자료를 모아 대조한다/);
-  assert.match(item(withAttr, '세부_업무_절차'), /매월 말 자료를 모아 대조한다/);
+  assert.equal(item(withAttr, '세부_업무_절차'), '점검 / 절차: 수집 후 대조'); // 예전: '점검 — 매월 말 자료를 모아 대조한다 / 절차: 수집 후 대조'
   // 절차·사용 시스템이 없으면 대상 업무 자신은 세부에서 빠진다(개요에만)
   const plain = smallDoc({ workDescription: '매월 말 자료를 모아 대조한다' });
   const r2 = buildHandoverDraft(viewOfDoc(plain), { ...base, target: gid(plain, 'N-001') });

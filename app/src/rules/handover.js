@@ -188,7 +188,7 @@ export function buildHandoverDraft(view, input) {
   for (const w of ordered) {
     if (w.gid === start.gid && !attr(w, '절차') && !attr(w, '사용 시스템')) continue; // 대상 업무 자신은 개요에 이미 있다
     const parts = [w.label];
-    if (w.description) parts.push(` — ${w.description}`);
+    if (w.description && w.gid !== start.gid) parts.push(` — ${w.description}`); // 대상 업무 자신의 설명은 「업무 개요」에 있으니 여기서는 절차·사용 시스템만(CR-17 G)
     if (attr(w, '절차')) parts.push(` / 절차: ${attr(w, '절차')}`);
     if (attr(w, '사용 시스템')) parts.push(` / 사용 시스템: ${attr(w, '사용 시스템')}`);
     items.세부_업무_절차.push(sentence(parts.join(''), [w.gid]));
