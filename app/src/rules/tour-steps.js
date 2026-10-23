@@ -138,7 +138,7 @@ const TEAM_STEPS = {
   insight: {
     // 마지막 단계(D-29): 「인사이트 보기」 → 내용이 있는 「반복 비효율」 탭. 인사이트의 기본 탭은 「인수인계 위험」이라 열린 뒤 탭을 한 번 더 누른다
     id: 'insight',
-    task: '「인사이트 보기」를 누르면 맨 먼저 「인수인계 위험」(한 사람만 해 본 일)이 열립니다. 이어서 「반복 비효율」 탭을 누르세요.',
+    task: '빈 곳을 눌러 선택을 풀고 「인사이트 보기」를 누르세요. 맨 먼저 「인수인계 위험」(한 사람만 해 본 일)이 열립니다. 이어서 「반복 비효율」 탭을 누르세요.',
     target: (s) => (s.insightOpen ? [{ sel: '[data-testid=tab-repeat]' }]
       : s.selected || s.draftOpen ? [{ sel: '#graph', hint: BLANK_HINT }]
         : [{ sel: '[data-testid=btn-insight-universe]' }]),

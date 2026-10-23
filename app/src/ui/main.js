@@ -816,7 +816,7 @@ function start() {
     const edgeId = parseGid(link.edge_gid).local_id;
     const title = `${link.relation} ${link.other.label}`;
     return el('div', { class: 'row link-tools' },
-      el('button', { type: 'button', class: 'small-btn', title: '관계·상대·기간·메모 고치기', onclick: () => { editing = { kind: 'edge-edit', edgeId, title }; renderPanel(); } }, '수정'),
+      el('button', { type: 'button', class: 'small-btn', title: '관계·상대·기간·메모 고치기', onclick: () => { editing = { kind: 'edge-edit', edgeId, title }; renderPanel(); } }, '연결 수정'),
       el('button', { type: 'button', class: 'small-btn danger', onclick: () => {
         if (!window.confirm(`연결 「${title}」${josa(title, '을/를')} 숨깁니다. 기록은 남습니다.`)) return;
         const r = app.hideEdge(edgeId);
@@ -1070,7 +1070,7 @@ function start() {
           const node = view.getNode(r.artifact);
           const wlabel = r.works.map((w) => (view.getNode(w) || { label: w }).label).join('·');
           const alabel = node ? node.label : '인수인계서';
-          $('detail').prepend(el('p', { class: 'ok-notice', role: 'status', 'data-testid': 'confirm-done' }, `인수인계서로 저장했습니다 — 「${alabel}」${josa(alabel, '이/가')} 「${wlabel}」의 산출물과 이력에 남았습니다. 현재 담당은 그대로입니다 — 담당을 넘기려면 업무의 수행 연결을 「연결 수정」에서 기간으로 바꾸세요.`));
+          $('detail').prepend(el('p', { class: 'ok-notice', role: 'status', 'data-testid': 'confirm-done' }, `인수인계서로 저장했습니다 — 「${alabel}」${josa(alabel, '이/가')} 「${wlabel}」의 산출물과 이력에 남았습니다. 현재 담당은 그대로입니다 — 담당을 넘기려면 업무를 누르고 「연결된 노드」에서 보내는 사람의 「수행」 줄 옆 「연결 수정」으로 끝 날짜를 넣고, 받는 사람은 「연결 추가」에서 「수행」으로 이으세요.`));
           $('detail').parentElement.scrollTop = 0;
           graph.zoomTo(view.canonical(r.artifact));
           return saved;

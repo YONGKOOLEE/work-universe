@@ -512,7 +512,7 @@ async function checkBrowser(browser, port) {
   check('R-03 ① 항목에 근거 링크가 붙는다(관계자: 한가람, 이전 인수인계: 문서·구두 두 건)', (await text(s.cdp, '[data-testid=draft-item-관계자_연락처]')).includes('한가람') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=draft-item-이전_인수인계] .evidence').length")) === 3 && (await text(s.cdp, '[data-testid=draft-item-이전_인수인계]')).includes('2026-09-30 윤바다 → 서하늘'));
   // N-5: 유니버스 전체가 대상이면 비교할 다른 업무가 없어 '해당 없음'(이력 부족과 구별). R-03 ② 이력 부족은 교육팀 신규 과정 단계에서 확인
   const simItem = await text(s.cdp, '[data-testid=draft-item-유사_경험자]');
-  check('N-5 유사 경험자: 비교했지만 해당자 없음 → "해당 없음"과 이유(이력 부족과 구별)', simItem.includes('해당 없음') && simItem.includes('비교할 다른 업무가 없습니다') && !simItem.includes('이력 부족'), simItem.slice(0, 120));
+  check('N-5 유사 경험자: 비교했지만 해당자 없음 → "해당 없음"과 이유(이력 부족과 구별)', simItem.includes('해당 없음') && simItem.includes('견줄 다른 업무가 없습니다') && !simItem.includes('이력 부족'), simItem.slice(0, 120));
   check('숨긴 노드가 근거면 "숨김 처리된 노드"로 표시(점검표 양식을 숨긴 상태)', (await text(s.cdp, '[data-testid=draft-item-산출물_문서]')).includes('점검표 양식(숨김 처리된 노드)'));
   // 근거를 누르면 패널은 그대로 두고 그래프에서 그 노드를 보여 준다
   // CR-6 새 항목: 절차·마감·주의사항·진행 중·문의 연락처가 실제로 보인다
@@ -1995,7 +1995,7 @@ async function checkBrowser(browser, port) {
   await evaluate(s.cdp, `window.__wu.select('U-A1/${fb17Saved.id}')`);
   await sleep(250);
   const fb17Btn = await evaluate(s.cdp, "(() => { const b = document.querySelector('#detail .link-tools button'); return b ? { text: b.textContent, title: b.title } : null; })()");
-  check('연결 줄 「수정」 단추의 title이 관계·상대·기간·메모 고치기', !!fb17Btn && fb17Btn.text === '수정' && fb17Btn.title === '관계·상대·기간·메모 고치기', JSON.stringify(fb17Btn));
+  check('연결 줄 「수정」 단추의 title이 관계·상대·기간·메모 고치기', !!fb17Btn && fb17Btn.text === '연결 수정' && fb17Btn.title === '관계·상대·기간·메모 고치기', JSON.stringify(fb17Btn));
   await evaluate(s.cdp, "document.querySelector('#detail .link-tools button').click()");
   await sleep(200);
   const fb17Edit = await evaluate(s.cdp, "(() => { const f = document.querySelector('#detail [data-testid=edge-edit-form]'); if (!f) return null; const q = (id) => f.querySelector('[data-testid=' + id + ']'); const r = q('edge-edit-type').getBoundingClientRect(); return { rel: q('edge-edit-type').value, other: q('edge-edit-other').value, dir: q('edge-edit-direction').value, hint: q('edge-edit-hint').textContent, size: r.width > 0 && r.height > 0 }; })()");

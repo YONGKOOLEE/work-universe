@@ -142,7 +142,7 @@ test('초안 안내: 꼭지 범위가 화면의 업무를 모두 덮으면(부�
   const resolve = (id) => SAMPLES.find((s) => s.universe.id === id);
   for (const id of ['U-A1', 'U-D1', 'U-T1']) {
     const v = buildView(resolve(id), resolve);
-    assert.match(scopeHint(v, `${id}/${resolve(id).universe.root_node_id}`, '없음'), /화면 안에 비교할 다른 업무가 없습니다/, id);
+    assert.match(scopeHint(v, `${id}/${resolve(id).universe.root_node_id}`, '없음'), /이 지도 안에 견줄 다른 업무가 없습니다/, id);
   }
   const v = buildView(resolve('U-D1'), resolve);
   assert.equal(scopeHint(v, 'U-A1/N-001', '없음'), '없음');

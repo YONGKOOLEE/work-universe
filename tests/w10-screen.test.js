@@ -282,7 +282,7 @@ test('R11-11: 기본 순서는 D-29(펼치기 → 찾기 → 주변만 → 전�
 test('R11-11: 기본 판의 마지막 단계 — 「인사이트 보기」 → 「반복 비효율」 탭을 눌러야 끝, 열린 탭이 인수인계 위험이면 아직', () => {
   const last = scenarioOf('team').steps[4];
   assert.equal(last.id, 'insight');
-  assert.equal(last.task, '「인사이트 보기」를 누르면 맨 먼저 「인수인계 위험」(한 사람만 해 본 일)이 열립니다. 이어서 「반복 비효율」 탭을 누르세요.');
+  assert.equal(last.task, '빈 곳을 눌러 선택을 풀고 「인사이트 보기」를 누르세요. 맨 먼저 「인수인계 위험」(한 사람만 해 본 일)이 열립니다. 이어서 「반복 비효율」 탭을 누르세요.');
   assert.deepEqual(quotedNames(last.task), ['인사이트 보기', '인수인계 위험', '반복 비효율']);
   const s = emptyState('U-D1');
   assert.equal(last.done(s), false);

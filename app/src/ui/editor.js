@@ -129,7 +129,8 @@ function attrsEditor(attrs = {}) {
   const rows = el('div', { class: 'attrs-rows' });
   const addRow = (k = '', v = '') => {
     const key = el('input', { placeholder: '이름(예: 주기)', value: k, class: 'attr-key' });
-    const val = el('input', { placeholder: '값(예: 매월)', value: String(v), class: 'attr-val' });
+    const ATTR_HINTS = { 절차: '값(예: ① 자료 수집 ② 대조 ③ 보고)', 주의사항: '값(예: 월말에는 조회가 느림)', 마감: '값(예: 매월 5일까지)', '관련 문서': '값(예: 공용 문서함 > 정산)', '사용 시스템': '값(예: 가상정산시스템)' };
+    const val = el('input', { placeholder: ATTR_HINTS[k] || '값(예: 매월)', value: String(v), class: 'attr-val' });
     const row = el('div', { class: 'attr-row' }, key, val, el('button', { type: 'button', title: '이 속성 지우기', onclick: () => row.remove() }, '×'));
     rows.append(row);
   };

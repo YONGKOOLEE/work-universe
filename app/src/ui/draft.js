@@ -66,7 +66,7 @@ export function scopeHint(view, targetGid, reason) {
   const t = view.getNode(targetGid);
   const inScope = new Set(scopeWorks(view, targetGid).map((g) => view.canonical(g)));
   const others = view.nodes.some((n) => n.core_type === 'work' && !n.hidden && !inScope.has(n.gid));
-  if (t && t.core_type === 'root' && !others) return `${reason}. 유니버스 전체가 대상이라 화면 안에 비교할 다른 업무가 없습니다. 업무 하나를 대상으로 하거나, 더 큰 묶음(팀·부서) 화면에서 만들면 다른 업무와 비교합니다`;
+  if (t && t.core_type === 'root' && !others) return `${reason}. 업무 지도 전체를 대상으로 하면 이 지도 안에 견줄 다른 업무가 없습니다. 업무 하나를 대상으로 고르거나, 여러 팀을 묶은 지도에서 만들면 비슷한 일을 해 본 사람을 찾습니다`;
   return reason;
 }
 
