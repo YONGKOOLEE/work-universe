@@ -178,7 +178,8 @@ export function isAssigneeSentence(name) {
   return false;
 }
 /** 「관련 문서」 절의 줄이 문서 이름이 아니라 문장인지(isAssigneeSentence). 「…모음」「…묶음」은 문서 이름으로 본다 */
-export const isDocSentence = (t) => !/[모묶]음$/.test(String(t).trim()) && isAssigneeSentence(t);
+// 「보관함」「결재함」처럼 상자 이름(…함)은 문서·보관 장소 이름이다(3차 재검증 R13-4)
+export const isDocSentence = (t) => !/[모묶]음$/.test(String(t).trim()) && !/(보관|결재|접수|수신|발신|우편|사서|문서)함$/.test(String(t).trim()) && isAssigneeSentence(t);
 /**
  * 담당 절 줄의 값이 사람·역할 이름으로 읽을 만한지(R11-2). 문장(isAssigneeSentence),
  * 공백 3개 초과, 40자 초과는 이름이 아니다. 한글 한 낱말이면 이름 모양이거나 역할 낱말로 끝나야 한다(「외부」「총괄」은 아니다).

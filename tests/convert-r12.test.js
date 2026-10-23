@@ -142,3 +142,22 @@ test('R12-4: 담당 줄은 값 단위로 거른다 — 문장 값 하나가 있�
 test('R12-7: previewRenameWork 스위치가 CONVERT_RULES.cr17j에 있고 기본은 꺼짐(미리 보기에서 지도 이름을 고쳐도 업무 이름은 그대로)', () => {
   assert.equal(CONVERT_RULES.cr17j.previewRenameWork, false);
 });
+
+// 3차 재검증 R13-3·R13-4·R13-2(2026-10-24): 복성이 아닌 5자 명사구는 이름이 아니다, 상자 이름(…함)은 문장이 아니다, 작성 주체 안내는 "읽지 못함"
+test('R13-3: 복성으로 시작하지 않는 한글 5자는 담당 이름 후보가 아니다(「가상접수표」), 복성 5자는 후보(「선우하늘이」「남궁민수아」)', () => {
+  assert.equal(looksLikeAssignee('가상접수표'), false);
+  assert.equal(looksLikeAssignee('월말정산업무'), false);
+  assert.equal(looksLikeAssignee('선우하늘이'), true);
+  assert.equal(looksLikeAssignee('남궁민수아'), true);
+});
+
+test('R13-4: 「보관함」「결재함」「가상 보관함」은 문서·장소 이름이라 문장이 아니고, 「처리함」·마침표 문장은 문장', () => {
+  for (const t of ['보관함', '결재함', '접수함', '가상 보관함']) assert.equal(isDocSentence(t), false, t);
+  for (const t of ['처리함', '이 문서는 매년 고친다.']) assert.equal(isDocSentence(t), true, t);
+});
+
+test('R13-2: C-NO-OWNER 안내는 "원문에 없다"가 아니라 "읽지 못했다"(그냥 「작성:」·날짜뿐인 값은 읽지 않음)', () => {
+  const t = noteText({ code: 'C-NO-OWNER' });
+  assert.ok(t.startsWith('원문에서 작성 주체를 읽지 못했습니다'), t);
+  assert.ok(t.includes('그냥 「작성:」 줄이나 날짜뿐인 값'), t);
+});
