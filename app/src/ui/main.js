@@ -46,6 +46,7 @@ import { DOC_EXAMPLE } from '../../data/doc-example.js';
 import { filterDisplay, neighborhoodDisplay, personsIn, searchNodes } from '../view/explore.js';
 import { EXPLORE, exploreBar } from './explore.js';
 import { createTour } from './tour.js';
+import { helpPanel } from './help.js';
 import { scenarioOf } from '../rules/tour-steps.js';
 import { createFieldId, fillMineDefaults } from '../rules/new-universe.js';
 
@@ -1636,7 +1637,15 @@ function start() {
       canMake: !app.readOnly,
       toolsHint: () => !toolsOpen,
     });
-    $('tour-open').addEventListener('click', () => tour.openHelp());
+    // 머리글 「?」(FU-9): 작은 도움말 상자를 연다. 「따라 하기 다시 보기」가 예전 「?」 동작(tour.openHelp)이다. Esc로도 닫힌다(dialog 기본)
+    const helpBox = $('help-dialog');
+    $('tour-open').addEventListener('click', () => {
+      helpBox.replaceChildren(helpPanel({
+        onTour: () => { helpBox.close(); tour.openHelp(); },
+        onClose: () => helpBox.close(),
+      }));
+      if (!helpBox.open) helpBox.showModal();
+    });
   }
 
   refresh();

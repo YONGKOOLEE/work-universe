@@ -364,6 +364,16 @@
   .start-way:disabled { border-color: var(--line); background: var(--panel); }
   .start-way strong { font-size: 18px; color: var(--accent); }
   .start-way span { word-break: keep-all; color: var(--text); font-size: 14px; line-height: 1.5; }
+  .start-way span.way-note { color: var(--muted); font-size: 12px; line-height: 1.4; }
+  #help-dialog { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto; scrollbar-color: var(--line) var(--panel-2); }
+  #help-dialog p { margin: 0 0 8px; line-height: 1.5; }
+  #help-dialog h3 { margin: 14px 0 6px; font-size: 14px; color: var(--accent); }
+  #help-dialog dl, #help-dialog ul { margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13px; line-height: 1.5; }
+  #help-dialog ul { list-style: none; }
+  #help-dialog dl { grid-template-columns: max-content 1fr; column-gap: 12px; }
+  #help-dialog dt { font-weight: bold; white-space: nowrap; }
+  #help-dialog dd { margin: 0 0 2px; color: var(--muted); }
+  #help-dialog .row { margin-top: 14px; }
   .start-small { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   details.start-more > summary { cursor: pointer; font-size: 16px; color: var(--accent); padding: 4px 0; }
   details.start-more[open] > summary { margin-bottom: 12px; }
@@ -379,7 +389,7 @@
   <button type="button" id="create-open" class="primary">새 유니버스</button>
   <button type="button" id="group-open">유니버스 묶기</button>
   <button type="button" id="import-open" title="업무정의서 문서를 붙여 넣어 초벌로 바꾸거나, JSON 파일을 열거나, 지금 유니버스를 JSON 파일로 내려받습니다">가져오기·내보내기</button>
-  <button type="button" id="tour-open" class="tour-open" data-testid="tour-open" title="따라 하기 다시 보기" aria-label="따라 하기 다시 보기">?</button>
+  <button type="button" id="tour-open" class="tour-open" data-testid="tour-open" title="도움말(용어 설명·따라 하기 다시 보기)" aria-label="도움말">?</button>
   <button type="button" id="settings-open" title="생성 방식과 작성자 이름을 정합니다">설정</button>
 </header>
 <div id="start-screen"></div>
@@ -447,6 +457,7 @@
     <div class="row"><button type="submit">묶기</button><button type="button" id="group-cancel">취소</button></div>
   </form>
 </dialog>
+<dialog id="help-dialog" data-testid="help-box" aria-labelledby="help-title"></dialog>
 <dialog id="import-dialog" class="wide" aria-labelledby="import-title"></dialog>
 <dialog id="table-dialog" class="wide" aria-labelledby="table-title"></dialog>
 <script src="app.js"></script>

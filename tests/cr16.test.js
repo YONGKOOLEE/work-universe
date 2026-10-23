@@ -116,7 +116,7 @@ test('WHY_STEPS: 세 칸(전 → 기록이 쌓이는 업무 지도 → 후), 제
   assert.equal(WHY_TITLE, '담당자가 바뀌어도 끊기지 않는 업무 지도');
   assert.equal(WHY_STEPS.length, 3);
   assert.deepEqual(WHY_STEPS.map((s) => s.head), ['담당자가 바뀔 때', '기록이 쌓이는 업무 지도', '근거 달린 인수인계 초안 · 혼자만 아는 업무 경고']);
-  assert.deepEqual(WHY_STEPS.map((s) => s.body), ['머릿속에서만 넘어가던 업무', '담당·메모·산출물을 그때그때', '자동으로']);
+  assert.deepEqual(WHY_STEPS.map((s) => s.body), ['머릿속에서만 넘어가던 업무', '담당·메모·산출물을 그때그때', 'AI가 기록만 보고 쓰고, 앱이 근거를 검사합니다']); // 셋째 칸: '자동으로' → AI가 하는 일(처음 사용 점검 FU-4, 2026-10-24)
   for (const s of WHY_STEPS) assert.ok(!/유니버스|노드|꼭지/.test(`${s.head} ${s.body}`), s.head);
   assert.ok(TERM_NOTE.includes('유니버스 = 업무 지도 하나'));
 });

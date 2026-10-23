@@ -187,6 +187,8 @@ async function fillPanelForm(cdp, fields) {
 const nullTextSpots = (cdp) => evaluate(cdp, "(() => { const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); const out = []; while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') out.push(w.currentNode.parentElement.id || w.currentNode.parentElement.className || w.currentNode.parentElement.tagName); return out; })()");
 const panelMessage = (cdp) => evaluate(cdp, "(() => { const m = document.querySelector('#detail [data-testid=form-message]'); return m ? { code: m.dataset.code || '', text: m.textContent } : null; })()");
 const clickTestId = (cdp, id) => evaluate(cdp, `document.querySelector('[data-testid=${id}]').click()`);
+// 머리글 「?」는 이제 도움말 상자를 연다(FU-9, 처음 사용 W2). 예전 「?」 동작(따라 하기 다시 보기)은 상자의 「따라 하기 다시 보기」 단추다
+const openTourViaHelp = async (cdp) => { await clickTestId(cdp, 'tour-open'); await sleep(150); await clickTestId(cdp, 'help-tour'); };
 
 const text = (cdp, sel) => evaluate(cdp, `(document.querySelector(${JSON.stringify(sel)}) || {}).textContent || ''`);
 
@@ -646,6 +648,11 @@ async function checkBrowser(browser, port) {
     check('시작 화면에 "null" 글자 없음', await evaluate(s.cdp, "(() => { const w = document.createTreeWalker(document.getElementById('start-screen'), NodeFilter.SHOW_TEXT); while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') return false; return true; })()"));
     await evaluate(s.cdp, 'window.scrollTo(0, 0)');
     await shot(s.cdp, `${browser.name}-0-start`);
+    // ── 처음 사용 W2(2026-10-24, FU-4·FU-11 일부): 「왜」 셋째 칸에 AI가 하는 일, 팀 카드 아래 한 줄. 높이는 위 whyFold(1366×768에서 잰 값)로 확인 ──
+    const w2Start = await evaluate(s.cdp, "(() => { const steps = [...document.querySelectorAll('[data-testid=why-step]')]; const n = document.querySelector('[data-testid=start-way-team-note]'); const r = n ? n.getBoundingClientRect() : { width: 0, height: 0 }; return { third: steps[2] ? steps[2].textContent : '', hasAi: steps[2] ? /AI/.test(steps[2].textContent) : false, note: n ? n.textContent : null, noteSize: r.width > 0 && r.height > 0, noteInTeam: !!(n && n.closest('[data-testid=start-way-team]')), noteFont: n ? getComputedStyle(n).fontSize : '' }; })()");
+    check('처음 사용 W2(FU-4) 「왜」 덩어리 셋째 칸에 「AI」 글자: 머리(근거 달린 인수인계 초안 · 혼자만 아는 업무 경고)는 그대로, 본문 「AI가 기록만 보고 쓰고, 앱이 근거를 검사합니다」', w2Start.hasAi && w2Start.third.includes('근거 달린 인수인계 초안 · 혼자만 아는 업무 경고') && w2Start.third.includes('AI가 기록만 보고 쓰고, 앱이 근거를 검사합니다'), w2Start.third);
+    check('처음 사용 W2(FU-4) 1366×768에서 「AI」 본문을 넣은 뒤에도 세 갈래 카드 세 장의 아래가 모두 768px 안(CR-16 whyFold와 같은 측정)', whyFold.length === 3 && whyFold.every((c) => c.w > 0 && c.bottom <= 768), JSON.stringify(whyFold));
+    check('처음 사용 W2(FU-11) 「팀 업무를 한눈에 보고 싶어요」 카드 안(설명 아래)에 작은 글씨 안내 「팀원 각자 만든 지도는 공유 폴더(「폴더 연결」)나 「가져오기」로 모아 묶습니다」가 보임(크기 있음, 12px)', w2Start.note === '팀원 각자 만든 지도는 공유 폴더(「폴더 연결」)나 「가져오기」로 모아 묶습니다' && w2Start.noteSize && w2Start.noteInTeam && w2Start.noteFont === '12px', JSON.stringify(w2Start));
     // ── CR-13 A(2026-10-18) 시작 화면 세 갈래 + 앱 안 따라 하기 ──
     // 바꾼 이유: 예전에는 「샘플 바로 열기」(start-primary)로 R-08 "첫 화면에서 탐색을 시작할 수 있음"을 확인했다. 이제 첫 화면의 중심은
     // 「무엇을 하고 싶어요?」 세 갈래 카드라서 R-08은 카드로 확인하고, 「샘플 바로 열기」는 따라 하기 없이 열리는 별도 점검으로 남긴다.
@@ -834,10 +841,36 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, "document.getElementById('create-cancel').click()");
     await sleep(150);
     // 「?」로 다시 시작(U-A1이면 handover), 「건너뛰기」로 닫기, 대상 표시도 사라짐
-    await clickTestId(s.cdp, 'tour-open');
+    await openTourViaHelp(s.cdp);
     await sleep(300);
     ti = await tourInfo();
-    check('CR-13 A 머리글 「?」(title 따라 하기 다시 보기): 월말 정산 화면에서는 인수인계 따라 하기가 처음부터 다시 시작됨', ti.mode === 'step' && ti.scenario === 'handover' && ti.index === 0 && (await evaluate(s.cdp, "document.getElementById('tour-open').title")) === '따라 하기 다시 보기', JSON.stringify(ti));
+    // 처음 사용 W2(FU-9)로 바뀜: 「?」는 도움말 상자를 열고(title 「도움말…」), 상자의 「따라 하기 다시 보기」가 예전 「?」 동작이다
+    check('CR-13 A 머리글 「?」 → 도움말 상자의 「따라 하기 다시 보기」(처음 사용 W2로 바뀜): 월말 정산 화면에서는 인수인계 따라 하기가 처음부터 다시 시작됨, 상자는 닫힘', ti.mode === 'step' && ti.scenario === 'handover' && ti.index === 0 && (await evaluate(s.cdp, "document.getElementById('tour-open').title")).startsWith('도움말') && !(await evaluate(s.cdp, "document.getElementById('help-dialog').open")), JSON.stringify(ti));
+    await evaluate(s.cdp, "document.querySelector('[data-testid=tour-skip]').click()");
+    await sleep(200);
+    // ── 처음 사용 W2(2026-10-24, FU-9) 「?」 도움말 상자: 보임(크기)·용어 4개·생성 방식 3개·「따라 하기 다시 보기」·Esc로 닫힘·"null" 없음 ──
+    await clickTestId(s.cdp, 'tour-open');
+    await sleep(250);
+    const hb = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=help-box]'); if (!b) return null; const r = b.getBoundingClientRect(); const q = (id) => document.querySelector('[data-testid=' + id + ']'); const t = q('help-tour'); return { open: b.open, w: r.width, h: r.height, terms: [...document.querySelectorAll('[data-testid=help-terms] dt')].map((e) => e.textContent), gen: [...document.querySelectorAll('[data-testid=help-gen] dt')].map((e) => e.textContent), intro: (q('help-intro') || {}).textContent || '', tour: t ? t.textContent : null, tourSize: t ? t.getBoundingClientRect().width > 0 : false, close: (q('help-close') || {}).textContent || '', text: b.textContent, inView: r.top >= 0 && r.bottom <= window.innerHeight }; })()");
+    check('처음 사용 W2(FU-9) 「?」 → 도움말 상자가 열리고 크기가 있으며 화면 안에 들어옴(따라 하기는 아직 시작되지 않음)', !!hb && hb.open === true && hb.w > 0 && hb.h > 0 && hb.inView && (await tourInfo()).mode === 'off', JSON.stringify(hb && { ...hb, text: '' }));
+    check('처음 사용 W2(FU-9) 도움말 한 줄 설명과 용어 4개(업무 지도(유니버스)·노드·꼭지·근거 칩)·생성 방식 3개(사전 생성·규칙 기반·Claude API)', !!hb && hb.intro.includes('누가 언제 무엇을 했는지 기록해 두고') && hb.intro.includes('「혼자만 아는 업무」 경고') && JSON.stringify(hb.terms) === JSON.stringify(['업무 지도(유니버스)', '노드', '꼭지', '근거 칩']) && JSON.stringify(hb.gen) === JSON.stringify(['사전 생성', '규칙 기반', 'Claude API']), JSON.stringify(hb && { terms: hb.terms, gen: hb.gen }));
+    check('처음 사용 W2(FU-9) 도움말 상자에 「따라 하기 다시 보기」(크기 있음)와 「닫기」 단추가 있고 "null" 글자가 없음', !!hb && hb.tour === '따라 하기 다시 보기' && hb.tourSize && hb.close === '닫기' && !hb.text.includes('null'));
+    await shot(s.cdp, `${browser.name}-0c-help-box`);
+    await s.cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await s.cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await sleep(200);
+    check('처음 사용 W2(FU-9) Esc로 도움말 상자가 닫히고 따라 하기도 시작되지 않음', !(await evaluate(s.cdp, "document.getElementById('help-dialog').open")) && (await tourInfo()).mode === 'off');
+    await clickTestId(s.cdp, 'tour-open');
+    await sleep(200);
+    await clickTestId(s.cdp, 'help-close');
+    await sleep(150);
+    check('처음 사용 W2(FU-9) 상자의 「닫기」로도 닫힘', !(await evaluate(s.cdp, "document.getElementById('help-dialog').open")) && (await tourInfo()).mode === 'off');
+    await clickTestId(s.cdp, 'tour-open');
+    await sleep(200);
+    await clickTestId(s.cdp, 'help-tour');
+    await sleep(300);
+    ti = await tourInfo();
+    check('처음 사용 W2(FU-9) 「따라 하기 다시 보기」 → 상자가 닫히고 따라 하기 카드 1/n(인수인계 1단계)이 보임', ti.mode === 'step' && ti.scenario === 'handover' && ti.index === 0 && !(await evaluate(s.cdp, "document.getElementById('help-dialog').open")) && /^따라 하기 1\/\d+/.test((await text(s.cdp, '[data-testid=tour-card] .tour-count')).trim()), JSON.stringify(ti));
     await evaluate(s.cdp, "document.querySelector('[data-testid=tour-skip]').click()");
     await sleep(200);
     const marks = await tourMarks();
@@ -845,7 +878,7 @@ async function checkBrowser(browser, port) {
     // 깜빡임 대신 테두리(prefers-reduced-motion): 그래프 노드 표시가 계속 켜져 있고, 화면 요소는 애니메이션이 없다
     await s.cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
     await reloadReady();
-    await clickTestId(s.cdp, 'tour-open');
+    await openTourViaHelp(s.cdp);
     await sleep(200);
     const reducedSamples = [];
     for (let i = 0; i < 4; i += 1) { reducedSamples.push(await evaluate(s.cdp, "window.__wu.cy.nodes('.tour-target').length")); await sleep(380); }
@@ -859,7 +892,7 @@ async function checkBrowser(browser, port) {
     await s.cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: '' }] });
     // 보통(깜빡임) 모드의 노드 표시는 켜졌다 꺼졌다 한다
     await reloadReady();
-    await clickTestId(s.cdp, 'tour-open');
+    await openTourViaHelp(s.cdp);
     const blinkSamples = [];
     for (let i = 0; i < 8; i += 1) { blinkSamples.push(await evaluate(s.cdp, "window.__wu.cy.nodes('.tour-target').length")); await sleep(240); }
     check('CR-13 A 보통 모드: 짚은 노드가 깜빡임(켜짐·꺼짐이 모두 관찰됨)', blinkSamples.includes(0) && blinkSamples.includes(1), JSON.stringify(blinkSamples));
@@ -943,7 +976,7 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, "location.hash = 'U-K1'; location.reload()").catch(() => {});
     await sleep(500);
     await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-K1' && window.__wu.cy.nodes().length > 0", 8000);
-    await clickTestId(s.cdp, 'tour-open');
+    await openTourViaHelp(s.cdp);
     await sleep(250);
     check('CR-13 A 「?」: 월말 정산·가상 운영부가 아닌 화면(U-K1)에서는 두 시나리오를 고르는 카드', (await tourInfo()).mode === 'pick' && (await text(s.cdp, '[data-testid=tour-pick-handover]')).includes('인수인계 초안 만들기') && (await text(s.cdp, '[data-testid=tour-pick-team]')).includes('팀 업무 한눈에 보기'));
     await evaluate(s.cdp, "document.querySelector('[data-testid=tour-pick-team]').click()");
@@ -3018,7 +3051,7 @@ async function checkBrowser(browser, port) {
       const hist = await text(s.cdp, '[data-testid=history]');
       check('W3 FU-15 이력의 「수정 — 속성」이 원문 JSON 없이 바뀐 값만(마감: 월 마감 후 5영업일 이내 → 월 마감 후 3영업일 이내)', hist.includes('수정 — 속성: 마감: 월 마감 후 5영업일 이내 → 월 마감 후 3영업일 이내') && !hist.includes('{'), hist.slice(-300));
       // FU-6 + 따라 하기: 노드를 기다리는 단계에서 「← 지도 전체 보기」를 눌러도 따라 하기 상태가 깨지지 않는다
-      await clickTestId(s.cdp, 'tour-open');
+      await openTourViaHelp(s.cdp);
       await sleep(300);
       await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
       await sleep(300);

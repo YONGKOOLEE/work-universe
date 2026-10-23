@@ -6,12 +6,16 @@
 import { el } from './dom.js';
 
 // CR-16 ①: 처음 보는 사람에게 "왜"를 한 줄로. 담당자가 바뀔 때(전) → 기록이 쌓이는 업무 지도 → 근거 달린 초안·경고(후). 글과 CSS 화살표만 쓴다
+// 셋째 칸 본문(FU-4, 처음 사용 점검 2026-10-24): 첫 화면에 AI가 하는 일이 보이게 한다. 키가 없어도 사전 생성 문장(개발 중 Claude가 작성)으로 보이므로 거짓이 아니다
+export const WHY_AI_BODY = 'AI가 기록만 보고 쓰고, 앱이 근거를 검사합니다';
 export const WHY_TITLE = '담당자가 바뀌어도 끊기지 않는 업무 지도';
 export const WHY_STEPS = [
   { head: '담당자가 바뀔 때', body: '머릿속에서만 넘어가던 업무' },
   { head: '기록이 쌓이는 업무 지도', body: '담당·메모·산출물을 그때그때' },
-  { head: '근거 달린 인수인계 초안 · 혼자만 아는 업무 경고', body: '자동으로' },
+  { head: '근거 달린 인수인계 초안 · 혼자만 아는 업무 경고', body: WHY_AI_BODY },
 ];
+// FU-11 일부: 팀 카드 설명 아래 작은 글씨 한 줄(여러 사람의 지도를 모으는 길)
+export const TEAM_NOTE = '팀원 각자 만든 지도는 공유 폴더(「폴더 연결」)나 「가져오기」로 모아 묶습니다';
 // 「샘플 더 보기」 안 첫 줄: 단추 이름에 남아 있는 「유니버스」를 처음 만나는 자리에서 한 번 풀어 준다
 export const TERM_NOTE = '(유니버스 = 업무 지도 하나)';
 
@@ -46,12 +50,13 @@ export function startScreen(o) {
   };
 
   // 세 갈래(CR-13 A): 처음 보는 사람이 "무엇을 하고 싶어?"에 답하면 앱 안 따라 하기나 새 업무 지도로 바로 들어간다. 쉬운 말: 업무 지도·동그라미
-  const way = (testid, title, desc, onclick, disabled = false) => el('li', {},
-    el('button', { type: 'button', class: 'start-way', 'data-testid': testid, disabled, onclick }, el('strong', {}, title), el('span', {}, desc)));
+  const way = (testid, title, desc, onclick, disabled = false, note = '') => el('li', {},
+    el('button', { type: 'button', class: 'start-way', 'data-testid': testid, disabled, onclick }, el('strong', {}, title), el('span', {}, desc),
+      note ? el('span', { class: 'way-note', 'data-testid': `${testid}-note` }, note) : null));
   const ways = [
     o.onTour ? way('start-way-handover', '인수인계를 앞두고 있어요', '예시 업무로 인수인계 초안을 만들어 봅니다(3분)', () => o.onTour('handover')) : null,
     way('start-way-mine', '내 업무를 정리해 두고 싶어요', '업무 하나부터 작은 지도를 만듭니다', o.onCreateMine || o.onCreate, o.readOnly),
-    o.onTour ? way('start-way-team', '팀 업무를 한눈에 보고 싶어요', '여러 업무를 묶은 팀·부서 지도를 봅니다', () => o.onTour('team')) : null,
+    o.onTour ? way('start-way-team', '팀 업무를 한눈에 보고 싶어요', '여러 업무를 묶은 팀·부서 지도를 봅니다', () => o.onTour('team'), false, TEAM_NOTE) : null,
   ].filter(Boolean);
 
   return el('div', { class: 'start-inner' },
