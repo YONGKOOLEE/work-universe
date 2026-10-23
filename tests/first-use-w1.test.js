@@ -165,7 +165,8 @@ test('FU-3: 사전 생성인데 미리 써 둔 조합이 없으면 실패처럼 
 }));
 
 // ── FU-7 ──
-test('FU-7: 사람이 하나뿐인 지도 — 창을 열 때부터 안내와 「＋ 사람 추가」가 보이고, 누르면 wu:add-node(사람) 알림만 보낸다', withDom(() => {
+// 2회차 FU-36(처음 사용 점검 2026-10-24): 「＋ 사람 추가」는 긴 노드 추가 창으로 바로 가지 않고 초안 창 안의 작은 칸을 먼저 연다 → 알림은 「넣기」에서 label과 함께 간다 (옛 기대: 누르면 바로 {type:'person'} 알림)
+test('FU-7·FU-36: 사람이 하나뿐인 지도 — 창을 열 때부터 안내와 「＋ 사람 추가」가 보이고, 누르면 작은 칸이 열리며 「넣기」에서 wu:add-node(사람, 이름) 알림을 보낸다', withDom(() => {
   const doc = smallDoc({ persons: 1 });
   const { q, events } = openDraft(viewOfDoc(doc));
   const help = q('draft-person-help');
@@ -175,10 +176,18 @@ test('FU-7: 사람이 하나뿐인 지도 — 창을 열 때부터 안내와 「
   const btn = q('draft-add-person');
   assert.equal(btn.textContent, '＋ 사람 추가');
   assert.equal(btn.getAttribute('type'), 'button');
+  assert.equal(q('draft-new-person').hidden, true);
   btn.click();
+  assert.equal(events.length, 0); // 누르기만으로는 알림을 보내지 않는다
+  assert.equal(q('draft-new-person').hidden, false);
+  q('draft-new-person-add').click(); // 이름이 비면 안내만
+  assert.equal(events.length, 0);
+  assert.equal(q('draft-new-person-msg').textContent, '이름을 적으세요.');
+  q('draft-new-person-name').value = ' 새후임 ';
+  q('draft-new-person-add').click();
   assert.equal(events.length, 1);
   assert.equal(events[0].type, 'wu:add-node');
-  assert.deepEqual(events[0].detail, { type: 'person' });
+  assert.deepEqual(events[0].detail, { type: 'person', label: '새후임', attrs: undefined });
 }));
 
 test('FU-7: 사람이 없는 지도에서도 안내가 보이고, 읽기 전용이면 단추 없이 안내만', withDom(() => {
@@ -304,10 +313,11 @@ test('FU-20: 「관련」 연결이 주제 아닌 노드에 걸려 거절되면 
 });
 
 // ── FU-14 ──
-test('FU-14: 팀 따라 하기 순서 — 펼치기 → 인사이트(인수인계 위험) → 찾기 → 주변만 보기 → 전체 보기', () => {
+// 2회차 FU-33: 1단계를 묶은 지도 위험 요약의 「자세히」로 바꾸고 겹치는 「인사이트 보기」 단계를 뺐다(옛 순서: expand → insight → find → neighborhood → full). 단계 수 5는 그대로
+test('FU-14·FU-33: 팀 따라 하기 순서 — 위험 요약 「자세히」(인수인계 위험) → 펼치기 → 찾기 → 주변만 보기 → 전체 보기', () => {
   const steps = scenarioOf('team').steps;
-  assert.deepEqual(steps.map((s) => s.id), ['expand', 'insight', 'find', 'neighborhood', 'full']);
+  assert.deepEqual(steps.map((s) => s.id), ['risk', 'expand', 'find', 'neighborhood', 'full']);
   assert.equal(steps.length, 5);
-  assert.match(steps[1].task, /「인사이트 보기」/);
-  assert.match(steps[1].task, /맨 먼저 「인수인계 위험」이 열려/);
+  assert.match(steps[0].task, /「혼자만 아는 일 …」 줄의 「자세히」/);
+  assert.match(steps[0].task, /한 사람만 해 봤고 인수인계 기록이 없는 일/);
 });

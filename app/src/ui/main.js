@@ -499,6 +499,13 @@ function start() {
     return el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft', onclick: () => openDraft(node.gid) }, '인수인계 초안 만들기');
   }
 
+  // 사람 상세의 「이 사람 일 인수인계 초안」(FU-30): 대상 = 이 지도 전체(꼭지), 보내는 사람 = 이 사람. 받는 사람은 비워 둔다. 읽기 전용이면 그리지 않는다
+  function personDraftButton(node) {
+    if (!node || node.core_type !== 'person' || app.readOnly) return null;
+    const rootGid = app.rootGid();
+    return el('button', { type: 'button', class: 'link', 'data-testid': 'btn-person-draft', title: '이 지도 전체를 대상으로, 이 사람을 보내는 사람으로 미리 골라 초안 창을 엽니다', onclick: () => openDraft(rootGid, { target: rootGid, from: node.label, to: '' }) }, '이 사람 일 인수인계 초안');
+  }
+
   // 「가져오기·내보내기」 창의 「폴더 연결」 탭을 바로 연다(import.js의 열기 함수는 탭 인자가 없어, 창을 연 뒤 탭 단추를 누른다)
   function openFolderTab() {
     openImport();
@@ -514,13 +521,14 @@ function start() {
       el('button', { type: 'button', class: 'link', 'data-testid': 'btn-folder-entry', onclick: openFolderTab }, '「폴더 연결」'));
   }
 
-  function openDraft(targetGid) {
+  // preset(선택, FU-30): 초안 창에 미리 고를 {target, from, to}(draft.js의 preset 옵션과 같은 모양: target은 gid나 이름, from·to는 사람 이름)
+  function openDraft(targetGid, preset) {
     settingsOpen = false;
     merging = false;
     editing = null;
     insight = null;
     issues = null;
-    drafting = { target: targetGid };
+    drafting = preset ? { target: targetGid, preset } : { target: targetGid };
     draftShown = false;
     renderPanel();
   }
@@ -626,9 +634,12 @@ function start() {
     const node = view.getNode(gid);
     if (!node || node.hidden || node.core_type !== 'person') return null;
     const text = soloWorksText(soloWorksOf(view, gid, asOf()));
-    if (!text) return null;
+    // 「이 사람 일 인수인계 초안」은 도구줄(R7-2: 수정·연결 추가·이력 추가·이력으로)이 아니라 이 줄에 둔다 — "이 사람이 빠지면"의 맥락
+    const draftLink = personDraftButton(node);
+    if (!text) return draftLink ? el('p', { class: 'muted small', 'data-testid': 'person-draft-line' }, draftLink) : null;
     return el('p', { class: 'notice', 'data-testid': 'person-solo-works' }, text, ' ',
-      el('button', { type: 'button', class: 'link', 'data-testid': 'btn-person-solo', onclick: () => openInsight('', 'risk') }, '인수인계 위험 보기'));
+      el('button', { type: 'button', class: 'link', 'data-testid': 'btn-person-solo', onclick: () => openInsight('', 'risk') }, '인수인계 위험 보기'),
+      draftLink ? ' · ' : null, draftLink);
   }
 
   // 하위 유니버스를 묶은 유니버스의 개요: 통합 확인 목록으로 가는 버튼(대기 건수)
@@ -949,7 +960,7 @@ function start() {
       return;
     }
     if (drafting) {
-      panel.replaceChildren(draftPanel({ view, provider, target: drafting.target, preset: tour ? tour.preset() : undefined, onDraft: () => { draftShown = true; tourHook(); }, asOf: todayLocal(), viewDate, readOnly: app.readOnly, onFocus: showInGraph, onClose: () => { drafting = null; renderPanel(); graph.highlight(selected); },
+      panel.replaceChildren(draftPanel({ view, provider, target: drafting.target, preset: drafting.preset || (tour ? tour.preset() : undefined), onDraft: () => { draftShown = true; tourHook(); }, asOf: todayLocal(), viewDate, readOnly: app.readOnly, onFocus: showInGraph, onClose: () => { drafting = null; renderPanel(); graph.highlight(selected); },
         // 확정(R-03 ③, CR-8): 저장되면 초안 화면을 닫고 새 인수인계서를 연다
         onConfirm: (input) => {
           const r = app.confirmHandover(input);
@@ -972,7 +983,7 @@ function start() {
       // 묶은 지도(하위 유니버스가 있는 꼭지)만 위험 요약 한 줄(FU-10). 인사이트 탭과 같은 기준일·같은 밀집 기준의 같은 계산이다
       const grouped = (view.ref_links || []).length > 0;
       const riskSummary = grouped ? { parts: teamRiskParts(teamRiskSummary(view, { asOf: asOf(), n: currentDenseN() })), onMore: () => openInsight('', 'risk') } : null;
-      renderUniverseSummary(panel, summary, display.nodes.length, { split: splitHint(app.doc), starter: starterSteps(app.doc, view), riskSummary, universeId: app.doc.universe.id, onSelect: (g) => { reveal(g); select(view.canonical(g)); } });
+      renderUniverseSummary(panel, summary, display.nodes.length, { split: splitHint(app.doc), starter: starterSteps(app.doc, view), onOpenFolder: folder && folder.state.supported && !rw && !app.readOnly ? openFolderTab : null, riskSummary, universeId: app.doc.universe.id, onSelect: (g) => { reveal(g); select(view.canonical(g)); } });
       // 꼭지만 있으면 「노드 추가」를 펼쳐 둔다(검토5 U-5). 안내 문구(detail.js)와 같은 기준: 하위 유니버스를 묶은 화면은 노드가 있으므로 건드리지 않는다
       if (summary.node_total <= 1 && !app.readOnly) document.querySelector('details.add').open = true;
       const rootGid = app.rootGid();
@@ -1564,9 +1575,40 @@ function start() {
   // 아래 「노드 추가」를 펼쳐 유형을 미리 고르고 이름 칸에 초점. 읽기 전용(되감기·보기 모드)이면 무시한다.
   // 초안 창이 열려 있었으면 추가가 끝난 뒤 패널 맨 위의 초안 창으로 돌아가 보여 준다(초안 창은 닫히지 않고 새 사람이 받는 사람 목록에 들어간다)
   let addReturnToTop = false;
+  // 이름(detail.label)이 함께 오면(FU-36 계약: detail { type:'person', label, attrs? }) 창을 열지 않고 바로 사람 노드를 만든다(연결 없음)
+  function addPersonDirect(detail) {
+    const input = { core_type: 'person', label: detail.label };
+    if (detail.attrs && typeof detail.attrs === 'object' && Object.keys(detail.attrs).length) input.attrs = detail.attrs;
+    // 다시 그려도 초안 창이 열린 채 고른 대상·보내는·받는 사람이 유지되게 지금 고른 값을 미리 적어 둔다
+    const pick = (id) => { const s = document.querySelector('#detail [data-testid=' + id + ']'); return s ? s.value : ''; };
+    const nameOf = (gid) => { const n = gid ? view.getNode(gid) : null; return n ? n.label : ''; };
+    const t = pick('draft-target');
+    const fromName = nameOf(pick('draft-from'));
+    const toName = nameOf(pick('draft-to'));
+    // 노드 추가 양식의 저장과 같은 명령(applyBatch addNode)을 쓴다 — 이력·검증이 같다
+    const b = app.applyBatch([{ op: 'addNode', row: 1, input, attachRoot: false }]);
+    if (!b.ok) {
+      const err = b.errors && b.errors.length ? b.errors[0].error : b.error;
+      const text = messageFor(err);
+      const m = drafting ? document.querySelector('#detail [data-testid=draft-message]') : null;
+      if (!m) return window.alert(text);
+      m.className = 'form-message error';
+      m.dataset.code = (err && err.code) || '';
+      m.textContent = text;
+      if (typeof m.scrollIntoView === 'function') m.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    if (drafting) {
+      if (t) drafting.target = t;
+      drafting.preset = { target: t || drafting.target, from: fromName, to: toName };
+    }
+    afterSave(b); // refresh()가 초안 창을 다시 그린다(새 사람이 받는 사람 목록에 들어간다)
+  }
+
   document.addEventListener('wu:add-node', (e) => {
     if (rw || app.readOnly) return;
     const want = e && e.detail && e.detail.type;
+    if (want === 'person' && e.detail.label) return addPersonDirect(e.detail);
     const typeSelect = $('add-slot').querySelector('[data-testid=node-type]');
     if (!typeSelect || ![...typeSelect.options].some((o) => o.value === want)) return;
     document.querySelector('details.add').open = true;

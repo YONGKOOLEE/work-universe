@@ -26,7 +26,7 @@ test('시나리오는 handover·team 둘(handover·team 모두 5단계), 이야�
 });
 
 test('단계 문구에 「」 화면 이름이 있고, 실제 화면의 단추·칸 이름과 같은 글자다', () => {
-  const known = new Set(['대사 확인', '미해결', '다음', '인수인계 초안 만들기', '초안 만들기', '근거:', '노드 찾기', '주변만 보기', '전체 보기', '인사이트 보기', '인수인계 위험', '수정', '저장', '편집 되감기']);
+  const known = new Set(['대사 확인', '미해결', '다음', '인수인계 초안 만들기', '초안 만들기', '근거:', '노드 찾기', '주변만 보기', '전체 보기', '인사이트 보기', '인수인계 위험', '수정', '저장', '편집 되감기', '혼자만 아는 일 …', '자세히']); // 2회차 FU-33: team 1단계가 위험 요약 줄의 「자세히」
   for (const id of TOUR_IDS) {
     const names = scenarioOf(id).steps.flatMap((st) => quotedNames(st.task));
     assert.ok(names.length >= 4, id);
@@ -58,10 +58,17 @@ test('handover 완료 조건: 대사 확인 선택 → (읽기, 다음) → 초�
   assert.equal(rew.next, undefined);
 });
 
+test('handover 이야기(2회차 FU-27): 샘플 데이터 시점(9월 30일 구두 인수인계, 10월 1일 서하늘 시작)에 맞춘다', () => {
+  assert.equal(scenarioOf('handover').story, '윤바다가 9월 말 서하늘에게 월말 정산을 넘겼습니다. 서하늘이 받을 인수인계 초안을 기록에서 만들어 봅니다.');
+  assert.doesNotMatch(scenarioOf('handover').story, /다음 달/);
+});
+
 test('handover 3단계(R9-4): 동작은 「인수인계 초안 만들기」 → 「초안 만들기」 둘이고, 사람 고르기는 보조 문구로', () => {
   const draft = scenarioOf('handover').steps[2];
   assert.deepEqual(quotedNames(draft.task), ['인수인계 초안 만들기', '초안 만들기']);
   assert.doesNotMatch(draft.task, /윤바다|서하늘/); // 사람 이름은 본문에서 뺐다
+  // 2회차 FU-26: 「빈 곳을 누르고」를 뺐다
+  assert.equal(draft.task, '오른쪽의 「인수인계 초안 만들기」를 누른 뒤 「초안 만들기」를 누르세요.');
   const SUB = '대상(월말 정산 점검 전체)과 보내는·받는 사람은 이미 골라져 있어요';
   assert.equal(draft.sub(emptyState()), SUB);
   assert.equal(draft.sub({ ...emptyState(), draftOpen: true }), SUB);
@@ -75,6 +82,7 @@ test('handover 5단계(R9-1 나) 문구·보조 문구·짚기: 대사 확인 �
   const base = emptyState('U-A1');
   assert.equal(rew.sub(base), null);
   assert.match(rew.sub({ ...base, saved: true }), /편집 되감기/);
+  assert.match(rew.task, /^\(연습용 — 예시라서 언제든 되돌릴 수 있어요\) /); // 2회차 FU-28
   // 아직 고치지 않음: 고른 게 없으면 노드를, 고르면 「수정」 단추를, 양식이 열려 있으면 저장 단추를 짚는다
   assert.equal(rew.target(base)[0].cy, 'node[label = "대사 확인"]');
   assert.equal(rew.target({ ...base, selected: 'U-A1/N-001' })[0].sel, '[data-testid=btn-edit]');
@@ -88,9 +96,10 @@ test('handover 5단계(R9-1 나) 문구·보조 문구·짚기: 대사 확인 �
   assert.equal(rew.target(saved)[1].hint, BLANK_HINT);
 });
 
-test('team 완료 조건(FU-14 순서): 펼침 → 인사이트 열기 → 찾기로 선택 → 주변만 보기 → 전체 보기로 돌아옴', () => {
-  const [exp, ins, find, nb, full] = scenarioOf('team').steps;
-  assert.deepEqual(scenarioOf('team').steps.map((x) => x.id), ['expand', 'insight', 'find', 'neighborhood', 'full']);
+// 2회차 FU-33: 첫 단계가 위험 요약 「자세히」(insight → risk)로 바뀌어 순서가 risk, expand, find, neighborhood, full
+test('team 완료 조건(FU-33 순서): 「자세히」로 인수인계 위험 열기 → 펼침 → 찾기로 선택 → 주변만 보기 → 전체 보기로 돌아옴', () => {
+  const [ins, exp, find, nb, full] = scenarioOf('team').steps;
+  assert.deepEqual(scenarioOf('team').steps.map((x) => x.id), ['risk', 'expand', 'find', 'neighborhood', 'full']);
   const s = emptyState('U-D1');
   assert.equal(exp.done(s), false);
   assert.equal(exp.done({ ...s, expandedCount: 1 }), true);
@@ -102,37 +111,39 @@ test('team 완료 조건(FU-14 순서): 펼침 → 인사이트 열기 → 찾�
   assert.equal(full.done({ ...s, nbhd: true }), false); // 주변만 보기 중이면 아직
   assert.equal(full.done(s), true); // 주변만 보기를 풀면 완료
   assert.equal(ins.done(s), false);
-  assert.equal(ins.done({ ...s, insightOpen: true, insightKind: 'risk' }), true); // 열리면 첫 탭(인수인계 위험)에 내용이 보인다
-  assert.equal(ins.done({ ...s, insightOpen: true, insightKind: 'similar' }), true);
-  assert.match(ins.task, /맨 먼저 「인수인계 위험」이 열려/);
-  assert.match(ins.task, /한 사람만 해 봤고/);
-  assert.deepEqual(quotedNames(ins.task), ['인사이트 보기', '인수인계 위험']);
-  assert.equal(ins.target({ ...s, insightOpen: true })[0].sel, '[data-testid=tab-risk]');
+  assert.equal(ins.done({ ...s, insightOpen: true, insightKind: 'risk' }), true); // 「자세히」는 인수인계 위험 탭으로 연다
+  assert.equal(ins.done({ ...s, insightOpen: true, insightKind: 'similar' }), false); // 다른 탭이 열린 것은 완료가 아니다
+  assert.match(ins.task, /한 사람만 해 봤고 인수인계 기록이 없는 일이 나옵니다/);
+  assert.deepEqual(quotedNames(ins.task), ['혼자만 아는 일 …', '자세히']);
+  assert.equal(ins.target(s)[0].sel, '[data-testid=btn-team-risk-more]');
+  assert.equal(ins.target(s).length, 1); // 선택이 없으면 단추만
+  assert.deepEqual(ins.target({ ...s, selected: 'U-A1/N-001' })[1], { sel: '#graph', hint: BLANK_HINT }); // 선택이 남아 있으면 요약이 가려지므로 빈 곳 표지도
 });
 
-test('team advance: 펼친 뒤 인사이트 단계에서 멈추고, 주변만 보기를 누른 직후에는 「전체 보기」 단계에서 멈추며, 풀면 끝', () => {
+test('team advance: 「자세히」(인수인계 위험)를 열기 전에는 첫 단계에서 멈추고, 주변만 보기를 누른 직후에는 「전체 보기」 단계에서 멈추며, 풀면 끝', () => {
   const sc = scenarioOf('team');
   const base = { ...emptyState('U-D1'), expandedCount: 1, foundGid: 'U-A1/N-001' };
-  assert.equal(advance(sc, 0, { ...base, nbhd: true }), 1); // 인사이트를 아직 열지 않았다
-  assert.equal(advance(sc, 1, { ...emptyState('U-D1'), expandedCount: 1 }), 1);
-  assert.equal(advance(sc, 1, { ...emptyState('U-D1'), insightOpen: true }), 2); // 찾기 단계
-  const opened = { ...base, insightOpen: true };
+  assert.equal(advance(sc, 0, { ...base, nbhd: true }), 0); // 위험 요약을 아직 열지 않았다
+  assert.equal(advance(sc, 0, { ...emptyState('U-D1'), insightOpen: true, insightKind: 'similar' }), 0); // 다른 탭
+  assert.equal(advance(sc, 0, { ...emptyState('U-D1'), insightOpen: true, insightKind: 'risk' }), 1); // 펼치기 단계
+  assert.equal(advance(sc, 1, { ...emptyState('U-D1'), expandedCount: 1 }), 2); // 찾기 단계
+  const opened = { ...base, insightOpen: true, insightKind: 'risk' };
   assert.equal(advance(sc, 0, { ...opened, nbhd: true }), 4);
   assert.equal(advance(sc, 0, { ...opened, nbhd: false }), 3); // 아직 주변만 보기를 누르지 않았다
   assert.equal(advance(sc, 4, { ...opened, nbhd: false }), 5); // 5단계가 끝
 });
 
-test('「빈 곳을 누르세요」 단계(handover 3·team 2): 선택이 있으면 그래프 안쪽 표지(hint)를 짚고, 선택이 없으면 단추를 짚는다', () => {
+// 2회차 FU-26·33: handover 3단계는 「빈 곳」 표지를 쓰지 않는다(선택이 있으면 그 노드 상세의 「인수인계 초안 만들기」 단추를 짚음). 표지는 handover 5단계·team 1단계(선택이 남아 있을 때, 단추 뒤 보조 후보)에서만
+test('「빈 곳을 누르세요」 표지: handover 3단계는 쓰지 않고(FU-26), team 1단계는 선택이 있을 때 단추 뒤 보조 후보로만 쓴다', () => {
   const sel = { ...emptyState(), selected: 'U-A1/N-001' };
   const draft = scenarioOf('handover').steps[2];
-  const insight = scenarioOf('team').steps[1];
   assert.equal(BLANK_HINT, '여기 빈 곳을 누르세요');
-  for (const st of [draft, insight]) {
-    const [t0] = st.target(sel);
-    assert.equal(t0.sel, '#graph');
-    assert.equal(t0.hint, BLANK_HINT);
-    assert.ok(st.target(emptyState()).every((x) => !x.hint), '선택이 없으면 표지 없음');
-  }
+  assert.ok(draft.target(sel).every((x) => !x.hint), 'handover 3단계에는 빈 곳 표지가 없다');
+  assert.equal(draft.target(sel)[0].sel, '[data-testid=btn-draft]'); // 선택한 노드 상세의 단추
+  assert.match(draft.target(sel)[1].sel, /btn-draft-universe/);
+  assert.equal(draft.target(sel)[2].sel, '#detail'); // 사람·산출물을 고른 경우 두 단추가 없으므로 패널만
+  const risk = scenarioOf('team').steps[0];
+  assert.ok(risk.target(emptyState()).every((x) => !x.hint), '선택이 없으면 표지 없음');
   // 표지가 있는 대상은 #graph 하나뿐
   for (const id of TOUR_IDS) for (const st of scenarioOf(id).steps) for (const x of st.target(sel)) if (x.hint) assert.equal(x.sel, '#graph');
 });
@@ -159,7 +170,7 @@ test('대상 짚기: 상태에 따라 후보가 바뀌고 모두 sel 또는 cy �
     }
   }
   const draft = scenarioOf('handover').steps[2];
-  assert.equal(draft.target({ ...emptyState(), selected: 'U-A1/N-001' })[0].sel, '#graph'); // 빈 곳을 눌러야 함
+  assert.equal(draft.target({ ...emptyState(), selected: 'U-A1/N-001' })[0].sel, '[data-testid=btn-draft]'); // 2회차 FU-26: 고른 노드 상세의 단추 (옛 기대: 빈 곳을 눌러야 함)
   assert.match(draft.target(emptyState())[0].sel, /btn-draft-universe/);
   assert.match(draft.target({ ...emptyState(), draftOpen: true })[0].sel, /draft-form/);
 });

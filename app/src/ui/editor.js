@@ -76,6 +76,19 @@ function suggestRelation(aType, bType) {
   return null;
 }
 
+// 관계 고르기 칸(FU-35): 고른 두 노드 유형으로 어느 방향으로도 쓸 수 없는 관계는 disabled + 보기 글 뒤에 「(이 조합에는 못 씀)」.
+// 방향은 따로 고르므로(allowedRelations의 forward||backward) 한쪽 방향이라도 되면 켜 둔다. 연결 대상이 아직 없으면(유형을 모르면) 전부 켜 둔다.
+// 이미 고른 값은 바꾸지 않는다(막힌 조합은 저장할 때 E-PAIR 안내가 그대로 나간다)
+export const PAIR_BLOCKED_NOTE = ' (이 조합에는 못 씀)';
+export function markRelationOptions(relationSelect, aType, bType) {
+  const ok = aType && bType ? new Set(allowedRelations(aType, bType).map((x) => x.relation)) : null;
+  for (const opt of relationSelect.options) {
+    const base = EDGE_TYPES[opt.value] || opt.value;
+    opt.disabled = !!ok && !ok.has(opt.value);
+    opt.textContent = opt.disabled ? base + PAIR_BLOCKED_NOTE : base;
+  }
+}
+
 // E-PAIR 안내에 쓸 문맥: 고른 두 노드와 그 사이에 쓸 수 있는 관계
 function pairContext(relation, s, t) {
   return { kind: 'edge', relation, source: s, target: t, suggestions: allowedRelations(s.core_type, t.core_type) };
@@ -96,6 +109,8 @@ function messageBox() {
       if (result.error.existing_id && onFocusLocal && ctx.kind !== 'edge') {
         box.append(' ', el('button', { type: 'button', class: 'link', onclick: () => onFocusLocal(result.error.existing_id) }, '기존 노드 보기'));
       }
+      // 오류가 화면 밖에 있으면 못 보므로(FU-35) 단추 바로 위의 이 자리로 스크롤한다
+      if (typeof box.scrollIntoView === 'function') box.scrollIntoView({ block: 'nearest' });
     },
   };
 }
@@ -203,6 +218,8 @@ export function nodeForm(o) {
     };
     const sync = () => {
       detail.hidden = !other.value;
+      const picked = other.value ? candidates().find((n) => n.id === other.value) : null;
+      markRelationOptions(relation, picked ? type.value : null, picked ? picked.core_type : null); // 고를 수 없는 관계 표시(FU-35)
       if (!other.value) return; // 상대나 새 노드 유형이 바뀔 때마다 알맞은 관계·방향을 다시 추천한다(직접 고르는 것은 그 뒤에)
       const t = candidates().find((n) => n.id === other.value);
       const sug = t && suggestRelation(type.value, t.core_type);
@@ -295,6 +312,11 @@ export function edgeForm(o) {
   const relation = select(Object.entries(EDGE_TYPES), 'relates_to', { 'data-testid': 'edge-type' });
   const direction = select([['out', `${o.node.label} → 상대`], ['in', `상대 → ${o.node.label}`]], 'out', { 'data-testid': 'edge-direction' });
   const other = select(nodeOptions(o.candidates, { empty: '상대 노드를 고르세요' }), '', { 'data-testid': 'edge-other' });
+  // 상대를 고르면 이 노드와 상대의 유형으로 쓸 수 없는 관계를 흐리게 한다(FU-35). 상대를 아직 안 골랐으면 전부 켜 둔다
+  other.addEventListener('change', () => {
+    const t = o.candidates.find((n) => n.id === other.value);
+    markRelationOptions(relation, t ? o.node.core_type : null, t ? t.core_type : null);
+  });
   const period = periodEditor();
   const note = el('input', { autocomplete: 'off', maxlength: 2000, placeholder: '예: 인수 후 담당' });
   const sub = subtypeEditor(o.subtypes || [], () => relation.value, null, 'edge-subtype');
@@ -397,6 +419,9 @@ export function edgeEditForm(o) {
   return form;
 }
 
+// 분류가 인수인계 초안의 어느 칸으로 가는지(FU-37). rules/handover.js의 같은 매핑: 이슈 → 최근 이슈, 진행 중 → 진행 중인 일, 주의사항 → 주의사항·노하우
+const CATEGORY_HINT = '분류에 따라 인수인계 초안의 칸이 정해집니다: 이슈 → 「최근 이슈」, 진행 중 → 「진행 중인 일」, 주의사항 → 「주의사항·노하우」';
+
 const EVENT_CHOICES = [
   ['memo', '메모(이슈·결정)'],
   ['handover', '인수인계'],
@@ -430,7 +455,7 @@ export function eventForm(o) {
   // 같은 입력 칸(업무·사람)을 여러 종류가 함께 쓰므로, 종류를 바꿀 때마다 칸을 새로 감싼다
   // (DOM 요소는 한 곳에만 붙을 수 있다)
   const groups = {
-    memo: () => [field('분류', category), field('관련 주제(선택)', topics)],
+    memo: () => [field('분류', category), el('p', { class: 'muted small', 'data-testid': 'category-hint' }, CATEGORY_HINT), field('관련 주제(선택)', topics)],
     handover: () => [field('업무', work), field('보내는 사람', from), field('받는 사람', to), field('인수인계서(선택)', artifact), field('이전 인수인계 참조(선택)', previous)],
     assign_start: () => [
       field('사람', person),

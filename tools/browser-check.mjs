@@ -657,7 +657,7 @@ async function checkBrowser(browser, port) {
     // 바꾼 이유: 예전에는 「샘플 바로 열기」(start-primary)로 R-08 "첫 화면에서 탐색을 시작할 수 있음"을 확인했다. 이제 첫 화면의 중심은
     // 「무엇을 하고 싶어요?」 세 갈래 카드라서 R-08은 카드로 확인하고, 「샘플 바로 열기」는 따라 하기 없이 열리는 별도 점검으로 남긴다.
     const cardInfo = await evaluate(s.cdp, "(() => { const ids = ['start-way-handover', 'start-way-mine', 'start-way-team']; return ids.map((id) => { const e = document.querySelector('[data-testid=' + id + ']'); if (!e) return null; const r = e.getBoundingClientRect(); return { w: r.width > 0 && r.height > 0, text: e.textContent }; }); })()");
-    check('CR-13 A 시작 화면에 「무엇을 하고 싶어요?」 세 갈래 카드(인수인계를 앞두고 있어요·내 업무를 정리해 두고 싶어요·팀 업무를 한눈에 보고 싶어요)가 실제로 보임(크기 있음)', cardInfo.every((c) => c && c.w) && cardInfo[0].text.includes('인수인계를 앞두고 있어요') && cardInfo[0].text.includes('예시 업무로 인수인계 초안을 만들어 봅니다(3분)') && cardInfo[1].text.includes('내 업무를 정리해 두고 싶어요') && cardInfo[1].text.includes('업무 하나부터 작은 지도를 만듭니다') && cardInfo[2].text.includes('팀 업무를 한눈에 보고 싶어요') && cardInfo[2].text.includes('여러 업무를 묶은 팀·부서 지도를 봅니다'), JSON.stringify(cardInfo));
+    check('CR-13 A 시작 화면에 「무엇을 하고 싶어요?」 세 갈래 카드(인수인계를 앞두고 있어요·내 업무를 정리해 두고 싶어요·팀 업무를 한눈에 보고 싶어요)가 실제로 보임(크기 있음)', cardInfo.every((c) => c && c.w) && cardInfo[0].text.includes('인수인계를 앞두고 있어요') && cardInfo[0].text.includes('넘기는 쪽도 받는 쪽도 — 예시 업무로 인수인계 초안을 봅니다(3분)') && cardInfo[1].text.includes('내 업무를 정리해 두고 싶어요') && cardInfo[1].text.includes('업무 하나부터 작은 지도를 만듭니다') && cardInfo[2].text.includes('팀 업무를 한눈에 보고 싶어요') && cardInfo[2].text.includes('여러 업무를 묶은 팀·부서 지도를 봅니다'), JSON.stringify(cardInfo));
     const smallInfo = await evaluate(s.cdp, "({ more: document.querySelector('[data-testid=start-more]').open, stepsVisible: document.querySelector('[data-testid=start-steps]').checkVisibility(), samplesVisible: document.querySelector('[data-testid=start-samples]').checkVisibility(), primary: document.querySelector('[data-testid=start-primary]').textContent, mine: !!document.querySelector('[data-testid=start-mine], [data-testid=start-mine-empty]') })");
     check('CR-13 A 「처음이라면 이 순서로」와 샘플 카드 7개는 「샘플·처음 순서 더 보기」 안에 기본 접힘, 「샘플 바로 열기: 월말 정산 점검」·내 유니버스는 그대로 보임', smallInfo.more === false && !smallInfo.stepsVisible && !smallInfo.samplesVisible && smallInfo.primary === '샘플 바로 열기: 월말 정산 점검' && smallInfo.mine, JSON.stringify(smallInfo));
     // 쉬운 말: 세 갈래 카드 문구에 유니버스·노드·꼭지가 없다
@@ -729,7 +729,7 @@ async function checkBrowser(browser, port) {
     check('R-08 첫 화면의 세 갈래 카드 「인수인계를 앞두고 있어요」 한 번으로 월말 정산이 열려 탐색이 시작됨(CR-13 A로 확인 방법 변경)', opened);
     await sleep(400);
     let ti = await tourInfo();
-    check('CR-13 A 갈래 a → 따라 하기 1/5 카드: 이야기 한 줄(윤바다가 다음 달 서하늘에게…), 할 일 한 줄, 「건너뛰기」, 읽기 단계가 아니라 「다음」 없음, 주소의 ~tour 표시는 지워짐', !!ti && ti.mode === 'step' && ti.scenario === 'handover' && ti.index === 0 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 1/5' && (await text(s.cdp, '[data-testid=tour-story]')).includes('윤바다가 다음 달 서하늘에게 월말 정산을 넘깁니다') && (await text(s.cdp, '[data-testid=tour-task]')).includes('대사 확인') && (await text(s.cdp, '[data-testid=tour-skip]')) === '건너뛰기' && !(await hasNext()) && (await hashClean()), JSON.stringify(ti));
+    check('CR-13 A 갈래 a → 따라 하기 1/5 카드: 이야기 한 줄(윤바다가 9월 말 서하늘에게…, FU-27), 할 일 한 줄, 「건너뛰기」, 읽기 단계가 아니라 「다음」 없음, 주소의 ~tour 표시는 지워짐', !!ti && ti.mode === 'step' && ti.scenario === 'handover' && ti.index === 0 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 1/5' && (await text(s.cdp, '[data-testid=tour-story]')).includes('윤바다가 9월 말 서하늘에게 월말 정산을 넘겼습니다') && (await text(s.cdp, '[data-testid=tour-task]')).includes('대사 확인') && (await text(s.cdp, '[data-testid=tour-skip]')) === '건너뛰기' && !(await hasNext()) && (await hashClean()), JSON.stringify(ti));
     const sn1 = await stepNamesOk();
     check('CR-13 A 1단계 문구의 「」 이름(대사 확인)이 실제 화면에 있고, 깜빡이는 대상은 그래프의 「대사 확인」 노드', sn1.missing.length === 0 && sn1.names.length >= 1 && (await blinkIds()).join() === 'U-A1/N-001', JSON.stringify(sn1));
     await shot(s.cdp, `${browser.name}-36a-tour-handover-1`);
@@ -770,12 +770,11 @@ async function checkBrowser(browser, port) {
     check('CR-13 A 3단계 문구의 「」 이름(인수인계 초안 만들기·초안 만들기)이 실제 화면에 있음', sn3.missing.length === 0 && sn3.names.length >= 2, JSON.stringify(sn3));
     // 재검증 N-2: 「빈 곳을 누르세요」 단계에서는 그래프 안쪽 아래 가운데에 표지가 보이고(크기 있음, 눌림을 막지 않음), 테두리는 안쪽(음수 오프셋)
     const hintInfo = () => evaluate(s.cdp, "(() => { const h = document.querySelector('[data-testid=tour-blank-hint]'); const g = document.getElementById('graph'); if (!h) return null; const r = h.getBoundingClientRect(); const gr = g.getBoundingClientRect(); const cs = getComputedStyle(h); const gs = getComputedStyle(g); return { text: h.textContent, w: r.width, h: r.height, inside: r.left >= gr.left && r.right <= gr.right && r.top >= gr.top && r.bottom <= gr.bottom, centerOff: Math.abs((r.left + r.right) / 2 - (gr.left + gr.right) / 2), nearBottom: gr.bottom - r.bottom < 60, noPointer: cs.pointerEvents === 'none', anim: cs.animationName, graphInset: g.classList.contains('tour-target') && g.classList.contains('tour-inset') && gs.outlineOffset.startsWith('-'), onTop: document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2) === g || g.contains(document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2)) }; })()");
+    // 처음 사용 점검 2회차 FU-26: 3단계는 「빈 곳을 누르고」 없이 오른쪽 상세의 「인수인계 초안 만들기」 단추(btn-draft)를 짚는다. 「빈 곳」 표지(N-2)는 team 1단계·handover 5단계에서 확인한다
     const hi3 = await hintInfo();
-    check('N-2 handover 3단계(선택이 남은 상태): 그래프 안쪽 아래 가운데에 표지 「여기 빈 곳을 누르세요」가 보이고(크기 있음, pointer-events:none, 아래 그래프가 눌림), 그래프 테두리는 안쪽(outline-offset 음수)', !!hi3 && hi3.text === '여기 빈 곳을 누르세요' && hi3.w > 80 && hi3.h > 15 && hi3.inside && hi3.centerOff < 3 && hi3.nearBottom && hi3.noPointer && hi3.graphInset && hi3.onTop, JSON.stringify(hi3));
-    await shot(s.cdp, `${browser.name}-36b4-tour-blank-hint`);
-    await blankClick();
-    check('N-2 빈 곳을 누르면(단계가 바뀌면) 표지가 사라지고 그래프 테두리도 풀림', (await hintInfo()) === null && !(await evaluate(s.cdp, "document.getElementById('graph').classList.contains('tour-target') || document.getElementById('graph').classList.contains('tour-inset')")));
-    await evaluate(s.cdp, "document.querySelector('[data-testid=btn-draft-universe]').click()");
+    check('처음 사용 W4(FU-26) handover 3단계(「대사 확인」을 고른 상태): 문구가 「오른쪽의 「인수인계 초안 만들기」를 누른 뒤 「초안 만들기」를 누르세요.」이고 「빈 곳」 표지는 없으며, 깜빡이는 대상은 상세의 「인수인계 초안 만들기」 단추', hi3 === null && (await text(s.cdp, '[data-testid=tour-task]')) === '오른쪽의 「인수인계 초안 만들기」를 누른 뒤 「초안 만들기」를 누르세요.' && (await evaluate(s.cdp, "document.querySelector('[data-testid=btn-draft]').classList.contains('tour-target')")), JSON.stringify(hi3));
+    await shot(s.cdp, `${browser.name}-36b4-tour-draft-button`);
+    await evaluate(s.cdp, "document.querySelector('[data-testid=btn-draft]').click()");
     await sleep(300);
     const preset = await evaluate(s.cdp, "({ target: document.querySelector('[data-testid=draft-target]').selectedOptions[0].textContent, from: document.querySelector('[data-testid=draft-from]').selectedOptions[0].textContent, to: document.querySelector('[data-testid=draft-to]').selectedOptions[0].textContent })");
     check('CR-13 A 3단계 초안 화면: 대상 월말 정산 점검(지도 전체, FU-2)·보내는 사람 윤바다·받는 사람 서하늘이 미리 골라져 있고, 화면만 열어서는 진행하지 않음', preset.target === '월말 정산 점검' && preset.from === '윤바다' && preset.to === '서하늘' && (await tourInfo()).index === 2, JSON.stringify(preset));
@@ -795,6 +794,14 @@ async function checkBrowser(browser, port) {
     await sleep(400);
     ti = await tourInfo();
     check('R9-1 근거 칩을 누르면 5/5(직접 고쳐 보고 되감기), 끝 카드는 아직', ti.mode !== 'end' && ti.index === 4 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 5/5', JSON.stringify(ti));
+    // 처음 사용 점검 2회차 FU-24·FU-29(처음 사용 W4): 키가 없는 사전 생성 초안 위 안내 한 줄, 방금 누른 근거 칩 아래 근거 글 한 줄
+    const w4Hint = await evaluate(s.cdp, "(() => { const h = document.querySelector('[data-testid=draft-live-hint]'); const first = document.querySelector('.draft [data-testid^=draft-item-]'); const note = document.querySelector('[data-testid=draft-method-note]'); const r = h ? h.getBoundingClientRect() : { width: 0, height: 0 }; return { text: h ? h.textContent : null, size: r.width > 0 && r.height > 0, above: !!(h && first && (h.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING)), note: note ? note.textContent : null, oldWord: document.querySelector('.draft').textContent.includes('개발 중') }; })()");
+    check('처음 사용 W4(FU-24) 키가 없는 사전 생성 초안: 항목들 위에 「실시간으로 다시 쓰려면: 「설정」에서 Claude API를 고르고 본인 키를 넣으세요(선택)」 한 줄(크기 있음)과 새 사전 생성 안내, 옛 「개발 중」 글자 없음', w4Hint.text === '실시간으로 다시 쓰려면: 「설정」에서 Claude API를 고르고 본인 키를 넣으세요(선택)' && w4Hint.size && w4Hint.above && w4Hint.note === 'Claude가 이 기록만 보고 써 둔 문장입니다. 열 때마다 앱이 근거를 검사하고, 맞지 않으면 기록을 그대로 모은 문장으로 바꿉니다.' && !w4Hint.oldWord, JSON.stringify(w4Hint));
+    const w4Ev = await evaluate(s.cdp, "(() => { const c = document.querySelector('.draft .evidence'); const li = c && c.closest('li'); const t = li && li.querySelector('[data-testid=evidence-text]'); const r = t ? t.getBoundingClientRect() : { width: 0, height: 0 }; return { has: !!t, text: t ? t.textContent : '', below: !!(t && (c.compareDocumentPosition(t) & Node.DOCUMENT_POSITION_FOLLOWING)), size: r.width > 0 && r.height > 0, noGidHead: t ? !/^U-[A-Z0-9]+\\//.test(t.textContent) : false, pressed: c ? c.getAttribute('aria-pressed') : null }; })()");
+    check('처음 사용 W4(FU-29) 근거 칩을 누르면 그 항목(칩 묶음) 아래에 근거 글 한 줄(크기 있음, 앞의 gid는 뗌)', w4Ev.has && w4Ev.text.length > 8 && w4Ev.below && w4Ev.size && w4Ev.noGidHead && w4Ev.pressed === 'true', JSON.stringify(w4Ev));
+    await shot(s.cdp, `${browser.name}-w4-evidence-text`);
+    const w4Ev2 = await evaluate(s.cdp, "(() => { const c = document.querySelector('.draft .evidence'); const li = c.closest('li'); c.click(); const closed = !li.querySelector('[data-testid=evidence-text]'); c.click(); const reopened = !!li.querySelector('[data-testid=evidence-text]'); c.click(); const multi = [...document.querySelectorAll('.draft li')].find((x) => x.querySelectorAll('.evidence').length >= 2); let switched = null; if (multi) { const [a, b] = multi.querySelectorAll('.evidence'); a.click(); const ta = multi.querySelector('[data-testid=evidence-text]').textContent; b.click(); const tb = multi.querySelector('[data-testid=evidence-text]'); switched = { changed: !!tb && tb.textContent !== ta, one: multi.querySelectorAll('[data-testid=evidence-text]').length === 1 }; } return { closed, reopened, switched }; })()");
+    check('처음 사용 W4(FU-29) 같은 칩을 다시 누르면 근거 글이 접히고(다시 누르면 열림), 같은 묶음의 다른 칩을 누르면 글이 바뀜(한 줄만 보임)', w4Ev2.closed && w4Ev2.reopened && (w4Ev2.switched === null || (w4Ev2.switched.changed && w4Ev2.switched.one)), JSON.stringify(w4Ev2));
     await shot(s.cdp, `${browser.name}-36d2-tour-handover-5`);
     // 5단계: 「대사 확인」 → 「수정」 → 설명 끝에 글자 하나 → 「저장」 → 빈 곳 → 「편집 되감기」
     await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
@@ -923,31 +930,31 @@ async function checkBrowser(browser, port) {
     ti = await tourInfo();
     check('CR-13 A 갈래 c 「팀 업무를 한눈에 보고 싶어요」 → 가상 운영부가 열리고 따라 하기 1/5(이야기: 75개 중 18개만 보임)', openedTeam && ti.scenario === 'team' && ti.index === 0 && (await text(s.cdp, '[data-testid=tour-story]')).includes('75개 중 18개만 보이고') && (await evaluate(s.cdp, 'window.__wu.cy.nodes().length')) === 18 && (await hashClean()), JSON.stringify(ti));
     const collapsedId = await evaluate(s.cdp, "window.__wu.cy.nodes('[?collapsed]')[0].id()");
-    check('CR-13 A team 1단계: 깜빡이는 대상은 접힌 팀(이중 테두리) 노드', (await blinkIds()).includes(collapsedId));
+    // 처음 사용 점검 2회차 FU-33: team 따라 하기 순서가 위험 요약의 「자세히」 → 펼치기 → 찾기 → 주변만 보기 → 전체 보기로 바뀜(옛 순서는 펼치기 → 인사이트 보기 → …)
+    // 노드 하나를 골라 둔다: 선택이 남아 있으면 위험 요약이 가려지므로 「빈 곳을 누르세요」 표지(N-2)가 보이는지 먼저 확인한다
+    await evaluate(s.cdp, "window.__wu.select(window.__wu.cy.nodes('[!collapsed]')[0].id())");
+    await sleep(300);
+    const hi2 = await hintInfo();
+    check('N-2 team 1단계(선택이 남은 상태)에도 그래프 안쪽 표지 「여기 빈 곳을 누르세요」(크기 있음, 안쪽 테두리)', !!hi2 && hi2.text === '여기 빈 곳을 누르세요' && hi2.w > 80 && hi2.inside && hi2.noPointer && hi2.graphInset, JSON.stringify(hi2));
+    await shot(s.cdp, `${browser.name}-37c-tour-team-5-hint`);
+    await blankClick();
+    check('처음 사용 W4(FU-33) team 1단계: 빈 곳을 누르면 표지가 사라지고 깜빡이는 대상은 위험 요약 줄의 「자세히」', (await hintInfo()) === null && (await evaluate(s.cdp, "document.querySelector('[data-testid=btn-team-risk-more]').classList.contains('tour-target')")));
+    const tn1 = await stepNamesOk();
+    check('처음 사용 W4(FU-33) team 1단계 문구: 「혼자만 아는 일 …」 줄의 「자세히」(줄 이름은 줄임표 앞부분이 요약 줄에 있고, 「자세히」 단추가 화면에 있음)', tn1.names.join('|') === '혼자만 아는 일 …|자세히' && tn1.missing.every((n) => n === '혼자만 아는 일 …') && (await text(s.cdp, '[data-testid=team-risk-summary]')).includes('혼자만 아는 일') && (await text(s.cdp, '[data-testid=tour-task]')).includes('한 사람만 해 봤고 인수인계 기록이 없는 일이 나옵니다'), JSON.stringify(tn1));
     await shot(s.cdp, `${browser.name}-37a-tour-team-1`);
+    await evaluate(s.cdp, "document.querySelector('[data-testid=btn-team-risk-more]').click()");
+    await sleep(500);
+    const insShow = await evaluate(s.cdp, "({ tab: document.querySelector('[data-testid=tab-risk]').classList.contains('active'), len: document.querySelector('#detail').textContent.length })");
+    ti = await tourInfo();
+    check('CR-13 A team 1단계 → 「자세히」로 인사이트가 「인수인계 위험」 탭으로 열리면(내용이 보임, FU-5) 2/5(접힌 팀 펼치기)', ti.index === 1 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 2/5' && insShow.tab && insShow.len > 100, JSON.stringify({ ti, insShow }));
+    await shot(s.cdp, `${browser.name}-37d-tour-team-insight`);
+    check('CR-13 A team 2단계: 깜빡이는 대상은 접힌 팀(이중 테두리) 노드', (await blinkIds()).includes(collapsedId));
     const dbl = await evaluate(s.cdp, `(() => { const n = window.__wu.cy.getElementById(${JSON.stringify(collapsedId)}); const p = n.renderedPosition(); const r = document.getElementById('graph').getBoundingClientRect(); return { x: r.left + p.x, y: r.top + p.y }; })()`);
     await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: dbl.x, y: dbl.y });
     for (const c of [1, 2]) { await s.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: dbl.x, y: dbl.y, button: 'left', clickCount: c }); await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: dbl.x, y: dbl.y, button: 'left', clickCount: c }); }
     await sleep(700);
     ti = await tourInfo();
-    // 처음 사용 점검 FU-14: 팀 따라 하기 순서가 펼치기 → 인사이트(인수인계 위험) → 찾기 → 주변만 보기 → 전체 보기로 바뀜
-    check('CR-13 A team 1단계 → 접힌 팀을 두 번 눌러 펼치면 2/5(인사이트 보기, FU-14: 팀장의 질문에 빨리 닿는 순서)', ti.index === 1 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 2/5' && (await evaluate(s.cdp, 'window.__wu.cy.nodes().length')) > 18, JSON.stringify(ti));
-    // 노드 하나를 골라 둔다(눌러서 펼친 뒤 선택이 남아 있는지는 상황에 따라 다르다): 선택이 남은 상태의 「빈 곳을 누르세요」 표지를 확인하기 위해
-    await evaluate(s.cdp, "window.__wu.select(window.__wu.cy.nodes('[!collapsed]')[0].id())");
-    await sleep(300);
-    const tn2 = await stepNamesOk();
-    check('CR-13 A team 2단계 문구의 「」 이름(인사이트 보기)이 실제 화면에 있고(「인수인계 위험」 탭은 열기 전에는 없음), 문구에 「맨 먼저 「인수인계 위험」이 열려, 한 사람만 해 봤고…」 설명이 있음', tn2.names.includes('인사이트 보기') && tn2.names.includes('인수인계 위험') && tn2.missing.every((n) => n === '인수인계 위험') && (await text(s.cdp, '[data-testid=tour-task]')).includes('맨 먼저 「인수인계 위험」이 열려, 한 사람만 해 봤고 인수인계 기록이 없는 일을 근거와 함께 보여 줍니다'), JSON.stringify(tn2));
-    const hi2 = await hintInfo();
-    check('N-2 team 2단계(선택이 남은 상태)에도 그래프 안쪽 표지 「여기 빈 곳을 누르세요」(크기 있음, 안쪽 테두리)', !!hi2 && hi2.text === '여기 빈 곳을 누르세요' && hi2.w > 80 && hi2.inside && hi2.noPointer && hi2.graphInset, JSON.stringify(hi2));
-    await shot(s.cdp, `${browser.name}-37c-tour-team-5-hint`);
-    await blankClick();
-    check('CR-13 A team 2단계: 빈 곳을 누르면 표지가 사라지고 깜빡이는 대상은 「인사이트 보기」', (await hintInfo()) === null && (await evaluate(s.cdp, "document.querySelector('[data-testid=btn-insight-universe]').classList.contains('tour-target')")));
-    await evaluate(s.cdp, "document.querySelector('[data-testid=btn-insight-universe]').click()");
-    await sleep(500);
-    const insShow = await evaluate(s.cdp, "({ tab: document.querySelector('[data-testid=tab-risk]').classList.contains('active'), len: document.querySelector('#detail').textContent.length })");
-    ti = await tourInfo();
-    check('CR-13 A team 2단계 → 「인사이트 보기」로 인사이트가 열리면(첫 탭 「인수인계 위험」에 내용이 보임, FU-5) 3/5(노드 찾기)', ti.index === 2 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 3/5' && insShow.tab && insShow.len > 100, JSON.stringify({ ti, insShow }));
-    await shot(s.cdp, `${browser.name}-37d-tour-team-insight`);
+    check('CR-13 A team 2단계 → 접힌 팀을 두 번 눌러 펼치면 3/5(노드 찾기)', ti.index === 2 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 3/5' && (await evaluate(s.cdp, 'window.__wu.cy.nodes().length')) > 18, JSON.stringify(ti));
     const tn3 = await stepNamesOk();
     check('CR-13 A team 3단계 문구의 「」 이름(노드 찾기)이 실제 화면에 있고 깜빡이는 대상은 찾기 칸', tn3.missing.length === 0 && (await evaluate(s.cdp, "document.querySelector('[data-testid=find-input]').classList.contains('tour-target')")), JSON.stringify(tn3));
     await evaluate(s.cdp, "(() => { const i = document.querySelector('[data-testid=find-input]'); i.value = ''; i.focus(); })()");
@@ -1092,6 +1099,17 @@ async function checkBrowser(browser, port) {
     check('첫 업무: 개요에 「처음 할 일」 상자가 보이고 크기가 있음(3단계, 완료 표시 없음)', await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=starter-steps]'); if (!b) return false; const r = b.getBoundingClientRect(); return r.width > 0 && r.height > 0 && b.textContent.includes('처음 할 일') && b.querySelectorAll('li').length === 3 && b.querySelectorAll('li[data-done=\"1\"]').length === 0; })()"));
     check('첫 업무: 업무 개수 노드가 하나라 「업무 더 넣기」가 남아 있음, 나눠 보세요 안내는 없음', (await text(s.cdp, '[data-testid=starter-steps]')).includes('업무 더 넣기') && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=split-hint]')")));
     // ── CR-16 ③ 빈 출발 미리 보기(2026-10-23): 「처음 할 일」 아래 접힌 상자 → 펼치면 「샘플」·월말 정산 사전 생성 문장 ──
+    // 처음 사용 W5 FU-34: 「처음 할 일」 아래 한 줄 「팀과 함께 쓰려면 → 「가져오기·내보내기」의 「폴더 연결」」(링크를 누르면 그 탭이 열림), 폴더 연결 ③ 문구
+    const teamHint = await evaluate(s.cdp, "(() => { const h = document.querySelector('[data-testid=starter-team-hint]'); const st = document.querySelector('[data-testid=starter-steps]'); const pv = document.querySelector('[data-testid=starter-preview]'); if (!h) return null; const r = h.getBoundingClientRect(); return { text: h.textContent, w: r.width, h: r.height, belowSteps: r.top >= st.getBoundingClientRect().bottom - 1, abovePreview: !pv || r.bottom <= pv.getBoundingClientRect().top + 1, link: !!h.querySelector('[data-testid=btn-starter-folder]') }; })()");
+    check('W5 FU-34 「처음 할 일」 아래에 「팀과 함께 쓰려면 → 「가져오기·내보내기」의 「폴더 연결」」 한 줄이 크기 있게 보임(폴더를 못 쓰는 브라우저면 한 줄이 없음)', !teamHint ? !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=btn-folder-entry]')")) : teamHint.text === '팀과 함께 쓰려면 → 「가져오기·내보내기」의 「폴더 연결」' && teamHint.w > 100 && teamHint.h > 8 && teamHint.belowSteps && teamHint.abovePreview && teamHint.link, JSON.stringify(teamHint));
+    if (teamHint) {
+      await clickTestId(s.cdp, 'btn-starter-folder');
+      await sleep(300);
+      const folderTab = await evaluate(s.cdp, "(() => ({ dialog: document.getElementById('import-dialog').open, tab: !!document.querySelector('[data-testid=folder-tab]'), origin: (document.querySelector('[data-testid=folder-howto-origin]') || { textContent: null }).textContent }))()");
+      check('W5 FU-34 「폴더 연결」 링크를 누르면 가져오기·내보내기 창의 폴더 연결 탭이 열리고 ③이 새 문구(브라우저 기록을 지워도 폴더 사본을 가져오면 돌아옴)', folderTab.dialog && folderTab.tab && (folderTab.origin === null || folderTab.origin === '원본은 각자 브라우저에 저장되고, 폴더에는 저장할 때마다 사본이 생깁니다. 브라우저 기록을 지워도 폴더 사본을 「가져오기」하면 돌아옵니다.'), JSON.stringify(folderTab));
+      await evaluate(s.cdp, "document.getElementById('import-dialog').close()");
+      await sleep(150);
+    }
     const pvInfo = () => evaluate(s.cdp, "(() => { const d = document.querySelector('[data-testid=starter-preview]'); if (!d) return null; const r = d.getBoundingClientRect(); const st = document.querySelector('[data-testid=starter-steps]').getBoundingClientRect(); return { open: d.open, w: r.width, h: r.height, below: r.top >= st.bottom - 1, summary: d.querySelector('summary').textContent, items: d.querySelectorAll('[data-testid=starter-preview-item]').length, text: d.textContent }; })()");
     const pv1 = await pvInfo();
     check('CR-16 ③ 「처음 할 일」 아래에 접힌 「기록이 이렇게 쌓이면 →」 미리 보기가 크기 있게 보임', !!pv1 && pv1.open === false && pv1.w > 0 && pv1.h > 0 && pv1.below && pv1.summary === '기록이 이렇게 쌓이면 →', JSON.stringify(pv1 && { ...pv1, text: '' }));
@@ -1856,8 +1874,8 @@ async function checkBrowser(browser, port) {
   // NFR 가용성·복구: 「가상 데이터 초기화」로 처음 상태로 돌아간다(위 버전 문제도 함께 풀림)
   await evaluate(s.cdp, "sessionStorage.setItem('__confirmMsg', ''); window.confirm = (m) => { sessionStorage.setItem('__confirmMsg', m); return true; }; document.getElementById('import-open').click()").catch(() => {});
   await sleep(300);
-  const roReset = await evaluate(s.cdp, "(() => { const d = document.getElementById('import-dialog'); const b = d && d.querySelector('[data-testid=reset-all]'); if (!d || !d.open || !b) return { open: !!(d && d.open), btn: false }; const r = b.getBoundingClientRect(); return { open: true, btn: true, disabled: b.disabled, size: r.width > 0 && r.height > 0 }; })()");
-  check('오류(12.1) 복구 경로: 읽기 전용 문서에서도 「가져오기·내보내기」 창이 열리고 안의 「가상 데이터 초기화」가 눌릴 수 있음', roReset && roReset.open && roReset.btn && !roReset.disabled && roReset.size, JSON.stringify(roReset));
+  const roReset = await evaluate(s.cdp, "(() => { const d = document.getElementById('import-dialog'); const adv = d && d.querySelector('details.danger-zone'); const closedAtFirst = !!(adv && !adv.open); if (adv) adv.open = true; /* 2회차 FU-25: 「고급」 안에 접혀 있어 먼저 펼친다 */ const b = d && d.querySelector('[data-testid=reset-all]'); if (!d || !d.open || !b) return { open: !!(d && d.open), btn: false }; const r = b.getBoundingClientRect(); return { open: true, btn: true, disabled: b.disabled, size: r.width > 0 && r.height > 0, closedAtFirst }; })()");
+  check('오류(12.1) 복구 경로: 읽기 전용 문서에서도 「가져오기·내보내기」 창이 열리고 안의 「가상 데이터 초기화」가 눌릴 수 있음', roReset && roReset.open && roReset.btn && !roReset.disabled && roReset.size && roReset.closedAtFirst, JSON.stringify(roReset));
   await evaluate(s.cdp, "document.getElementById('reset').click()").catch(() => {});
   await sleep(600);
   await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.cy.nodes().length > 0", 8000);
@@ -1876,6 +1894,7 @@ async function checkBrowser(browser, port) {
   check('R-26: 「인수인계 위험」 탭에 세 절(지식 집중·준비도·파급 영향)이 그려짐(크기 있음)', riskSizes.every((x) => x > 2000), JSON.stringify(riskSizes));
   const conc = await text(s.cdp, '[data-testid=risk-concentration-list]');
   check('R-26 ①: 「자료 수집」·「보고」가 윤바다 혼자 해 본 업무(높음)로 나옴, 「대사 확인」은 아님', conc.includes('자료 수집') && conc.includes('보고') && conc.includes('윤바다') && !conc.includes('대사 확인'), conc.slice(0, 160));
+  await evaluate(s.cdp, "document.querySelectorAll('[data-testid=risk-readiness-fold]').forEach((d) => { d.open = true; })"); // 업무별 빠진 항목은 기본 접힘(FU-31) — 펼친 뒤 읽는다
   const ready = await text(s.cdp, '[data-testid=risk-readiness-list]');
   check('R-26 ②: 준비도 n/6이 낮은 순(「보고」 2/6이 먼저, 「대사 확인」 5/6)', ready.indexOf('보고') >= 0 && ready.indexOf('보고') < ready.indexOf('대사 확인') && ready.includes('2/6') && ready.includes('5/6'), ready.slice(0, 160));
   const rip = await text(s.cdp, '[data-testid=risk-ripple-works]');
@@ -1917,8 +1936,8 @@ async function checkBrowser(browser, port) {
   check('R7-4: 머리글에 「설정」은 있고 「가상 데이터 초기화」는 없음', (await text(s.cdp, '#settings-open')) === '설정' && !(await evaluate(s.cdp, "[...document.querySelectorAll('header button')].some((b) => b.textContent.includes('가상 데이터 초기화'))")));
   await evaluate(s.cdp, "document.getElementById('import-open').click()");
   await sleep(300);
-  check('R7-4: 「가져오기·내보내기」 창 맨 아래 위험 구역에 「가상 데이터 초기화」', await evaluate(s.cdp, "(() => { const d = document.querySelector('#import-dialog'); const z = d.querySelector('.danger-zone'); return !!z && !!z.querySelector('[data-testid=reset-all]') && z === d.lastElementChild; })()"));
-  await evaluate(s.cdp, "document.querySelector('#import-dialog .danger-zone').scrollIntoView({ block: 'center' })");
+  check('R7-4(2회차 FU-25): 「가져오기·내보내기」 창 맨 아래 「고급」(기본 접힘) 안 위험 구역에 「가상 데이터 초기화」', await evaluate(s.cdp, "(() => { const d = document.querySelector('#import-dialog'); const z = d.querySelector('.danger-zone'); return !!z && !!z.querySelector('[data-testid=reset-all]') && z === d.lastElementChild && z.tagName === 'DETAILS' && !z.open && z.querySelector('summary').textContent === '고급'; })()"));
+  await evaluate(s.cdp, "document.querySelector('#import-dialog .danger-zone').open = true; document.querySelector('#import-dialog .danger-zone').scrollIntoView({ block: 'center' })");
   await sleep(150);
   await shot(s.cdp, `${browser.name}-27c-import-danger-zone`);
   await clickTestId(s.cdp, 'import-close');
@@ -2570,14 +2589,29 @@ async function checkBrowser(browser, port) {
       const help0 = await evaluate(s.cdp, "(() => { const h = document.querySelector('[data-testid=draft-person-help]'); return h ? h.textContent : null; })()");
       check('처음 사용 W1(FU-7) 받는 사람 후보가 0명인 새 지도: 초안 창을 열면 안내 「후임이 목록에 없으면 사람으로 먼저 넣으세요…」와 「＋ 사람 추가」 단추가 보임(크기 있음)', !!help0 && help0.includes('후임이 목록에 없으면 사람으로 먼저 넣으세요. 연결하지 않아도 받는 사람으로 고를 수 있습니다(「수행」으로 이으면 현재 담당으로 보입니다).') && (await w1Visible('[data-testid=draft-person-help]')) && (await w1Visible('[data-testid=draft-add-person]')) && (await text(s.cdp, '[data-testid=draft-add-person]')) === '＋ 사람 추가', String(help0));
       await shot(s.cdp, `${browser.name}-w1-draft-no-person`);
-      // 단추는 wu:add-node(사람) 알림만 보낸다(노드 추가 창을 여는 것은 main.js 쪽 — 여기서는 알림 내용만 확인)
-      await evaluate(s.cdp, "window.__w1evt = null; document.addEventListener('wu:add-node', (e) => { window.__w1evt = e.detail; }, { once: true }); document.querySelector('[data-testid=draft-add-person]').click()");
+      // 처음 사용 점검 2회차 FU-36(처음 사용 W4): 「＋ 사람 추가」는 긴 노드 추가 창 대신 초안 창 안의 작은 칸(이름 필수·연락처 선택)을 연다.
+      // 「넣기」가 wu:add-node(detail.label, attrs)를 보내면 main이 사람을 바로 만들고(연결 없음) 초안 창을 다시 그린다(계약). 알림 내용은 문서 수준 리스너로 따로 받아 본다
+      await evaluate(s.cdp, "window.__w1evt = null; window.__w1evtN = 0; document.addEventListener('wu:add-node', (e) => { window.__w1evt = e.detail; window.__w1evtN += 1; })");
+      const w4AddWasOpen = await evaluate(s.cdp, "(document.querySelector('details.add') || {}).open === true"); // 새 지도는 노드 추가가 펼쳐져 있다 — 누른 뒤 달라지지 않았는지를 본다
+      await evaluate(s.cdp, "document.querySelector('[data-testid=draft-add-person]').click()");
       await sleep(250);
-      check('처음 사용 W1(FU-7) 「＋ 사람 추가」를 누르면 wu:add-node 알림(detail.type = person)이 나감', (await evaluate(s.cdp, 'window.__w1evt && window.__w1evt.type')) === 'person', JSON.stringify(await evaluate(s.cdp, 'window.__w1evt')));
+      const w4Box = { box: await w1Visible('[data-testid=draft-new-person]'), name: await w1Visible('[data-testid=draft-new-person-name]'), contact: await w1Visible('[data-testid=draft-new-person-contact]'), add: await w1Visible('[data-testid=draft-new-person-add]'), events: await evaluate(s.cdp, 'window.__w1evtN'), addNodeOpen: await evaluate(s.cdp, "(document.querySelector('details.add') || {}).open === true") };
+      check('처음 사용 W4(FU-36) 「＋ 사람 추가」를 누르면 초안 창 안에 이름·연락처 칸과 「넣기」가 열리고(크기 있음), 알림은 아직 없고 노드 추가 창은 열리지 않음', w4Box.box && w4Box.name && w4Box.contact && w4Box.add && w4Box.events === 0 && w4Box.addNodeOpen === w4AddWasOpen, JSON.stringify({ ...w4Box, w4AddWasOpen }));
+      await shot(s.cdp, `${browser.name}-w4-new-person-box`);
+      await evaluate(s.cdp, "document.querySelector('[data-testid=draft-new-person-add]').click()");
+      await sleep(200);
+      check('처음 사용 W4(FU-36) 이름이 비면 「넣기」는 안내(이름을 적으세요.)만 하고 알림을 보내지 않음', (await text(s.cdp, '[data-testid=draft-new-person-msg]')) === '이름을 적으세요.' && (await evaluate(s.cdp, 'window.__w1evtN')) === 0);
+      await evaluate(s.cdp, "(() => { document.querySelector('[data-testid=draft-new-person-name]').value = '가상갑'; document.querySelector('[data-testid=draft-new-person-contact]').value = '내선 1234'; document.querySelector('[data-testid=draft-new-person-add]').click(); })()");
+      await sleep(400);
+      const w4Evt = await evaluate(s.cdp, 'window.__w1evt');
+      check('처음 사용 W4(FU-36) 이름·연락처를 넣고 「넣기」: wu:add-node 알림 detail이 {type: person, label: 가상갑, attrs: {연락처: 내선 1234}}', !!w4Evt && w4Evt.type === 'person' && w4Evt.label === '가상갑' && !!w4Evt.attrs && w4Evt.attrs['연락처'] === '내선 1234' && (await evaluate(s.cdp, 'window.__w1evtN')) === 1, JSON.stringify(w4Evt));
+      // main(W5 계약): label이 있으면 노드 추가 창을 열지 않고 사람 노드를 바로 만들고(연결 없음) 초안 창을 다시 그린다 → 받는 사람 목록에 그 사람이 있고 자동으로 골라짐
+      const w4Made = await waitFor(s.cdp, "window.__wu.doc.nodes.some((n) => n.label === '가상갑' && n.core_type === 'person')", 3000);
+      const w4After = await evaluate(s.cdp, "({ draftOpen: !!document.querySelector('[data-testid=draft-form]'), addOpen: (document.querySelector('details.add') || {}).open === true, to: (() => { const s = document.querySelector('[data-testid=draft-to]'); return s && s.selectedOptions[0] ? s.selectedOptions[0].textContent : null; })(), attr: (() => { const n = window.__wu.doc.nodes.find((x) => x.label === '가상갑'); return n && n.attrs ? n.attrs['연락처'] : null; })() })");
+      check('처음 사용 W4(FU-36) 사람 노드가 바로 만들어지고(연락처 속성 포함), 초안 창은 열려 있고 노드 추가 창 상태는 그대로이며, 받는 사람으로 그 사람이 골라져 있음', w4Made && w4After.draftOpen && w4After.addOpen === w4AddWasOpen && w4After.to === '가상갑' && w4After.attr === '내선 1234', JSON.stringify(w4After));
       await w1CloseDraft();
-      // 업무 하나 + 사람 하나(사람이 하나뿐이어도 받는 사람 후보는 없다) → 안내가 계속 보임
       const w1Work = await submitAdd(s.cdp, 'work', '시험 업무');
-      const w1P1 = await submitAdd(s.cdp, 'person', '가상갑');
+      const w1P1 = w4Made ? { code: 'OK' } : await submitAdd(s.cdp, 'person', '가상갑'); // 계약이 지켜지지 않았을 때도 뒤 점검은 이어 간다
       check('처음 사용 W1: 시험 지도에 업무 하나·사람 하나를 넣음', w1Work.code === 'OK' && w1P1.code === 'OK', JSON.stringify([w1Work, w1P1]));
       await w1OpenDraft();
       check('처음 사용 W1(FU-7) 사람이 하나뿐이어도 안내가 보임', await w1Visible('[data-testid=draft-person-help]'));
@@ -2597,8 +2631,8 @@ async function checkBrowser(browser, port) {
       await w1Pick('draft-to', '가상을');
       await evaluate(s.cdp, "document.querySelector('[data-testid=draft-form] button[type=submit]').click()");
       await sleep(400);
-      const w1Fill = await evaluate(s.cdp, "({ insufficient: document.querySelectorAll('[data-testid=insufficient]').length, hints: [...document.querySelectorAll('[data-testid=draft-fill-hint]')].map((h) => h.textContent), rel: (document.querySelector('[data-testid=draft-item-관계자_연락처] [data-testid=draft-fill-hint]') || {}).textContent || '' })");
-      check('처음 사용 W1(FU-8) 이력 부족 항목마다 「채우려면: …」 한 줄(개수 일치, 관계자는 「수행」으로 이으라고 안내)', w1Fill.insufficient >= 6 && w1Fill.hints.length === w1Fill.insufficient && w1Fill.hints.every((t) => t.startsWith('채우려면: ')) && w1Fill.rel.includes('「수행」(사람 → 업무)'), JSON.stringify(w1Fill));
+      const w1Fill = await evaluate(s.cdp, "({ insufficient: document.querySelectorAll('[data-testid=insufficient]').length, hints: [...document.querySelectorAll('[data-testid=draft-fill-hint]')].map((h) => h.textContent), rel: (document.querySelector('[data-testid=draft-item-관계자_연락처] [data-testid=draft-fill-hint]') || {}).textContent || '', relShort: !!document.querySelector('[data-testid=draft-item-관계자_연락처] [data-testid=insufficient]') })");
+      check('처음 사용 W1(FU-8) 이력 부족 항목마다 「채우려면: …」 한 줄(개수 일치, 관계자가 비었으면 「수행」으로 이으라고 안내 — 앞에서 연락처 있는 사람을 넣었으면 관계자는 채워짐)', w1Fill.insufficient >= 6 && w1Fill.hints.length === w1Fill.insufficient && w1Fill.hints.every((t) => t.startsWith('채우려면: ')) && (!w1Fill.relShort || w1Fill.rel.includes('「수행」(사람 → 업무)')), JSON.stringify(w1Fill));
       await shot(s.cdp, `${browser.name}-w1-fill-hints`);
       // FU-17: 초안을 닫았다가 다시 열면 마지막으로 만든 보내는·받는 사람이 골라져 있음
       await w1CloseDraft();
@@ -2644,6 +2678,7 @@ async function checkBrowser(browser, port) {
     await sleep(300);
     const noKey = await evaluate(s.cdp, "({ live: !!document.querySelector('[data-testid=draft-live]'), calls: window.__wu.fakeLlm.calls.length, items: document.querySelectorAll('[data-testid^=draft-item-]').length, fb: (document.querySelector('[data-testid=draft-fallback]') || {}).textContent || '' })");
     check('CR-15 키가 없으면 「생성 중…」 표시도 호출도 없고 규칙 기반 + 연결 전 이유(기존 동작 그대로)', !noKey.live && noKey.calls === 0 && noKey.items === 10 && noKey.fb.includes('규칙 기반으로 대체함'), JSON.stringify(noKey));
+    check('처음 사용 W4(FU-24) 「Claude API」를 골랐지만 키가 없으면 초안에 「실시간으로 다시 쓰려면…」 한 줄(draft-live-hint)이 보임', await evaluate(s.cdp, "!!document.querySelector('[data-testid=draft-live-hint]')"));
     // 2) 키를 넣는다: 머리글 설명에 「(실시간)」, 저장은 이 브라우저 설정에만
     await settingsOpen();
     await typeInto('settings-apikey', fakeKey);
@@ -2658,6 +2693,7 @@ async function checkBrowser(browser, port) {
     await sleep(150);
     const during = await evaluate(s.cdp, "({ note: (document.querySelector('[data-testid=draft-live]') || {}).textContent || '', aria: (document.querySelector('[data-testid=draft-live]') || {}).getAttribute && document.querySelector('[data-testid=draft-live]').getAttribute('aria-live'), items: document.querySelectorAll('[data-testid^=draft-item-]').length, claude: [...document.querySelectorAll('[data-testid=item-method]')].filter((c) => c.textContent === 'Claude API').length })");
     check('CR-15 초안: 먼저 규칙 기반(사전 생성) 10항목이 그려지고 「생성 중…」(aria-live=polite)이 보임, 아직 Claude API 칩은 없음', during.note === '생성 중…' && during.aria === 'polite' && during.items === 10 && during.claude === 0, JSON.stringify(during));
+    check('처음 사용 W4(FU-24) 키가 있으면 「실시간으로 다시 쓰려면…」 한 줄을 그리지 않음', await evaluate(s.cdp, "!document.querySelector('[data-testid=draft-live-hint]')"));
     const lockedDuring = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=draft-confirm]'); return b ? b.disabled : null; })()");
     check('CR-15 초안: 응답이 오면 「생성 중…」이 사라지고 항목이 교체됨(칩 「Claude API」), 생성 방식 표시도 바뀜', (await liveDone()) && (await chipCount()) >= 3 && (await text(s.cdp, '[data-testid=draft-method]')).includes('Claude API') && (await text(s.cdp, '[data-testid=draft-method-note]')).includes('원문 인용'), `칩 ${await chipCount()}`);
     const lockedAfter = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=draft-confirm]'); return { disabled: b ? b.disabled : null, note: (document.querySelector('[data-testid=draft-live]') || {}).textContent || '' }; })()");
@@ -3148,6 +3184,116 @@ async function checkBrowser(browser, port) {
 
     } else {
       check('W3 대형가맹점 A 카드승인 전문 송수신(U-K1) 열기', false, 'U-K1이 열리지 않음');
+    }
+    // ── 처음 사용 W5(2026-10-24, 2회차 FU-29·30·31·32·35·36·37): 근거 칩 글 한 줄(인사이트), 사람 상세 「이 사람 일 인수인계 초안」, 준비도 접힘, 「지금 담당 없음」 표시,
+    //    wu:add-node + label 바로 추가, 관계 고르기 칸 흐리게·오류 위치, 이력 분류 안내. 데이터는 저장하지 않는다(예외: 초안 창에서 사람을 추가해 보고 바로 「삭제」로 되돌림 — 노드 수가 같아야 통과) ──
+    if (await gotoU('U-D1')) {
+      // FU-31 준비도: 업무별 빠진 항목은 기본 접힘
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await sleep(150);
+      await clickTestId(s.cdp, 'btn-insight-universe');
+      await sleep(250);
+      await clickTestId(s.cdp, 'tab-risk');
+      await sleep(250);
+      const folds = await evaluate(s.cdp, "(() => { const fs = [...document.querySelectorAll('[data-testid=risk-readiness-fold]')]; return { n: fs.length, open: fs.filter((d) => d.open).length, hiddenInner: fs.every((d) => d.querySelector('ul').checkVisibility() === false), sumOk: fs.every((d) => /^「.+」 \\d\\/6 — 빠진 것 \\d+개/.test(d.querySelector('summary').textContent)), sumVisible: fs.every((d) => d.querySelector('summary').checkVisibility()) }; })()");
+      check('W5 FU-31 인사이트 「인수인계 준비도」: 업무별 빠진 항목이 기본 접힘(요약만 보임, 「업무 n/6 — 빠진 것 k개」)', folds.n > 0 && folds.open === 0 && folds.hiddenInner && folds.sumOk && folds.sumVisible, JSON.stringify(folds));
+      await evaluate(s.cdp, "document.querySelector('[data-testid=risk-readiness-fold] summary').click()");
+      await sleep(150);
+      const foldOpened = await evaluate(s.cdp, "(() => { const d = document.querySelector('[data-testid=risk-readiness-fold]'); return { open: d.open, visible: d.querySelector('ul').checkVisibility() }; })()");
+      check('W5 FU-31 요약을 누르면 빠진 항목이 펼쳐져 보임', foldOpened.open && foldOpened.visible, JSON.stringify(foldOpened));
+      await shot(s.cdp, `${browser.name}-w5-risk-fold`);
+      // FU-32 지금 담당 없음 표시 (2025 행사 등)
+      const noCur = await evaluate(s.cdp, "(() => { const lis = [...document.querySelectorAll('[data-testid=risk-concentration-list] li')]; const marked = lis.filter((li) => li.querySelector('[data-testid=risk-no-current]')); const ev = lis.find((li) => li.textContent.includes('2025 행사')); return { total: lis.length, marked: marked.length, event: ev ? (ev.querySelector('[data-testid=risk-no-current]') || { textContent: null }).textContent : 'none', sample: marked[0] ? marked[0].querySelector('[data-testid=risk-no-current]').textContent : null, vis: marked[0] ? marked[0].querySelector('[data-testid=risk-no-current]').checkVisibility() : null }; })()");
+      check('W5 FU-32 「한 사람에게 몰린 지식」 목록의 「2025 행사」에 「지금 담당 없음 — 끝난 업무인지 확인」, 지금 담당이 있는 업무에는 없음', noCur.event === '지금 담당 없음 — 끝난 업무인지 확인' && noCur.marked >= 1 && noCur.marked < noCur.total && noCur.vis === true, JSON.stringify(noCur));
+      // FU-29 인사이트 근거 칩: 누르면 근거 글 한 줄, 패널은 그대로
+      const chipShown = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=risk-concentration-list] button.evidence'); if (!b) return null; b.click(); const t = document.querySelector('[data-testid=risk-concentration-list] [data-testid=evidence-text]'); return { text: t ? t.textContent : '', pressed: b.getAttribute('aria-pressed'), insight: !!document.querySelector('[data-testid=risk-body]') }; })()");
+      check('W5 FU-29 인사이트의 근거 칩을 누르면 그 아래에 근거 글 한 줄이 보이고 인사이트 화면은 그대로', !!chipShown && chipShown.text.length > 3 && chipShown.pressed === 'true' && chipShown.insight, JSON.stringify(chipShown));
+      await clickTestId(s.cdp, 'insight-close');
+      await sleep(150);
+
+      // FU-36 wu:add-node + label: 노드 추가 창을 열지 않고 사람을 바로 만들고 초안 창이 유지된다. 끝에 「삭제」로 되돌림
+      const nBefore = await evaluate(s.cdp, 'window.__wu.doc.nodes.length');
+      const w5Person = '처음사용W5 시험 후임';
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await sleep(150);
+      await clickTestId(s.cdp, 'btn-draft-universe');
+      await sleep(250);
+      const picked = await evaluate(s.cdp, "(() => { const f = document.querySelector('[data-testid=draft-from]'); const o = [...f.options].find((x) => x.value); f.value = o.value; f.dispatchEvent(new Event('change')); return { target: document.querySelector('[data-testid=draft-target]').value, from: f.value }; })()");
+      await evaluate(s.cdp, `document.dispatchEvent(new CustomEvent('wu:add-node', { detail: { type: 'person', label: ${JSON.stringify(w5Person)}, attrs: { 연락처: '내선 0000' } } }))`);
+      await sleep(300);
+      const direct = await evaluate(s.cdp, `(() => ({ nodes: window.__wu.doc.nodes.length, draft: !!document.querySelector('[data-testid=draft-form]'), inTo: [...document.querySelectorAll('[data-testid=draft-to] option')].some((o) => o.textContent.includes(${JSON.stringify(w5Person)})), addOpen: document.querySelector('details.add').open, target: (document.querySelector('[data-testid=draft-target]') || {}).value, from: (document.querySelector('[data-testid=draft-from]') || {}).value }))()`);
+      check('W5 FU-36 wu:add-node {label}: 노드 추가 창은 안 열리고 노드 +1, 초안 창 유지·받는 사람 목록에 그 이름, 고른 대상·보내는 사람 유지', direct.nodes === nBefore + 1 && direct.draft && direct.inTo && direct.addOpen === false && direct.target === picked.target && direct.from === picked.from, JSON.stringify({ nBefore, picked, direct }));
+      const newNode = await evaluate(s.cdp, `(() => { const p = window.__wu.view.nodes.find((n) => n.label === ${JSON.stringify(w5Person)}); return p ? { gid: p.gid, links: window.__wu.view.edges.filter((e) => !e.hidden && (e.source === p.gid || e.target === p.gid)).length } : null; })()`);
+      check('W5 FU-36 새 사람은 연결 없이 만들어짐', !!newNode && newNode.links === 0, JSON.stringify(newNode));
+      // 오류: 이름이 공백뿐이면 → 초안 창의 메시지 자리에 오류 문구, 노드 수는 그대로
+      await evaluate(s.cdp, `document.dispatchEvent(new CustomEvent('wu:add-node', { detail: { type: 'person', label: '   ' } }))`);
+      await sleep(250);
+      const dup = await evaluate(s.cdp, "(() => { const m = document.querySelector('[data-testid=draft-message]'); return { nodes: window.__wu.doc.nodes.length, error: !!m && m.classList.contains('error'), text: m ? m.textContent : '', alert: false }; })()");
+      check('W5 FU-36 이름이 공백뿐이면 초안 창의 메시지 자리에 오류 문구, 노드 수 그대로', dup.nodes === nBefore + 1 && dup.error && dup.text.length > 3, JSON.stringify(dup));
+      if (newNode) {
+        await evaluate(s.cdp, `window.__wu.select(${JSON.stringify(newNode.gid)})`);
+        await sleep(200);
+        // FU-30 사람 상세: 「이 사람 일 인수인계 초안」 (이 새 사람으로 시험 — 보내는 사람이 그 사람이어야 함)
+        const pbtn = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=btn-person-draft]'); return b ? { text: b.textContent, visible: b.checkVisibility() } : null; })()");
+        check('W5 FU-30 사람 상세에 「이 사람 일 인수인계 초안」 단추', !!pbtn && pbtn.text === '이 사람 일 인수인계 초안' && pbtn.visible, JSON.stringify(pbtn));
+        await clickTestId(s.cdp, 'btn-person-draft');
+        await sleep(250);
+        const pd = await evaluate(s.cdp, `(() => { const t = document.querySelector('[data-testid=draft-target]'); const f = document.querySelector('[data-testid=draft-from]'); const to = document.querySelector('[data-testid=draft-to]'); const root = window.__wu.view.nodes.find((n) => n.core_type === 'root'); return t ? { targetText: t.selectedOptions[0] ? t.selectedOptions[0].textContent : '', rootLabel: root ? root.label : null, fromText: f.selectedOptions[0] ? f.selectedOptions[0].textContent : '', to: to.value } : null; })()`);
+        check('W5 FU-30 단추를 누르면 초안 창이 대상 = 이 지도 전체(꼭지), 보내는 사람 = 그 사람으로 미리 골라져 열림(받는 사람은 비어 있음)', !!pd && pd.targetText.includes(pd.rootLabel) && pd.fromText.includes(w5Person) && pd.to === '', JSON.stringify(pd));
+        await shot(s.cdp, `${browser.name}-w5-person-draft`);
+        await evaluate(s.cdp, `window.__wu.select(${JSON.stringify(newNode.gid)})`);
+        await sleep(200);
+        await evaluate(s.cdp, "(document.querySelector('[data-testid=btn-delete]') || { click() {} }).click()");
+        await sleep(300);
+      }
+      const nAfter = await evaluate(s.cdp, 'window.__wu.doc.nodes.length');
+      check('W5 FU-36 시험으로 추가한 사람을 바로 지워 노드 수가 처음과 같음(데이터 되돌림)', nAfter === nBefore, `${nBefore} → ${nAfter}`);
+    } else {
+      check('W5 가상 운영부(U-D1) 열기', false, 'U-D1이 열리지 않음');
+    }
+
+    if (await gotoU('U-A1')) {
+      // FU-35 연결 추가: 상대를 고르면 그 조합에 못 쓰는 관계가 흐려짐(disabled + 보기 글). 상대 고르기 전에는 전부 켜짐
+      await evaluate(s.cdp, "window.__wu.select('U-A1/N-002')");
+      await sleep(200);
+      await clickTestId(s.cdp, 'btn-edge');
+      await sleep(200);
+      const before = await evaluate(s.cdp, "[...document.querySelector('[data-testid=edge-type]').options].filter((o) => o.disabled).length");
+      const personOpt = await evaluate(s.cdp, "(() => { const o = [...document.querySelector('[data-testid=edge-other]').options].find((x) => x.textContent.includes('(사람)')); return o ? o.value : null; })()");
+      await evaluate(s.cdp, `(() => { const o = document.querySelector('[data-testid=edge-other]'); o.value = ${JSON.stringify(personOpt)}; o.dispatchEvent(new Event('change')); })()`);
+      await sleep(150);
+      const rel = await evaluate(s.cdp, "(() => Object.fromEntries([...document.querySelector('[data-testid=edge-type]').options].map((o) => [o.value, { disabled: o.disabled, text: o.textContent }])))()");
+      check('W5 FU-35 연결 추가: 상대를 고르기 전에는 관계가 전부 켜져 있음', before === 0, String(before));
+      check('W5 FU-35 연결 추가: 업무↔사람을 고르면 「수행」은 켜짐, 「관련」은 disabled + 「(이 조합에는 못 씀)」', !!personOpt && rel.performs && rel.performs.disabled === false && rel.performs.text === '수행' && rel.relates_to.disabled === true && rel.relates_to.text === '관련 (이 조합에는 못 씀)', JSON.stringify(rel));
+      // FU-35 오류 위치: 「관련」(사람 → 업무)로 실제로 저장해 보면 E-PAIR가 「연결」 단추 바로 위에, 화면 안에 보임
+      await evaluate(s.cdp, "(() => { const t = document.querySelector('[data-testid=edge-type]'); t.value = 'relates_to'; t.dispatchEvent(new Event('change')); const d = document.querySelector('[data-testid=edge-direction]'); d.value = 'in'; d.dispatchEvent(new Event('change')); document.querySelector('[data-testid=edge-form] button[type=submit]').click(); })()");
+      await sleep(250);
+      const errPos = await evaluate(s.cdp, "(() => { const f = document.querySelector('[data-testid=edge-form]'); const m = f.querySelector('[data-testid=form-message]'); const btn = f.querySelector('button[type=submit]'); const r = m.getBoundingClientRect(); const br = btn.getBoundingClientRect(); return { code: m.dataset.code, text: m.textContent, above: r.bottom <= br.top + 1, inView: r.top >= 0 && r.bottom <= window.innerHeight }; })()");
+      check('W5 FU-35 연결 추가 실패(E-PAIR): 오류가 「연결」 단추 바로 위에 있고 화면 안에 보임', errPos.code === 'E-PAIR' && errPos.text.includes('사람 → 업무') && errPos.above && errPos.inView, JSON.stringify(errPos));
+      await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=edge-form] button')].find((b) => b.textContent === '취소').click()");
+      await sleep(150);
+      // FU-37 이력 추가: 분류 안내 한 줄
+      await clickTestId(s.cdp, 'btn-event');
+      await sleep(200);
+      const hint = await evaluate(s.cdp, "(() => { const h = document.querySelector('[data-testid=category-hint]'); const c = document.querySelector('[data-testid=event-category]'); return h ? { text: h.textContent, options: [...c.options].map((o) => o.textContent), visible: h.checkVisibility() } : null; })()");
+      check('W5 FU-37 이력 추가의 분류 아래에 초안 칸 안내(이슈 → 「최근 이슈」, 진행 중 → 「진행 중인 일」, 주의사항 → 「주의사항·노하우」), 분류 보기 이름과 같음',
+        !!hint && hint.visible && hint.text === '분류에 따라 인수인계 초안의 칸이 정해집니다: 이슈 → 「최근 이슈」, 진행 중 → 「진행 중인 일」, 주의사항 → 「주의사항·노하우」' && ['이슈', '진행 중', '주의사항'].every((x) => hint.options.includes(x)), JSON.stringify(hint));
+      await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=event-form] button')].find((b) => b.textContent === '취소').click()");
+      await sleep(150);
+      // FU-35 노드 추가: 새 노드 유형과 함께 이을 노드로 못 쓰는 관계가 흐려지고, 실패 오류가 「추가」 단추 바로 위
+      await evaluate(s.cdp, "window.__wu.select(null)");
+      await sleep(150);
+      const nBefore2 = await evaluate(s.cdp, 'window.__wu.doc.nodes.length');
+      await evaluate(s.cdp, "document.querySelector('details.add').open = true");
+      const addRel = await evaluate(s.cdp, "(() => { const slot = document.getElementById('add-slot'); const t = slot.querySelector('[data-testid=node-type]'); t.value = 'person'; t.dispatchEvent(new Event('change')); const o = slot.querySelector('[data-testid=node-link-other]'); const w = [...o.options].find((x) => x.textContent.includes('(업무)')); o.value = w.value; o.dispatchEvent(new Event('change')); const r = slot.querySelector('[data-testid=node-link-type]'); return Object.fromEntries([...r.options].map((x) => [x.value, { disabled: x.disabled, text: x.textContent }])); })()");
+      check('W5 FU-35 노드 추가: 사람 + 업무를 고르면 「관련」은 disabled + 「(이 조합에는 못 씀)」, 추천된 「수행」은 켜짐', addRel.relates_to.disabled === true && addRel.relates_to.text === '관련 (이 조합에는 못 씀)' && addRel.performs.disabled === false, JSON.stringify(addRel));
+      await evaluate(s.cdp, "(() => { const slot = document.getElementById('add-slot'); slot.querySelector('[data-testid=node-label]').value = 'W5 시험'; const r = slot.querySelector('[data-testid=node-link-type]'); r.value = 'relates_to'; r.dispatchEvent(new Event('change')); slot.querySelector('button[type=submit]').click(); })()");
+      await sleep(250);
+      const addErr = await evaluate(s.cdp, "(() => { const slot = document.getElementById('add-slot'); const m = slot.querySelector('[data-testid=form-message]'); const btn = slot.querySelector('button[type=submit]'); const r = m.getBoundingClientRect(); const br = btn.getBoundingClientRect(); return { code: m.dataset.code, above: r.bottom <= br.top + 1, inView: r.top >= 0 && r.bottom <= window.innerHeight, nodes: window.__wu.doc.nodes.length }; })()");
+      check('W5 FU-35 노드 추가 실패(E-PAIR): 오류가 「추가」 단추 바로 위에 있고 화면 안에 보이며 아무것도 저장되지 않음', addErr.code === 'E-PAIR' && addErr.above && addErr.inView && addErr.nodes === nBefore2, JSON.stringify(addErr));
+      await shot(s.cdp, `${browser.name}-w5-add-error`);
+    } else {
+      check('W5 월말 정산(U-A1) 열기', false, 'U-A1이 열리지 않음');
     }
     await gotoU('U-A1'); // 뒤 단계(편집 되감기)는 월말 정산에서 시작한다
   }

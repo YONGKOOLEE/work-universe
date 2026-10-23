@@ -54,7 +54,7 @@ export function startScreen(o) {
     el('button', { type: 'button', class: 'start-way', 'data-testid': testid, disabled, onclick }, el('strong', {}, title), el('span', {}, desc),
       note ? el('span', { class: 'way-note', 'data-testid': `${testid}-note` }, note) : null));
   const ways = [
-    o.onTour ? way('start-way-handover', '인수인계를 앞두고 있어요', '예시 업무로 인수인계 초안을 만들어 봅니다(3분)', () => o.onTour('handover')) : null,
+    o.onTour ? way('start-way-handover', '인수인계를 앞두고 있어요', '넘기는 쪽도 받는 쪽도 — 예시 업무로 인수인계 초안을 봅니다(3분)', () => o.onTour('handover')) : null,
     way('start-way-mine', '내 업무를 정리해 두고 싶어요', '업무 하나부터 작은 지도를 만듭니다', o.onCreateMine || o.onCreate, o.readOnly),
     o.onTour ? way('start-way-team', '팀 업무를 한눈에 보고 싶어요', '여러 업무를 묶은 팀·부서 지도를 봅니다', () => o.onTour('team'), false, TEAM_NOTE) : null,
   ].filter(Boolean);

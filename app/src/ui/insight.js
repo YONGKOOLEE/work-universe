@@ -15,8 +15,8 @@ import { SUBTYPE_ROLE } from '../model/schema.js';
 let denseN = DENSE_DEFAULT_N;
 export const currentDenseN = () => denseN;
 
-// 근거 칩 묶음(인사이트는 div.evidence-list)
-const chips = (view, ids, onFocus) => evidenceChips(view, ids, onFocus, { tag: 'div' });
+// 근거 칩 묶음(인사이트는 div.evidence-list). 칩을 누르면 그 묶음 아래에 근거 글 한 줄이 보인다(FU-29, evidence.js의 showText — 글은 view로 만든 기본 함수)
+const chips = (view, ids, onFocus) => evidenceChips(view, ids, onFocus, { tag: 'div', showText: true });
 
 // 인사이트 설명(역할 b): 공급자 결과(사전 생성)가 있으면 그 문장, 없으면 규칙 기반 문장. 문장마다 근거 버튼
 function explainBox(view, req, o) {
@@ -47,7 +47,7 @@ function explainBox(view, req, o) {
 
 function fillExplain(box, view, r, o, note) {
   box.replaceChildren(...[
-    el('h4', {}, '설명', el('span', { class: `method-chip ${r.method}`, title: r.method === 'pregen' ? '개발 중 Claude가 이 근거만 보고 쓴 문장 — 앱이 열 때마다 근거 ID를 검증하고, 맞지 않으면 규칙 기반 문장으로 바꿉니다' : r.method === 'llm' ? 'Claude API가 실시간으로 이 근거만 보고 쓴 문장 — 앱이 근거 ID와 원문 인용(quote)을 검증했습니다' : METHOD_LABELS[r.method] }, METHOD_LABELS[r.method].replace(/\(.*\)$/, '')), note),
+    el('h4', {}, '설명', el('span', { class: `method-chip ${r.method}`, title: r.method === 'pregen' ? 'Claude가 이 기록만 보고 써 둔 문장 — 앱이 열 때마다 근거 ID를 검증하고, 맞지 않으면 규칙 기반 문장으로 바꿉니다' : r.method === 'llm' ? 'Claude API가 실시간으로 이 근거만 보고 쓴 문장 — 앱이 근거 ID와 원문 인용(quote)을 검증했습니다' : METHOD_LABELS[r.method] }, METHOD_LABELS[r.method].replace(/\(.*\)$/, '')), note),
     // 근거가 많으면 접어 둔다(표를 밀어내지 않게)
     el('ul', {}, ...r.sentences.map((s) => el('li', {}, s.text, ' ', s.evidence_ids.length > 4
       ? el('details', { class: 'evidence-fold' }, el('summary', { class: 'muted small' }, `근거 ${s.evidence_ids.length}건`), chips(view, s.evidence_ids, o.onFocus))
@@ -298,6 +298,13 @@ function renderFlow(box, view, r, o) {
 const LEVEL_TEXT = { high: '높음', caution: '주의' };
 
 // 인수인계 위험 행의 근거 칩: 6개를 넘으면 「근거 n건」으로 접는다. 경로 글은 단계가 많으면 가운데를 줄인다(재검증 D4: 300단계 사슬)
+// 지금 담당이 없는 업무에 붙이는 작은 표시(FU-32). 시작 예정 담당자만 있는 업무는 끝난 업무가 아니므로 그 사실을 알린다
+function noCurrentMark(gap) {
+  if (!gap) return null;
+  const text = gap.kind === 'scheduled' ? `지금 담당 없음 — 시작 예정(${gap.next_person.label}, ${gap.next_start}부터)` : '지금 담당 없음 — 끝난 업무인지 확인';
+  return el('span', { class: 'muted small', 'data-testid': 'risk-no-current', 'data-kind': gap.kind }, text);
+}
+
 const RISK_FOLD_AT = 6;
 function riskChips(view, ids, onFocus) {
   return ids.length > RISK_FOLD_AT
@@ -318,6 +325,8 @@ function riskView(o, view) {
 
   // ① 지식 집중 위험
   const c = knowledgeConcentration(view, { asOf });
+  // 지금 담당(현재 수행 연결)이 없는 업무(FU-32): 「밀집·공백」 탭이 공백으로 세는 업무와 같다 — 같은 함수(densityGaps)의 gaps를 그대로 쓴다(새 규칙 없음, 밀집 기준 N은 공백 판정과 무관)
+  const noCurrent = new Map(densityGaps(view, { asOf, n: denseN }).gaps.map((g) => [g.gid, g]));
   let cBody;
   if (c.insufficient) cBody = insuff('risk-concentration-insufficient', c);
   else {
@@ -328,7 +337,7 @@ function riskView(o, view) {
     else {
       parts.push(el('ul', { class: 'patterns', 'data-testid': 'risk-concentration-list' },
         ...c.items.map((x) => el('li', { 'data-level': x.level },
-          el('div', { class: 'who' }, el('strong', {}, `「${x.work.label}」`), el('span', { class: 'chip' }, LEVEL_TEXT[x.level]), el('span', { class: 'muted small' }, ` ${x.work.universe_name}`)),
+          el('div', { class: 'who' }, el('strong', {}, `「${x.work.label}」`), el('span', { class: 'chip' }, LEVEL_TEXT[x.level]), el('span', { class: 'muted small' }, ` ${x.work.universe_name}`), noCurrentMark(noCurrent.get(x.work.gid))),
           el('div', { class: 'muted small' }, x.level === 'high' ? `${x.person.label}만 해 봤고 인수인계 기록이 0건입니다.` : `${x.person.label}만 해 봤습니다. 인수인계 이력 ${x.handover_events}건, 인수인계서 ${x.handover_docs}건이 있습니다.`),
           riskChips(view, x.evidence, o.onFocus)))));
     }
@@ -343,10 +352,13 @@ function riskView(o, view) {
   else {
     rBody = el('ul', { class: 'patterns', 'data-testid': 'risk-readiness-list' },
       ...r.items.map((x) => el('li', { 'data-score': String(x.score) },
-        el('div', { class: 'who' }, el('strong', {}, `「${x.work.label}」`), el('span', { class: 'chip' }, `${x.score}/${x.total}`), el('span', { class: 'muted small' }, ` ${x.work.universe_name}`)),
+        // 빠진 항목은 기본 접어 두고(FU-31) 요약 한 줄만 보인다. 다 갖췄으면 접을 것이 없다
         x.missing.length
-          ? el('ul', { class: 'steps' }, ...x.missing.map((m) => el('li', {}, `${m.label} — ${m.detail}`, ' ', chips(view, m.evidence, o.onFocus))))
-          : el('div', { class: 'muted small' }, '6항목을 모두 갖췄습니다.'))));
+          ? el('details', { class: 'readiness-fold', 'data-testid': 'risk-readiness-fold' },
+            el('summary', {}, el('strong', {}, `「${x.work.label}」`), ` ${x.score}/${x.total} — 빠진 것 ${x.missing.length}개`, el('span', { class: 'muted small' }, ` ${x.work.universe_name}`)),
+            el('ul', { class: 'steps' }, ...x.missing.map((m) => el('li', {}, `${m.label} — ${m.detail}`, ' ', chips(view, m.evidence, o.onFocus)))))
+          : el('div', { class: 'who' }, el('strong', {}, `「${x.work.label}」`), el('span', { class: 'chip' }, `${x.score}/${x.total}`), el('span', { class: 'muted small' }, ` ${x.work.universe_name}`)),
+        x.missing.length ? null : el('div', { class: 'muted small' }, '6항목을 모두 갖췄습니다.'))));
   }
   const rBox = explainBox(view, readinessExplain(r, uid), o);
 

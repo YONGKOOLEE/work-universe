@@ -25,7 +25,7 @@ export const LLM_CANDIDATES_MAX_TOKENS = 8000;
 export const LLM_CANDIDATES_TIMEOUT_MS = 60000;
 
 export const PROVIDERS = [
-  { name: 'pregen', label: '사전 생성(개발 시 Claude로 작성)', help: '기본값. 개발 중 Claude로 미리 작성한 문장을 씁니다. 결과가 없거나 데이터가 바뀐 항목은 규칙 기반 문장으로 보입니다.' },
+  { name: 'pregen', label: '사전 생성(Claude가 기록만 보고 써 둔 문장)', help: '기본값. 개발 중 Claude로 미리 작성한 문장을 씁니다. 결과가 없거나 데이터가 바뀐 항목은 규칙 기반 문장으로 보입니다.' },
   { name: 'none', label: '규칙 기반만', help: '기록을 규칙으로 옮겨 적은 문장만 씁니다(LLM 없음).' },
   { name: 'claude_api', label: 'Claude API(키를 넣으면 실시간)', help: '키를 넣으면 초안·인사이트 설명 문장을 실시간으로 다듬습니다(근거와 원문 인용이 확인된 문장만 씁니다). 키가 없으면 규칙 기반으로 동작하고 이유를 표시합니다.' },
   { name: 'internal', label: '사내 LLM (다음 단계에서 연결)', help: '사용 방법이 정해지면 이 자리에 연결합니다. 지금은 규칙 기반으로 동작합니다.' },

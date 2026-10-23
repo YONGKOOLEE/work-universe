@@ -61,3 +61,14 @@ export function remember(memory, universeId, from, to) {
 export function recall(memory, universeId) {
   return memory.get(universeId) || null;
 }
+
+/**
+ * 「＋ 사람 추가」로 방금 넣은 사람을 받는 사람 후보에서 찾는다(FU-36). 이름이 같은 사람이 여럿이면 가장 나중에 만든(목록 맨 끝) 사람.
+ * @param {{gid:string,label:string}[]} people
+ * @param {string} label 넣을 때 쓴 이름
+ * @returns {string|null} gid
+ */
+export function pickNewPerson(people, label) {
+  const hits = people.filter((p) => p.label === label);
+  return hits.length ? hits[hits.length - 1].gid : null;
+}

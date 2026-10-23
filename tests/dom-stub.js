@@ -67,7 +67,14 @@ export class FakeEl {
     return node;
   }
 
-  append(...cs) { for (const c of cs) this.childNodes.push(this.#adopt(c)); }
+  append(...cs) {
+    for (const c of cs) {
+      const node = this.#adopt(c);
+      this.childNodes.push(node);
+      // select에 selected 보기를 붙이면 select의 값이 그 보기가 된다(실제 브라우저와 같음)
+      if (this.tagName === 'SELECT' && node.tagName === 'OPTION' && node.selected) this.value = node.value;
+    }
+  }
 
   prepend(...cs) { this.childNodes.unshift(...cs.map((c) => this.#adopt(c))); }
 

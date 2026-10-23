@@ -198,6 +198,12 @@
   .draft-item.insufficient h4 { color: var(--muted); }
   .evidence-list { display: flex; flex-wrap: wrap; gap: 4px; }
   .evidence { padding: 0 8px; font-size: 11px; border-radius: 8px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .evidence[aria-pressed=true] { border-color: var(--accent); color: var(--accent); } /* FU-29: 근거 글을 보이고 있는 칩 */
+  .new-person { display: grid; gap: 6px; margin-top: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; } /* FU-36: 초안 창 안 「＋ 사람 추가」 작은 칸 */
+  .new-person[hidden] { display: none; }
+  .evidence-slot { flex: 1 0 100%; min-width: 0; }
+  .evidence-slot:empty { display: none; }
+  .evidence-text { display: block; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; white-space: normal; padding: 2px 0; }
   .copy-box { width: 100%; margin-top: 8px; }
   .confirm-box { margin-top: 12px; padding: 10px; border: 1px solid var(--accent); border-radius: 8px; display: grid; gap: 6px; }
   .confirm-box p { margin: 0; } .confirm-box p:empty { display: none; } /* 화면 점검 S-6 */
@@ -266,8 +272,9 @@
   .explain h4 { margin: 0; font-size: 13px; display: flex; gap: 6px; align-items: center; }
   .explain ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
   .method-chip { margin-left: 6px; font-size: 11px; padding: 0 6px; border-radius: 8px; border: 1px solid var(--line); color: var(--muted); font-weight: normal; }
-  .evidence-label { color: var(--muted); font-size: 12px; margin-right: 4px; }
+  .evidence-label { color: var(--muted); font-size: 12px; margin-right: 4px; flex: none; white-space: nowrap; }
   .evidence-row { display: flex; align-items: baseline; margin-top: 2px; }
+  .evidence-row > .evidence-list { flex: 1; min-width: 0; }
   .starter-list button.starter-go { flex: 1; min-width: 0; background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
   .method-chip.pregen { border-color: var(--accent); color: var(--accent); }
   .dg-n { display: flex; align-items: center; gap: 6px; font-size: 13px; }

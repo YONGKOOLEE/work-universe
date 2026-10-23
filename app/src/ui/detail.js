@@ -118,6 +118,11 @@ export function renderUniverseSummary(panel, s, shown = null, extras = {}) {
       el('ul', { class: 'starter-list' }, ...extras.starter.steps.map((st) => el('li', { class: st.done ? 'done' : '', 'data-done': st.done ? '1' : '0' }, `${st.done ? '✓' : '○'} `, st.work && extras.onSelect && !st.done
         ? el('button', { type: 'button', class: 'starter-go', 'data-testid': 'starter-go', title: '이 업무를 고릅니다', onclick: () => extras.onSelect(st.work.gid) }, st.label)
         : st.label)))));
+    // 팀과 함께 쓰는 길(FU-34): 폴더 연결 탭을 여는 함수(extras.onOpenFolder)가 있을 때만 보인다(읽기 전용·되감기·폴더를 못 쓰는 브라우저에서는 부르는 쪽이 넘기지 않는다)
+    if (extras.onOpenFolder) {
+      panel.append(el('p', { class: 'muted small', 'data-testid': 'starter-team-hint' }, '팀과 함께 쓰려면 → 「가져오기·내보내기」의 ',
+        el('button', { type: 'button', class: 'link', 'data-testid': 'btn-starter-folder', onclick: extras.onOpenFolder }, '「폴더 연결」')));
+    }
     // CR-16 ③: 「처음 할 일」이 보이는 동안만, 그 아래에 접힌 미리 보기(샘플 초안의 일부, 사전 생성 문장 그대로). 내용·표시 여부는 rules가 정한다
     const pv = extras.preview !== undefined ? extras.preview : previewContent();
     if (pv) {

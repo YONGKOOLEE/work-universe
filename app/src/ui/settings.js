@@ -10,13 +10,18 @@ import { el } from './dom.js';
  *   persisted: 저장소를 쓸 수 있는지(없으면 이번 화면에서만 유지)
  *   apiKey·llmModel·onApiKey·onLlmModel·onClearKey: 「Claude API」를 골랐을 때 보이는 키·모델 칸(CR-15)
  */
+// 화면에서만 바꾸는 부분(llm/providers.js는 그대로): 「사내 LLM」은 맨 아래로(FU-25), 사전 생성 설명은 실시간이 아닌 "써 둔 문장"임을 그대로 쓴다(FU-24)
+const HELP_OVERRIDE = { pregen: '기본값. Claude가 이 기록만 보고 써 둔 문장을 씁니다. 열 때마다 앱이 근거를 검사하고, 맞지 않거나 써 둔 문장이 없는 항목은 규칙 기반 문장으로 보입니다.' };
+/** 설정 화면에 보일 공급자 순서: 사내 LLM만 맨 아래로(나머지는 PROVIDERS 순서 그대로) */
+export const displayProviders = (all) => [...all.filter((p) => p.name !== 'internal'), ...all.filter((p) => p.name === 'internal')];
+
 export function settingsPanel(o) {
   const list = el('div', { class: 'settings-list', role: 'radiogroup', 'data-testid': 'settings-providers' },
     // 「실패 흉내」는 개발 점검용이라 점검 주소(?check)에서만 보인다(여섯 번째 검토 U-13)
-    ...PROVIDERS.filter((p) => p.name !== 'fail' || o.showCheckTools).map((p) => {
+    ...displayProviders(PROVIDERS).filter((p) => p.name !== 'fail' || o.showCheckTools).map((p) => {
       const input = el('input', { type: 'radio', name: 'provider', value: p.name, checked: p.name === o.current, 'data-testid': `provider-${p.name}` });
       input.addEventListener('change', () => { o.onChange(p.name); syncKeyBox(p.name); });
-      return el('label', { class: 'setting' }, input, el('span', {}, el('strong', {}, p.label), el('span', { class: 'muted small' }, p.help)));
+      return el('label', { class: 'setting' }, input, el('span', {}, el('strong', {}, p.label), el('span', { class: 'muted small' }, HELP_OVERRIDE[p.name] || p.help)));
     }));
   const authorInput = el('input', { type: 'text', maxlength: String(LABEL_MAX), value: o.authorName || '', placeholder: '사용자(이 브라우저)', 'aria-label': '작성자 이름', 'data-testid': 'settings-author' });
   authorInput.addEventListener('change', () => o.onAuthorName(authorInput.value));

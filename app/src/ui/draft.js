@@ -9,16 +9,27 @@ import { el } from './dom.js';
 import { downloadWithNotice, draftDoc, printHtml } from './doc-output.js';
 import { evidenceChips } from './evidence.js';
 import { josa, messageFor } from './messages.js';
-import { SUBTYPE_ROLE } from '../model/schema.js';
-import { choosePeople, fillHintOf, findPresetTarget, needsPersonHelp, recall, remember } from './draft-hints.js';
+import { LABEL_MAX, SUBTYPE_ROLE } from '../model/schema.js';
+import { choosePeople, fillHintOf, findPresetTarget, needsPersonHelp, pickNewPerson, recall, remember } from './draft-hints.js';
 
 // 같은 지도에서 초안을 다시 만들 때 마지막으로 고른 보내는·받는 사람을 기억한다(FU-17). 메모리만: 저장소에는 쓰지 않고, 페이지를 다시 열면 사라진다
 const lastPeople = new Map();
 /** 기억한 보내는·받는 사람을 모두 잊는다(단위 테스트용) */
-export const forgetLastPeople = () => lastPeople.clear();
+export const forgetLastPeople = () => { lastPeople.clear(); pendingPerson = null; };
+
+// 「＋ 사람 추가」 → 「넣기」 직후(FU-36): main이 사람 노드를 만들고 초안 창을 다시 그린다. 새 창이 그 사람을 받는 사람으로 골라 두고,
+// 사람이 앞서 고른 대상·보내는 사람도 되살린다. 메모리만(저장소에는 쓰지 않음), 한 번 쓰면 비운다
+let pendingPerson = null; // {key, label, target, from}
 
 /** 받는 사람 후보가 없을 때의 안내(FU-7). 「＋ 사람 추가」는 노드 추가 창을 유형 「사람」으로 열도록 문서에 알리기만 한다(main.js가 받음) */
 export const ADD_PERSON_HELP = '후임이 목록에 없으면 사람으로 먼저 넣으세요. 연결하지 않아도 받는 사람으로 고를 수 있습니다(「수행」으로 이으면 현재 담당으로 보입니다).';
+
+/** 키가 없고 사전 생성·규칙 기반 문장일 때 초안 결과 위에 보이는 한 줄(FU-24) */
+export const LIVE_HINT = '실시간으로 다시 쓰려면: 「설정」에서 Claude API를 고르고 본인 키를 넣으세요(선택)';
+
+/** 사전 생성 결과 위 안내(FU-24): 실시간이 아니라 미리 써 둔 문장임을 그대로 밝힌다 */
+export const PREGEN_NOTE = 'Claude가 이 기록만 보고 써 둔 문장입니다. 열 때마다 앱이 근거를 검사하고, 맞지 않으면 기록을 그대로 모은 문장으로 바꿉니다.';
+export const PREGEN_CHIP_TITLE = 'Claude가 이 기록만 보고 써 둔 문장 — 앱이 열 때마다 근거 ID를 검증하고, 맞지 않으면 규칙 기반 문장으로 바꿉니다';
 
 /** 응답으로 문장이 바뀌었을 때 「생성 중…」 자리에 남기는 안내 */
 export const LIVE_REPLACED_NOTE = '문장이 Claude API 문장으로 바뀌었습니다 — 확인 후 확정하세요';
@@ -81,6 +92,11 @@ export function draftPanel(o) {
   // 따라 하기(FU-2): 예시 대상(이름 또는 gid)이 있으면 먼저 고른다. 대상을 먼저 정해야 아래 현재 담당 표시가 그 대상 기준이 된다
   const presetTarget = findPresetTarget(targets, o.preset && o.preset.target);
   if (presetTarget) target.value = presetTarget.gid;
+  const universeKey = view.universe_id;
+  // 방금 「＋ 사람 추가」로 넣은 사람이 있으면(FU-36) 앞서 고른 대상을 되살린다
+  const pend = pendingPerson && pendingPerson.key === universeKey ? pendingPerson : null;
+  if (pendingPerson && !pend) pendingPerson = null;
+  if (pend && pend.target && targets.some((t) => t.gid === pend.target)) target.value = pend.target;
   // 대상이 업무면 현재 담당자를 알려 주고, 한 명이면 보내는 사람으로 미리 고른다(사람이 바꿀 수 있음)
   const holder = el('p', { class: 'muted small', 'data-testid': 'draft-holder' });
   const showHolder = () => {
@@ -92,16 +108,54 @@ export function draftPanel(o) {
   showHolder();
   // 미리 채우는 순서(보내는 사람): 따라 하기 예시(이름) > 현재 담당자 한 명(위 showHolder) > 마지막으로 고른 사람(FU-17). 받는 사람: 예시 > 마지막으로 고른 사람.
   // 예시 이름이 없거나 기억한 사람이 지금 목록에 없으면 건드리지 않는다. 사람이 바꿀 수 있다
-  const universeKey = view.universe_id;
   const fromPreset = choosePeople({ people, preset: o.preset, remembered: null });
   const fromMemory = choosePeople({ people, preset: null, remembered: recall(lastPeople, universeKey) });
   from.value = fromPreset.from || from.value || fromMemory.from || '';
   to.value = fromPreset.to || fromMemory.to || '';
+  if (pend) {
+    // 앞서 고른 보내는 사람을 되살리고, 새로 넣은 사람을 받는 사람으로 고른다(같은 사람이면 건드리지 않음)
+    if (pend.from && people.some((p) => p.gid === pend.from)) from.value = pend.from;
+    const added = pickNewPerson(people, pend.label);
+    if (added && added !== from.value) to.value = added;
+    pendingPerson = null;
+  }
   if (from.value && from.value === to.value) to.value = '';
   // 받는 사람 후보가 없을 때의 안내(FU-7): 후보가 없으면 창을 열 때부터, 그 밖에는 받는 사람 오류가 났을 때 보인다
+  // 「＋ 사람 추가」(FU-36): 긴 「노드 추가」 양식 대신 초안 창 안의 작은 칸 두 개(이름 필수·연락처 선택). 「넣기」는 wu:add-node를 label과 함께 보낸다
+  // (계약: detail {type:'person', label, attrs?} — label이 있으면 main이 사람 노드를 바로 만들고(연결 없음) 초안 창을 다시 그린다. label이 없으면 기존처럼 노드 추가 창)
+  const newName = el('input', { type: 'text', maxlength: String(LABEL_MAX), 'aria-label': '새 사람 이름(필수)', placeholder: '이름(필수)', 'data-testid': 'draft-new-person-name' });
+  const newContact = el('input', { type: 'text', maxlength: String(LABEL_MAX), 'aria-label': '새 사람 연락처(선택)', placeholder: '연락처(선택)', 'data-testid': 'draft-new-person-contact' });
+  const newMsg = el('p', { class: 'form-message', 'aria-live': 'polite', 'data-testid': 'draft-new-person-msg' });
+  const addNew = () => {
+    const label = newName.value.trim();
+    newMsg.textContent = '';
+    newMsg.className = 'form-message';
+    if (!label) {
+      newMsg.className = 'form-message error';
+      newMsg.textContent = '이름을 적으세요.';
+      return;
+    }
+    const contact = newContact.value.trim();
+    pendingPerson = { key: universeKey, label, target: target.value, from: from.value };
+    newName.value = '';
+    newContact.value = '';
+    newBox.hidden = true;
+    document.dispatchEvent(new CustomEvent('wu:add-node', { detail: { type: 'person', label, attrs: contact ? { 연락처: contact } : undefined } }));
+  };
+  const onEnter = (e) => { if (e.key === 'Enter') { e.preventDefault(); addNew(); } }; // 안쪽 칸의 Enter가 초안 만들기를 보내지 않게
+  newName.addEventListener('keydown', onEnter);
+  newContact.addEventListener('keydown', onEnter);
+  const newBox = el('div', { class: 'new-person', hidden: true, 'data-testid': 'draft-new-person' },
+    el('label', { class: 'field' }, el('span', {}, '이름'), newName),
+    el('label', { class: 'field' }, el('span', {}, '연락처'), newContact),
+    el('div', { class: 'row' },
+      el('button', { type: 'button', class: 'small-btn primary', 'data-testid': 'draft-new-person-add', onclick: addNew }, '넣기'),
+      el('button', { type: 'button', class: 'small-btn', 'data-testid': 'draft-new-person-cancel', onclick: () => { newBox.hidden = true; newMsg.textContent = ''; } }, '취소')),
+    newMsg);
   const personHelp = el('div', { class: 'muted small', 'data-testid': 'draft-person-help' },
     el('p', {}, ADD_PERSON_HELP),
-    o.readOnly ? null : el('button', { type: 'button', class: 'small-btn', 'data-testid': 'draft-add-person', onclick: () => document.dispatchEvent(new CustomEvent('wu:add-node', { detail: { type: 'person' } })) }, '＋ 사람 추가'));
+    o.readOnly ? null : el('button', { type: 'button', class: 'small-btn', 'data-testid': 'draft-add-person', onclick: () => { newBox.hidden = !newBox.hidden; if (!newBox.hidden) newName.focus(); } }, '＋ 사람 추가'),
+    o.readOnly ? null : newBox);
   const syncPersonHelp = (errorShown = false) => { personHelp.hidden = !(errorShown || needsPersonHelp(people, from.value)); };
   syncPersonHelp();
   from.addEventListener('change', () => { if (!msg.classList.contains('error')) syncPersonHelp(); });
@@ -257,7 +311,8 @@ function renderDraft(box, d, view, onFocus, o = {}) {
       el('span', { class: 'method', 'data-testid': 'draft-method', title: METHOD_LABELS[d.method] }, `생성 방식: ${METHOD_LABELS[d.method].replace(/\(.*\)$/, '')}`),
       copyBtn, downBtn, printBtn),
     el('h3', { class: 'draft-title' }, d.title),
-    d.method === 'pregen' ? el('p', { class: 'muted small', 'data-testid': 'draft-method-note' }, '문장은 개발 중 Claude가 이 근거만 보고 썼고, 앱이 근거를 검증합니다. 근거가 맞지 않거나 미리 쓴 문장이 없는 항목은 기록을 그대로 모은 문장(규칙 기반)으로 채웁니다.') : null,
+    !isLive(o.provider) && (d.method === 'pregen' || d.method === 'rule') ? el('p', { class: 'muted small', 'data-testid': 'draft-live-hint' }, LIVE_HINT) : null,
+    d.method === 'pregen' ? el('p', { class: 'muted small', 'data-testid': 'draft-method-note' }, PREGEN_NOTE) : null,
     d.method === 'llm' ? el('p', { class: 'muted small', 'data-testid': 'draft-method-note' }, '문장은 Claude API가 실시간으로 이 근거만 보고 썼고, 앱이 근거 ID와 원문 인용(quote)을 검증합니다. 확인되지 않은 항목은 규칙 기반 문장으로 바꿉니다.') : null,
     d.fallback ? el('p', { class: 'notice', 'data-testid': 'draft-fallback' }, `${d.fallback.keep ? '원래 문장을 유지함' : '규칙 기반으로 대체함'}: ${d.fallback.reason}`) : null,
     d.method !== 'rule' && d.counts && d.counts.rule ? el('p', { class: 'muted small', 'data-testid': 'draft-counts' }, `${METHOD_LABELS[d.method]} ${d.counts.provider}개 항목, 나머지 ${d.counts.rule}개는 ${d.method === 'llm' && d.counts.kept ? `호출 전 문장 그대로(사전 생성 ${d.counts.kept}개 포함, 응답에 없거나 검증을 통과하지 못한 항목)` : `규칙 기반(${d.method === 'llm' ? '응답에 없거나 검증을 통과하지 못한 항목' : '사전 생성 결과가 없거나 데이터가 바뀐 항목'})`}`) : null,
@@ -265,13 +320,13 @@ function renderDraft(box, d, view, onFocus, o = {}) {
     d.method === 'rule' && !d.fallback && o.provider && o.provider.name === 'pregen' ? el('p', { class: 'muted small', 'data-testid': 'draft-rule-reason' }, '이 조합(대상·보내는·받는 사람)에는 미리 써 둔 문장이 없어, 기록을 그대로 모아 만든 초안입니다(규칙 기반). 문장마다 근거가 붙어 있습니다.') : null,
     ...d.items.map((i) =>
       el('section', { class: `draft-item${i.insufficient ? ' insufficient' : ''}`, 'data-testid': `draft-item-${i.key}` },
-        el('h4', {}, i.title, i.insufficient ? null : el('span', { class: `method-chip ${i.method || 'rule'}`, 'data-testid': 'item-method', title: i.method === 'pregen' ? '개발 중 Claude가 이 근거만 보고 쓴 문장 — 앱이 열 때마다 근거 ID를 검증하고, 맞지 않으면 규칙 기반 문장으로 바꿉니다' : i.method === 'llm' ? 'Claude API가 실시간으로 이 근거만 보고 쓴 문장 — 앱이 근거 ID와 원문 인용(quote)을 검증했습니다' : undefined }, i.method === 'pregen' ? '사전 생성' : i.method === 'llm' ? 'Claude API' : '규칙 기반')),
+        el('h4', {}, i.title, i.insufficient ? null : el('span', { class: `method-chip ${i.method || 'rule'}`, 'data-testid': 'item-method', title: i.method === 'pregen' ? PREGEN_CHIP_TITLE : i.method === 'llm' ? 'Claude API가 실시간으로 이 근거만 보고 쓴 문장 — 앱이 근거 ID와 원문 인용(quote)을 검증했습니다' : undefined }, i.method === 'pregen' ? '사전 생성' : i.method === 'llm' ? 'Claude API' : '규칙 기반')),
         i.insufficient && i.empty_reason
           ? el('p', { class: 'muted', 'data-testid': 'not-found' }, `해당 없음 — ${i.empty_reason}`)
           : i.insufficient
           ? el('div', {}, el('p', { class: 'muted', 'data-testid': 'insufficient' }, '이력 부족 — 근거가 되는 기록이 없어 내용을 만들지 않았습니다.'),
             fillHintOf(i.key) ? el('p', { class: 'muted small', 'data-testid': 'draft-fill-hint' }, fillHintOf(i.key)) : null)
-          : el('ul', {}, ...i.sentences.map((s) => el('li', {}, el('span', {}, s.text), roleChip(view, i.key, s), el('span', { class: 'evidence-row' }, el('span', { class: 'evidence-label' }, '근거:'), evidenceChips(view, s.evidence_ids, onFocus, { dedupe: false, unknown: true }))))),
+          : el('ul', {}, ...i.sentences.map((s) => el('li', {}, el('span', {}, s.text), roleChip(view, i.key, s), el('span', { class: 'evidence-row' }, el('span', { class: 'evidence-label' }, '근거:'), evidenceChips(view, s.evidence_ids, onFocus, { dedupe: false, unknown: true, showText: true }))))),
       ),
     ),
     el('p', { class: 'muted small' }, '축적된 이력으로 만든 초안입니다. 근거를 눌러 확인하고, 담당자가 검토해 확정하세요.'),

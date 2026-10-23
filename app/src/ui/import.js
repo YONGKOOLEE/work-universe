@@ -64,7 +64,7 @@ function noteText(n) {
 }
 
 function warningText(w, from) {
-  if (w.code === 'W-SAMPLE-OVERWRITE') return `내장 샘플「${w.name}」${josa(w.name, '을/를')} 덮어씁니다. 이 창 맨 아래 「가상 데이터 초기화」를 누르면 원래 샘플로 돌아갑니다.`;
+  if (w.code === 'W-SAMPLE-OVERWRITE') return `내장 샘플「${w.name}」${josa(w.name, '을/를')} 덮어씁니다. 이 창 맨 아래 「고급」을 펼쳐 「가상 데이터 초기화」를 누르면 원래 샘플로 돌아갑니다.`;
   if (w.code === 'W-SAMPLE-FLAG') return '파일에 샘플 표시가 있지만 내장 샘플이 아니므로 「내 유니버스」로 가져옵니다.';
   if (w.code === 'W-REAL-NAME-LIKE') return `실명처럼 보이는 사람 이름 ${w.count}개가 있습니다(${w.labels.join(', ')}). 이 도구는 가상 데이터용입니다. 실제 이름이면 가져오기 전에 역할 이름(예: 정산 담당)으로 바꾸세요.`;
   if (w.code === 'W-EMPNO-LIKE') return `사번·주민번호처럼 보이는 숫자(6자리 이상)가 ${w.count}곳에 있습니다. 실제 번호면 지우거나 V-0000 형식의 가상 사번으로 바꾸세요.`;
@@ -412,7 +412,9 @@ export function importDialog(o) {
       el('p', { class: 'error-text', 'data-testid': 'import-message', 'aria-live': 'polite' }, st.message),
       head,
       slot,
-      o.onReset ? el('div', { class: 'danger-zone' },
+      // 「고급」 안에 접어 둔다(FU-25, 처음 사용 점검 2026-10-24): 처음 보는 사람이 위험한 단추를 바로 보지 않게. 기능은 펼치면 그대로
+      o.onReset ? el('details', { class: 'danger-zone', 'data-testid': 'import-advanced' },
+        el('summary', {}, '고급'),
         el('h4', {}, '위험 구역'),
         el('p', { class: 'muted small' }, '모든 유니버스를 처음 샘플 상태로 되돌립니다. 직접 만들거나 가져온 유니버스도 지워지므로 먼저 위에서 내보내 두세요. 누르면 한 번 더 확인합니다.'),
         el('button', { type: 'button', id: 'reset', class: 'danger', 'data-testid': 'reset-all', disabled: !o.app.canReset, onclick: () => o.onReset() }, '가상 데이터 초기화')) : null,

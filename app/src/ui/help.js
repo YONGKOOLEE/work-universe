@@ -14,7 +14,7 @@ export const HELP_TERMS = [
 ];
 export const HELP_GEN_TITLE = '문장은 이렇게 만들어집니다';
 export const HELP_GEN = [
-  { term: '사전 생성', desc: '개발 중 Claude가 근거만 보고 미리 쓴 문장입니다. 앱이 열 때마다 근거를 검사합니다.' },
+  { term: '사전 생성', desc: 'Claude가 이 기록만 보고 써 둔 문장입니다. 열 때마다 앱이 근거를 검사하고, 맞지 않으면 기록을 그대로 모은 문장으로 바꿉니다.' },
   { term: '규칙 기반', desc: '기록을 그대로 모아 만든 문장입니다.' },
   { term: 'Claude API', desc: '본인 키를 「설정」에 넣으면 실시간으로 씁니다.' },
 ];

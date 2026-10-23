@@ -2,6 +2,7 @@
 // 초안·인사이트·통합 확인 화면이 함께 쓴다. 숨긴 노드는 이름 뒤에 표시가 붙는다(describe.displayName).
 
 import { displayName, eventText } from '../view/describe.js';
+import { describeEvidence } from '../llm/evidence-text.js';
 import { eventChipLabel } from './chip-label.js';
 import { el } from './dom.js';
 
@@ -16,21 +17,55 @@ const button = (gid, label, onclick, full = label) => el('button', { type: 'butt
  * @param {(gid:string)=>void} onFocus
  * @param {{unknown?:boolean}} [opt] unknown: 찾지 못한 근거도 ID 글자 그대로 버튼으로 보인다(초안). 기본은 null(그리지 않음)
  */
-export function evidenceChip(view, gid, onFocus, { unknown = false } = {}) {
+export function evidenceChip(view, gid, onFocus, { unknown = false, onShow = null } = {}) {
   const hit = view.lookup(gid);
-  if (hit.found) return button(gid, displayName(hit.node), () => onFocus(hit.node.gid));
+  let btn;
+  const after = (fn) => () => { fn(); if (onShow) onShow(gid, btn); };
+  if (hit.found) {
+    btn = button(gid, displayName(hit.node), after(() => onFocus(hit.node.gid)));
+    return btn;
+  }
   const ev = view.events.find((e) => e.gid === gid);
   if (!ev && !unknown) return null;
   const first = ev && ev.node_gids[0];
-  return button(gid, ev ? eventChipLabel(view, ev) : gid, () => first && onFocus(first), ev ? `${ev.occurred_at} ${eventText(view, ev)}` : gid);
+  btn = button(gid, ev ? eventChipLabel(view, ev) : gid, after(() => first && onFocus(first)), ev ? `${ev.occurred_at} ${eventText(view, ev)}` : gid);
+  return btn;
+}
+
+/**
+ * 근거 칩을 눌렀을 때 그 항목 아래에 보여 줄 근거 글(FU-29, 처음 사용 점검 2026-10-24).
+ * describeEvidence(앞에 `gid`가 붙은 한 줄)에서 gid를 떼고, 이력은 「[이력] 날짜 내용」, 없는 근거는 안내 글로 바꾼다.
+ */
+export function readableEvidence(view, gid) {
+  const raw = describeEvidence(view, gid);
+  if (raw === `${gid} (없음)`) return `근거 ${gid}: 지금 화면의 기록에서 찾을 수 없습니다`;
+  const body = raw.startsWith(`${gid} `) ? raw.slice(gid.length + 1) : raw;
+  return body.replace(/^\[이력 ([^\]]+)\]\s*/, '[이력] $1 ');
 }
 
 /**
  * 근거 여러 개를 .evidence-list 하나로.
  * @param {{tag?:'span'|'div', dedupe?:boolean, unknown?:boolean}} [opt]
  *   tag: 감싸는 요소(인사이트는 div). dedupe: 같은 ID를 한 번만(초안은 문장의 근거를 그대로 보인다). unknown: evidenceChip과 같다
+ *   showText: 칩을 누르면 이 칩 묶음 맨 아래에 근거 글 한 줄(data-testid=evidence-text)을 보인다. 같은 칩을 다시 누르면 접히고, 다른 칩을 누르면 글이 바뀐다.
+ *     textOf: 글을 만드는 함수(gid → 문자열). 없으면 view로 만든 readableEvidence
  */
-export function evidenceChips(view, ids, onFocus, { tag = 'span', dedupe = true, unknown = false } = {}) {
+export function evidenceChips(view, ids, onFocus, { tag = 'span', dedupe = true, unknown = false, showText = false, textOf = null } = {}) {
   const list = dedupe ? [...new Set(ids)] : ids;
-  return el(tag, { class: 'evidence-list' }, ...list.map((g) => evidenceChip(view, g, onFocus, { unknown })).filter(Boolean));
+  if (!showText) return el(tag, { class: 'evidence-list' }, ...list.map((g) => evidenceChip(view, g, onFocus, { unknown })).filter(Boolean));
+  const slot = el('span', { class: 'evidence-slot' }); // 비어 있으면 CSS가 감춘다
+  const text = textOf || ((g) => readableEvidence(view, g));
+  let shown = null; // 글을 보이고 있는 칩
+  const onShow = (gid, btn) => {
+    if (shown) shown.setAttribute('aria-pressed', 'false');
+    if (shown === btn) {
+      shown = null;
+      slot.replaceChildren();
+      return;
+    }
+    shown = btn;
+    btn.setAttribute('aria-pressed', 'true');
+    slot.replaceChildren(el('span', { class: 'evidence-text', 'data-testid': 'evidence-text' }, text(gid)));
+  };
+  return el(tag, { class: 'evidence-list' }, ...list.map((g) => evidenceChip(view, g, onFocus, { unknown, onShow })).filter(Boolean), slot);
 }

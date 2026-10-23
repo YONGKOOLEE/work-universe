@@ -17,7 +17,7 @@ import { buildDraftPrompt, buildExplainPrompt } from './prompts.js';
 import { aiResultToDocument, checkConvertInput, textFingerprint, verifyAiConvert } from './ai-convert.js';
 import { candidatesInputMessage, checkCandidatesInput, verifyAiCandidates, worksFingerprint } from './ai-candidates.js';
 
-export const METHOD_LABELS = { rule: '규칙 기반', pregen: '사전 생성(개발 시 Claude로 작성)', llm: 'Claude API(실시간)' };
+export const METHOD_LABELS = { rule: '규칙 기반', pregen: '사전 생성(Claude가 기록만 보고 써 둔 문장)', llm: 'Claude API(실시간)' };
 const FALLBACK = 'W-LLM-FALLBACK';
 export const QUOTE_FAIL = 'W-LLM-QUOTE';
 
