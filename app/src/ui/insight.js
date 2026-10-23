@@ -1,8 +1,9 @@
-// 인사이트 화면(R-05, T-08·T-11). 탭 넷: 유사 경험자 / 반복 비효율 / 밀집·공백 / 흐름 변화. 모두 규칙으로 계산하고 근거를 함께 보여 준다.
+// 인사이트 화면(R-05, T-08·T-11). 탭 다섯: 유사 경험자 / 반복 비효율 / 밀집·공백 / 흐름 변화 / 인수인계 위험. 모두 규칙으로 계산하고 근거를 함께 보여 준다.
 // 해석과 인력 배치는 사람이 한다(R-05 ③): 화면은 참고 정보임을 밝히고 자동 결정을 하지 않는다.
 
 import { DENSE_DEFAULT_N, denseLimit, densityGaps, repeatInefficiency, similarExperts } from '../rules/insight.js';
 import { flowChange } from '../rules/flow.js';
+import { RISK, concentrationExplain, handoverReadiness, knowledgeConcentration, readinessExplain, ripple, rippleExplain } from '../rules/insight-risk.js';
 import { densityExplain, flowExplain, repeatExplain, similarExplain } from '../rules/explain.js';
 import { METHOD_LABELS, explainInsight } from '../llm/connector.js';
 import { el } from './dom.js';
@@ -31,7 +32,7 @@ function explainBox(view, req, o) {
 }
 
 /**
- * @param {{view:object, kind?:'similar'|'repeat'|'density'|'flow', today?:string, onTime?:(date)=>void, work?:string, asOf?:string, onFocus:(gid)=>void, onClose:()=>void}} o
+ * @param {{view:object, kind?:'similar'|'repeat'|'density'|'flow'|'risk', today?:string, onTime?:(date)=>void, work?:string, asOf?:string, onFocus:(gid)=>void, onClose:()=>void}} o
  */
 export function insightPanel(o) {
   const { view } = o;
@@ -47,12 +48,12 @@ export function insightPanel(o) {
     el('button', { type: 'button', role: 'tab', class: kind === key ? 'tab active' : 'tab', 'data-testid': testid, onclick: () => { kind = key; if (o.onKind) o.onKind(key); draw(); } }, label);
 
   function draw() {
-    tabs.replaceChildren(tabButton('similar', '유사 경험자', 'tab-similar'), tabButton('repeat', '반복 비효율', 'tab-repeat'), tabButton('density', '밀집·공백', 'tab-density'), tabButton('flow', '흐름 변화', 'tab-flow'));
+    tabs.replaceChildren(tabButton('similar', '유사 경험자', 'tab-similar'), tabButton('repeat', '반복 비효율', 'tab-repeat'), tabButton('density', '밀집·공백', 'tab-density'), tabButton('flow', '흐름 변화', 'tab-flow'), tabButton('risk', '인수인계 위험', 'tab-risk'));
     asofNote.hidden = !past;
     asofNote.textContent = kind === 'flow'
       ? `표는 전체 기간이고, 강조한 줄이 기준일(${o.asOf})입니다. 오늘 기준은 그래프 아래 「오늘로」.`
       : `${o.asOf} 기준으로 계산합니다(시간 보기). 오늘 기준은 그래프 아래 「오늘로」.`;
-    body.replaceChildren(kind === 'similar' ? similarView(o, view) : kind === 'repeat' ? repeatView(view, o) : kind === 'density' ? densityView(o, view) : flowView(o, view));
+    body.replaceChildren(kind === 'similar' ? similarView(o, view) : kind === 'repeat' ? repeatView(view, o) : kind === 'density' ? densityView(o, view) : kind === 'risk' ? riskView(o, view) : flowView(o, view));
   }
   draw();
 
@@ -265,4 +266,91 @@ function renderFlow(box, view, r, o) {
     el('tbody', {}, ...r.periods.map(row))));
   if (noPerforms) parts.push(el('p', { class: 'muted small', 'data-testid': 'flow-na' }, '이 유니버스에는 업무 담당(수행) 기록이 없어 업무·인원은 세지 않습니다(—).'));
   box.replaceChildren(...parts);
+}
+
+// ── 인수인계 위험(CR-14 B, R-26) ──
+const LEVEL_TEXT = { high: '높음', caution: '주의' };
+
+// 인수인계 위험 행의 근거 칩: 6개를 넘으면 「근거 n건」으로 접는다. 경로 글은 단계가 많으면 가운데를 줄인다(재검증 D4: 300단계 사슬)
+const RISK_FOLD_AT = 6;
+function riskChips(view, ids, onFocus) {
+  return ids.length > RISK_FOLD_AT
+    ? el('details', { class: 'evidence-fold' }, el('summary', { class: 'muted small' }, `근거 ${ids.length}건`), chips(view, ids, onFocus))
+    : chips(view, ids, onFocus);
+}
+function shortPath(text) {
+  const parts = String(text).split(/(?= →)/);
+  return parts.length <= 6 ? text : `${parts.slice(0, 3).join('')} → … ${parts.length - 5}단계 …${parts.slice(-2).join('')}`;
+}
+
+function riskView(o, view) {
+  const asOf = o.asOf || todayLocal();
+  const uid = view.universe_id;
+  const section = (testid, title, hint, content, explain) =>
+    el('section', { class: 'risk-section', 'data-testid': testid }, el('h3', {}, title), el('p', { class: 'muted small' }, hint), explain, content);
+  const insuff = (testid, r) => el('p', { class: 'notice', 'data-testid': testid }, `데이터 부족 — ${r.reason}.`);
+
+  // ① 지식 집중 위험
+  const c = knowledgeConcentration(view, { asOf });
+  let cBody;
+  if (c.insufficient) cBody = insuff('risk-concentration-insufficient', c);
+  else {
+    const k = c.counts;
+    const parts = [el('p', { class: 'muted small', 'data-testid': 'risk-concentration-counts' },
+      `업무 ${k.works}개 중 혼자 해 본 업무 ${k.one}개(높음 ${k.high}, 주의 ${k.caution}), 둘 이상이 해 본 업무 ${k.many}개${k.unknown ? `, 해 본 사람 기록이 없는 업무 ${k.unknown}개` : ''}${k.role_only ? `, 역할 이름만 있는 업무 ${k.role_only}개(사람 미확인)` : ''}.`)];
+    if (c.status === 'none') parts.push(el('p', { class: 'muted', 'data-testid': 'risk-concentration-none' }, `${c.reason}.`));
+    else {
+      parts.push(el('ul', { class: 'patterns', 'data-testid': 'risk-concentration-list' },
+        ...c.items.map((x) => el('li', { 'data-level': x.level },
+          el('div', { class: 'who' }, el('strong', {}, `「${x.work.label}」`), el('span', { class: 'chip' }, LEVEL_TEXT[x.level]), el('span', { class: 'muted small' }, ` ${x.work.universe_name}`)),
+          el('div', { class: 'muted small' }, x.level === 'high' ? `${x.person.label}만 해 봤고 인수인계 기록이 0건입니다.` : `${x.person.label}만 해 봤습니다. 인수인계 이력 ${x.handover_events}건, 인수인계서 ${x.handover_docs}건이 있습니다.`),
+          riskChips(view, x.evidence, o.onFocus)))));
+    }
+    cBody = el('div', {}, ...parts);
+  }
+  const cBox = explainBox(view, concentrationExplain(c, uid), o);
+
+  // ② 인수인계 준비도
+  const r = handoverReadiness(view, { asOf });
+  let rBody;
+  if (r.insufficient) rBody = insuff('risk-readiness-insufficient', r);
+  else {
+    rBody = el('ul', { class: 'patterns', 'data-testid': 'risk-readiness-list' },
+      ...r.items.map((x) => el('li', { 'data-score': String(x.score) },
+        el('div', { class: 'who' }, el('strong', {}, `「${x.work.label}」`), el('span', { class: 'chip' }, `${x.score}/${x.total}`), el('span', { class: 'muted small' }, ` ${x.work.universe_name}`)),
+        x.missing.length
+          ? el('ul', { class: 'steps' }, ...x.missing.map((m) => el('li', {}, `${m.label} — ${m.detail}`, ' ', chips(view, m.evidence, o.onFocus))))
+          : el('div', { class: 'muted small' }, '6항목을 모두 갖췄습니다.'))));
+  }
+  const rBox = explainBox(view, readinessExplain(r, uid), o);
+
+  // ③ 파급 영향
+  const p = ripple(view, { asOf });
+  let pBody;
+  if (p.insufficient) pBody = insuff('risk-ripple-insufficient', p);
+  else if (p.status === 'none') pBody = el('p', { class: 'muted', 'data-testid': 'risk-ripple-none' }, `${p.reason}.`);
+  else {
+    pBody = el('div', {},
+      el('h4', {}, `길목 업무 상위 ${p.works.length}개`),
+      el('ol', { class: 'patterns', 'data-testid': 'risk-ripple-works' },
+        ...p.works.map((x) => el('li', {},
+          el('div', { class: 'who' }, el('strong', {}, `「${x.work.label}」`), el('span', { class: 'chip' }, `${x.count}개 업무에 닿음`)),
+          el('div', { class: 'muted small' }, `경로 예: ${shortPath(x.path.text)}`),
+          riskChips(view, x.evidence, o.onFocus)))),
+      el('h4', {}, '혼자 맡은 사람이 빠지면 함께 막히는 업무'),
+      p.people.length
+        ? el('ol', { class: 'patterns', 'data-testid': 'risk-ripple-people' },
+          ...p.people.map((x) => el('li', {},
+            el('div', { class: 'who' }, el('strong', {}, x.person.label), el('span', { class: 'chip' }, `${x.count}개 업무`)),
+            el('div', { class: 'muted small' }, `혼자 맡은 업무 ${x.sole_works}개에서 이어지는 다른 업무 수입니다(겹치는 업무는 한 번만, 자기 업무는 뺌).`),
+            riskChips(view, x.evidence, o.onFocus))))
+        : el('p', { class: 'muted', 'data-testid': 'risk-ripple-nopeople' }, '기준일에 혼자 맡은 업무에서 이어지는 업무가 없습니다.'));
+  }
+  const pBox = explainBox(view, rippleExplain(p, uid), o);
+
+  return el('div', { 'data-testid': 'risk-body' },
+    el('p', { class: 'muted small' }, `기준일 ${asOf}에 한 사람에게 일이 몰려 있거나 인수인계 준비가 덜 된 곳, 한 업무가 막힐 때 영향이 퍼지는 곳을 기록에서 셉니다. 기록에 없는 것은 세지 않으므로, 입력이 모자란 곳은 위험이 낮게 보일 수 있습니다.`),
+    section('risk-concentration', '① 한 사람에게 몰린 지식', '업무를 해 본 사람(과거·현재, 역할 이름 제외)이 한 명뿐이고 인수인계 기록이 없으면 「높음」, 기록이 있으면 「주의」입니다.', cBody, cBox),
+    section('risk-readiness', `② 인수인계 준비도 (6항목 중 몇 개)`, `표준 양식 권장 항목 · 미해결 이슈 없음 · 산출물 연결 · 현재 담당자 · 인수인계 이력 또는 인수인계서 · 최근 ${RISK.RECENT_DAYS}일 이내 이력. 낮은 순입니다.`, rBody, rBox),
+    section('risk-ripple', '③ 막히면 퍼지는 영향', '선후행(앞 → 뒤)과 산출 → 참조(이 업무의 산출물을 다른 업무가 참조)를 따라 이어서 닿는 업무 수입니다.', pBody, pBox));
 }

@@ -7,6 +7,7 @@ import { buildHandoverDraft, scopeWorks } from '../app/src/rules/handover.js';
 import { densityGaps, repeatInefficiency, similarExperts, similarSentences, DENSE_DEFAULT_N } from '../app/src/rules/insight.js';
 import { flowChange } from '../app/src/rules/flow.js';
 import { densityExplain, flowExplain, repeatExplain, similarExplain } from '../app/src/rules/explain.js';
+import { concentrationExplain, handoverReadiness, knowledgeConcentration, readinessExplain, ripple, rippleExplain } from '../app/src/rules/insight-risk.js';
 
 export const PREGEN_ASOF = '2026-10-02';
 const all = Object.fromEntries(SAMPLES.map((d) => [d.universe.id, d]));
@@ -26,6 +27,13 @@ export const EXPLAIN_SCENARIOS = [
   { id: 'X5', kind: 'density', view: 'U-C' },
   { id: 'X6', kind: 'flow', view: 'U-A1' },
   { id: 'X7', kind: 'flow', view: 'U-O' },
+  // CR-14 B 인수인계 위험(시연: 월말 정산·부서 화면)
+  { id: 'X8', kind: 'risk_concentration', view: 'U-A1' },
+  { id: 'X9', kind: 'risk_readiness', view: 'U-A1' },
+  { id: 'X10', kind: 'risk_ripple', view: 'U-A1' },
+  { id: 'X11', kind: 'risk_concentration', view: 'U-D1' },
+  { id: 'X12', kind: 'risk_readiness', view: 'U-D1' },
+  { id: 'X13', kind: 'risk_ripple', view: 'U-D1' },
 ];
 
 /** 초안 시나리오의 규칙 기반 초안(화면 draft.js와 같은 계산) */
@@ -42,6 +50,9 @@ export function explainRequestOf(s, asOf = PREGEN_ASOF) {
   if (s.kind === 'similar') return { view: v, req: similarExplain(similarExperts(v, { works: [s.work], asOf }), s.work) };
   if (s.kind === 'repeat') return { view: v, req: repeatExplain(repeatInefficiency(v, { asOf }), s.view) }; // 화면과 같이 기준일(검토5 I-2)
   if (s.kind === 'density') return { view: v, req: densityExplain(densityGaps(v, { asOf, n: DENSE_DEFAULT_N }), s.view) };
+  if (s.kind === 'risk_concentration') return { view: v, req: concentrationExplain(knowledgeConcentration(v, { asOf }), s.view) };
+  if (s.kind === 'risk_readiness') return { view: v, req: readinessExplain(handoverReadiness(v, { asOf }), s.view) };
+  if (s.kind === 'risk_ripple') return { view: v, req: rippleExplain(ripple(v, { asOf }), s.view) };
   return { view: v, req: flowExplain(flowChange(v, { unit: 'month', asOf }), s.view) };
 }
 

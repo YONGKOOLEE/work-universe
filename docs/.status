@@ -202,6 +202,22 @@ implementation:
   scope_change: CR-12 승인(docs/CR-12-초안.md v0.2, 2026-10-13). 날짜 일정·동결 날짜는 폐기, 동결은 진행에 따라 사용자가 정함
   current_task: (2026-10-13 저녁) CR-12 T-23~T-26·C12-8·일곱 번째 검토(T-28)·가·나 묶음 완료, push됨 9b56b0c. 남은 것: 사용자 화면 확인 체크리스트, T-27 E는 ①로 결정됨(구현 끝), T-21(F)은 조력자 샘플 도착 시, 사람 몫(T-14·T-15·T-16), 기능 동결 선언·제출
   tasks:
+    - id: T-33
+      status: 구현·검증 완료(CR-14 A 편집 되감기, R-25, D-30). 화면 확인은 사람 몫(미확인)
+      date: 2026-10-23
+      model: 구현 Sonnet 하위 에이전트 / 나란히 재검증 Opus 하위 에이전트 / 결함 수정(명령 순서·자리표시·기록 순서·같은 초)·결함 주입·통합 Opus 메인
+      result: model/rewind.js(editPoints·rewind·rewindOps·applyRewindOps·laterThanLast), app.js(editPoints·rewindAvailable·viewAt·rewindPreview·rewindTo·setRewinding, readOnly getter), ui/rewind.js, main.js 되감기 모드, graph.js 바뀐 노드 표시, index.html 띠, tests/rewind.test.js 18개, browser-check 13항목. limits L-48, 실행안내, tech-record 52절
+      normal_checks: 통과 (단위 754, 속성 시험 240회·1000건 이상 비교, check:chrome — 띠·막대 크기, 옛 이름, 편집 막힘, 되돌리기·되돌림 이력, "null" 글자 없음, 스크린샷 확인)
+      error_checks: 통과 (재검증 결함 4건 수정: 같은 이름·사번 E-DUP로 되돌리기 실패 1.9%·원상 복귀 실패 5.1% → 무작위 7,995회 0건, 완전 삭제 자리표시가 과거에 보이던 것 269건 → 0, 미래 시각 이력, 같은 초 되돌림. 결함 주입 6가지 중 5가지를 테스트가 잡았고, 못 잡은 1가지(되살리는 순서)는 재현 사례를 테스트에 넣어 잡게 함)
+      unverified: [실제 마우스로 끌어 보는 시연 흐름(사람 몫), Edge(다음 제출 점검), 담당 이력과 수행 연결이 어긋나 보이는 경우의 화면]
+    - id: T-34
+      status: 구현·검증 완료(CR-14 B 인수인계 위험 인사이트, R-26, D-31)
+      date: 2026-10-23
+      model: 구현 Sonnet 하위 에이전트 / 나란히 재검증 Opus 하위 에이전트 / 조사 문장·사전 생성 6개·업무 상세 한 줄·결함 수정·점검 항목 Opus 메인
+      result: rules/insight-risk.js, ui/insight.js 「인수인계 위험」 탭, main.js riskNote, app/data/pregen.js risk_* 6개(Claude가 근거 덤프만 보고 작성, 근거 검증), tools/pregen-scenarios.mjs X8~X13, tests/insight-risk.test.js 30개, browser-check 8항목. limits L-49, decisions-pending 16절 C14-9~14
+      normal_checks: 통과 (샘플 7개 고정 비교, 사전 생성 지문 36개 일치, 화면 경로에서 사전 생성 선택 확인, check:chrome — 세 절 크기·①②③ 내용·사전 생성 문장·업무 상세 한 줄·탭 이동)
+      error_checks: 통과 (재검증 결함 수정: 사람을 알 수 없을 때 결론 대신 데이터 부족, 혼자 맡은 사람의 자기 업무를 영향 수에서 뺌(시연 경로 도하람), unknown_works 누락, 긴 사슬 칩 접기·경로 줄임. 근거 gid 3,396건 전수 존재. 결함 주입 4건 잡음)
+      unverified: [근거 칩 → 층별 보기에서 접힌 노드로 이동(브라우저), Edge]
     - id: F23-4-CONVERT
       status: 변환 규칙 결함 수정 완료(사용자 "1. 하기", 2026-10-23)
       date: 2026-10-23

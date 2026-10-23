@@ -22,11 +22,13 @@ import { draftPanel } from './draft.js';
 import { currentDenseN, insightPanel } from './insight.js';
 import { issueEntry, issuePanel } from './issues.js';
 import { hiddenEntry, hiddenPanel } from './hidden.js';
+import { confirmText, doneText, failText, fillBand, hideBand, nodeChangeNote, revertBlock, rewindEntry, rewindPanel } from './rewind.js';
 import { renderBackupNudge } from './backup.js';
 import { backupAdvice, userChangeTimes } from '../rules/backup.js';
 import { hiddenNodesOf } from '../rules/hidden.js';
 import { nowIso, todayLocal } from './time.js';
 import { personLoad, repeatPatternsFor, workLoad } from '../rules/insight.js';
+import { riskNoteFor } from '../rules/insight-risk.js';
 import { monthAsOf, timeMonths } from '../rules/flow.js';
 import { splitHint, workFormMissing } from '../rules/form.js';
 import { starterSteps } from '../rules/starter-steps.js';
@@ -285,6 +287,8 @@ function start() {
   let insight = null; // 인사이트 화면: {work, kind}
   let issues = null; // 미해결 이슈 목록 화면(R-20): {target}
   let hiddenOpen = false; // 숨긴 노드 목록 화면(R-21)
+  let rw = null; // 편집 되감기 중이면 {at}(CR-14 A). 옛 지도를 읽기 전용으로 본다. 저장하지 않는다
+  let rwPast = null; // 되감기 중인 시점의 app.viewAt 결과 {doc, view, diff, limits}
   // 따라 하기(CR-13 A): 완료 조건에 쓰는 표시. 따라 하기를 시작할 때 지운다
   let draftShown = false; // 초안 결과가 그려졌음
   let evidenceUsed = false; // 초안의 근거 칩을 눌렀음
@@ -555,6 +559,14 @@ function start() {
       el('button', { type: 'button', class: 'link', 'data-testid': 'btn-repeat-note', onclick: () => openInsight('', 'repeat') }, '반복 비효율 보기'));
   }
 
+  // 업무를 해 본 사람이 한 명뿐이고 인수인계 기록이 없으면 한 줄(CR-14 B, R-26 ⑤)
+  function riskNote(gid) {
+    const hit = riskNoteFor(view, gid, asOf());
+    if (!hit) return null;
+    return el('p', { class: 'notice', 'data-testid': 'risk-note' }, `지식 집중 위험 높음 — ${hit.person.label}만 해 봤고 인수인계 기록이 없습니다 `,
+      el('button', { type: 'button', class: 'link', 'data-testid': 'btn-risk-note', onclick: () => openInsight('', 'risk') }, '인수인계 위험 보기'));
+  }
+
   // 하위 유니버스를 묶은 유니버스의 개요: 통합 확인 목록으로 가는 버튼(대기 건수)
   function mergeButton() {
     const plan = app.mergePlan();
@@ -735,6 +747,19 @@ function start() {
 
   function renderPanelBody() {
     const panel = $('detail');
+    if (rw && rwPast && !selected) { // 편집 되감기: 시점 막대·목록
+      const nodeById = new Map(rwPast.doc.nodes.map((n) => [n.id, n]));
+      const nowNode = (id) => app.findNode(id);
+      panel.replaceChildren(rewindPanel({
+        points: app.editPoints(), at: rw.at, diff: rwPast.diff, limits: rwPast.limits,
+        isNode: (id) => nodeById.has(id),
+        labelOf: (id) => (nodeById.get(id) || nowNode(id) || { label: '' }).label,
+        gidOf: (id) => toGid(currentId(), id),
+        onPick: pickRewind,
+        onSelect: (g) => { reveal(g); select(view.canonical(g)); },
+      }));
+      return;
+    }
     // 다른 화면(설정·통합 확인·이슈·인사이트·초안)이 열리면 숨긴 노드 목록은 닫는다
     if (settingsOpen || merging || issues || insight || drafting) hiddenOpen = false;
     if (hiddenOpen) {
@@ -859,25 +884,33 @@ function start() {
       const rootGid = app.rootGid();
       panel.append(...[issueEntry(view, app.rootGid(), { rootGid: app.rootGid(), onOpen: () => openIssues(app.rootGid()) }),
         hiddenEntry(hiddenNodesOf(app.doc), { onOpen: () => { rememberOpener(); hiddenOpen = true; renderPanel(); } }),
+        app.rewindAvailable() ? rewindEntry({ points: app.editPoints(), onOpen: enterRewind }) : null,
         el('div', { class: 'row' },
         el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft-universe', onclick: () => openDraft(rootGid) }, '인수인계 초안 만들기'),
         el('button', { type: 'button', 'data-testid': 'btn-insight-universe', onclick: () => openInsight('', 'repeat') }, '인사이트 보기')),
         mergeButton(),
-        el('p', { class: 'muted small', 'data-testid': 'insight-hint' }, '인사이트(반복 비효율 탭부터 열림): 유사 경험자 · 반복 비효율 · 밀집·공백(일이 몰린 사람, 담당자 없는 업무) · 흐름 변화')].filter(Boolean)); // append(null)은 "null" 글자를 넣으므로 거른다
+        el('p', { class: 'muted small', 'data-testid': 'insight-hint' }, '인사이트(반복 비효율 탭부터 열림): 유사 경험자 · 반복 비효율 · 밀집·공백(일이 몰린 사람, 담당자 없는 업무) · 흐름 변화 · 인수인계 위험(혼자만 아는 업무, 준비도, 파급 영향)')].filter(Boolean)); // append(null)은 "null" 글자를 넣으므로 거른다
       return;
     }
     if (editing && isOwn(selected) && localNode(selected)) {
       panel.replaceChildren(el('h2', {}, localNode(selected).label), editorFor(selected));
       return;
     }
-    const notes = [loadNote(selected), workNote(selected), issueNote(selected), formNote(selected), repeatNote(selected)].filter(Boolean);
+    const notes = [loadNote(selected), workNote(selected), issueNote(selected), formNote(selected), repeatNote(selected), riskNote(selected)].filter(Boolean);
     const tools = toolbar(selected);
-    return renderNodeDetail(panel, describeNode(view, selected, { asOf: asOf(), past: !!viewDate }), {
+    const detail = renderNodeDetail(panel, describeNode(view, selected, { asOf: asOf(), past: !!viewDate }), {
       onFocus: focus,
       extra: layerControls(selected),
       toolbar: notes.length || tools ? el('div', {}, ...[...notes, tools].filter(Boolean)) : null,
       linkTools,
     });
+    if (rw && rwPast) { // 편집 되감기: 그때 값임을 알리고, 지금과 다른 칸을 보인다
+      const local = isOwn(selected) ? parseGid(selected).local_id : null;
+      const change = local ? rwPast.diff.changed.find((c) => c.id === local && c.kind === 'node') || (rwPast.diff.hidden.includes(local) ? { fields: ['hidden'] } : null) : null;
+      const note = change ? nodeChangeNote({ change, pastNode: rwPast.doc.nodes.find((n) => n.id === local), currentNode: app.findNode(local) }) : null;
+      panel.prepend(...[el('button', { type: 'button', class: 'small-btn', 'data-testid': 'btn-rewind-list', onclick: () => select(null) }, '← 시점 목록으로'), note].filter(Boolean));
+    }
+    return detail;
   }
 
   function select(gid) {
@@ -1072,8 +1105,95 @@ function start() {
     graph.cy.resize(); // 상태 줄이 두 줄이 되면 그래프 영역 높이가 바뀐다
   }
 
+  // ── 편집 되감기(CR-14 A, R-25): 옛 시점의 지도를 읽기 전용으로 보고, 필요하면 그 시점으로 되돌린다 ──
+  // 지금과 달라진 노드(바뀜·그 뒤 숨김)를 그래프에서 표시할 전역 ID
+  function rwMarkGids() {
+    if (!rw || !rwPast) return [];
+    const nodeIds = new Set(rwPast.doc.nodes.map((n) => n.id));
+    const ids = [...rwPast.diff.changed.filter((c) => c.kind === 'node').map((c) => c.id), ...rwPast.diff.hidden].filter((id) => nodeIds.has(id));
+    return ids.map((id) => toGid(currentId(), id));
+  }
+
+  // 머리 띠(그래프 위): 시점·숫자·「이 시점으로 되돌리기」·「지금으로 돌아가기」
+  function renderRewindBand() {
+    const band = $('rewind-band');
+    if (!rw || !rwPast) return hideBand(band);
+    const pv = app.rewindPreview(rw.at);
+    const reason = revertBlock({ baseReadOnly: app.baseReadOnly, nothing: !pv.ok || pv.ops.length === 0 });
+    fillBand(band, { at: rw.at, diff: rwPast.diff, canRevert: !reason, reason, onRevert: revertRewind, onBack: leaveRewind });
+  }
+
+  // 되감기를 켜고 끌 때 한 번: 편집으로 이어지는 머리 단추와 노드 추가 칸을 읽기 전용 상태에 맞춘다
+  function syncRewindShell() {
+    document.body.classList.toggle('rewinding', !!rw);
+    $('create-open').disabled = !!rw || app.baseReadOnly;
+    $('group-open').disabled = !!rw || app.baseReadOnly;
+    renderAddForm();
+  }
+
+  function enterRewind() {
+    const points = app.editPoints();
+    if (!app.rewindAvailable() || points.length < 2) return;
+    nbhd = null;
+    editing = null;
+    drafting = null;
+    insight = null;
+    issues = null;
+    hiddenOpen = false;
+    merging = false;
+    settingsOpen = false;
+    selected = null;
+    rw = { at: points[points.length - 2].at };
+    app.setRewinding(true);
+    syncRewindShell();
+    refresh();
+    graph.relayout();
+  }
+
+  function pickRewind(at) {
+    if (!rw) return;
+    rw.at = at;
+    refresh();
+  }
+
+  function leaveRewind() {
+    rw = null;
+    rwPast = null;
+    app.setRewinding(false);
+    syncRewindShell();
+    refresh();
+  }
+
+  function revertRewind() {
+    if (!rw) return;
+    const at = rw.at;
+    const pv = app.rewindPreview(at);
+    if (!pv.ok || !pv.ops.length) return window.alert(failText({ nothing: true }));
+    if (!window.confirm(confirmText(pv, at))) return;
+    const r = app.rewindTo(at);
+    if (!r.ok) return window.alert(failText(r.error));
+    rw = null;
+    rwPast = null;
+    app.setRewinding(false);
+    selected = null;
+    syncRewindShell();
+    refresh();
+    $('detail').prepend(el('p', { class: 'ok-notice', role: 'status', 'data-testid': 'rewind-done' }, doneText(at, r.counts, (r.skipped || []).length)));
+  }
+
   function refresh() {
-    view = app.view;
+    if (rw) {
+      rwPast = app.viewAt(rw.at);
+      if (!rwPast.ok) { // 시점을 읽지 못하면 되감기를 끝낸다
+        rw = null;
+        rwPast = null;
+        app.setRewinding(false);
+        syncRewindShell();
+      }
+    }
+    view = rw ? rwPast.view : app.view;
+    if (rw && selected && !view.getNode(selected)) selected = null; // 그 시점에 없던 노드
+    renderRewindBand();
     // 주변만 보기 중이면 그 노드와 이웃만. 가운데 노드가 사라졌거나(숨김) 고른 노드가 주변 밖이면(주변 밖에 노드 추가 등) 전체로 돌아가 다시 배치한다
     let nd = nbhd ? neighborhoodDisplay(view, nbhd.center, nbhd.depth) : null;
     if (nd && selected && !nd.nodes.some((n) => n.gid === view.canonical(selected))) nd = null;
@@ -1089,6 +1209,7 @@ function start() {
     renderTimebar();
     renderExploreStatus();
     graph.render(display, selected);
+    graph.setRewindMarks(rwMarkGids());
     renderLegend();
     graph.setTimeOff(timeOffIds());
     renderPanel();
@@ -1404,7 +1525,13 @@ function start() {
     get filter() {
       return filterState;
     },
-    readOnly: app.readOnly,
+    get readOnly() {
+      return app.readOnly;
+    },
+    // CR-14 A 점검용: 편집 되감기 상태
+    get rewind() {
+      return rw ? { at: rw.at } : null;
+    },
   };
 }
 

@@ -205,6 +205,7 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
       // 찾기로 고른 노드: 노란 테두리(잠시)
       // 따라 하기가 짚는 노드(CR-13 A, ui/tour.js가 깜빡이거나 고정으로 켠다)
       { selector: 'node.tour-target', style: { 'border-color': '#ffd84d', 'border-width': 8, 'border-style': 'solid' } },
+      { selector: 'node.rw-changed', style: { 'border-color': '#ff9f43', 'border-width': 6, 'border-style': 'solid' } }, // 편집 되감기: 지금과 달라진 노드
       { selector: 'node.found', style: { 'border-color': '#ffd84d', 'border-width': 6 } },
       // 거르기에서 빠졌어도 고른·찾은·마우스를 올린 노드는 보인다(R-17 ①⑦: 거르기 중 찾기로 고르거나 새로 추가한 노드). 'hide'여도 같다
       { selector: 'node.filtered-out:selected, node.filtered-out.found, node.filtered-out.hover', style: { display: 'element', opacity: 1, 'text-opacity': 1 } },
@@ -281,6 +282,10 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
   }
 
   let selectedGid = null;
+  let rwMarks = new Set(); // 편집 되감기에서 지금과 다른 노드의 gid
+  const applyRwMarks = () => {
+    cy.nodes().forEach((n) => n.toggleClass('rw-changed', rwMarks.has(n.id())));
+  };
   let timeOff = new Set(); // 시간 슬라이더의 기준일에 유효하지 않은 노드·연결
   const applyTimeOff = () => {
     cy.elements().removeClass('time-off');
@@ -459,6 +464,12 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
       cy.animate({ center: { eles: node }, zoom: Math.max(cy.zoom(), 1.2) }, { duration: 250 });
       setTimeout(() => node.removeClass('found'), 4000);
       return true;
+    },
+
+    /** 편집 되감기: 지금과 달라진 노드 gid들에 표시를 단다(빈 목록이면 해제) */
+    setRewindMarks(gids) {
+      rwMarks = new Set(gids);
+      applyRwMarks();
     },
 
     /** 시간 슬라이더: 기준일에 유효하지 않은 요소 ID들을 흐리게 표시한다(빈 목록이면 해제) */

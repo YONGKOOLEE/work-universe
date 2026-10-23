@@ -158,6 +158,19 @@
   .links li:hover .link-tools, .links li:focus-within .link-tools { display: flex; }
   .form-message.error { color: var(--err); font-size: 13px; }
   .ok-text { color: var(--ok); font-size: 13px; margin: 0 0 8px; }
+  /* 편집 되감기(CR-14 A): 머리 띠·시점 막대·목록. 주황은 「지금과 달라진 노드」 표시와 같은 색 */
+  .rewind-band { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 8px 12px; background: var(--warn-bg); color: var(--warn-text); border-bottom: 2px solid #ff9f43; font-size: 14px; }
+  .rewind-band[hidden] { display: none; }
+  .rewind-band .rewind-title { font-weight: bold; }
+  .rewind-band .rewind-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+  .rewind-band .rewind-reason { flex-basis: 100%; color: var(--warn-text); }
+  .rewind-entry { margin: 10px 0; }
+  .rewind-bar { width: 100%; margin: 6px 0; accent-color: var(--accent); }
+  .rewind-points, .rewind-changed { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 4px; }
+  .rewind-point { width: 100%; text-align: left; }
+  .rewind-point[aria-pressed="true"] { border-color: #ff9f43; background: var(--chip); font-weight: bold; }
+  .rewind-now { margin: 6px 0 0; font-weight: bold; }
+  .rewind-summary { margin: 2px 0 8px; color: var(--warn-text); }
   .ok-notice { background: #1d3a22; color: var(--ok); border: 1px solid #2f6a38; padding: 8px 10px; border-radius: 8px; font-size: 13px; margin: 0 0 10px; }
   .draft-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 12px 0 4px; }
   .badge { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px; padding: 1px 10px; font-size: 12px; font-weight: bold; }
@@ -346,6 +359,7 @@
 <p id="backup-nudge" role="status" data-testid="backup-nudge" hidden></p>
 <main>
   <div class="graph-wrap">
+    <div id="rewind-band" class="rewind-band" data-testid="rewind-band" role="status" hidden></div>
     <div class="explore-row">
       <div id="explore-bar" class="explore-bar" data-testid="explore-bar"></div>
       <div class="graph-tools"><button type="button" id="relayout" title="노드 배치를 처음부터 다시 계산합니다">다시 정렬</button><button type="button" id="fit" title="그래프 전체를 화면에 맞춥니다. 주변만 보기 중이면 전체 그래프로 돌아갑니다">전체 보기</button><button type="button" id="tools-toggle" data-testid="tools-toggle" aria-expanded="false" aria-controls="tools-more" title="흐름 정렬·거르기 같은 고급 도구를 펼치거나 접습니다(펼침 상태는 이 브라우저에 기억)">도구 더 보기</button></div>

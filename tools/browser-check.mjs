@@ -1762,6 +1762,33 @@ async function checkBrowser(browser, port) {
   check('U-9: 초기화 확인 문구가 직접 만들거나 가져온 유니버스도 지워진다고 알림', resetMsg.includes('초기 샘플로 되돌립니다') && resetMsg.includes('직접 만들거나 가져온 유니버스') && resetMsg.includes('내보내세요'), resetMsg);
   check('NFR 복구: 가상 데이터 초기화 → 샘플이 처음 상태(추가 노드 없음, 수정 되돌림, 쓰기 가능)', (await nodeCount(s.cdp)) === NODES && !(await hasLabel(s.cdp, newLabel)) && !(await evaluate(s.cdp, "window.__wu.readOnly")) && !(await evaluate(s.cdp, "(window.__wu.doc.nodes.find((n) => n.id === 'N-001').description || '').includes('(수정)')")));
 
+  // ── CR-14 B 인수인계 위험(R-26): 초기화 직후 원본 월말 정산에서(앞 단계가 데이터를 고치므로 여기서) ──
+  await evaluate(s.cdp, "window.__wu.select(null)");
+  await clickTestId(s.cdp, 'btn-insight-universe');
+  await sleep(200);
+  await clickTestId(s.cdp, 'tab-risk');
+  await sleep(250);
+  const riskSizes = await evaluate(s.cdp, "['risk-concentration','risk-readiness','risk-ripple'].map((id) => { const e = document.querySelector('[data-testid=' + id + ']'); if (!e) return 0; const r = e.getBoundingClientRect(); return Math.round(r.width * r.height); })");
+  check('R-26: 「인수인계 위험」 탭에 세 절(지식 집중·준비도·파급 영향)이 그려짐(크기 있음)', riskSizes.every((x) => x > 2000), JSON.stringify(riskSizes));
+  const conc = await text(s.cdp, '[data-testid=risk-concentration-list]');
+  check('R-26 ①: 「자료 수집」·「보고」가 윤바다 혼자 해 본 업무(높음)로 나옴, 「대사 확인」은 아님', conc.includes('자료 수집') && conc.includes('보고') && conc.includes('윤바다') && !conc.includes('대사 확인'), conc.slice(0, 160));
+  const ready = await text(s.cdp, '[data-testid=risk-readiness-list]');
+  check('R-26 ②: 준비도 n/6이 낮은 순(「보고」 2/6이 먼저, 「대사 확인」 5/6)', ready.indexOf('보고') >= 0 && ready.indexOf('보고') < ready.indexOf('대사 확인') && ready.includes('2/6') && ready.includes('5/6'), ready.slice(0, 160));
+  const rip = await text(s.cdp, '[data-testid=risk-ripple-works]');
+  check('R-26 ③: 길목 업무 「자료 수집」과 경로 자료 수집 → 대사 확인 → 보고', rip.includes('자료 수집') && rip.includes('대사 확인') && rip.includes('보고'), rip.slice(0, 160));
+  const riskBody = await text(s.cdp, '[data-testid=risk-body]');
+  check('R-26 ④: 설명 문장은 사전 생성(윤바다 한 사람만 맡아 왔고 …)', riskBody.includes('윤바다 한 사람만 맡아 왔고'), riskBody.slice(0, 200));
+  await shot(s.cdp, `${browser.name}-7f-risk`);
+  await evaluate(s.cdp, "window.__wu.select('U-A1/N-002')");
+  await sleep(200);
+  const riskNote = await text(s.cdp, '[data-testid=risk-note]');
+  check('R-26 ⑤: 업무 상세(자료 수집)에 「지식 집중 위험 높음 — 윤바다만 해 봤고」 한 줄', riskNote.includes('지식 집중 위험 높음') && riskNote.includes('윤바다'), riskNote);
+  await clickTestId(s.cdp, 'btn-risk-note');
+  await sleep(250);
+  check('R-26 ⑤: 「인수인계 위험 보기」 → 인사이트 「인수인계 위험」 탭이 열림', await evaluate(s.cdp, "!!document.querySelector('[data-testid=tab-risk].active') && !!document.querySelector('[data-testid=risk-body]')"));
+  await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+  await sleep(200);
+  check('R-26 ⑤: 둘이 해 본 「대사 확인」에는 지식 집중 위험 줄이 없음', !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=risk-note]')")));
   // ── 일곱 번째 검토 「나」 묶음(R7-2·R7-4·R7-5): 업무 상세 단추 정리, 머리글 정리, 용어 풀이. 데이터를 바꾸지 않는다 ──
   await evaluate(s.cdp, "window.__wu.select(window.__wu.view.nodes.find((n) => n.core_type === 'work' && !n.hidden).gid)");
   await sleep(200);
@@ -2406,6 +2433,60 @@ async function checkBrowser(browser, port) {
   check('V-1: 방금 쓴 메모를 바로 해결로 표시 → 안내 없이 목록에서 빠짐', !!v1gid && v1.err === '' && v1.still === false, JSON.stringify(v1));
   await clickTestId(s.cdp, 'issue-close');
   await sleep(100);
+
+  // ── CR-14 A 편집 되감기(R-25, D-30): 이름 수정 → 개요 「편집 되감기」 → 이전 시점 → 읽기 전용 확인 → 지금으로 → 다시 → 되돌리기. 데이터를 바꾸므로 끝부분 ──
+  await reloadApp();
+  const rwOld = await evaluate(s.cdp, "window.__wu.doc.nodes.find((n) => n.id === 'N-002').label");
+  const rwNew = '되감기 시험 새 이름';
+  await sleep(1100); // 기록 시각은 초 단위: 앞의 수정과 다른 판이 되게
+  await evaluate(s.cdp, "window.__wu.select('U-A1/N-002')");
+  await sleep(150);
+  await clickTestId(s.cdp, 'btn-edit');
+  await fillPanelForm(s.cdp, { 'node-label': rwNew });
+  await sleep(300);
+  await evaluate(s.cdp, "window.__cm = ''; window.confirm = (m) => { window.__cm = m; return true; }; window.__wu.select(null)");
+  await sleep(200);
+  const rwEntry = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=btn-rewind]'); if (!b) return null; const r = b.getBoundingClientRect(); return { disabled: b.disabled, size: r.width > 0 && r.height > 0 }; })()");
+  check('CR-14 A 개요에 「편집 되감기」 단추(크기 있음, 고친 기록이 있어 켜짐)', !!rwEntry && !rwEntry.disabled && rwEntry.size, JSON.stringify(rwEntry));
+  await clickTestId(s.cdp, 'btn-rewind');
+  await sleep(500);
+  const rwBand = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=rewind-band]'); const r = b.getBoundingClientRect(); const bar = document.querySelector('[data-testid=rewind-bar]'); const br = bar ? bar.getBoundingClientRect() : { width: 0, height: 0 }; return { hidden: b.hidden, w: r.width, h: r.height, text: b.textContent, barW: br.width, barH: br.height, points: document.querySelectorAll('[data-testid=rewind-point]').length, rev: !!document.querySelector('[data-testid=btn-rewind-revert]'), back: !!document.querySelector('[data-testid=btn-rewind-back]') }; })()");
+  check('CR-14 A 되감기 띠(크기 있음): 「편집 되감기 중 — 시점 (읽기 전용)」·생김/바뀜/숨김 숫자·두 단추', !rwBand.hidden && rwBand.w > 0 && rwBand.h > 0 && rwBand.text.includes('편집 되감기 중') && rwBand.text.includes('읽기 전용') && rwBand.text.includes('바뀜') && rwBand.rev && rwBand.back, JSON.stringify(rwBand));
+  check('CR-14 A 시점 막대와 시점 목록(2개 이상)이 그려짐(크기 있음)', rwBand.barW > 0 && rwBand.barH > 0 && rwBand.points >= 2, JSON.stringify(rwBand));
+  const rwNull = await nullTextSpots(s.cdp);
+  check('CR-14 A 되감기 화면(띠·패널)에 "null" 글자 없음(빈 값을 replaceChildren에 넘긴 실수)', rwNull.length === 0, JSON.stringify(rwNull));
+  const rwPast = await evaluate(s.cdp, "({ cy: window.__wu.cy.getElementById('U-A1/N-002').data('label'), ro: window.__wu.readOnly, rw: !!window.__wu.rewind, add: document.getElementById('add-slot').textContent, create: document.getElementById('create-open').disabled, group: document.getElementById('group-open').disabled })");
+  check('CR-14 A 이전 시점의 지도: 그 노드 이름이 옛 이름, 읽기 전용, 노드 추가·새 유니버스·묶기 막힘', rwPast.cy === rwOld && rwPast.ro === true && rwPast.rw && rwPast.add.includes('읽기 전용') && rwPast.create && rwPast.group, JSON.stringify(rwPast));
+  await evaluate(s.cdp, "window.__wu.select('U-A1/N-002')");
+  await sleep(250);
+  const rwNode = await evaluate(s.cdp, "({ title: document.querySelector('#detail h2') ? document.querySelector('#detail h2').textContent : '', note: (document.querySelector('[data-testid=rewind-node-note]') || {}).textContent || '', edit: !!document.querySelector('[data-testid=btn-edit]'), edge: !!document.querySelector('[data-testid=btn-edge]'), hide: !!document.querySelector('[data-testid=btn-hide]'), mark: window.__wu.cy.getElementById('U-A1/N-002').hasClass('rw-changed') })");
+  check('CR-14 A 노드를 누르면 그때 값이 상세에, 바뀐 칸(이름: 그때/지금)이 표시되고 그래프에서 주황 표시', rwNode.title.includes(rwOld) && rwNode.note.includes('이름') && rwNode.note.includes(rwOld) && rwNode.note.includes(rwNew) && rwNode.mark, JSON.stringify(rwNode));
+  check('CR-14 A 되감기 중에는 수정·연결 추가·숨기기 단추가 없음', !rwNode.edit && !rwNode.edge && !rwNode.hide, JSON.stringify(rwNode));
+  await shot(s.cdp, `${browser.name}-40-rewind`);
+  await clickTestId(s.cdp, 'btn-rewind-back');
+  await sleep(400);
+  const rwBack = await evaluate(s.cdp, "({ hidden: document.querySelector('[data-testid=rewind-band]').hidden, label: window.__wu.doc.nodes.find((n) => n.id === 'N-002').label, cy: window.__wu.cy.getElementById('U-A1/N-002').data('label'), ro: window.__wu.readOnly, create: document.getElementById('create-open').disabled })");
+  check('CR-14 A 「지금으로 돌아가기」 → 띠가 사라지고 새 이름 그대로, 편집 가능 상태로 복귀', rwBack.hidden && rwBack.label === rwNew && rwBack.cy === rwNew && rwBack.ro === false && rwBack.create === false, JSON.stringify(rwBack));
+  const evBefore = await evaluate(s.cdp, 'window.__wu.doc.events.length');
+  await evaluate(s.cdp, 'window.__wu.select(null)');
+  await sleep(150);
+  await clickTestId(s.cdp, 'btn-rewind');
+  await sleep(400);
+  const pointsBefore = await evaluate(s.cdp, "document.querySelectorAll('[data-testid=rewind-point]').length");
+  await sleep(1100); // 되돌림이 새 판(다른 초)으로 남게
+  await clickTestId(s.cdp, 'btn-rewind-revert');
+  await sleep(500);
+  const rwDone = await evaluate(s.cdp, "(() => { const d = window.__wu.doc; const n = d.nodes.find((x) => x.id === 'N-002'); const last = d.events.slice(-3); const done = document.querySelector('[data-testid=rewind-done]'); const dr = done ? done.getBoundingClientRect() : { width: 0, height: 0 }; return { label: n.label, bandHidden: document.querySelector('[data-testid=rewind-band]').hidden, confirm: window.__cm, noted: last.some((e) => (e.note || '').startsWith('편집 되감기:')), grew: d.events.length, doneW: dr.width, doneH: dr.height, ro: window.__wu.readOnly }; })()");
+  check('CR-14 A 「이 시점으로 되돌리기」 → 확인 창(개수·사용자 기록 보존 안내) → 이름이 옛 이름으로, 되감기 끝, 완료 알림(크기 있음)', rwDone.label === rwOld && rwDone.bandHidden && rwDone.confirm.includes('시점으로 되돌립니다') && rwDone.confirm.includes('사용자 기록') && rwDone.doneW > 0 && rwDone.doneH > 0 && rwDone.ro === false && rwDone.grew > evBefore, JSON.stringify(rwDone));
+  check('CR-14 A 되돌림이 이력에 「편집 되감기」 메모로 남음', rwDone.noted, JSON.stringify(rwDone));
+  await evaluate(s.cdp, 'window.__wu.select(null)');
+  await sleep(150);
+  await clickTestId(s.cdp, 'btn-rewind');
+  await sleep(400);
+  const pointsAfter = await evaluate(s.cdp, "document.querySelectorAll('[data-testid=rewind-point]').length");
+  check('CR-14 A 되돌림도 되감기 시점 목록에 한 판으로 남아 다시 되감을 수 있음', pointsAfter === pointsBefore + 1, `${pointsBefore} → ${pointsAfter}`);
+  await clickTestId(s.cdp, 'btn-rewind-back');
+  await sleep(200);
 
   const errors2 = [...s.log.errors];
   const external2 = [...s.log.external];

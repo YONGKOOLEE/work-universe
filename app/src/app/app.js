@@ -3,6 +3,7 @@
 import {
   addAssignment, addEdge, addEvent, addNode, applyBatch, addRef, addSubtype, canDeleteNow, createUniverse, decideIdentity, deleteNodeNow, hideEdge, hideNode, hideRef, purgeNode, replaceEdge, restoreNode, updateEdge, updateNode,
 } from '../model/commands.js';
+import { applyRewindOps, editPoints, laterThanLast, pointLabel, rewind, rewindOps } from '../model/rewind.js';
 import { CODES, DRAFT_TARGET_TYPES, SUBTYPE_HANDOVER_DOC, TEXT_MAX, normalizeLabel } from '../model/schema.js';
 import { validateDocument } from '../model/validate.js';
 import { applyStarter } from '../model/starter.js';
@@ -120,7 +121,8 @@ export function createApp({ store, samples, currentId, now, authorName, locked =
   const docReadOnly = checked.readOnly;
   if (docReadOnly) warnings.push({ code: CODES.SCHEMA, reason: 'version', found: doc.schema_version });
   else if (!checked.ok) warnings.push({ code: CODES.SCHEMA, reason: 'invalid', count: checked.errors.length });
-  const readOnly = !writable || docReadOnly;
+  const baseReadOnly = !writable || docReadOnly;
+  let rewinding = false; // 편집 되감기로 옛 지도를 보는 중: 읽기 전용과 같은 길로 모든 편집을 막는다(CR-14 A)
   const resolve = (id) => (id === doc.universe.id ? doc : db.loadUniverse(id));
 
   // 저장(브라우저 저장소 용량 초과 등)이 실패하면 화면 상태를 바꾸지 않고 W-STORAGE로 알린다.
@@ -141,7 +143,8 @@ export function createApp({ store, samples, currentId, now, authorName, locked =
     return result;
   }
   const importCtx = (existing) => ({ existing, resolve: (id) => db.loadUniverse(id), sampleIds: samples.map((s) => s.universe.id) });
-  const guard = () => (!writable ? { ok: false, error: { code: CODES.STORAGE } } : docReadOnly ? { ok: false, error: { code: CODES.SCHEMA, reason: 'version' } } : null);
+  const guardBase = () => (!writable ? { ok: false, error: { code: CODES.STORAGE } } : docReadOnly ? { ok: false, error: { code: CODES.SCHEMA, reason: 'version' } } : null);
+  const guard = () => guardBase() || (rewinding ? { ok: false, error: { code: CODES.SCHEMA, reason: 'rewinding' } } : null);
 
   return {
     get doc() {
@@ -151,7 +154,18 @@ export function createApp({ store, samples, currentId, now, authorName, locked =
     get view() {
       return buildView(doc, resolve);
     },
-    readOnly,
+    // 읽기 전용: 저장소를 못 쓰거나 형식이 다르거나(고정) 편집 되감기로 옛 지도를 보는 중(일시)
+    get readOnly() {
+      return baseReadOnly || rewinding;
+    },
+    /** 되감기 모드와 무관한 읽기 전용(저장소·형식·내용 포함 HTML) */
+    get baseReadOnly() {
+      return baseReadOnly;
+    },
+    /** 편집 되감기 보기 모드를 켜고 끈다. 켜 있는 동안 저장하는 명령은 모두 거부된다(rewindTo는 예외) */
+    setRewinding(on) {
+      rewinding = !!on;
+    },
     // 저장소 자체를 쓸 수 있는지(읽기 전용이어도 초기화로 복구할 수 있는 경우를 가르기 위해)
     canReset: !!store && !locked,
     warnings,
@@ -508,6 +522,45 @@ export function createApp({ store, samples, currentId, now, authorName, locked =
         if (err.result) return err.result;
         throw err;
       }
+    },
+
+    // ── 편집 되감기(CR-14 A, R-25, D-30): 기록 시각 기준으로 지도가 고쳐진 시점을 보고 되돌린다 ──
+    /** 편집 시점 목록 [{at, count, kinds}] 오래된 순(같은 기록 시각 = 한 판) */
+    editPoints() {
+      return editPoints(doc);
+    },
+    /** 되감기를 쓸 수 있는가. 다른 유니버스를 묶은 지도(상위)는 대상이 아니다: 하위 유니버스를 열어 되감는다 */
+    rewindAvailable() {
+      return !(doc.refs || []).some((r) => !r.hidden);
+    },
+    /** 그 시점의 지도(읽기 전용). 하위 유니버스는 지금 것 그대로. 저장하지 않는다 */
+    viewAt(at) {
+      const r = rewind(doc, at);
+      if (!r.ok) return r;
+      const past = r.doc;
+      return { ok: true, doc: past, view: buildView(past, (id) => (id === doc.universe.id ? past : db.loadUniverse(id))), diff: r.diff, limits: r.limits };
+    },
+    /** 이 시점으로 되돌리면 무엇이 바뀌는지(적용하지 않음): {ok, counts, limits, ops} */
+    rewindPreview(at) {
+      return rewindOps(doc, at);
+    },
+    /**
+     * 이 시점으로 되돌린다: 지금 문서를 그 시점과 같게 만드는 명령을 한 묶음으로 저장한다(전부 아니면 전무).
+     * 거부: 읽기 전용·형식 다름·저장소 없음(guard), 묶은 지도(reason 'grouped'), 되돌릴 것 없음(field 'ops', nothing), 저장 실패(W-STORAGE)
+     */
+    rewindTo(at) {
+      const g = guardBase();
+      if (g) return g;
+      if (!this.rewindAvailable()) return { ok: false, error: { code: CODES.SCHEMA, reason: 'grouped' } };
+      const plan = rewindOps(doc, at);
+      if (!plan.ok) return plan;
+      if (!plan.ops.length) return { ok: false, error: { code: CODES.SCHEMA, field: 'ops', nothing: true } };
+      // 되돌림이 마지막 편집과 같은 초에 기록되면 두 판이 합쳐져 되돌리기 직전으로 돌아갈 시점이 사라진다 → 마지막 기록보다 늦은 시각으로(재검증 결함 4)
+      const res = applyRewindOps(doc, plan.ops, { now: laterThanLast(now(), doc.events) }, { resolve: (id) => db.loadUniverse(id), label: pointLabel(at), decidedBy: author() });
+      if (!res.ok) return { ok: false, error: res.error };
+      if (res.doc.events.length === doc.events.length) return { ok: false, error: { code: CODES.SCHEMA, field: 'ops', nothing: true } };
+      const done = commit(res);
+      return done.ok ? { ...done, counts: plan.counts, limits: plan.limits, skipped: res.skipped } : done;
     },
 
     /** 내보내기(D-06): 현재 유니버스 문서를 JSON 글로. 다른 PC로 옮기거나 백업할 때 쓴다 */

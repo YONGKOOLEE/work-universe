@@ -219,6 +219,58 @@ const explain = [
       { text: '2026-03-10 소속 정리 메모 뒤로는 기록이 없어, 그 뒤의 인력 변화는 이 자료로 판단할 수 없습니다.', evidence_ids: g('U-O', 'E-016') },
     ],
   },
+  // CR-14 B 인수인계 위험(2026-10-23). 근거: pregen-dump X8~X13
+  {
+    target: 'risk_concentration|U-A1',
+    evidence_ids: g(A1, 'N-002', 'N-003', 'N-011'),
+    sentences: [
+      { text: '「자료 수집」과 「보고」는 지금까지 윤바다 한 사람만 맡아 왔고, 두 업무 모두 인수인계 기록이 없습니다.', evidence_ids: g(A1, 'N-002', 'N-003', 'N-011') },
+    ],
+  },
+  {
+    target: 'risk_readiness|U-A1',
+    evidence_ids: g(A1, 'E-006', 'E-012', 'E-014', 'E-015', 'N-001', 'N-002', 'N-003'),
+    sentences: [
+      { text: '월말 정산 점검의 세 업무 중 6항목을 모두 갖춘 업무는 아직 없습니다.', evidence_ids: g(A1, 'N-001', 'N-002', 'N-003') },
+      { text: '「보고」가 2/6으로 가장 낮습니다. 9월 보고서가 잠정본인 채 진행 중이고, 산출물 연결·현재 담당자·인수인계 기록이 비어 있습니다.', evidence_ids: g(A1, 'N-003', 'E-015') },
+      { text: '「자료 수집」은 3/6입니다. 7월 점검표 양식 메모가 해결 표시되지 않았고, 현재 담당자와 인수인계 기록이 없습니다.', evidence_ids: g(A1, 'N-002', 'E-012') },
+      { text: '「대사 확인」은 5/6으로 준비가 가장 잘 돼 있지만, 9월 불일치 관련 메모 2건이 아직 해결 표시되지 않았습니다.', evidence_ids: g(A1, 'N-001', 'E-006', 'E-014') },
+    ],
+  },
+  {
+    target: 'risk_ripple|U-A1',
+    evidence_ids: g(A1, 'N-001', 'N-002', 'N-003', 'N-012'),
+    sentences: [
+      { text: '「자료 수집」이 막히면 이어지는 「대사 확인」과 「보고」가 영향을 받습니다.', evidence_ids: g(A1, 'N-001', 'N-002', 'N-003') },
+      { text: '서하늘이 혼자 맡은 「대사 확인」이 멈추면 「보고」까지 영향을 받습니다.', evidence_ids: g(A1, 'N-001', 'N-003', 'N-012') },
+    ],
+  },
+  {
+    target: 'risk_concentration|U-D1',
+    evidence_ids: ['U-A1/N-011', 'U-B/N-101', 'U-B/N-102', 'U-B/N-201', 'U-C/N-102', 'U-C/N-202'],
+    sentences: [
+      { text: '부서 전체에서 한 사람만 해 봤고 인수인계 기록도 없는 업무는 8개입니다.', evidence_ids: ['U-A1/N-011', 'U-B/N-101', 'U-B/N-102', 'U-B/N-201', 'U-C/N-102', 'U-C/N-202'] },
+      { text: '가상행사팀의 「2025 행사」는 윤바다, 「2026 행사」는 도하람만 맡아 봤습니다.', evidence_ids: ['U-B/N-101', 'U-A1/N-011', 'U-B/N-102', 'U-B/N-201'] },
+      { text: '가상교육팀의 「강의실·강사 섭외」도 이든빛 한 사람만 해 본 업무입니다.', evidence_ids: ['U-C/N-102', 'U-C/N-202'] },
+    ],
+  },
+  {
+    target: 'risk_readiness|U-D1',
+    evidence_ids: ['U-B/E-002', 'U-B/E-003', 'U-B/N-101', 'U-K1/E-003', 'U-K1/E-005', 'U-K1/E-006', 'U-K1/N-103', 'U-K1/N-104'],
+    sentences: [
+      { text: '부서의 업무 22개 중 6항목을 모두 갖춘 업무는 1개뿐입니다.', evidence_ids: ['U-B/N-101', 'U-K1/N-103', 'U-K1/N-104'] },
+      { text: '「2025 행사」는 2025-12-15에 윤바다의 담당이 끝난 뒤 담당자도 최근 이력도 없고, 참가비 정산 불일치 메모가 해결 표시되지 않았습니다.', evidence_ids: ['U-B/N-101', 'U-B/E-002', 'U-B/E-003'] },
+      { text: '카드승인의 「망취소」와 「거래 조회」는 담당자·산출물 연결이 없고, 원문의 질문·리스크 메모(§5.1·§5.2)가 해결 표시되지 않았습니다.', evidence_ids: ['U-K1/N-103', 'U-K1/N-104', 'U-K1/E-003', 'U-K1/E-005', 'U-K1/E-006'] },
+    ],
+  },
+  {
+    target: 'risk_ripple|U-D1',
+    evidence_ids: ['U-C/N-102', 'U-C/N-103', 'U-C/N-104', 'U-C/N-202', 'U-K1/N-201', 'U-K1/N-202', 'U-K1/N-203', 'U-K1/N-204', 'U-K1/N-205'],
+    sentences: [
+      { text: '부서에서 가장 많은 업무에 닿는 길목은 카드승인의 「승인요청 수신」입니다. 이 단계가 막히면 요청 검증부터 정합성 조치까지 이어지는 4개 업무가 영향을 받습니다.', evidence_ids: ['U-K1/N-201', 'U-K1/N-202', 'U-K1/N-203', 'U-K1/N-204', 'U-K1/N-205'] },
+      { text: '가상교육팀 이든빛이 혼자 맡은 업무 2개가 막히면, 이어지는 다른 업무 2개가 함께 영향을 받습니다.', evidence_ids: ['U-C/N-102', 'U-C/N-103', 'U-C/N-104', 'U-C/N-202'] },
+    ],
+  },
 ].map((x) => ({ task: 'insight_explain', ...x }));
 
 // 역할 (c) 업무 후보 이유(T-10): 통합 확인 목록의 업무 후보마다. 왜 후보인지와 두 업무의 차이까지만 쓰고, 같은지는 사람이 정한다
@@ -286,6 +338,12 @@ const FP = {
   "insight_explain|density|U-C|n=3||": '20f66f7b',
   "insight_explain|flow|U-A1|month||": 'c78f93fa',
   "insight_explain|flow|U-O|month||": '6e8d1326',
+  "insight_explain|risk_concentration|U-A1||": '64b77fed',
+  "insight_explain|risk_readiness|U-A1||": '1b0e4846',
+  "insight_explain|risk_ripple|U-A1||": '080f0b26',
+  "insight_explain|risk_concentration|U-D1||": 'e6412c21',
+  "insight_explain|risk_readiness|U-D1||": '47eda5b6',
+  "insight_explain|risk_ripple|U-D1||": 'd5a64fa4',
   "work_candidate_reason|work_candidate|U-A1/N-001|U-K1/N-104||": 'b1db6c11',
   "work_candidate_reason|work_candidate|U-A1/N-001|U-K1/N-105||": 'b1db6c11',
   "work_candidate_reason|work_candidate|U-A1/N-003|U-C/N-104||": '47aa15ea',
