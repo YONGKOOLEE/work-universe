@@ -20,6 +20,7 @@ export const CONVERT_RULES = {
   version: 'v1',
   nodeTarget: { min: 10, max: 20 }, // 월말 정산 수준(사용자 결정 2026-10-03). 벗어나면 미리 보기에서 알린다
   artifactLabelMax: 40, // 산출물 이름이 이보다 길면 앞부분만 이름으로, 전체는 설명으로
+  roleLabelMax: 40, // 역할 절의 줄이 이보다 길면(「키: 값」이 아니면) 사람 이름이 아니라 문장으로 본다(F23-4)
   maxInput: 200000, // 붙여 넣을 수 있는 글자 수
 };
 
@@ -34,6 +35,8 @@ const SECTION_KINDS = [
   ['scope_out', /^((업무 ?)?범위 ?(제외|외|밖)( ?(사항|항목|업무))?|제외 ?(범위|사항|대상|업무|항목)( ?업무)?|제외|비 ?범위|(적용 ?)?대상 ?외)$/],
   ['scope', /범위|대상 ?업무|업무 ?목록|하위 ?업무/],
   ['overview', /개요|요약|기본 ?정보|업무 ?정보/],
+  // 「참여 주체」「참여 기관」(F23-4). 제목 전체가 이 말일 때만, 개요·범위보다 뒤: 「정보주체의 권리」「주체적 대응」「처리 주체별 책임」「참여자 교육」은 아니다(재검증 R2)
+  ['people', /^((참여|업무|관련) ?)?주체$|^참여 ?(기관|자)$/],
 ];
 // 주제 노드의 하위 유형(절 제목으로 고른다). 없으면 하위 유형 없이 둔다
 const TOPIC_SUBTYPES = [['예외', /예외|장애|오류/], ['보안', /보안|개인정보|암호/], ['비기능', /비기능|성능|가용성/], ['요건', /요건|요구|규칙|기준|정책/]];
@@ -58,9 +61,18 @@ const CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳';
 
 // ── 문서 읽기 ───────────────────────────────────────────────────────────
 
-/** 굵게·기울임·코드 표시를 걷어 내고 공백을 한 칸으로 */
+// 문서 안 링크(목차의 [제목](#앵커), 주소 링크)와 표 칸에 섞인 HTML 태그(<br> 등). [가정: …](…)처럼 괄호 안이 주소가 아니면 링크로 보지 않는다(F23-4)
+// 주소 안 괄호 한 겹까지(…/a_(b)). 링크 글이 [가정]·[미확인] 표시면 표시를 지키려고 바꾸지 않는다(재검증 R8)
+const MD_LINK = /\[([^\]]+)\]\((?:#|https?:\/\/|\.{0,2}\/)(?:[^()\s]|\([^()\s]*\))*\)/g;
+const keepMarkLink = (m, text) => (/^(가정|미확인)/.test(text) ? m : text);
+// 태그 이름 뒤에는 속성 문법(영문 이름[=값])만 온다: 「a<b 이고 c>d」「<p 95> 미만」은 태그가 아니다(재검증 R7)
+const HTML_TAG = /<\/?(?:br|p|div|span|table|thead|tbody|tfoot|tr|td|th|b|i|u|strong|em|sup|sub|font|center)(?:\s+[a-zA-Z_:][\w:.-]*(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'>]+))?)*\s*\/?>/gi;
+
+/** 굵게·기울임·코드 표시, 링크 표시, HTML 태그를 걷어 내고 공백을 한 칸으로 */
 export function cleanText(s) {
   return String(s)
+    .replace(MD_LINK, keepMarkLink)
+    .replace(HTML_TAG, ' ')
     .replace(/\*\*(.+?)\*\*/g, '$1')
     .replace(/__(.+?)__/g, '$1')
     .replace(/`([^`]*)`/g, '$1')
@@ -120,7 +132,9 @@ export function parseDocument(text) {
       openSection(level, m ? m[1] : null, m ? m[2] : heading, heading);
       continue;
     }
-    if (/^\s*$/.test(line)) {
+    // 빈 줄, 마크다운 구분선(---, ***, ___)은 내용이 아니다(F23-4: 「---」가 이름 없는 항목으로 읽히던 문제). 표의 |---| 구분 줄은 위에서 표로 처리한다
+    // 탭 표의 「---⇥---」 구분 줄도 구분선이 아니다(재검증 R5)
+    if (/^\s*$/.test(line) || (!isPipeRow && !isTabRow && /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/.test(line))) {
       lastItem = null;
       continue;
     }
@@ -236,7 +250,53 @@ function listItem(line, plain) {
 // ── 도우미 ──────────────────────────────────────────────────────────────
 
 const refOf = (s) => (s.num ? `§${s.num}` : `「${s.title}」`);
-const titleCore = (title) => title.replace(/\([^)]*\)/g, '').replace(MARK, '').trim();
+// 괄호를 짝 맞춰 뗀다(안쪽부터). 「제42조(위탁받은 개인(신용)정보처리)」가 「제42조정보처리)」로 깨지던 문제(F23-4). 짝이 없는 괄호는 그대로
+export function stripParens(s) {
+  let t = String(s);
+  for (let prev = null; prev !== t;) {
+    prev = t;
+    t = t.replace(/\([^()]*\)|（[^（）]*）/g, '');
+  }
+  // 겹괄호의 짝이 모자라면(「보안 (추가(협의)」) 남은 여는 괄호부터 끝까지 뗀다 — 옛 규칙과 같은 결과(재검증 R9). 닫는 괄호가 아예 없는 「정산 (미완」은 그대로
+  const hasClose = /[)）]/.test(String(s));
+  const open = Math.max(t.lastIndexOf('('), t.lastIndexOf('（'));
+  if (hasClose && open >= 0 && t.length !== String(s).length) t = t.slice(0, open);
+  return t;
+}
+// 제목의 맨 바깥 괄호 묶음과 [가정]·[미확인] 표시를 나온 순서대로(괄호 안의 표시는 괄호와 함께 한 번만)
+function headNotes(title) {
+  const found = [];
+  let depth = 0;
+  let start = -1;
+  for (let i = 0; i < title.length; i += 1) {
+    const ch = title[i];
+    if (ch === '(' || ch === '（') { if (depth === 0) start = i; depth += 1; }
+    else if ((ch === ')' || ch === '）') && depth > 0) { depth -= 1; if (depth === 0) found.push([start, title.slice(start, i + 1)]); }
+  }
+  const inside = (at) => found.some(([s, t]) => at > s && at < s + t.length);
+  for (const m of title.matchAll(new RegExp(MARK.source, 'g'))) if (!inside(m.index)) found.push([m.index, m[0]]);
+  return found.sort((a, b) => a[0] - b[0]).map(([, t]) => t);
+}
+const titleCore = (title) => stripParens(title).replace(MARK, '').trim();
+// 조문 제목 「제1조(목적)」「제3조의2 (정의)」: 괄호 안이 조문의 이름이라 떼지 않는다(F23-4)
+const ARTICLE = /^제\s*\d+\s*조(?:의\s*\d+)?\s*[(（]/;
+// 목차 절: 노드로 만들지 않는다(F23-4)
+const TOC_TITLE = /^(목\s*차|차례|contents|table of contents)$/i;
+// 문장(…다. …니다 …?)이면 이름이 아니다. 「키: 값」은 따로 읽으므로 콜론은 보지 않는다(looksLikeSentence와 다름)
+const isSentence = (t) => /다\.?$|[.?!]$/.test(stripMarks(String(t)).trim());
+// 역할 절의 줄이 사람 이름이 아니라 문장인지: 「…다」로 끝나거나, 20자 넘는 줄이 마침표·물음표로 끝나거나, 40자를 넘으면.
+// 「가상 운영 담당.」「가상 정산 담당 등.」처럼 짧은 줄의 끝 마침표만으로는 문장으로 보지 않는다(재검증 R6)
+function isProse(t) {
+  const s = stripMarks(String(t)).trim();
+  return /다\.?$/.test(s) || (s.length > 20 && /[.?!]$/.test(s)) || s.length > CONVERT_RULES.roleLabelMax;
+}
+// 주제 노드 이름: 조문은 괄호까지, 그 밖은 괄호를 뗀 제목, 괄호뿐인 제목(「(참고)」)은 괄호 안 글자(재검증 R3·R10)
+function topicLabel(s) {
+  if (ARTICLE.test(stripMarks(s.title))) return stripMarks(s.title);
+  const core = titleCore(s.title) || s.title;
+  const inner = stripMarks(s.title).replace(/[()（）]/g, ' ').replace(/\s+/g, ' ').trim();
+  return hasName(core) ? core : inner || core;
+}
 // 글 속 날짜를 YYYY-MM-DD로. "2026-09-15", "2026.09.15", "2026. 9. 15.", "2026년 9월 15일", "2026/9/15"를 읽는다(검토5 V-6). 없으면 null
 export function findDate(text) {
   // 앞 경계만 본다: 숫자·점·하이픈·빗금·v에 붙어 있으면 버전(v2026.1.2)·전화번호·긴 번호의 일부다(재검증 3).
@@ -275,7 +335,7 @@ function headDate(text) {
   return best ? best.d : findDate(text.replace(DOC_NUMBER, ' '));
 }
 // 이름에 글자(한글·영문 등)가 하나도 없으면 — [가정]·[미확인] 표시, 번호(「3.」「1」), 괄호(「(양식)」)뿐이면 — 이름 없는 것으로 본다(corpus F11)
-const hasName = (s) => /\p{L}/u.test(stripMarks(String(s)).replace(/\([^)]*\)|（[^）]*）/g, ''));
+const hasName = (s) => /\p{L}/u.test(stripParens(stripMarks(String(s))));
 
 // 표에서 이름으로 쓸 칸(검토5 V-1): 머리글에 이름 칸이 있으면 그 칸, 첫 머리글이 구분·순서·번호면 그다음 칸, 아니면 첫 칸.
 // 이름 칸 후보는 절 종류별로 다르다(corpus F5: 범위 표의 「담당」 열이 업무 이름이 되던 문제). 범위의 이름·내용은 전에도 후보였다
@@ -288,8 +348,20 @@ const INDEX_HEADER = /^(구분|분류|유형|순서|번호|단계|no\.?|#)$/i;
 // 산출물 표는 구분·유형 대체 규칙을 쓰지 않는다(재검증 R2: 「구분 | 형식」의 형식 칸이 이름이 되던 문제).
 // 이름 칸 머리글이 없으면 첫 칸, 첫 칸 값이 숫자일 때만 다음 칸(머리글 없는 「1 ⇥ 가상 보고서 ⇥ 엑셀」)
 const isNumberCell = (c) => /^\d+$/.test(String(c || '').trim());
+// 사람 표의 주체·기관 칸(F23-4). 「주체 | 역할」은 주체 칸이 이름(역할 칸은 하는 일), 그 밖에는 역할·담당 칸이 먼저이고
+// 이름 칸이 없을 때만 주체·기관 칸(재검증 R4: 「기관 | 담당자 | 하는 일」에서 기관이 역할 이름이 되던 문제)
+const SUBJECT_HEADER = /^(주체|참여자)$/;
+const ORG_NAME_HEADER = /^(주체|참여자|기관|기관명)$/;
 function nameCellIndex(header, kind, cells) {
   const named = header && header.length ? header.findIndex((h) => NAME_HEADER[kind].test(cleanText(h))) : -1;
+  if (kind === 'people' && header && header.length) {
+    const subject = header.findIndex((h) => SUBJECT_HEADER.test(cleanText(h)));
+    if (subject >= 0 && (named < 0 || cleanText(header[named]) === '역할')) return subject;
+    if (named < 0) {
+      const org = header.findIndex((h) => ORG_NAME_HEADER.test(cleanText(h)));
+      if (org >= 0) return org;
+    }
+  }
   if (named >= 0) return named;
   if (kind === 'artifacts') return cells && cells.length > 1 && isNumberCell(cells[0]) ? 1 : 0;
   if (!header || !header.length) return 0;
@@ -325,7 +397,22 @@ const compact = (s) => normalizeLabel(s).replace(/\s/g, '');
 const contains = (hay, needle) => needle.length >= 2 && compact(hay).includes(compact(needle));
 const circled = (i) => CIRCLED[i] || `(${i + 1})`;
 
+// 장 제목 아래의 「1. CMS 개요 / 2. …」처럼 아래 절 제목을 늘어놓기만 한 절(목차 구실)이면 주제로 만들지 않는다(내용은 하위 절에서, F23-4).
+// 조건: 하위 절이 있고, 줄이 모두 짧은 비문장(표 없음)이며, 앞 번호를 뗀 줄이 하위 절 제목과 **같아야** 한다 —
+// 모든 줄이 같거나, 장 제목(CHAPTER·PART·제N장·N장·Ⅰ.)이면서 하나 이상 같을 때. 부분 일치는 보지 않는다(재검증 R3: 「보안」 절의 글이 사라지던 문제)
+const CHAPTER_TITLE = /^(chapter|part|section)\b|^제\s*\d+\s*(장|편|부)|^\d+\s*장|^([IVX]+|[Ⅰ-Ⅻ])\.?\s/i;
+function isOutline(section, lines, all) {
+  const below = all.filter((x) => { for (let p = x.parent; p; p = p.parent) if (p === section) return true; return false; });
+  if (!below.length) return false;
+  if (!lines.every((l) => !l.cells && l.text.length <= 40 && !isSentence(l.text))) return false;
+  const titles = new Set(below.map((x) => compact(titleCore(x.title))).filter(Boolean));
+  const same = lines.filter((l) => titles.has(compact(titleCore(l.text.replace(/^\d+(?:\.\d+)*\.?\s*/, ''))))).length;
+  return same === lines.length || (same > 0 && (CHAPTER_TITLE.test(section.heading) || CHAPTER_TITLE.test(section.title)));
+}
+
 function sectionKind(section) {
+  // 목차는 그 절 자신의 제목만 본다(재검증 R1: 「# 목차」·「【목차】」 아래 이어지는 본문 절까지 목차가 되어 사라지던 문제)
+  if (TOC_TITLE.test(titleCore(section.title))) return 'toc';
   for (let s = section; s; s = s.parent) {
     const core = titleCore(s.title);
     const hit = SECTION_KINDS.find(([, re]) => re.test(core));
@@ -609,15 +696,15 @@ export function convertDocument(text, ctx) {
   // 주제: 그 밖의 절(내용이 있는 것)마다 하나
   const topics = [];
   const subtypes = new Map();
+  for (const s of parsed.sections.filter((x) => x.kind === 'toc')) sections.push({ order: parsed.sections.indexOf(s), ref: refOf(s), title: s.heading, kind: 'toc', made: 0 });
   for (const s of parsed.sections.filter((x) => x.kind === 'topic')) {
     const lines = linesOf(s.blocks);
     if (!lines.length) continue; // 하위 절만 있는 절
+    if (isOutline(s, lines, parsed.sections)) { sections.push({ order: parsed.sections.indexOf(s), ref: refOf(s), title: s.heading, kind: 'outline', made: 0 }); continue; }
     // 괄호뿐인 제목(「7. (참고)」)은 괄호 안 글자를 이름으로(재검증 R3). 괄호 안도 비면 아래에서 C-NO-NAME
-    const inner = stripMarks(s.title).replace(/[()（）]/g, ' ').replace(/\s+/g, ' ').trim();
-    const core = titleCore(s.title) || s.title;
-    const label = hasName(core) ? core : inner || core;
+    const label = topicLabel(s);
     if (!hasName(label)) { notes.push({ code: 'C-NO-NAME', ref: refOf(s), text: s.title }); continue; } // 「## 3.」처럼 번호뿐인 제목
-    const headNote = (s.title.match(new RegExp(`\\([^)]*\\)|${MARK.source}`, 'g')) || []).join(' ');
+    const headNote = (ARTICLE.test(stripMarks(s.title)) ? marksOf(s.title) : headNotes(s.title)).join(' ');
     const description = [headNote, ...lines.map((l) => (l.kind === 'bullet' || l.n !== undefined || l.row ? `- ${l.text}` : l.text))].filter(Boolean).join('\n');
     const sub = TOPIC_SUBTYPES.find(([, re]) => re.test(label));
     if (sub) subtypes.set(`topic|${sub[0]}`, { core_type: 'topic', name: sub[0] });
@@ -651,6 +738,7 @@ export function convertDocument(text, ctx) {
   for (const p of info.people) for (const part of splitList(p.text)) roleItems.push({ text: part, ref: p.ref });
   for (const s of parsed.sections.filter((x) => x.kind === 'people')) {
     const lines = linesOf(s.blocks);
+    const prose = []; // 「참가기관은 담당자를 선임하여야 한다.」 같은 문장은 사람 이름이 아니다 → 이 절의 주제 설명으로(F23-4)
     for (const l of lines) {
       if (l.cells) {
         const { name: cellName, desc, duty } = nameAndRest(l.cells, l.header, 'people');
@@ -658,11 +746,27 @@ export function convertDocument(text, ctx) {
         roleItems.push({ text: cellName, ref: refOf(s), desc: desc || '', duty: duty || '' });
       }
       else {
-        const kv = /^([^:：[]{1,30})[:：]\s*(.+)$/.exec(l.text);
+        // 「이름: 설명」, 「이름 — 설명」을 먼저 나눈다(재검증 R6: 「가상 정산 담당 — 매월 대사를 한다.」는 역할)
+        const kv = /^([^:：[]{1,30})[:：]\s*(.+)$/.exec(l.text) || /^([^—–[]{1,30}?)\s+(?:—|–|-)\s+(.+)$/.exec(l.text);
+        if (!kv && isProse(l.text)) { prose.push(l); continue; }
         roleItems.push(kv ? { text: kv[1], ref: refOf(s), desc: kv[2] } : { text: l.text, ref: refOf(s) });
       }
     }
-    sections.push({ order: parsed.sections.indexOf(s), ref: refOf(s), title: s.heading, kind: 'people', made: lines.length });
+    sections.push({ order: parsed.sections.indexOf(s), ref: refOf(s), title: s.heading, kind: 'people', made: lines.length - prose.length });
+    if (prose.length) {
+      const label = topicLabel(s);
+      if (!hasName(label)) { notes.push({ code: 'C-NO-NAME', ref: refOf(s), text: s.title }); continue; }
+      const description = prose.map((l) => (l.kind === 'bullet' || l.n !== undefined ? `- ${l.text}` : l.text)).join('\n');
+      const t = pushNode('topic', label, { ref: refOf(s), description, status: statusOf(s.title, ...prose.map((l) => l.text)) });
+      if (!topics.some((x) => x.node === t)) {
+        topics.push({ node: t, text: `${label} ${description}`, known: false });
+        // 규칙 밖 주제 수에 넣는다(알림은 주제 절 다음에 이미 나갔을 수 있으므로 그 알림의 수를 늘린다)
+        const guess = notes.find((n) => n.code === 'C-TOPIC-GUESS');
+        if (guess) guess.count += 1;
+        else notes.push({ code: 'C-TOPIC-GUESS', count: 1 });
+      }
+      notes.push({ code: 'C-PEOPLE-PROSE', ref: refOf(s), count: prose.length });
+    }
   }
   const roles = [];
   const roleDuty = new Map(); // 역할 노드 → [{text, ref}] 원문에 적힌 하는 일(담당 추정의 근거)
@@ -740,7 +844,7 @@ export function convertDocument(text, ctx) {
     // 담당(수행): 원문이 그 역할의 하는 일로 업무 이름을 적은 경우만. 기간은 원문에 없으므로 두지 않는다(= 지금 담당으로 계산)
     // 하는 일을 쉼표로 나눈 항목이 업무 이름과 같을 때만 잇는다(D3-33). "결과 승인"처럼 업무 이름이 일부만 들어간 항목(결재·수강)은 담당이 아니다
     const duties = roleDuty.get(r) || [];
-    const bare = (t) => compact(stripMarks(t).replace(/\([^)]*\)|（[^）]*）/g, '').replace(/[.。·\s]+$/, ''));
+    const bare = (t) => compact(stripParens(stripMarks(t)).replace(/[.。·\s]+$/, ''));
     const dutyItems = duties.flatMap((d) => splitList(d.text).map((t) => ({ text: t, ref: d.ref })));
     // 글자 그대로 같은 업무가 먼저다. 그런 업무가 없을 때만 괄호를 뗀 값으로 비교한다(「승인(재처리)」 업무가 있으면 「승인」에 붙이지 않는다, 2차 B)
     const half = (t) => t.replace(/（/g, '(').replace(/）/g, ')'); // 전각 괄호는 반각과 같게 본다(3차 3)

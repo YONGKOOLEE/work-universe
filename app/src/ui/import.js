@@ -17,6 +17,8 @@ const KIND_TEXT = {
   cautions: (n) => `주의사항 → 대표 업무의 주의사항 속성 ${n}줄`,
   artifacts: (n) => `산출물 ${n}개`,
   memos: (n) => `메모 ${n}건`,
+  toc: () => '목차 → 건너뜀(노드로 만들지 않음)',
+  outline: () => '아래 절 제목의 목록 → 건너뜀(아래 절에서 만듦)',
 };
 
 function noteText(n) {
@@ -34,6 +36,7 @@ function noteText(n) {
     case 'C-NO-STRUCTURE': return '제목(#)이 없어 구조를 거의 읽지 못했습니다. 마크다운 제목·표·번호 목록이 있으면 더 잘 바뀝니다.';
     case 'C-TRUNCATED': return `「${n.where}」 글이 너무 길어 ${n.max}자에서 잘랐습니다.`;
     case 'C-UNUSED': return `개요 표에서 쓰지 못한 칸이 있습니다(${n.refs.join(', ')}). 원문을 함께 보세요.`;
+    case 'C-PEOPLE-PROSE': return `${n.ref}의 문장 ${n.count}줄은 사람 이름이 아니라서 역할로 만들지 않고 그 절의 주제 설명에 넣었습니다.`;
     default: return n.code;
   }
 }
