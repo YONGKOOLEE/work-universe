@@ -150,7 +150,7 @@ test('「빈 곳을 누르세요」 표지: handover 3단계는 쓰지 않고(FU
   assert.match(draft.target(sel)[1].sel, /btn-draft-universe/);
   assert.equal(draft.target(sel)[2].sel, '#detail'); // 사람·산출물을 고른 경우 두 단추가 없으므로 패널만
   const risk = teamScenario('risk-first').steps[0];
-  const lastStep = scenarioOf('team').steps[4]; // 기본(D-29) 판의 마지막 단계도 선택이 있으면 빈 곳 표지
+  const lastStep = teamScenario('d29').steps[4]; // D-29 판의 마지막 단계도 선택이 있으면 빈 곳 표지
   assert.ok(lastStep.target(emptyState()).every((x) => !x.hint));
   assert.equal(lastStep.target(sel)[0].hint, BLANK_HINT);
   assert.ok(risk.target(emptyState()).every((x) => !x.hint), '선택이 없으면 표지 없음');

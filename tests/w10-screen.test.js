@@ -267,20 +267,21 @@ test('R11-10 ④: 사전 생성 초안에 규칙 기반 항목이 섞이면 맨 
 }));
 
 // ── R11-11: 팀 따라 하기 두 순서 ──
-test('R11-11: 기본 순서는 D-29(펼치기 → 찾기 → 주변만 → 전체 보기 → 「인사이트 보기」 → 「반복 비효율」 탭), 다른 판은 위험 요약 먼저', () => {
-  assert.equal(TEAM_ORDER, 'd29');
+test('R11-11·CR-17 K: 기본 순서는 위험 요약 먼저(TEAM_ORDER), D-29 판(펼치기 → 찾기 → 주변만 → 전체 보기 → 「인사이트 보기」 → 「반복 비효율」 탭)도 상수만 바꾸면', () => {
+  assert.equal(TEAM_ORDER, 'risk-first');
   assert.deepEqual(Object.keys(TEAM_ORDERS).sort(), ['d29', 'risk-first']);
-  const d29 = scenarioOf('team');
+  const d29 = teamScenario('d29');
+  assert.deepEqual(scenarioOf('team').steps.map((s) => s.id), ['risk', 'expand', 'find', 'neighborhood', 'full']);
   assert.deepEqual(d29.steps.map((s) => s.id), ['expand', 'find', 'neighborhood', 'full', 'insight']);
   assert.deepEqual(teamScenario('d29').steps.map((s) => s.id), ['expand', 'find', 'neighborhood', 'full', 'insight']);
   assert.deepEqual(teamScenario('risk-first').steps.map((s) => s.id), ['risk', 'expand', 'find', 'neighborhood', 'full']);
-  assert.deepEqual(teamScenario('모르는 이름').steps.map((s) => s.id), d29.steps.map((s) => s.id), '모르는 이름은 기본 순서');
+  assert.deepEqual(teamScenario('모르는 이름').steps.map((s) => s.id), scenarioOf('team').steps.map((s) => s.id), '모르는 이름은 기본 순서');
   for (const order of Object.keys(TEAM_ORDERS)) assert.equal(teamScenario(order).steps.length, 5, order);
   assert.equal(teamScenario('risk-first').universeId, 'U-D1');
 });
 
-test('R11-11: 기본 판의 마지막 단계 — 「인사이트 보기」 → 「반복 비효율」 탭을 눌러야 끝, 열린 탭이 인수인계 위험이면 아직', () => {
-  const last = scenarioOf('team').steps[4];
+test('R11-11: D-29 판의 마지막 단계 — 「인사이트 보기」 → 「반복 비효율」 탭을 눌러야 끝, 열린 탭이 인수인계 위험이면 아직', () => {
+  const last = teamScenario('d29').steps[4];
   assert.equal(last.id, 'insight');
   assert.equal(last.task, '빈 곳을 눌러 선택을 풀고 「인사이트 보기」를 누르세요. 맨 먼저 「인수인계 위험」(한 사람만 해 본 일)이 열립니다. 이어서 「반복 비효율」 탭을 누르세요.');
   assert.deepEqual(quotedNames(last.task), ['인사이트 보기', '인수인계 위험', '반복 비효율']);
@@ -294,8 +295,8 @@ test('R11-11: 기본 판의 마지막 단계 — 「인사이트 보기」 → �
   assert.equal(last.target({ ...s, insightOpen: true, insightKind: 'risk' })[0].sel, '[data-testid=tab-repeat]');
 });
 
-test('R11-11: 기본 판 advance — 찾기·주변만 보기·전체 보기를 차례로, 마지막은 반복 비효율 탭에서 끝', () => {
-  const sc = scenarioOf('team');
+test('R11-11: D-29 판 advance — 찾기·주변만 보기·전체 보기를 차례로, 마지막은 반복 비효율 탭에서 끝', () => {
+  const sc = teamScenario('d29');
   const s = emptyState('U-D1');
   assert.equal(advance(sc, 0, s), 0);
   assert.equal(advance(sc, 0, { ...s, expandedCount: 1 }), 1);

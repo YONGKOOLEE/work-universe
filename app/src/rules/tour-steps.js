@@ -94,10 +94,10 @@ const HANDOVER = {
   ],
 };
 
-// team 시나리오의 단계 순서(R11-11). 승인된 D-29는 "team 시나리오는 5단계, 마지막은 내용이 있는 「반복 비효율」 탭에서 끝"이므로 기본은 'd29'다.
-// 처음 사용 점검 2회차(FU-33)가 만든 'risk-first'(위험 요약 「자세히」 먼저, 마지막은 전체 보기)는 승인 문서(02 D-29)와 다르므로 CR-17 K 승인 전에는 쓰지 않는다.
-// 승인되면 이 상수 하나만 'risk-first'로 바꾼다(단위 테스트가 두 순서를 모두 고정한다).
-export const TEAM_ORDER = 'd29';
+// team 시나리오의 단계 순서. CR-17 K(승인 전 준비): 기본은 'risk-first'(위험 요약 「자세히」 먼저, 마지막은 전체 보기 — 처음 사용 점검 FU-14·FU-33).
+// 이전 승인 문서(02 D-29: "team 시나리오는 5단계, 마지막은 내용이 있는 「반복 비효율」 탭에서 끝")의 순서는 'd29' 판이다.
+// 되돌리려면 이 상수 하나만 'd29'로 바꾼다(단위 테스트가 두 순서를 모두 고정한다).
+export const TEAM_ORDER = 'risk-first';
 export const TEAM_ORDERS = {
   d29: ['expand', 'find', 'neighborhood', 'full', 'insight'],
   'risk-first': ['risk', 'expand', 'find', 'neighborhood', 'full'],

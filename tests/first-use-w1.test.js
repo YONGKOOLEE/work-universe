@@ -316,13 +316,14 @@ test('FU-20: 「관련」 연결이 주제 아닌 노드에 걸려 거절되면 
 
 // ── FU-14 ──
 // 2회차 FU-33이 팀 순서를 위험 요약 먼저(risk-first)로 바꿨으나 승인된 D-29는 "마지막은 내용이 있는 반복 비효율 탭"이라 R11-11에서 기본을 D-29 판으로 되돌렸다.
-// 두 판 모두 단계 수 5. 상수 TEAM_ORDER 하나로 바꾼다(CR-17 K 승인 시). tests/w10-screen.test.js가 두 판의 완료 조건을 고정한다
-test('FU-14·FU-33·R11-11: 팀 따라 하기 순서 — 기본(D-29) 펼치기 → 찾기 → 주변만 → 전체 보기 → 인사이트, 위험 요약 먼저 판은 상수만 바꾸면', () => {
-  const steps = scenarioOf('team').steps;
+// 두 판 모두 단계 수 5. 기본은 위험 요약 먼저(CR-17 K 승인), D-29 판은 상수 TEAM_ORDER만 'd29'로. tests/w10-screen.test.js가 두 판의 완료 조건을 고정한다
+test('FU-14·FU-33·R11-11·CR-17 K: 팀 따라 하기 순서 — 기본은 위험 요약 먼저, D-29 판(펼치기 → 찾기 → 주변만 → 전체 보기 → 인사이트)은 상수만 바꾸면', () => {
+  const steps = teamScenario('d29').steps;
   assert.deepEqual(steps.map((s) => s.id), ['expand', 'find', 'neighborhood', 'full', 'insight']);
   assert.equal(steps.length, 5);
   assert.match(steps[4].task, /「반복 비효율」 탭을 누르세요/);
-  const riskFirst = teamScenario('risk-first').steps;
+  const riskFirst = scenarioOf('team').steps;
+  assert.deepEqual(riskFirst.map((s) => s.id), teamScenario('risk-first').steps.map((s) => s.id), '기본 = risk-first');
   assert.deepEqual(riskFirst.map((s) => s.id), ['risk', 'expand', 'find', 'neighborhood', 'full']);
   assert.match(riskFirst[0].task, /「혼자만 아는 일 …」 줄의 「자세히」/);
   assert.match(riskFirst[0].task, /한 사람만 해 봤고 인수인계 기록이 없는 일/);

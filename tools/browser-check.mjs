@@ -926,7 +926,7 @@ async function checkBrowser(browser, port) {
     await sleep(500);
     check('머리글 제목을 누르면 시작 화면으로 돌아옴', await waitFor(s.cdp, 'window.__wu && window.__wu.start === true', 8000));
 
-    // 갈래 c: 팀 업무 → 가상 운영부(U-D1), team 시나리오 1~5(D-29 순서)
+    // 갈래 c: 팀 업무 → 가상 운영부(U-D1), team 시나리오 1~5(위험 요약 먼저 — CR-17 K)
     await evaluate(s.cdp, "document.querySelector('[data-testid=start-way-team]').click()");
     await sleep(500);
     const openedTeam = await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-D1' && window.__wu.cy.nodes().length > 0", 8000);
@@ -934,53 +934,53 @@ async function checkBrowser(browser, port) {
     ti = await tourInfo();
     check('CR-13 A 갈래 c 「팀 업무를 한눈에 보고 싶어요」 → 가상 운영부가 열리고 따라 하기 1/5(이야기: 75개 중 18개만 보임)', openedTeam && ti.scenario === 'team' && ti.index === 0 && (await text(s.cdp, '[data-testid=tour-story]')).includes('75개 중 18개만 보이고') && (await evaluate(s.cdp, 'window.__wu.cy.nodes().length')) === 18 && (await hashClean()), JSON.stringify(ti));
     const collapsedId = await evaluate(s.cdp, "window.__wu.cy.nodes('[?collapsed]')[0].id()");
-    // 승인된 D-29 순서(R11-11): 펼치기 → 찾기 → 주변만 보기 → 전체 보기 → 「인사이트 보기」 → 「반복 비효율」 탭. (위험 요약 먼저 판은 rules/tour-steps.js TEAM_ORDER = 'risk-first' — CR-17 K 승인 시)
-    check('CR-13 A team 1단계: 깜빡이는 대상은 접힌 팀(이중 테두리) 노드, 문구에 「접힌 팀」', (await blinkIds()).includes(collapsedId) && (await text(s.cdp, '[data-testid=tour-task]')).includes('접힌 팀'));
+    // CR-17 K(위험 요약 먼저 판, TEAM_ORDER = 'risk-first'). 처음 사용 점검 2회차 FU-33: team 따라 하기 순서가 위험 요약의 「자세히」 → 펼치기 → 찾기 → 주변만 보기 → 전체 보기로 바뀜(옛 순서는 펼치기 → 인사이트 보기 → …)
+    // 노드 하나를 골라 둔다: 선택이 남아 있으면 위험 요약이 가려지므로 「빈 곳을 누르세요」 표지(N-2)가 보이는지 먼저 확인한다
+    await evaluate(s.cdp, "window.__wu.select(window.__wu.cy.nodes('[!collapsed]')[0].id())");
+    await sleep(300);
+    const hi2 = await hintInfo();
+    check('N-2 team 1단계(선택이 남은 상태)에도 그래프 안쪽 표지 「여기 빈 곳을 누르세요」(크기 있음, 안쪽 테두리)', !!hi2 && hi2.text === '여기 빈 곳을 누르세요' && hi2.w > 80 && hi2.inside && hi2.noPointer && hi2.graphInset, JSON.stringify(hi2));
+    await shot(s.cdp, `${browser.name}-37c-tour-team-5-hint`);
+    await blankClick();
+    check('처음 사용 W4(FU-33) team 1단계: 빈 곳을 누르면 표지가 사라지고 깜빡이는 대상은 위험 요약 줄의 「자세히」', (await hintInfo()) === null && (await evaluate(s.cdp, "document.querySelector('[data-testid=btn-team-risk-more]').classList.contains('tour-target')")));
+    const tn1 = await stepNamesOk();
+    check('처음 사용 W4(FU-33) team 1단계 문구: 「혼자만 아는 일 …」 줄의 「자세히」(줄 이름은 줄임표 앞부분이 요약 줄에 있고, 「자세히」 단추가 화면에 있음)', tn1.names.join('|') === '혼자만 아는 일 …|자세히' && tn1.missing.every((n) => n === '혼자만 아는 일 …') && (await text(s.cdp, '[data-testid=team-risk-summary]')).includes('혼자만 아는 일') && (await text(s.cdp, '[data-testid=tour-task]')).includes('한 사람만 해 봤고 인수인계 기록이 없는 일이 나옵니다'), JSON.stringify(tn1));
     await shot(s.cdp, `${browser.name}-37a-tour-team-1`);
+    await evaluate(s.cdp, "document.querySelector('[data-testid=btn-team-risk-more]').click()");
+    await sleep(500);
+    const insShow = await evaluate(s.cdp, "({ tab: document.querySelector('[data-testid=tab-risk]').classList.contains('active'), len: document.querySelector('#detail').textContent.length })");
+    ti = await tourInfo();
+    check('CR-13 A team 1단계 → 「자세히」로 인사이트가 「인수인계 위험」 탭으로 열리면(내용이 보임, FU-5) 2/5(접힌 팀 펼치기)', ti.index === 1 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 2/5' && insShow.tab && insShow.len > 100, JSON.stringify({ ti, insShow }));
+    await shot(s.cdp, `${browser.name}-37d-tour-team-insight`);
+    check('CR-13 A team 2단계: 깜빡이는 대상은 접힌 팀(이중 테두리) 노드', (await blinkIds()).includes(collapsedId));
     const dbl = await evaluate(s.cdp, `(() => { const n = window.__wu.cy.getElementById(${JSON.stringify(collapsedId)}); const p = n.renderedPosition(); const r = document.getElementById('graph').getBoundingClientRect(); return { x: r.left + p.x, y: r.top + p.y }; })()`);
     await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: dbl.x, y: dbl.y });
     for (const c of [1, 2]) { await s.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: dbl.x, y: dbl.y, button: 'left', clickCount: c }); await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: dbl.x, y: dbl.y, button: 'left', clickCount: c }); }
     await sleep(700);
     ti = await tourInfo();
-    check('CR-13 A team 1단계 → 접힌 팀을 두 번 눌러 펼치면 2/5(노드 찾기)', ti.index === 1 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 2/5' && (await evaluate(s.cdp, 'window.__wu.cy.nodes().length')) > 18, JSON.stringify(ti));
+    check('CR-13 A team 2단계 → 접힌 팀을 두 번 눌러 펼치면 3/5(노드 찾기)', ti.index === 2 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 3/5' && (await evaluate(s.cdp, 'window.__wu.cy.nodes().length')) > 18, JSON.stringify(ti));
     const tn3 = await stepNamesOk();
-    check('CR-13 A team 2단계 문구의 「」 이름(노드 찾기)이 실제 화면에 있고 깜빡이는 대상은 찾기 칸', tn3.missing.length === 0 && (await evaluate(s.cdp, "document.querySelector('[data-testid=find-input]').classList.contains('tour-target')")), JSON.stringify(tn3));
+    check('CR-13 A team 3단계 문구의 「」 이름(노드 찾기)이 실제 화면에 있고 깜빡이는 대상은 찾기 칸', tn3.missing.length === 0 && (await evaluate(s.cdp, "document.querySelector('[data-testid=find-input]').classList.contains('tour-target')")), JSON.stringify(tn3));
     await evaluate(s.cdp, "(() => { const i = document.querySelector('[data-testid=find-input]'); i.value = ''; i.focus(); })()");
     await s.cdp.send('Input.insertText', { text: '대사' });
     await sleep(250);
-    check('CR-13 A team 2단계: 찾기 칸에 글자만 넣어서는 진행하지 않음', (await tourInfo()).index === 1);
+    check('CR-13 A team 3단계: 찾기 칸에 글자만 넣어서는 진행하지 않음', (await tourInfo()).index === 2);
     await evaluate(s.cdp, "document.querySelector('[data-testid=find-hit]').click()");
     await sleep(500);
     ti = await tourInfo();
-    check('CR-13 A team 2단계 → 찾기 결과를 고르면 3/5(주변만 보기)', ti.index === 2 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 3/5', JSON.stringify(ti));
+    check('CR-13 A team 3단계 → 찾기 결과를 고르면 4/5(주변만 보기)', ti.index === 3 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 4/5', JSON.stringify(ti));
     const tn4 = await stepNamesOk();
-    check('CR-13 A team 3단계 문구의 「」 이름(주변만 보기)이 실제 화면에 있고 깜빡이는 대상은 그 단추', tn4.missing.length === 0 && (await evaluate(s.cdp, "document.querySelector('[data-testid=btn-nbhd]').classList.contains('tour-target')")), JSON.stringify(tn4));
+    check('CR-13 A team 4단계 문구의 「」 이름(주변만 보기)이 실제 화면에 있고 깜빡이는 대상은 그 단추', tn4.missing.length === 0 && (await evaluate(s.cdp, "document.querySelector('[data-testid=btn-nbhd]').classList.contains('tour-target')")), JSON.stringify(tn4));
     await evaluate(s.cdp, "document.querySelector('[data-testid=btn-nbhd]').click()");
     await sleep(600);
     ti = await tourInfo();
-    check('CR-13 A team 3단계 → 「주변만 보기」를 누르면 4/5(전체 보기로 돌아오기), 이때 깜빡이는 대상은 「전체 보기」', ti.index === 3 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 4/5' && !!(await evaluate(s.cdp, 'window.__wu.nbhd')) && (await evaluate(s.cdp, "document.getElementById('fit').classList.contains('tour-target')")), JSON.stringify(ti));
+    check('CR-13 A team 4단계 → 「주변만 보기」를 누르면 5/5(전체 보기로 돌아오기), 이때 깜빡이는 대상은 「전체 보기」', ti.index === 4 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 5/5' && !!(await evaluate(s.cdp, 'window.__wu.nbhd')) && (await evaluate(s.cdp, "document.getElementById('fit').classList.contains('tour-target')")), JSON.stringify(ti));
     const tn5 = await stepNamesOk();
-    check('CR-13 A team 4단계 문구의 「」 이름(전체 보기)이 실제 화면에 있음', tn5.missing.length === 0 && tn5.names.includes('전체 보기'), JSON.stringify(tn5));
+    check('CR-13 A team 5단계 문구의 「」 이름(전체 보기)이 실제 화면에 있음', tn5.missing.length === 0 && tn5.names.includes('전체 보기'), JSON.stringify(tn5));
     await shot(s.cdp, `${browser.name}-37b-tour-team-4`);
     await evaluate(s.cdp, "document.getElementById('fit').click()");
     await sleep(600);
-    ti = await tourInfo();
-    check('CR-13 A team 4단계 → 「전체 보기」로 돌아오면(주변만 보기 해제) 마지막 5/5(인사이트)이고 아직 끝 카드가 아님', ti.index === 4 && ti.mode !== 'end' && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 5/5' && !(await evaluate(s.cdp, 'window.__wu.nbhd')), JSON.stringify(ti));
-    // 5단계: 노드가 골라진 채라 「인사이트 보기」 단추가 가려진다 → 그래프 안쪽 표지 「여기 빈 곳을 누르세요」(N-2)
-    const hi2 = await hintInfo();
-    check('N-2 team 5단계(선택이 남은 상태)에도 그래프 안쪽 표지 「여기 빈 곳을 누르세요」(크기 있음, 안쪽 테두리)', !!hi2 && hi2.text === '여기 빈 곳을 누르세요' && hi2.w > 80 && hi2.inside && hi2.noPointer && hi2.graphInset, JSON.stringify(hi2));
-    await shot(s.cdp, `${browser.name}-37c-tour-team-5-hint`);
-    await blankClick();
-    check('R11-11 team 5단계: 빈 곳을 누르면 표지가 사라지고 깜빡이는 대상은 「인사이트 보기」 단추', (await hintInfo()) === null && (await evaluate(s.cdp, "document.querySelector('[data-testid=btn-insight-universe]').classList.contains('tour-target')")));
-    const tn6 = await stepNamesOk();
-    check('R11-11 team 5단계 문구: 「인사이트 보기」→「인수인계 위험」→「반복 비효율」 순서(인사이트 보기는 화면에 있고, 나머지는 열린 뒤 탭 이름)', tn6.names.join('|') === '인사이트 보기|인수인계 위험|반복 비효율' && !tn6.missing.includes('인사이트 보기') && (await text(s.cdp, '[data-testid=tour-task]')).includes('이어서 「반복 비효율」 탭을 누르세요'), JSON.stringify(tn6));
-    await evaluate(s.cdp, "document.querySelector('[data-testid=btn-insight-universe]').click()");
-    await sleep(500);
-    ti = await tourInfo();
-    check('R11-11 team 5단계: 「인사이트 보기」로 열린 기본 탭은 「인수인계 위험」이고 아직 끝이 아님(깜빡이는 대상은 「반복 비효율」 탭)', ti.index === 4 && ti.mode !== 'end' && (await evaluate(s.cdp, "document.querySelector('[data-testid=tab-risk]').classList.contains('active')")) && (await evaluate(s.cdp, "document.querySelector('[data-testid=tab-repeat]').classList.contains('tour-target')")), JSON.stringify(ti));
-    await evaluate(s.cdp, "document.querySelector('[data-testid=tab-repeat]').click()");
-    await sleep(500);
-    check('R11-11 team 5단계 → 「반복 비효율」 탭을 누르면(내용이 보임) 끝 카드', (await tourInfo()).mode === 'end' && (await text(s.cdp, '[data-testid=tour-end]')) === '끝! 이제 내 업무로 해 볼까요?' && (await text(s.cdp, '[data-testid=tour-card] .tour-count')) === '따라 하기 5/5 끝' && (await evaluate(s.cdp, "document.querySelector('#detail').textContent.length")) > 100);
+    check('CR-13 A team 5단계 → 「전체 보기」로 돌아오면(주변만 보기 해제) 끝 카드', (await tourInfo()).mode === 'end' && (await text(s.cdp, '[data-testid=tour-end]')) === '끝! 이제 내 업무로 해 볼까요?' && (await text(s.cdp, '[data-testid=tour-card] .tour-count')) === '따라 하기 5/5 끝' && !(await evaluate(s.cdp, 'window.__wu.nbhd')));
     await shot(s.cdp, `${browser.name}-37d-tour-team-end`);
     await evaluate(s.cdp, "document.querySelector('[data-testid=tour-skip]').click()");
     // 「?」: 다른 유니버스(U-K1)에서는 두 시나리오 고르기 → 팀을 고르면 U-D1이 열리고 team 시작
