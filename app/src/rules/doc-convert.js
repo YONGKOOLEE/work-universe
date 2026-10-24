@@ -29,15 +29,15 @@ export const CONVERT_RULES = {
   // 만든 문서인지 참고한 문서인지 원문에 없으므로 「참조」(지어내지 않기, 메인 결정 2026-10-24). produces로 바꾸면 인수인계 초안의 「산출물·문서 위치」가
   // 읽지만 「원문이 만든다고 말한 것」이 아닌 문서까지 산출로 보이게 된다. 초안이 「참조」도 읽게 하는 것은 CR-17 J ②(승인 필요)
   relatedDocEdge: 'references',
-  // CR-17 J 스위치 묶음. 승인안 기본값: assignPerforms·namedPersonPlain·relatedDocLink·pathToLocation·authorDate·previewRenameWork 켬,
-  // authorPickOrg·summaryToWork·periodDeadline 끔(전부 끄면 승인된 02-design 12.9.1 v1·12.9.2 D-P3·D-P6 그대로).
+  // CR-17 J 스위치 묶음. 승인안 기본값: assignPerforms·namedPersonPlain·relatedDocLink·pathToLocation·authorPickOrg(범위 한정)·authorDate·previewRenameWork 켬,
+  // summaryToWork·periodDeadline 끔(authorPickOrg는 R13-6을 고친 뒤 2026-10-24 승인에 따라 켬; 전부 끄면 승인된 02-design 12.9.1 v1·12.9.2 D-P3·D-P6 그대로).
   // convertDocument의 ctx.cr17j로 한 번 호출만 덮어쓸 수 있다(시험·비교용).
   cr17j: {
     assignPerforms: true, // 담당 절의 「주 담당·담당·정」 사람 → 문서의 업무가 하나뿐일 때 업무 performs(+ 알림 C-PERFORMS-GUESS·C-ASSIGN-SKIPPED). 끄면 연결 없음(D-P3)
     namedPersonPlain: true, // 담당 절에서 이름 모양(한글 2~4자)인 사람을 하위 유형 「역할」 없는 사람으로. 끄면 모두 「역할」(12.9.1 v1: 이해관계자는 역할)
     relatedDocLink: true, // 「관련 문서」 절의 산출물 → 대표 업무 relatedDocEdge 연결(업무 하나짜리 문서). 끄면 꼭지 contains(v1: 산출물은 꼭지가 담음)
     pathToLocation: true, // 산출물 이름 뒤 괄호가 경로 모양이면 설명 대신 속성 「위치」로. 끄면 괄호는 설명(v1: 괄호는 설명)
-    authorPickOrg: false, // 「작성(자/부서/주체):」 값에서 조직 낱말(…팀·…부)까지만 작성 주체로 + 키가 그냥 「작성:」인 줄도 작성 주체로 읽음. 끄면 값 그대로이고 「작성:」은 작성 주체로 읽지 않음(D-P6: 변경 없음, R12-2)
+    authorPickOrg: true, // 키가 「작성」·「작성 부서」인 줄은 조직 낱말(…팀·…부·…실·…본부·…센터·…파트·…그룹)로 끝나는 덩어리까지만 작성 주체로(없으면 입력받기), 한 줄에 키가 여럿이면 「작성 부서」 칸만. 「작성자」·「작성 주체」는 값 그대로. 끄면 모두 값 그대로이고 그냥 「작성:」은 작성 주체로 읽지 않음(D-P6: 변경 없음, R12-2)
     authorDate: true, // 「작성(자/부서/주체):」 값 속의 날짜를 작성일로 읽음. 끄면 작성일은 따로 적힌 날짜만
     summaryToWork: false, // 업무 하나짜리 문서에서 개요 첫 문장 → 대표 업무 설명
     periodDeadline: false, // 업무 하나짜리 문서에서 개요·절차 문장 속 주기·마감 구절 → 대표 업무 속성 「주기」「마감」(문장에서 낱말 고르기 — 12.9의 「개요의 주기·마감 항목」 밖)
@@ -87,17 +87,44 @@ export function docWorkLabel(title) {
 // 작성 주체 줄에서 조직 낱말을 고른다(W8). 「가상재무팀 류다온 / 2026-09-01」 → 가상재무팀, 날짜는 따로
 const ORG_WORD = /(팀|부서|본부|센터|파트|그룹|실|부|처)$/;
 const NOT_ORG_WORD = /^(외부|내부|일부|전부|상부|하부|세부|실제|실무|총무|부|실|팀|처)$/;
-export function authorOf(value) {
+// strict: 조직 낱말로 끝나는 덩어리가 없으면 작성 주체 없음(null) — 값 그대로 쓰지 않는다(CR-17 J ⑤: 키가 「작성」·「작성 부서」일 때)
+export function authorOf(value, { strict = false } = {}) {
   const date = findDate(value);
   const rest = String(value).replace(DATE_SPAN, ' ').replace(/(^|\s)(작성|작성일|작성일자)(\s|$)/g, ' ').replace(/^[\s/,·|:：-]+|[\s/,·|:：-]+$/g, '');
+  // 괄호 꼬리(「(초안)」「(류다온)」)는 조직 판정에서 뺀다
+  const judged = rest.replace(/\([^)]*\)|（[^）]*）/g, ' ');
   // 「/」「,」「·」「|」로 나뉜 덩어리마다 보고, 조직 낱말이 든 첫 덩어리에서 그 낱말까지를 작성 주체로 한다(「류다온 / 가상정산팀」은 사람 덩어리를 건너뜀)
-  for (const group of rest.split(/\s*[/,·|]\s*/)) {
+  for (const group of judged.split(/\s*[/,·|]\s*/)) {
     const tokens = group.split(/\s+/).filter(Boolean);
     const at = tokens.findIndex((t) => t.length >= 3 && ORG_WORD.test(t) && !NOT_ORG_WORD.test(t));
     // 「가상 재무팀」처럼 조직 이름이 두 낱말이면 앞 낱말까지(최대 3낱말), 아니면 조직 낱말 하나
     if (at >= 0) return { owner: at <= 2 ? tokens.slice(0, at + 1).join(' ') : tokens[at], date };
   }
-  return { owner: rest || null, date };
+  return { owner: strict ? null : rest || null, date };
+}
+// 한 줄에 키가 여럿인 작성 줄(「작성자: 류다온 / 작성 부서: 가상팀」)을 칸으로 나눈다. 첫 칸은 줄의 키, 나머지는 구분 기호 뒤에 「키:」가 이어지는 곳부터
+const CELL_SPLIT = /\s*[/|·,，]\s*(?=[^:：/|·,，[\]]{1,12}[:：])/;
+export function authorCells(key, value) {
+  const [first, ...more] = String(value).split(CELL_SPLIT);
+  const cells = [{ key: String(key).replace(/\s/g, ''), text: first }];
+  for (const c of more) {
+    const m = /^([^:：]{1,12})[:：]\s*(.*)$/.exec(c);
+    cells.push(m ? { key: m[1].replace(/\s/g, ''), text: m[2] } : { key: '', text: c });
+  }
+  return cells;
+}
+/**
+ * CR-17 J ⑤: 작성 줄에서 작성 주체를 조직 낱말로 고른다. 적용 범위는 키가 「작성」·「작성 부서」일 때만(「작성자」·「작성 주체」는 값 그대로 — 이 함수를 거치지 않는다).
+ * 칸이 여럿이면 「작성 부서」 칸의 값만 쓴다. 조직 낱말로 끝나는 덩어리가 없으면 null(입력받음).
+ * 「작성자」 키의 줄이어도 같은 줄에 「작성 부서」 칸이 있으면 그 칸을 쓴다(없으면 null이 아니라 호출한 쪽이 값 그대로 쓴다 → undefined)
+ */
+export function orgOwnerOf(key, value) {
+  const cells = authorCells(key, value);
+  const dept = cells.find((c) => c.key === '작성부서');
+  const own = cells[0].key;
+  if (dept) return authorOf(dept.text, { strict: true }).owner;
+  if (own === '작성' || own === '작성부서') return authorOf(cells[0].text, { strict: true }).owner;
+  return undefined;
 }
 
 // 개요 문장에서 분명한 주기·마감 구절을 원문 그대로 고른다(W8). 확실하지 않으면 null(지어내지 않기)
@@ -502,10 +529,22 @@ export function findDate(text) {
 const DATE_SPAN = /\d{4}\s*[.\-\/년]\s*\d{1,2}\s*[.\-\/월]\s*\d{1,2}/g;
 const DATE_BEFORE = [[0, /(작성 ?일자|작성일)\s*[:：]?\s*$/], [1, /작성\s*[:：]?\s*$/], [2, /(기준일|일자)\s*[:：]?\s*$/]];
 const DATE_AFTER = /^\s*[.일]?\s*작성/; // 「2026.09.18 작성」 「2026년 9월 18일 작성」
-/** 값이 날짜뿐인가(「2026-09-05」「2026년 9월 5일 작성」). 작성 주체로 쓸 글자가 없다 */
+// 날짜 꼴을 느슨하게 읽는 후보(isDateOnly 전용. 날짜를 뽑는 findDate의 정규식은 건드리지 않는다).
+// 「26-09-05」(두 자리 해)·「2026. 9. 5.」·「2026년 9월」(일 없음)·「2026.09」·「9월 5일」. 앞 경계는 findDate와 같다(R13-5)
+const LOOSE_DATE = /(?<![\d.\-\/vV])(?:(?:\d{4}|\d{2})\s*[.\-\/]\s*(\d{1,2})\s*[.\-\/]\s*(\d{1,2})\s*일?|(?:\d{4}|\d{2})\s*년\s*(\d{1,2})\s*월(?:\s*(\d{1,2})\s*일?)?|\d{4}\s*[.\-\/]\s*(\d{1,2})(?!\d|\.\d)|(\d{1,2})\s*월\s*(\d{1,2})\s*일?)\.?/g;
+/** 값이 날짜뿐인가(「2026-09-05」「26-09-05」「2026년 9월」「2026년 9월 5일 작성」「2026-09-05 (초안)」). 작성 주체로 쓸 글자가 없다. 괄호 꼬리는 보지 않는다 */
 export function isDateOnly(value) {
-  const v = String(value || '');
-  return !!findDate(v) && !/\p{L}/u.test(v.replace(DATE_SPAN, ' ').replace(/작성(일자|일)?|[일월년]/g, ' '));
+  const v = String(value || '').replace(/\([^)]*\)|（[^）]*）/g, ' ');
+  let hit = !!findDate(v);
+  const rest = v.replace(DATE_SPAN, ' ').replace(LOOSE_DATE, (m, ...g) => {
+    const [a, b, c, d, e, f, h] = g; // 달·일 후보(앞 두 개는 해 다음 숫자들)
+    const month = Number([a, c, e, f].find((x) => x !== undefined));
+    const day = Number([b, d, h].find((x) => x !== undefined) || 1);
+    if (!(month >= 1 && month <= 12 && day >= 1 && day <= 31)) return m; // 달력에 없는 값은 날짜로 치지 않는다
+    hit = true;
+    return ' ';
+  });
+  return hit && !/\p{L}/u.test(rest.replace(/작성(일자|일)?|[일월년]/g, ' '));
 }
 const DOC_NUMBER = /제\s*\d[\d\s.\-\/]*호|(문서 ?번호|번호)\s*[:：]?\s*\S+/g;
 function headDate(text) {
@@ -749,7 +788,10 @@ export function convertDocument(text, ctx) {
       if (!k || !v) continue;
       // 키가 그냥 「작성」이면 작성 주체로 읽지 않는다(R12-2: 「작성: 2026-09-05」「작성: 가상구매팀 / 2026.09.05 / 검토 전」이 문자열 통째로 작성 주체가 되던 문제).
       // W8 전과 같게 머리말 글로 남기고 날짜만 작성일 후보로 읽는다(F4). 「작성」 키를 작성 주체로 읽는 것은 CR-17 J 스위치 authorPickOrg가 켜졌을 때만
-      if (k === 'owner' && cleanText(key).replace(/[\s:：]/g, '') === '작성' && !sw.authorPickOrg) continue;
+      if (k === 'owner' && cleanText(key).replace(/[\s:：]/g, '') === '작성' && !sw.authorPickOrg) {
+        block.authorLine = true; // 작성 줄은 개요 문장(⑦ 설명·⑧ 주기·마감)을 고를 때 뺀다(R13-6). 줄 자체는 예전처럼 머리말·목적 글로 남는다
+        continue;
+      }
       used += 1;
       block.used = true;
       info.refs.add(ref);
@@ -770,11 +812,14 @@ export function convertDocument(text, ctx) {
       }
       else if (k === 'owner' && (sw.authorPickOrg || sw.authorDate) && /^작성/.test(cleanText(key).replace(/\s/g, ''))) {
         // CR-17 J 스위치(꺼짐 = D-P6: 값 그대로). 「작성: 가상재무팀 류다온 / 2026-09-01」
-        //   authorDate: 날짜를 작성일로 / authorPickOrg: 조직 낱말(…팀·…부·…실·…본부·…센터)까지만 작성 주체로(없으면 날짜만 뺀 값)
+        //   authorDate: 날짜를 작성일로 / authorPickOrg: 키가 「작성」·「작성 부서」일 때만 조직 낱말(…팀·…부·…실·…본부·…센터…)까지를 작성 주체로
+        //   (조직 낱말이 없으면 작성 주체 없음 → 입력받기, 값 그대로 쓰지 않는다). 「작성자」·「작성 주체」는 값 그대로(D-P6).
+        //   한 줄에 키가 여럿이면(「작성자: 류다온 / 작성 부서: 가상팀」) 「작성 부서」 칸의 값만 쓴다(R13-6)
         const a = authorOf(v);
         if (cleanText(key).replace(/\s/g, '') === '작성') info.authorLineDate = headDate(v); // 스위치가 꺼진 쪽과 같게: 키가 그냥 「작성」이면 같은 줄 날짜는 예전처럼(F4) 작성일 후보
         if (sw.authorDate && a.date) info.date = info.date || a.date;
-        const owner = sw.authorPickOrg ? a.owner : v;
+        const picked = sw.authorPickOrg ? orgOwnerOf(key, v) : undefined; // undefined: 조직 고르기 대상 키가 아님 → 값 그대로
+        const owner = picked === undefined ? v : picked;
         if (owner && !info.owner) info.owner = owner;
       }
       else if (!info[k]) {
@@ -794,7 +839,11 @@ export function convertDocument(text, ctx) {
     if (s.kind === 'overview') {
       const used = readOverview(s.blocks, refOf(s));
       const rest = s.blocks.filter((b) => !b.used && b.kind !== 'table');
-      if (!info.purpose && rest.length) { info.purpose = rest.map((b) => b.text).join(' '); info.purposeRef = refOf(s); }
+      if (!info.purpose && rest.length) {
+        info.purpose = rest.map((b) => b.text).join(' ');
+        info.purposeRef = refOf(s);
+        info.purposeProse = rest.filter((b) => !b.authorLine).map((b) => b.text).join(' '); // 작성 줄을 뺀 글: ⑦⑧이 문장을 고를 때 쓴다(R13-6)
+      }
       if (s.blocks.length) sections.push({ order: parsed.sections.indexOf(s), ref: refOf(s), title: s.heading, kind: 'overview', made: used });
     }
   }
@@ -968,10 +1017,11 @@ export function convertDocument(text, ctx) {
   const single = works.length === 1;
   if (single && (sw.summaryToWork || sw.periodDeadline)) {
     let fromOverview = false;
-    if (sw.summaryToWork && !main.description && info.purpose) { main.description = truncate(firstSentence(info.purpose), TEXT_MAX, notes, main.label); fromOverview = true; }
-    const per = sw.periodDeadline ? periodIn(info.purpose) : null;
+    const prose = info.purposeProse !== undefined ? info.purposeProse : info.purpose; // 「작성:」 줄은 업무 설명·주기·마감의 근거가 아니다(R13-6)
+    if (sw.summaryToWork && !main.description && prose) { main.description = truncate(firstSentence(prose), TEXT_MAX, notes, main.label); fromOverview = true; }
+    const per = sw.periodDeadline ? periodIn(prose) : null;
     if (per && !('주기' in main.attrs)) { main.attrs.주기 = per; fromOverview = true; }
-    const dl = sw.periodDeadline ? deadlineIn([info.purpose, ...steps]) : null;
+    const dl = sw.periodDeadline ? deadlineIn([prose, ...steps]) : null;
     if (dl && !('마감' in main.attrs)) main.attrs.마감 = dl;
     if (fromOverview && info.purposeRef && !main.attrs.원문.split(', ').includes(info.purposeRef)) main.attrs.원문 += `, ${info.purposeRef}`;
   }

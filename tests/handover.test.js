@@ -12,6 +12,7 @@ import { buildView } from '../app/src/view/view.js';
 import { eventText } from '../app/src/view/describe.js';
 import { buildHandoverDraft, itemEvidence, HANDOVER_ITEMS } from '../app/src/rules/handover.js';
 import { refineDraft } from '../app/src/llm/connector.js';
+import { mkDoc, mkEdge, mkNode } from './helpers.js';
 
 const ctx = { now: '2026-10-01T10:00:00+09:00' };
 const answer = ANSWERS_V1.handover_drafts[0];
@@ -21,10 +22,10 @@ const item = (d, key) => d.items.find((i) => i.key === key);
 const texts = (d, key) => item(d, key).sentences.map((s) => s.text);
 const exists = (view) => (gid) => view.lookup(gid).found || view.events.some((e) => e.gid === gid);
 
-test('10개 고정 항목이 순서대로 나오고, 초안 상태·규칙 기반이다(R-03 ③, R-04 ②, CR-6)', () => {
+test('11개 고정 항목이 순서대로 나오고, 초안 상태·규칙 기반이다(R-03 ③, R-04 ②, CR-6)', () => {
   const d = draft();
   assert.deepEqual(d.items.map((i) => i.title), HANDOVER_ITEMS.map((i) => i.title));
-  assert.equal(d.items.length, 10);
+  assert.equal(d.items.length, 11);
   assert.equal(d.status, 'draft');
   assert.equal(d.method, 'rule');
   assert.equal(d.title, '윤바다 → 서하늘 인수인계 초안: 월말 정산 점검');
@@ -175,7 +176,7 @@ test('속성도 이력도 없는 새 업무는 모든 항목이 "이력 부족"�
   doc = addNode(doc, { core_type: 'person', label: '가상을', emp_no: 'V-3002' }, ctx).doc;
   const [a, b] = doc.nodes.slice(1).map((n) => `${doc.universe.id}/${n.id}`);
   const d = buildHandoverDraft(buildView(doc), { target: `${doc.universe.id}/${doc.universe.root_node_id}`, from: a, to: b }).draft;
-  assert.equal(d.items.filter((i) => i.insufficient).length, 10);
+  assert.equal(d.items.filter((i) => i.insufficient).length, 11);
   for (const i of d.items) assert.deepEqual(i.sentences, []);
 });
 
@@ -278,6 +279,65 @@ test('공급자 문장의 근거가 없거나 가짜면 그 항목만 규칙 기
   assert.equal(item(r, '유사_경험자').insufficient, true);
   assert.deepEqual(item(r, '유사_경험자').sentences, []);
   assert.match(r.fallback.reason, /1개는 규칙 기반 문장으로 대체/);
+});
+
+// ── CR-17 E: 받는 범위와 담당 공백 ──
+const ASOF_E = '2026-10-02';
+const rangeItem = (d) => d.items.find((i) => i.key === '받는_범위');
+
+test('CR-17 E: 「받는 범위와 담당 공백」은 「업무 개요」 다음 항목이고, 받는 사람이 지금 맡은 일과 지금 담당이 없는 업무를 쓴다', () => {
+  const d = buildHandoverDraft(v, { target: answer.target, from: answer.from, to: answer.to, asOf: ASOF_E }).draft;
+  assert.deepEqual(d.items.slice(0, 3).map((i) => i.key), ['업무_개요', '받는_범위', '세부_업무_절차']);
+  const it = rangeItem(d);
+  assert.equal(it.title, '받는 범위와 담당 공백');
+  assert.equal(it.insufficient, false);
+  assert.deepEqual(it.sentences.map((s) => s.text), [
+    '서하늘이 지금 맡은 일: 대사 확인.',
+    '자료 수집·보고는 2026-09-30 이후 지금 담당이 없습니다(마지막 담당 윤바다) — 누가 맡을지 확인하세요.',
+  ]);
+  assert.deepEqual(it.sentences.map((s) => s.evidence_ids), [['U-A1/N-012', 'U-A1/N-001'], ['U-A1/N-002', 'U-A1/N-011', 'U-A1/N-003']]);
+  const ok = exists(v);
+  for (const s of it.sentences) for (const g of s.evidence_ids) assert.ok(ok(g), g);
+  // 대상이 업무 하나면 범위 안 업무만 본다(자료 수집은 범위 밖이라 빠짐)
+  const one = rangeItem(buildHandoverDraft(v, { target: 'U-A1/N-001', from: answer.from, to: answer.to, asOf: ASOF_E }).draft);
+  assert.deepEqual(one.sentences.map((s) => s.text), ['서하늘이 지금 맡은 일: 대사 확인.']);
+  // 받는 사람이 지금 맡은 일이 범위에 없으면 공백 문장만
+  const hand = rangeItem(buildHandoverDraft(v, { target: answer.target, from: answer.from, to: 'U-A1/N-010', asOf: ASOF_E }).draft);
+  assert.deepEqual(hand.sentences.map((s) => s.text), ['자료 수집·보고는 2026-09-30 이후 지금 담당이 없습니다(마지막 담당 윤바다) — 누가 맡을지 확인하세요.']);
+});
+
+test('CR-17 E: 공백 판정은 인사이트 「밀집·공백」(densityGaps)과 같다 — 담당 기록 없음·시작 예정·이전 담당만 있음을 구분한다', () => {
+  const doc = mkDoc('U-E1', [
+    mkNode('W1', 'work', '업무가'), mkNode('W2', 'work', '업무나'), mkNode('W3', 'work', '업무다'), mkNode('W4', 'work', '업무라'),
+    mkNode('P1', 'person', '가상갑', { emp_no: 'V-9201' }), mkNode('P2', 'person', '가상을', { emp_no: 'V-9202' }), mkNode('P3', 'person', '가상병', { emp_no: 'V-9203' }),
+  ], [
+    mkEdge('N-000', 'W1', 'contains'), mkEdge('N-000', 'W2', 'contains'), mkEdge('N-000', 'W3', 'contains'), mkEdge('N-000', 'W4', 'contains'),
+    mkEdge('P1', 'W1', 'performs', { period: { start: '2026-01-01' } }),
+    mkEdge('P2', 'W2', 'performs', { period: { start: '2026-11-01' } }), // 시작 예정
+    mkEdge('P1', 'W4', 'performs', { period: { start: '2025-01-01', end: '2026-01-31' } }), // 이전 담당만
+  ]);
+  const view = buildView(doc);
+  const d = buildHandoverDraft(view, { target: 'U-E1/N-000', from: 'U-E1/P1', to: 'U-E1/P3', asOf: ASOF_E }).draft;
+  const texts = rangeItem(d).sentences.map((s) => s.text);
+  assert.ok(texts.includes('업무나는 지금 담당이 없고 2026-11-01부터 가상을이 맡을 예정입니다 — 시작 전까지는 공백입니다.'), texts.join('|'));
+  assert.ok(texts.includes('업무다는 담당 기록이 없습니다 — 누가 맡을지 확인하세요.'), texts.join('|'));
+  assert.ok(texts.includes('업무라는 2026-01-31 이후 지금 담당이 없습니다(마지막 담당 가상갑) — 누가 맡을지 확인하세요.'), texts.join('|'));
+  assert.equal(texts.length, 3); // 받는 사람(가상병)이 맡은 일은 없고, 업무가는 담당이 있어 공백이 아니다
+});
+
+test('CR-17 E: 받는 사람이 맡을 업무도 담당 공백도 없으면 이력 부족이 아니라 해당 없음, 판정할 기준일이 없거나 담당 연결이 하나도 없으면 이력 부족', () => {
+  const covered = buildView(mkDoc('U-E2', [mkNode('W1', 'work', '업무가'), mkNode('P1', 'person', '가상갑', { emp_no: 'V-9204' }), mkNode('P2', 'person', '가상을', { emp_no: 'V-9205' }), mkNode('P3', 'person', '가상병', { emp_no: 'V-9206' })],
+    [mkEdge('N-000', 'W1', 'contains'), mkEdge('P1', 'W1', 'performs', { period: { start: '2026-01-01' } })]));
+  const input = { target: 'U-E2/W1', from: 'U-E2/P2', to: 'U-E2/P3' };
+  const none = rangeItem(buildHandoverDraft(covered, { ...input, asOf: ASOF_E }).draft);
+  assert.deepEqual([none.insufficient, none.sentences.length, none.empty_reason], [true, 0, '받는 사람이 맡을 업무와 담당 공백이 없습니다']);
+  // 기준일 없음 → 「지금」을 정할 수 없어 판정하지 않는다
+  const noAsOf = rangeItem(buildHandoverDraft(covered, input).draft);
+  assert.deepEqual([noAsOf.insufficient, noAsOf.sentences.length, noAsOf.empty_reason], [true, 0, undefined]);
+  // 담당(수행) 연결이 하나도 없으면 공백을 셀 수 없다 → 해당 없음이라고 하지 않고 이력 부족
+  const bare = buildView(mkDoc('U-E3', [mkNode('W1', 'work', '업무가'), mkNode('P2', 'person', '가상을', { emp_no: 'V-9207' }), mkNode('P3', 'person', '가상병', { emp_no: 'V-9208' })], [mkEdge('N-000', 'W1', 'contains')]));
+  const unknown = rangeItem(buildHandoverDraft(bare, { target: 'U-E3/W1', from: 'U-E3/P2', to: 'U-E3/P3', asOf: ASOF_E }).draft);
+  assert.deepEqual([unknown.insufficient, unknown.empty_reason], [true, undefined]);
 });
 
 // N-5(사용자 확인 중 발견, 2026-10-03): 유사 경험자를 비교했지만 해당자가 없으면 "이력 부족"과 구별한다

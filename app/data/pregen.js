@@ -15,6 +15,15 @@ const handoverA1 = [
     sentences: [{ text: '월말 정산 점검은 매월 말 정산 결과를 모아 원천 자료와 대조(대사)하고, 그 결과를 보고하는 반복 업무입니다.', evidence_ids: g(A1, 'N-000') }],
   },
   {
+    // CR-17 E: 받는 사람(서하늘)이 맡은 일과 범위 안 담당 공백. 월말 정산 단독 화면과 부서 화면이 같은 문장이다
+    item: '받는_범위',
+    evidence_ids: g(A1, 'N-001', 'N-002', 'N-003', 'N-011', 'N-012'),
+    sentences: [
+      { text: '서하늘이 지금 맡고 있는 일은 대사 확인입니다.', evidence_ids: g(A1, 'N-012', 'N-001') },
+      { text: '자료 수집과 보고는 2026-09-30 이후 지금 담당이 없고 마지막 담당은 윤바다였으니, 누가 맡을지 확인해야 합니다.', evidence_ids: g(A1, 'N-002', 'N-003', 'N-011') },
+    ],
+  },
+  {
     item: '세부_업무_절차',
     evidence_ids: g(A1, 'N-001', 'N-002', 'N-003'),
     sentences: [
@@ -80,17 +89,34 @@ const handoverA1 = [
     ],
   },
   {
-    // 부서 화면(U-D1)에서 열었을 때만 채워지는 항목
+    // 월말 정산 단독 화면: 비슷한 일은 비교할 수 없지만 이전 담당은 「직접 해 본 사람」으로 나온다(CR-17 B). D3-31: 보내는 사람(윤바다)은 「문의」로 이미 나오므로 뺀다
     item: '유사_경험자',
-    // D3-31: 보내는 사람(윤바다)은 「문의」로 이미 나오므로 뺀다
-    evidence_ids: ['U-A1/N-030', 'U-K1/N-104', 'U-K1/N-105', 'U-K1/N-503', 'U-K1/N-505'],
+    evidence_ids: ['U-A1/N-001', 'U-A1/N-010'],
     sentences: [
-      { text: '카드승인 업무에서 같은 「대사 불일치」 주제를 다루는 「장애 시 재처리」의 운영 담당(V-4002)과 「거래 조회」의 정산 담당(V-4004)이 해당하지만, 둘 다 역할 이름이라 실제 담당자는 연결되어 있지 않아 누구에게 물어볼지는 먼저 확인해야 합니다.', evidence_ids: ['U-K1/N-503', 'U-K1/N-105', 'U-K1/N-505', 'U-K1/N-104', 'U-A1/N-030'] },
+      { text: '한가람은 대사 확인을 2025-03-01부터 2026-05-31까지 직접 맡았던 이전 담당자입니다.', evidence_ids: ['U-A1/N-010', 'U-A1/N-001'] },
+    ],
+  },
+  {
+    // 부서 화면(U-D1)에서 열었을 때만 채워지는 항목: 직접 해 본 사람 → 이름 낱말만 같은 업무 → 역할 이름(사람 미확인)
+    item: '유사_경험자',
+    evidence_ids: ['U-A1/N-001', 'U-A1/N-010', 'U-A1/N-030', 'U-C/N-104', 'U-C/N-201', 'U-C/N-205', 'U-K1/N-104', 'U-K1/N-105', 'U-K1/N-503', 'U-K1/N-505'],
+    sentences: [
+      { text: '한가람은 대사 확인을 2025-03-01부터 2026-05-31까지 직접 맡았던 이전 담당자입니다.', evidence_ids: ['U-A1/N-010', 'U-A1/N-001'] },
+      { text: '나래솔(2025-03-01 ~ 2025-12-31)과 윤바다라(2026-01-02부터 진행 중)는 「교육 결과 보고」를 맡았습니다. 이름에 같은 낱말(보고)이 있을 뿐이라 같은 일인지는 확인이 필요합니다.', evidence_ids: ['U-C/N-201', 'U-C/N-205', 'U-C/N-104'] },
+      { text: '운영 담당과 정산 담당은 사람 이름이 아니라 역할 이름입니다. 각각 「장애 시 재처리」와 「거래 조회」를 맡았고 같은 주제 「대사 불일치」를 다루지만, 실제 담당자는 확인이 필요합니다.', evidence_ids: ['U-K1/N-503', 'U-K1/N-105', 'U-K1/N-505', 'U-K1/N-104', 'U-A1/N-030'] },
     ],
   },
 ].map((x) => ({ task: 'handover', target: 'U-A1/N-000', from: 'U-A1/N-011', to: 'U-A1/N-012', ...x }));
 
 const handoverC = [
+  {
+    item: '유사_경험자',
+    evidence_ids: g(C, 'N-101', 'N-104', 'N-203', 'N-205'),
+    sentences: [
+      { text: '마루한은 「신입 교육 운영」을 2025-03-01부터 2026-03-31까지 직접 맡았던 이전 담당자입니다.', evidence_ids: g(C, 'N-203', 'N-101') },
+      { text: '윤바다라는 「교육 결과 보고」를 2026-01-02부터 맡고 있습니다. 이름에 같은 낱말(교육)이 있을 뿐이라 같은 일인지는 확인이 필요합니다.', evidence_ids: g(C, 'N-205', 'N-104') },
+    ],
+  },
   {
     item: '업무_개요',
     evidence_ids: g(C, 'N-101'),
@@ -164,10 +190,11 @@ const handoverC = [
 const explain = [
   {
     target: 'similar|U-A1/N-001',
-    evidence_ids: ['U-A1/N-011', 'U-A1/N-030', 'U-B/N-101', 'U-B/N-302', 'U-K1/N-104', 'U-K1/N-105', 'U-K1/N-503', 'U-K1/N-505'],
+    evidence_ids: ['U-A1/N-001', 'U-A1/N-010', 'U-A1/N-011', 'U-A1/N-030', 'U-B/N-101', 'U-B/N-302', 'U-K1/N-104', 'U-K1/N-105', 'U-K1/N-503', 'U-K1/N-505'],
     sentences: [
-      { text: '「대사 확인」과 비슷한 일을 해 본 사람은 세 명이며, 그중 둘(운영 담당·정산 담당)은 역할 이름이라 실제 담당자는 연결되어 있지 않습니다. 세 명 모두 「대사 불일치」 주제로 이어집니다.', evidence_ids: ['U-A1/N-030', 'U-A1/N-011', 'U-K1/N-503', 'U-K1/N-505'] },
-      { text: '윤바다는 행사팀 「2025 행사」에서 이름이 같은 주제를 다뤘고(같은 주제인지는 확인 전), 운영 담당과 정산 담당은 카드승인 업무의 「장애 시 재처리」와 「거래 조회」를 맡고 있습니다.', evidence_ids: ['U-A1/N-011', 'U-B/N-101', 'U-B/N-302', 'U-K1/N-503', 'U-K1/N-105', 'U-K1/N-505', 'U-K1/N-104'] },
+      { text: '「대사 확인」을 직접 해 본 사람은 윤바다(2026-06-01 ~ 2026-09-30)와 한가람(2025-03-01 ~ 2026-05-31) 두 명입니다.', evidence_ids: ['U-A1/N-001', 'U-A1/N-011', 'U-A1/N-010'] },
+      { text: '비슷한 일을 해 본 사람으로도 윤바다가 잡힙니다. 행사팀 「2025 행사」에서 이름이 같은 주제 「대사 불일치」를 다뤘기 때문이며, 같은 주제인지는 확인 전입니다.', evidence_ids: ['U-A1/N-011', 'U-B/N-101', 'U-B/N-302', 'U-A1/N-030'] },
+      { text: '운영 담당과 정산 담당은 사람 이름이 아니라 역할 이름이라 따로 분류했습니다. 카드승인 업무의 「장애 시 재처리」와 「거래 조회」를 맡고 있어 실제 담당자는 확인이 필요합니다.', evidence_ids: ['U-K1/N-503', 'U-K1/N-105', 'U-K1/N-505', 'U-K1/N-104'] },
     ],
   },
   {
@@ -312,51 +339,56 @@ const candidate = [
 // 문장은 건드리지 않고 이 표만 `node tools/pregen-dump.mjs --write-fp`로 다시 만든다(데이터를 고쳐 문장을 새로 쓴 뒤). 키: task|target|item|보내는>받는
 // FP-BEGIN
 const FP = {
-  "handover|U-A1/N-000|업무_개요|U-A1/N-011>U-A1/N-012": 'b492e1f0',
-  "handover|U-A1/N-000|세부_업무_절차|U-A1/N-011>U-A1/N-012": '4e87acaf',
-  "handover|U-A1/N-000|일정_마감|U-A1/N-011>U-A1/N-012": '2f13cf1a',
-  "handover|U-A1/N-000|주의사항|U-A1/N-011>U-A1/N-012": '63bc7d08',
-  "handover|U-A1/N-000|진행_중|U-A1/N-011>U-A1/N-012": '3c1df702',
-  "handover|U-A1/N-000|산출물_문서|U-A1/N-011>U-A1/N-012": '9e94f20c',
-  "handover|U-A1/N-000|관계자_연락처|U-A1/N-011>U-A1/N-012": '9332aaaa',
-  "handover|U-A1/N-000|최근_이슈|U-A1/N-011>U-A1/N-012": '78821adc',
-  "handover|U-A1/N-000|이전_인수인계|U-A1/N-011>U-A1/N-012": '699c8b7f',
-  "handover|U-A1/N-000|유사_경험자|U-A1/N-011>U-A1/N-012": 'cf156094',
-  "handover|U-C/N-101|업무_개요|U-C/N-202>U-C/N-201": 'fa081938',
-  "handover|U-C/N-101|세부_업무_절차|U-C/N-202>U-C/N-201": 'b28c6b50',
-  "handover|U-C/N-101|일정_마감|U-C/N-202>U-C/N-201": 'f0da42b5',
-  "handover|U-C/N-101|주의사항|U-C/N-202>U-C/N-201": '041f61b4',
-  "handover|U-C/N-101|진행_중|U-C/N-202>U-C/N-201": '0dc0f762',
-  "handover|U-C/N-101|산출물_문서|U-C/N-202>U-C/N-201": '27154aca',
-  "handover|U-C/N-101|관계자_연락처|U-C/N-202>U-C/N-201": 'a8c4f7fd',
-  "handover|U-C/N-101|최근_이슈|U-C/N-202>U-C/N-201": '991d9712',
-  "handover|U-C/N-101|이전_인수인계|U-C/N-202>U-C/N-201": 'a5e69b9d',
-  "insight_explain|similar|U-A1/N-001||": 'e2a4a3e7',
-  "insight_explain|repeat|U-A1||": '0d20fb69',
-  "insight_explain|repeat|U-D1||": '1b3ccbc6',
-  "insight_explain|density|U-D1|n=3||": '5d65ae56',
-  "insight_explain|density|U-C|n=3||": '20f66f7b',
-  "insight_explain|flow|U-A1|month||": 'c78f93fa',
-  "insight_explain|flow|U-O|month||": '6e8d1326',
-  "insight_explain|risk_concentration|U-A1||": '64b77fed',
-  "insight_explain|risk_readiness|U-A1||": 'd73fe237',
-  "insight_explain|risk_ripple|U-A1||": 'dc503d4d',
-  "insight_explain|risk_concentration|U-D1||": 'e6412c21',
-  "insight_explain|risk_readiness|U-D1||": '47eda5b6',
-  "insight_explain|risk_ripple|U-D1||": '7fb7ac27',
-  "work_candidate_reason|work_candidate|U-A1/N-001|U-K1/N-104||": 'b1db6c11',
-  "work_candidate_reason|work_candidate|U-A1/N-001|U-K1/N-105||": 'b1db6c11',
-  "work_candidate_reason|work_candidate|U-A1/N-003|U-C/N-104||": '47aa15ea',
-  "work_candidate_reason|work_candidate|U-B/N-103|U-C/N-102||": 'cf9fed35',
+  "handover|U-A1/N-000|업무_개요|U-A1/N-011>U-A1/N-012|U-A1/N-000": 'b492e1f0',
+  "handover|U-A1/N-000|받는_범위|U-A1/N-011>U-A1/N-012|U-A1/N-001,U-A1/N-002,U-A1/N-003,U-A1/N-011,U-A1/N-012": '3c55baee',
+  "handover|U-A1/N-000|세부_업무_절차|U-A1/N-011>U-A1/N-012|U-A1/N-001,U-A1/N-002,U-A1/N-003": '4e87acaf',
+  "handover|U-A1/N-000|일정_마감|U-A1/N-011>U-A1/N-012|U-A1/N-001,U-A1/N-002,U-A1/N-003": '2f13cf1a',
+  "handover|U-A1/N-000|주의사항|U-A1/N-011>U-A1/N-012|U-A1/E-013,U-A1/N-001,U-A1/N-002,U-A1/N-003": '63bc7d08',
+  "handover|U-A1/N-000|진행_중|U-A1/N-011>U-A1/N-012|U-A1/E-014,U-A1/E-015": '3c1df702',
+  "handover|U-A1/N-000|산출물_문서|U-A1/N-011>U-A1/N-012|U-A1/N-020,U-A1/N-021": '9e94f20c',
+  "handover|U-A1/N-000|관계자_연락처|U-A1/N-011>U-A1/N-012|U-A1/N-010,U-A1/N-011": '9332aaaa',
+  "handover|U-A1/N-000|최근_이슈|U-A1/N-011>U-A1/N-012|U-A1/E-006,U-A1/E-012": '78821adc',
+  "handover|U-A1/N-000|이전_인수인계|U-A1/N-011>U-A1/N-012|U-A1/E-002,U-A1/E-007,U-A1/N-020": '699c8b7f',
+  "handover|U-A1/N-000|유사_경험자|U-A1/N-011>U-A1/N-012|U-A1/N-001,U-A1/N-010": '062b3d6e',
+  "handover|U-A1/N-000|유사_경험자|U-A1/N-011>U-A1/N-012|U-A1/N-001,U-A1/N-010,U-A1/N-030,U-C/N-104,U-C/N-201,U-C/N-205,U-K1/N-104,U-K1/N-105,U-K1/N-503,U-K1/N-505": '4d730efa',
+  "handover|U-C/N-101|유사_경험자|U-C/N-202>U-C/N-201|U-C/N-101,U-C/N-104,U-C/N-203,U-C/N-205": 'd88b411a',
+  "handover|U-C/N-101|업무_개요|U-C/N-202>U-C/N-201|U-C/N-101": 'fa081938',
+  "handover|U-C/N-101|세부_업무_절차|U-C/N-202>U-C/N-201|U-C/N-101,U-C/N-102,U-C/N-103": 'b28c6b50',
+  "handover|U-C/N-101|일정_마감|U-C/N-202>U-C/N-201|U-C/N-101,U-C/N-102,U-C/N-103": 'f0da42b5',
+  "handover|U-C/N-101|주의사항|U-C/N-202>U-C/N-201|U-C/E-009,U-C/N-101,U-C/N-102,U-C/N-103": '041f61b4',
+  "handover|U-C/N-101|진행_중|U-C/N-202>U-C/N-201|U-C/E-014": '0dc0f762',
+  "handover|U-C/N-101|산출물_문서|U-C/N-202>U-C/N-201|U-C/N-401,U-C/N-402,U-C/N-404": '27154aca',
+  "handover|U-C/N-101|관계자_연락처|U-C/N-202>U-C/N-201|U-C/N-202,U-C/N-203,U-C/N-204": 'a8c4f7fd',
+  "handover|U-C/N-101|최근_이슈|U-C/N-202>U-C/N-201|U-C/E-004,U-C/E-008,U-C/E-015": '991d9712',
+  "handover|U-C/N-101|이전_인수인계|U-C/N-202>U-C/N-201|U-C/E-011,U-C/N-404": 'a5e69b9d',
+  "insight_explain|similar|U-A1/N-001|||U-A1/N-001,U-A1/N-010,U-A1/N-011,U-A1/N-030,U-B/N-101,U-B/N-302,U-K1/N-104,U-K1/N-105,U-K1/N-503,U-K1/N-505": '98bc2fa4',
+  "insight_explain|repeat|U-A1|||U-A1/E-002,U-A1/E-007": '0d20fb69',
+  "insight_explain|repeat|U-D1|||U-A1/E-002,U-A1/E-006,U-A1/E-007,U-A1/E-010,U-A1/E-014,U-A1/N-030,U-B/E-002,U-B/N-302,U-K1/E-005,U-K1/E-006": '1b3ccbc6',
+  "insight_explain|density|U-D1|n=3|||U-A1/N-002,U-A1/N-003,U-A1/N-011,U-B/N-101,U-B/N-102,U-B/N-103,U-B/N-104,U-B/N-201,U-C/N-105,U-K1/N-101,U-K1/N-102,U-K1/N-103,U-K1/N-202,U-K1/N-204": '5d65ae56',
+  "insight_explain|density|U-C|n=3|||U-C/N-105": '20f66f7b',
+  "insight_explain|flow|U-A1|month|||U-A1/E-001,U-A1/E-002,U-A1/E-003,U-A1/E-004,U-A1/E-005,U-A1/E-006,U-A1/E-007,U-A1/E-008,U-A1/E-009,U-A1/E-010,U-A1/E-011,U-A1/E-012,U-A1/E-013,U-A1/E-014,U-A1/E-015,U-A1/E-016,U-A1/E-017,U-A1/E-018,U-A1/E-019,U-A1/E-020,U-A1/E-021,U-A1/E-022": 'c78f93fa',
+  "insight_explain|flow|U-O|month|||U-O/E-001,U-O/E-002,U-O/E-003,U-O/E-004,U-O/E-005,U-O/E-006,U-O/E-007,U-O/E-008,U-O/E-009,U-O/E-010,U-O/E-011,U-O/E-012,U-O/E-013,U-O/E-014,U-O/E-015,U-O/E-016": '6e8d1326',
+  "insight_explain|risk_concentration|U-A1|||U-A1/N-002,U-A1/N-003,U-A1/N-011": '64b77fed',
+  "insight_explain|risk_readiness|U-A1|||U-A1/E-006,U-A1/E-014,U-A1/E-015,U-A1/N-001,U-A1/N-002,U-A1/N-003": 'd73fe237',
+  "insight_explain|risk_ripple|U-A1|||U-A1/N-001,U-A1/N-002,U-A1/N-003,U-A1/N-012": 'dc503d4d',
+  "insight_explain|risk_concentration|U-D1|||U-A1/N-011,U-B/N-101,U-B/N-102,U-B/N-201,U-C/N-102,U-C/N-202": 'e6412c21',
+  "insight_explain|risk_readiness|U-D1|||U-B/E-002,U-B/E-003,U-B/N-101,U-K1/E-003,U-K1/E-005,U-K1/E-006,U-K1/N-103,U-K1/N-104": '47eda5b6',
+  "insight_explain|risk_ripple|U-D1|||U-C/N-102,U-C/N-103,U-C/N-104,U-C/N-202,U-K1/N-201,U-K1/N-202,U-K1/N-203,U-K1/N-204,U-K1/N-205": '7fb7ac27',
+  "work_candidate_reason|work_candidate|U-A1/N-001|U-K1/N-104|||U-A1/N-001,U-A1/N-030,U-K1/N-104": 'b1db6c11',
+  "work_candidate_reason|work_candidate|U-A1/N-001|U-K1/N-105|||U-A1/N-001,U-A1/N-030,U-K1/N-105": 'b1db6c11',
+  "work_candidate_reason|work_candidate|U-A1/N-003|U-C/N-104|||U-A1/N-003,U-C/N-104": '47aa15ea',
+  "work_candidate_reason|work_candidate|U-B/N-103|U-C/N-102|||U-B/N-103,U-C/N-102": 'cf9fed35',
 };
 // FP-END
-const fpKey = (it) => [it.task, it.target, it.item || '', it.from && it.to ? `${it.from}>${it.to}` : ''].join('|');
+// 키 끝에 근거 ID(정렬)를 붙인다: 같은 초안 항목이라도 보는 화면(월말 정산 단독/부서)에 따라 근거와 문장이 달라 줄이 둘일 수 있다(CR-17 B로 단독 화면에도 유사 경험자가 생김)
+const fpKey = (it) => [it.task, it.target, it.item || '', it.from && it.to ? `${it.from}>${it.to}` : '', [...(it.evidence_ids || [])].sort().join(',')].join('|');
 
 export const PREGEN = {
   schema_version: '1.0',
   generator: 'Claude Code (개발 시 작성)',
-  // 첫 작성 2026-10-02, 위험 인사이트(CR-14 B) 줄 2026-10-23 추가, 검토9에서 일부 문장 손질(2026-10-23)
-  generated_at: '2026-10-23T14:00:00+09:00',
+  // 첫 작성 2026-10-02, 위험 인사이트(CR-14 B) 줄 2026-10-23 추가, 검토9에서 일부 문장 손질(2026-10-23),
+  // CR-17 B·E(2026-10-24): 받는_범위 줄, 유사_경험자 줄(월말 정산 단독·부서·교육팀), 유사 경험자 인사이트 설명을 다시 씀
+  generated_at: '2026-10-24T14:00:00+09:00',
   data_version: 'v2',
   items: [...handoverA1, ...handoverC, ...explain, ...candidate].map((it) => ({ ...it, fp: FP[fpKey(it)] })),
 };

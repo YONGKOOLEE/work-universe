@@ -126,7 +126,7 @@ test('R11-13 ①: 초안을 만든 뒤 창이 다시 그려질 때(rerun) 「＋
   const b = openDraft(view2, { target: picked.target, preset: picked.preset, rerun: true });
   assert.equal(b.q('draft-to').value, G('N-104'), '새로 만든 사람(같은 이름의 기존 N-103이 아님)');
   assert.equal(b.q('draft-from').value, G('N-101'));
-  assert.equal(b.qa('[data-testid^=draft-item-]').length, 10, '같은 선택으로 초안이 다시 만들어진다');
+  assert.equal(b.qa('[data-testid^=draft-item-]').length, 11, '같은 선택으로 초안이 다시 만들어진다');
 }));
 
 // ── R11-7: 지금 칸 값 우선, 실시간 호출 금지 ──
@@ -142,7 +142,7 @@ test('R11-7: 다시 그려진 창(rerun)은 기억한 마지막 선택이 아니
   const b = openDraft(view, { target: G('N-001'), preset: { target: G('N-001'), from: '가상인', from_gid: G('N-102'), to: '가상인', to_gid: G('N-101') }, rerun: true });
   assert.equal(b.q('draft-from').value, G('N-102'));
   assert.equal(b.q('draft-to').value, G('N-101'));
-  assert.equal(b.qa('[data-testid^=draft-item-]').length, 10);
+  assert.equal(b.qa('[data-testid^=draft-item-]').length, 11);
   assert.equal(b.q('draft-rerun-note').hidden, false);
 }));
 
@@ -184,7 +184,7 @@ test('R11-7: rerunNote:false(기록은 그대로, 화면 조건만 바뀐 다시
   a.q('draft-form').fire('submit');
   uninstallDom();
   const b = openDraft(view, { rerun: true, rerunNote: false });
-  assert.equal(b.qa('[data-testid^=draft-item-]').length, 10);
+  assert.equal(b.qa('[data-testid^=draft-item-]').length, 11);
   assert.equal(b.q('draft-rerun-note').hidden, true);
   assert.equal(RERUN_NOTE, '기록이 바뀌어 초안을 다시 만들었습니다');
 }));
@@ -208,7 +208,7 @@ test('R11-7: 키가 있어도 자동으로 다시 만든 초안은 Claude를 부
     const b = openDraft(view, { provider: live, rerun: true, onConfirm: () => ({ ok: true }) });
     await sleep(100);
     assert.equal(fake.calls.length, 0, '자동 다시 만들기는 호출하지 않는다');
-    assert.equal(b.qa('[data-testid^=draft-item-]').length, 10, '동기 결과(규칙·사전 생성)는 그려진다');
+    assert.equal(b.qa('[data-testid^=draft-item-]').length, 11, '동기 결과(규칙·사전 생성)는 그려진다');
     assert.equal(b.q('draft-live').textContent, LIVE_RERUN_NOTE);
     assert.equal(b.q('draft-confirm').disabled, false, '생성 중이 아니므로 확정이 잠기지 않는다');
     b.q('draft-form').fire('submit'); // 사람이 누르면 호출한다

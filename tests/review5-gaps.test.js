@@ -23,7 +23,7 @@ function twoWorks(labelA, labelB) {
   const a = add({ core_type: 'work', label: labelA });
   const b = add({ core_type: 'work', label: labelB });
   const p = add({ core_type: 'person', label: '가상갑', emp_no: 'V-9001' });
-  // 낱말만 겹쳐서는 후보가 되지 않는다(주제나 산출물 유형을 하나는 공유해야 함). 두 업무가 주제 하나를 공유하게 한다
+  // 낱말 점수(+1)를 보려고 두 업무가 주제 하나를 공유하게 한다(낱말만 같으면 낮은 점수 후보가 된다, CR-17 B ③)
   const topic = add({ core_type: 'topic', label: '공유 주제' });
   doc = addEdge(doc, { source: a, target: topic, core_type: 'relates_to' }, T0).doc;
   doc = addEdge(doc, { source: b, target: topic, core_type: 'relates_to' }, T0).doc;

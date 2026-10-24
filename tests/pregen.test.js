@@ -261,7 +261,9 @@ test('낡음 ⑥ pregen-dump --check-fp와 같은 기준: 시나리오의 지금
     const { draft } = handoverDraftOf(s);
     for (const i of draft.items) {
       if (i.insufficient) continue;
-      const line = PREGEN.items.find((it) => it.task === 'handover' && it.target === draft.target && it.item === i.key && it.from === draft.from && it.to === draft.to);
+      // 같은 항목이 화면에 따라 근거가 다른 줄 둘일 수 있다(월말 정산 단독/부서의 유사 경험자) → 근거 ID까지 맞는 줄을 찾는다
+      const ev = JSON.stringify(itemEvidence(i));
+      const line = PREGEN.items.find((it) => it.task === 'handover' && it.target === draft.target && it.item === i.key && it.from === draft.from && it.to === draft.to && JSON.stringify([...it.evidence_ids].sort()) === ev);
       assert.equal(line.fp, fingerprint(i.sentences), `${s.id} ${i.key}`);
     }
   }

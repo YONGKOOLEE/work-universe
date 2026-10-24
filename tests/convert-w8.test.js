@@ -6,8 +6,8 @@
 //   - 전부 꺼짐(OFF) = 승인된 02-design 12.9.1 v1·12.9.2 D-P3·D-P6 그대로. 담당 절은 「역할」 사람만(연결 없음), 관련 문서는 산출물(꼭지가 담음, 괄호는 설명),
 //     작성 줄은 값 그대로, 개요의 문장에서 설명·주기·마감을 고르지 않는다.
 //   - 전부 켬(ON) = W8 때 동작.
-//   - 기본값(CR-17 J 승인안, 이 준비 커밋) = 6개 켬(assignPerforms·namedPersonPlain·relatedDocLink·pathToLocation·authorDate·previewRenameWork),
-//     authorPickOrg·summaryToWork·periodDeadline은 꺼짐(J 추천: ⑤는 고친 뒤, ⑦⑧은 1차 후).
+//   - 기본값(CR-17 J 승인안) = 7개 켬(assignPerforms·namedPersonPlain·relatedDocLink·pathToLocation·authorPickOrg·authorDate·previewRenameWork),
+//     summaryToWork·periodDeadline은 꺼짐(⑦⑧은 1차 후). ⑤ authorPickOrg는 키가 「작성」·「작성 부서」일 때만 조직 낱말을 고르도록 고친 뒤 켬(R13-6, 2026-10-24).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -29,7 +29,7 @@ const conv = (text, cr17j) => {
 const convOn = (text) => conv(text, ALL_ON);
 const OFF = Object.fromEntries(SWITCHES.map((k) => [k, false]));
 const convOff = (text) => conv(text, OFF);
-const J_DEFAULT = { assignPerforms: true, namedPersonPlain: true, relatedDocLink: true, pathToLocation: true, authorPickOrg: false, authorDate: true, summaryToWork: false, periodDeadline: false, previewRenameWork: true };
+const J_DEFAULT = { assignPerforms: true, namedPersonPlain: true, relatedDocLink: true, pathToLocation: true, authorPickOrg: true, authorDate: true, summaryToWork: false, periodDeadline: false, previewRenameWork: true };
 const TAX = readFileSync(new URL('./fixtures/w8/tax-prepay.md', import.meta.url), 'utf8');
 const CARD = readFileSync(new URL('./fixtures/w9/card-recon.txt', import.meta.url), 'utf8');
 const byLabel = (doc, label) => doc.nodes.find((n) => n.label === label);
@@ -40,7 +40,7 @@ const HEAD = '# 가상 업무\n- 작성 주체: 가상팀\n## 업무 범위\n- �
 
 // ── 스위치 ───────────────────────────────────────────────────────────
 
-test('W9 스위치: CR-17 J 스위치 9개가 CONVERT_RULES.cr17j 한 곳에 있고 기본값은 J 승인안(6개 켬, authorPickOrg·summaryToWork·periodDeadline 꺼짐)', () => {
+test('W9 스위치: CR-17 J 스위치 9개가 CONVERT_RULES.cr17j 한 곳에 있고 기본값은 J 승인안(7개 켬, summaryToWork·periodDeadline 꺼짐)', () => {
   assert.deepEqual(Object.keys(CONVERT_RULES.cr17j).sort(), [...SWITCHES].sort());
   assert.deepEqual({ ...CONVERT_RULES.cr17j }, J_DEFAULT);
   // 한 번의 호출만 덮어쓸 수 있고, 덮어쓴 값이 설정 객체를 바꾸지 않는다
@@ -76,9 +76,10 @@ test('W9 스위치 하나씩: 각 스위치는 자기 동작만 바꾼다(법인
   assert.deepEqual(edgesOf(only('pathToLocation'), 'references'), []);
   // 작성 줄
   assert.equal(conv(TAX, { ...OFF, authorPickOrg: true }).doc.universe.owner, '가상재무팀');
-  const byline = '# 가상 업무\n- 작성자: 가상재무팀 류다온 / 2026-09-01\n## 업무 범위\n- 가상 접수\n';
+  const byline = '# 가상 업무\n- 작성 부서: 가상재무팀 류다온 / 2026-09-01\n## 업무 범위\n- 가상 접수\n';
   assert.equal(conv(byline, { ...OFF, authorPickOrg: true }).doc.universe.owner, '가상재무팀');
   assert.ok(codes(conv(byline, { ...OFF, authorPickOrg: true })).includes('C-DATE-ASSUMED'), '날짜는 따로 읽지 않으면 작성일 없음 알림');
+  assert.equal(conv(byline.replace('작성 부서', '작성자'), { ...OFF, authorPickOrg: true }).doc.universe.owner, '가상재무팀 류다온 / 2026-09-01', '「작성자」 키는 ⑤를 켜도 값 그대로(D-P6)');
   assert.equal(conv(byline, { ...OFF, authorDate: true }).doc.universe.owner, '가상재무팀 류다온 / 2026-09-01', '날짜만 읽으면 작성 주체는 값 그대로');
   assert.ok(!codes(conv(byline, { ...OFF, authorDate: true })).includes('C-DATE-ASSUMED'));
   // 개요
@@ -163,7 +164,7 @@ test('W9 스위치 꺼짐 표준 양식: 설명·주기·마감·관련 문서·
 
 // ── 기본값(CR-17 J 승인안): 6개 켬, 작성 주체 읽기·개요 문장·주기 마감은 꺼짐 ─────────
 
-test('CR-17 J 기본값: 법인세 중간예납 정의서 → 담당 연결 1·관련 문서는 「참조」·경로는 위치 속성, 그러나 그냥 「작성:」은 작성 주체가 아니고 개요 문장은 읽지 않음', () => {
+test('CR-17 J 기본값: 법인세 중간예납 정의서 → 담당 연결 1·관련 문서는 「참조」·경로는 위치 속성, 「작성:」은 조직 낱말만 작성 주체(⑤ 켬), 개요 문장은 읽지 않음', () => {
   const { doc, report } = conv(TAX);
   assert.deepEqual(edgesOf(doc, 'performs'), ['류다온>법인세 중간예납 준비']);
   assert.equal(byLabel(doc, '류다온').subtype, undefined, '이름 모양은 하위 유형 없는 사람');
@@ -171,14 +172,13 @@ test('CR-17 J 기본값: 법인세 중간예납 정의서 → 담당 연결 1·�
   assert.deepEqual(edgesOf(doc, 'references'), ['법인세 중간예납 준비>중간예납 계산표']);
   assert.deepEqual(edgesOf(doc, 'produces'), []);
   assert.equal(byLabel(doc, '중간예납 계산표').attrs.위치, '공유 드라이브 > 재무 > 세무');
-  assert.equal(doc.universe.owner, '', '⑤ authorPickOrg 꺼짐: 그냥 「작성:」은 작성 주체로 읽지 않음(입력받음)');
-  assert.ok(codes({ report }).includes('C-NO-OWNER'));
+  assert.equal(doc.universe.owner, '가상재무팀', '⑤ authorPickOrg 켬: 「작성: 가상재무팀 류다온 / 2026-09-01」 → 조직 낱말만');
+  assert.ok(!codes({ report }).includes('C-NO-OWNER'));
   assert.ok(codes({ report }).includes('C-PERFORMS-GUESS'));
   const w = doc.nodes.find((n) => n.core_type === 'work');
   assert.equal(w.description, undefined, '⑦ summaryToWork 꺼짐');
   assert.equal(w.attrs.주기, undefined, '⑧ periodDeadline 꺼짐');
   assert.equal(w.attrs.마감, undefined);
-  doc.universe.owner = '가상재무팀';
   assert.equal(validateDocument(doc).ok, true);
 });
 
@@ -321,7 +321,8 @@ test('W8 작성 줄(스위치 켬): 「작성:」「작성자:」「작성 부�
   assert.deepEqual(authorOf('총무 담당'), { owner: '총무 담당', date: null }, '총무는 조직 낱말이 아니다');
   for (const key of ['작성', '작성자', '작성 부서']) {
     const { doc, report } = convOn(`# 가상 업무\n- ${key}: 가상재무팀 류다온 / 2026-09-01\n## 업무 범위\n- 가상 접수\n`);
-    assert.equal(doc.universe.owner, '가상재무팀', key);
+    // ⑤는 키가 「작성」·「작성 부서」일 때만 조직 낱말을 고른다. 「작성자」는 값 그대로(D-P6), 날짜는 ④가 작성일로 읽는다
+    assert.equal(doc.universe.owner, key === '작성자' ? '가상재무팀 류다온 / 2026-09-01' : '가상재무팀', key);
     assert.ok(!doc.universe.description.includes('머리말'), key);
     assert.ok(!codes({ report }).includes('C-DATE-ASSUMED'), key);
   }

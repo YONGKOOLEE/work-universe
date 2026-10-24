@@ -46,7 +46,7 @@ export function looksNotDefinition(report) {
 
 export function noteText(n) {
   switch (n.code) {
-    case 'C-NO-OWNER': return '원문에서 작성 주체를 읽지 못했습니다(그냥 「작성:」 줄이나 날짜뿐인 값은 작성 주체로 읽지 않습니다). 위 「작성 주체」 칸에 팀·부서 이름을 입력해야 가져올 수 있습니다.';
+    case 'C-NO-OWNER': return '원문에서 작성 주체를 읽지 못했습니다(「작성:」·「작성 부서:」 줄은 …팀·…부 같은 조직 이름이 있을 때만, 날짜뿐인 값은 읽지 않습니다). 위 「작성 주체」 칸에 팀·부서 이름을 입력해야 가져올 수 있습니다.';
     case 'C-DATE-ASSUMED': return `원문에 작성일이 없어 메모(질문·리스크) 날짜를 변환한 날(${n.date})로 적었습니다.`;
     case 'C-TOPIC-GUESS': return `규칙에 없는 제목의 절 ${n.count}개를 주제로 만들었습니다(표에 「규칙 밖」 표시). 맞는지 확인하세요.`;
     case 'C-TOO-MANY': return `노드가 ${n.count}개로, 정한 세분화(월말 정산 수준, ${n.max}개 이하)보다 많습니다. 범위 항목을 묶을 수 있는지 확인하세요.`;

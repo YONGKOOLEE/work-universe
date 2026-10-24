@@ -11,8 +11,8 @@ import { PREGEN } from '../app/data/pregen.js';
 import { CANDIDATE_VIEWS, candidateRequestsOf } from './pregen-scenarios.mjs';
 import fs from 'node:fs';
 
-// pregen.js의 fpKey와 같은 키: task|target|item|보내는>받는
-const fpKey = (it) => [it.task, it.target, it.item || '', it.from && it.to ? `${it.from}>${it.to}` : ''].join('|');
+// pregen.js의 fpKey와 같은 키: task|target|item|보내는>받는|정렬한 근거 ID(같은 항목이 화면에 따라 근거가 다를 수 있다, CR-17 B)
+const fpKey = (it) => [it.task, it.target, it.item || '', it.from && it.to ? `${it.from}>${it.to}` : '', [...(it.evidence_ids || [])].sort().join(',')].join('|');
 
 /** 시나리오에서 만든 규칙 기반 문장의 지문 표(키 → 지문). 같은 키가 다른 지문이면 오류 */
 function currentFingerprints() {
@@ -23,13 +23,13 @@ function currentFingerprints() {
   };
   for (const s of HANDOVER_SCENARIOS) {
     const { draft } = handoverDraftOf(s);
-    for (const item of draft.items) if (!item.insufficient) put(fpKey({ task: 'handover', target: draft.target, item: item.key, from: draft.from, to: draft.to }), fingerprint(item.sentences));
+    for (const item of draft.items) if (!item.insufficient) put(fpKey({ task: 'handover', target: draft.target, item: item.key, from: draft.from, to: draft.to, evidence_ids: itemEvidence(item) }), fingerprint(item.sentences));
   }
   for (const s of EXPLAIN_SCENARIOS) {
     const { req } = explainRequestOf(s);
-    if (req) put(fpKey({ task: 'insight_explain', target: req.target }), fingerprint(req.rule));
+    if (req) put(fpKey({ task: 'insight_explain', target: req.target, evidence_ids: req.evidence_ids }), fingerprint(req.rule));
   }
-  for (const id of CANDIDATE_VIEWS) for (const req of candidateRequestsOf(id).reqs) put(fpKey({ task: req.task, target: req.target }), fingerprint(req.rule));
+  for (const id of CANDIDATE_VIEWS) for (const req of candidateRequestsOf(id).reqs) put(fpKey({ task: req.task, target: req.target, evidence_ids: req.evidence_ids }), fingerprint(req.rule));
   return map;
 }
 

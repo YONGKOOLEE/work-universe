@@ -4,13 +4,15 @@
 
 import { periodStatus, periodText } from '../view/describe.js';
 import { refGid } from '../view/view.js';
-import { SUBTYPE_HANDOVER_DOC, normalizeLabel, memoCategoryOf } from '../model/schema.js';
+import { SUBTYPE_HANDOVER_DOC, SUBTYPE_ROLE, normalizeLabel, memoCategoryOf } from '../model/schema.js';
 import { josa } from '../model/josa.js';
 import { lastInput } from './flow.js';
 
 // 점수 가중치(D-08에 수치가 없어 정함): 주제 3, 산출물 유형 2, 라벨 토큰 1
 export const WEIGHTS = { topic: 3, artifactType: 2, token: 1 };
 const STOP_TOKENS = new Set(['업무', '관리', '처리', '확인']);
+// 이름 낱말만 같은 업무(주제·산출물 유형 공유 없음)는 같은 일이 아닐 수 있다는 단서(CR-17 B ③). 화면·문장이 같은 글을 쓴다
+export const NAME_ONLY_NOTE = '같은 일인지 확인';
 // 어떤 업무든 인계할 때 생기는 산출물 유형은 업무가 비슷하다는 근거가 아니다(T-13에서 발견, 결정 D3-3: 뺌)
 export const GENERIC_ARTIFACT_TYPES = new Set([SUBTYPE_HANDOVER_DOC]);
 
@@ -57,9 +59,13 @@ function profileOf(view, work) {
  * @param {object} view buildView 결과
  * @param {{works: string[], asOf: string, exclude?: string[]}} opts
  *   works: 기준 업무(전역 참조, 여러 개면 합쳐서 비교). asOf: 오늘 날짜(YYYY-MM-DD). exclude: 추가로 뺄 사람
- * @returns {{status:'ok'|'none'|'insufficient', reason:string, people:object[], excluded:object[], basis:object}}
- *   insufficient: 기준 업무에 주제·산출물 연결이 없어 비교할 수 없음(데이터 부족)
- *   none: 비교는 했지만 비슷한 업무를 수행한 사람이 없음
+ * @returns {{status:'ok'|'none'|'insufficient', reason:string, direct:object[], people:object[], roles:object[], excluded:object[], basis:object}}
+ *   direct: 기준 업무를 직접 해 본 사람(이전 담당 — 수행 연결이 기준일에 끝남, 지금 담당·제외 대상 제외). 항상 맨 위에 그린다(CR-17 B ①).
+ *     각 항목의 direct_works: [{gid,label,period,reason,evidence_ids}]. works·score는 이 사람이 비슷한 일로도 센 업무(없으면 [], 0)
+ *   people: 비슷한 업무를 한 사람(주제·산출물 유형·이름 낱말). 점수순. 직접 해 본 사람도 비슷한 일을 했으면 여기에도 있다(화면은 이미 direct에 그린 사람을 다시 그리지 않는다)
+ *   roles: 사람 이름 없이 역할 이름으로 만든 노드(하위 유형 「역할」, CR-17 B ②) — 실제 사람이 아니라 따로 묶는다. 사람과 같은 필드 구조
+ *   insufficient: 기준 업무에 주제·산출물 연결도, 이름 낱말이 같은 다른 업무도, 이전 담당도 없어 비교할 수 없음(데이터 부족)
+ *   none: 비교는 했지만 직접 해 본 사람도, 비슷한 업무를 수행한 사람도 없음
  */
 export function similarExperts(view, { works, asOf, exclude = [] }) {
   const selected = [...new Set(works.map((g) => view.canonical(g)))]
@@ -83,8 +89,13 @@ export function similarExperts(view, { works, asOf, exclude = [] }) {
     for (const k of p.tokens) basisTokens.add(k);
   }
   const basis = { topics: [...basisTopics.values()].map((t) => t.label), artifactTypes: [...basisTypes], tokens: [...basisTokens] };
-  if (!profiles.some((p) => p.hasLink)) {
-    return { status: 'insufficient', reason: '주제나 산출물에 연결된 정보가 없어 비슷한 업무를 찾을 수 없습니다', people: [], excluded: [], basis };
+  const empty = { direct: [], people: [], roles: [] };
+  // 주제·산출물 연결이 없어도 이름 낱말이 같은 다른 업무가 있으면 비교할 수 있다(CR-17 B ③). 기준 업무의 이전 담당이 있어도 직접 해 본 사람을 보일 수 있다(B ①)
+  const anyLink = profiles.some((p) => p.hasLink);
+  const anyNameMatch = view.nodes.some((n) => n.core_type === 'work' && !n.hidden && !selectedIds.has(n.gid) && [...tokensOf(n.label)].some((t) => basisTokens.has(t)));
+  const anyPast = view.edges.some((e) => live(e) && e.core_type === 'performs' && selectedIds.has(e.target) && periodStatus(e.period, asOf) === 'ended');
+  if (!anyLink && !anyNameMatch && !anyPast) {
+    return { status: 'insufficient', reason: '주제나 산출물에 연결된 정보가 없어 비슷한 업무를 찾을 수 없습니다', ...empty, excluded: [], basis };
   }
 
   // 현재 담당자(제외 대상): 기준 업무를 지금 수행 중인 사람
@@ -99,8 +110,34 @@ export function similarExperts(view, { works, asOf, exclude = [] }) {
     if (n) excluded.push({ gid: n.gid, label: n.label });
   }
 
-  // 후보 업무: 기준 업무가 아닌 업무 중 주제 또는 산출물 유형을 공유하는 것
-  const people = new Map();
+  // 직접 해 본 사람(CR-17 B ①): 기준 업무의 이전 담당 — 수행 연결이 기준일에 끝난 사람. 지금 담당·제외 대상은 뺀다
+  const entries = new Map(); // 사람 gid → {gid,label,emp_no,score,works,direct_works}
+  const entryOf = (person) => {
+    if (!entries.has(person.gid)) entries.set(person.gid, { gid: person.gid, label: person.label, emp_no: person.emp_no, score: 0, works: [], direct_works: [] });
+    return entries.get(person.gid);
+  };
+  for (const e of view.edges) {
+    if (!live(e) || e.core_type !== 'performs' || !selectedIds.has(e.target) || excludedGids.has(e.source)) continue;
+    if (periodStatus(e.period, asOf) !== 'ended') continue;
+    const person = view.getNode(e.source);
+    if (!person || person.hidden || person.core_type !== 'person') continue;
+    const w = view.getNode(e.target);
+    const entry = entryOf(person);
+    const period = periodText(e.period, asOf);
+    // 같은 업무를 여러 기간 맡았으면 기간을 이어서 보인다
+    const prev = entry.direct_works.find((x) => x.gid === w.gid);
+    if (prev) {
+      prev.period = `${prev.period}, ${period}`;
+      if (e.period.end > prev.end) prev.end = e.period.end;
+      continue;
+    }
+    entry.direct_works.push({ gid: w.gid, label: w.label, period, end: e.period.end, evidence_ids: [w.gid, person.gid] });
+  }
+  for (const entry of entries.values()) {
+    for (const d of entry.direct_works) d.reason = `${selected.length > 1 ? `「${d.label}」을 ` : '이 업무를 '}직접 해 봄(${d.period})`;
+  }
+
+  // 후보 업무: 기준 업무가 아닌 업무 중 주제·산출물 유형을 공유하는 것, 또는 이름에 같은 낱말이 있는 것(낮은 점수, 같은 일인지 확인 필요)
   for (const cand of view.nodes) {
     if (cand.core_type !== 'work' || cand.hidden || selectedIds.has(cand.gid)) continue;
     const cp = profileOf(view, cand);
@@ -113,8 +150,9 @@ export function similarExperts(view, { works, asOf, exclude = [] }) {
     }
     const sharedTopics = [...byName.values()];
     const sharedTypes = [...cp.artifactTypes.keys()].filter((k) => basisTypes.has(k));
-    if (sharedTopics.length === 0 && sharedTypes.length === 0) continue;
     const sharedTokens = [...cp.tokens].filter((t) => basisTokens.has(t));
+    const nameOnly = sharedTopics.length === 0 && sharedTypes.length === 0;
+    if (nameOnly && sharedTokens.length === 0) continue;
     const score = WEIGHTS.topic * sharedTopics.length + WEIGHTS.artifactType * sharedTypes.length + WEIGHTS.token * sharedTokens.length;
 
     // 공유한 이유와 근거 ID. 이름만 같은 주제(유니버스가 달라 연결 확인 전)는 그렇다고 밝힌다
@@ -130,15 +168,14 @@ export function similarExperts(view, { works, asOf, exclude = [] }) {
       reasons.push(`같은 산출물 유형 「${k}」`);
       evidence.push(...cp.artifactTypes.get(k));
     }
-    if (sharedTokens.length) reasons.push(`이름에 같은 낱말 「${sharedTokens.join('·')}」`);
+    if (sharedTokens.length) reasons.push(`이름에 같은 낱말 「${sharedTokens.join('·')}」${nameOnly ? ` — ${NAME_ONLY_NOTE}` : ''}`);
 
     for (const e of view.edges) {
       if (!live(e) || e.core_type !== 'performs' || e.target !== cand.gid || excludedGids.has(e.source)) continue;
       if (periodStatus(e.period, asOf) === 'scheduled') continue; // 아직 시작하지 않은 담당은 경험이 아니다
       const person = view.getNode(e.source);
       if (!person || person.hidden || person.core_type !== 'person') continue;
-      if (!people.has(person.gid)) people.set(person.gid, { gid: person.gid, label: person.label, emp_no: person.emp_no, score: 0, works: [] });
-      const entry = people.get(person.gid);
+      const entry = entryOf(person);
       if (entry.works.some((w) => w.gid === cand.gid)) continue; // 같은 업무를 여러 기간 맡아도 한 번만 센다
       entry.score += score;
       entry.works.push({
@@ -149,31 +186,54 @@ export function similarExperts(view, { works, asOf, exclude = [] }) {
         current: isCurrent(e.period, asOf),
         score,
         reasons,
+        name_only: nameOnly,
         evidence_ids: [...new Set(evidence)],
       });
     }
   }
 
-  const list = [...people.values()]
-    .map((p) => ({ ...p, evidence_ids: [...new Set([p.gid, ...p.works.flatMap((w) => w.evidence_ids)])] }))
+  const all = [...entries.values()]
+    .map((p) => ({ ...p, evidence_ids: [...new Set([p.gid, ...p.direct_works.flatMap((w) => w.evidence_ids), ...p.works.flatMap((w) => w.evidence_ids)])] }))
     .sort((a, b) => b.score - a.score || a.label.localeCompare(b.label));
-  if (list.length === 0) {
-    return { status: 'none', reason: '비슷한 업무를 수행한 사람이 없습니다', people: [], excluded, basis };
+  // 역할 이름 노드는 실제 사람이 아니라 따로 묶고(②, insight-risk.js의 isRole과 같은 판정), 직접 해 본 사람은 맨 위 묶음으로 뺀다(①). 직접 해 본 사람 안에서는 최근에 끝난 순
+  const isRole = (p) => view.getNode(p.gid)?.subtype === SUBTYPE_ROLE;
+  const roles = all.filter(isRole);
+  const real = all.filter((p) => !isRole(p));
+  const lastEnd = (p) => p.direct_works.reduce((m, d) => (d.end > m ? d.end : m), '');
+  const direct = real
+    .filter((p) => p.direct_works.length)
+    .sort((a, b) => (lastEnd(a) < lastEnd(b) ? 1 : lastEnd(a) > lastEnd(b) ? -1 : a.label.localeCompare(b.label)));
+  const similar = real.filter((p) => p.works.length);
+  if (all.length === 0) {
+    return { status: 'none', reason: '비슷한 업무를 수행한 사람이 없습니다', ...empty, excluded, basis };
   }
-  return { status: 'ok', reason: '', people: list, excluded, basis };
+  return { status: 'ok', reason: '', direct, people: similar, roles, excluded, basis };
 }
 
-/** 결과를 문장 목록으로(인수인계 초안의 "유사 경험자" 항목, LLM 설명의 입력). 문장마다 근거 ID가 붙는다. */
+/**
+ * 결과를 문장 목록으로(인수인계 초안의 "유사 경험자" 항목, LLM 설명의 입력). 문장마다 근거 ID가 붙는다.
+ * 순서(CR-17 B): 직접 해 본 사람 → 비슷한 일을 해 본 사람 → 역할 이름(사람 미확인)
+ */
 export function similarSentences(result) {
-  return result.people.map((p) => {
+  const who = (p) => `${p.label}${p.emp_no ? `(${p.emp_no})` : ''}`;
+  // 「…」 수행(기간) 외 N건 — 기간이 이름 바로 뒤에 붙어 「…」 2026-04-01 ~ 진행 중 수행처럼 읽히지 않게(검토9 R-4)
+  const similarText = (p) => {
     const w = p.works[0];
     const more = p.works.length > 1 ? ` 외 ${p.works.length - 1}건` : '';
-    return {
-      // 「…」 수행(기간) 외 N건 — 기간이 이름 바로 뒤에 붙어 「…」 2026-04-01 ~ 진행 중 수행처럼 읽히지 않게(검토9 R-4)
-      text: `${p.label}${p.emp_no ? `(${p.emp_no})` : ''} — 「${w.label}」 수행${w.period ? `(${w.period})` : ''}${more}. ${w.reasons.join(', ')}`,
-      evidence_ids: p.evidence_ids,
-    };
-  });
+    return `「${w.label}」 수행${w.period ? `(${w.period})` : ''}${more}. ${w.reasons.join(', ')}`;
+  };
+  const directText = (p) => {
+    const d = p.direct_works[0];
+    const more = p.direct_works.length > 1 ? ` 외 ${p.direct_works.length - 1}건` : '';
+    const own = `「${d.label}」${josa(d.label, '을/를')} 직접 해 봄${d.period ? `(${d.period})` : ''}${more}`;
+    return p.works.length ? `${own}. 비슷한 일도 해 봄: ${similarText(p)}` : own;
+  };
+  const directIds = new Set((result.direct || []).map((p) => p.gid));
+  return [
+    ...(result.direct || []).map((p) => ({ text: `${who(p)} — ${directText(p)}`, evidence_ids: p.evidence_ids })),
+    ...result.people.filter((p) => !directIds.has(p.gid)).map((p) => ({ text: `${who(p)} — ${similarText(p)}`, evidence_ids: p.evidence_ids })),
+    ...(result.roles || []).map((p) => ({ text: `${who(p)} — 역할 이름(사람 미확인) — ${p.direct_works.length ? directText(p) : similarText(p)}`, evidence_ids: p.evidence_ids })),
+  ];
 }
 
 // ── 반복 비효율(D-08, R-05 ⑤) ─────────────────────────────────────────────

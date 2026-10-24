@@ -507,12 +507,12 @@ async function checkBrowser(browser, port) {
   })()`);
   await sleep(250);
   const itemsCount = await evaluate(s.cdp, "document.querySelectorAll('[data-testid^=draft-item-]').length");
-  check('R-03 초안 10개 항목, "초안" 상태와 생성 방식(규칙 기반) 표시(R-03 ③, R-04 ②)', itemsCount === 10 && (await text(s.cdp, '[data-testid=draft-status]')) === '초안' && (await text(s.cdp, '[data-testid=draft-method]')).includes('규칙 기반'));
+  check('R-03 초안 11개 항목, "초안" 상태와 생성 방식(규칙 기반) 표시(R-03 ③, R-04 ②)', itemsCount === 11 && (await text(s.cdp, '[data-testid=draft-status]')) === '초안' && (await text(s.cdp, '[data-testid=draft-method]')).includes('규칙 기반'));
   // 검토5 I-1: 이전 인수인계는 E-002(+인수인계서)와 E-007(구두) 두 줄 → 근거 3개
   check('R-03 ① 항목에 근거 링크가 붙는다(관계자: 한가람, 이전 인수인계: 문서·구두 두 건)', (await text(s.cdp, '[data-testid=draft-item-관계자_연락처]')).includes('한가람') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=draft-item-이전_인수인계] .evidence').length")) === 3 && (await text(s.cdp, '[data-testid=draft-item-이전_인수인계]')).includes('2026-09-30 윤바다 → 서하늘'));
   // N-5: 유니버스 전체가 대상이면 비교할 다른 업무가 없어 '해당 없음'(이력 부족과 구별). R-03 ② 이력 부족은 교육팀 신규 과정 단계에서 확인
   const simItem = await text(s.cdp, '[data-testid=draft-item-유사_경험자]');
-  check('N-5 유사 경험자: 비교했지만 해당자 없음 → "해당 없음"과 이유(이력 부족과 구별)', simItem.includes('해당 없음') && simItem.includes('견줄 다른 업무가 없습니다') && !simItem.includes('이력 부족'), simItem.slice(0, 120));
+  check('N-5·CR-17 B 유사 경험자: 지도 전체 대상이면 이전 담당 한가람이 「직접 해 봄」으로 먼저 나오고 이력 부족이 아님(해당 없음과 이력 부족의 구별은 단위 테스트 SE-2)', simItem.includes('한가람') && simItem.includes('직접 해 봄') && !simItem.includes('이력 부족'), simItem.slice(0, 120));
   check('숨긴 노드가 근거면 "숨김 처리된 노드"로 표시(점검표 양식을 숨긴 상태)', (await text(s.cdp, '[data-testid=draft-item-산출물_문서]')).includes('점검표 양식(숨김 처리된 노드)'));
   // 근거를 누르면 패널은 그대로 두고 그래프에서 그 노드를 보여 준다
   // CR-6 새 항목: 절차·마감·주의사항·진행 중·문의 연락처가 실제로 보인다
@@ -539,7 +539,7 @@ async function checkBrowser(browser, port) {
     document.querySelector('[data-testid=draft-form] button[type=submit]').click();
   })()`);
   await sleep(250);
-  check('R-04 ③: 실패 흉내 → 생성 방식 규칙 기반과 원인(호출 실패) 표시, 초안은 그대로 10개 항목', (await text(s.cdp, '[data-testid=draft-method]')).includes('규칙 기반') && (await text(s.cdp, '[data-testid=draft-fallback]')).includes('호출 실패') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid^=draft-item-]').length")) === 10);
+  check('R-04 ③: 실패 흉내 → 생성 방식 규칙 기반과 원인(호출 실패) 표시, 초안은 그대로 11개 항목', (await text(s.cdp, '[data-testid=draft-method]')).includes('규칙 기반') && (await text(s.cdp, '[data-testid=draft-fallback]')).includes('호출 실패') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid^=draft-item-]').length")) === 11);
   await shot(s.cdp, `${browser.name}-3d-draft-fail`);
   // 화면 어디에도 'null' 글자가 들어가지 않는다(replaceChildren에 빈 값을 넘긴 실수 검출)
   const nullTexts = await evaluate(s.cdp, "(() => { document.querySelectorAll('details').forEach((d) => (d.open = true)); const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); const out = []; while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') out.push(w.currentNode.parentElement.id || w.currentNode.parentElement.className); return out; })()");
@@ -1331,7 +1331,7 @@ async function checkBrowser(browser, port) {
     check('검토3 UI-2: 지난 날짜를 보는 중 초안 패널에 "초안은 오늘 기준" 안내', (await text(s.cdp, '[data-testid=draft-today]')).includes('오늘'));
     await setMonth('2025-09');
     await sleep(200);
-    check('검토3 UI-3: 슬라이더를 움직여도 만든 초안(10개 항목)과 받는 사람 선택이 남는다', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid^=draft-item-]').length")) === 10 && (await evaluate(s.cdp, "document.querySelector('[data-testid=draft-to]').value")) === 'U-A1/N-012');
+    check('검토3 UI-3: 슬라이더를 움직여도 만든 초안(11개 항목)과 받는 사람 선택이 남는다', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid^=draft-item-]').length")) === 11 && (await evaluate(s.cdp, "document.querySelector('[data-testid=draft-to]').value")) === 'U-A1/N-012');
     await evaluate(s.cdp, "window.__wu.select(null)");
     await setMonth('2025-06');
     await sleep(200);
@@ -1389,21 +1389,28 @@ async function checkBrowser(browser, port) {
     await sleep(200);
     const pickOk = await evaluate(s.cdp, "(() => { const p = document.querySelector('[data-testid=insight-work]'); return p.value; })()");
     check('업무 노드의 "유사 경험자" 버튼 → 그 업무가 미리 골라짐', pickOk === 'U-A1/N-001');
-    const people = await text(s.cdp, '[data-testid=insight-people]');
-    check('R-05 ① ④ 윤바다가 근거 업무·주제와 함께 나옴', people.includes('윤바다') && people.includes('2025 행사') && people.includes('같은 주제 「대사 불일치」(이름이 같은 주제, 연결 확인 전)'), people.slice(0, 120));
-    check('R-05 ① 근거 버튼(공유 주제·업무)이 붙음', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=insight-people] .evidence').length")) >= 4);
-    check('U-18: 유사 경험자의 역할 노드(운영 담당·정산 담당)에 「역할 · 담당자 미연결」 표시, 실제 사람(윤바다)에는 없음', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=insight-people] [data-testid=role-chip]').length")) >= 2 && (await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=insight-people] li')].filter((li) => li.querySelector('strong').textContent === '윤바다').every((li) => !li.querySelector('[data-testid=role-chip]'))")));
-    check('현재 담당자(서하늘)는 뺀다고 밝힘', (await text(s.cdp, '[data-testid=insight-excluded]')).includes('서하늘') && !people.includes('서하늘') && !people.includes('한가람'));
+    const direct = await text(s.cdp, '[data-testid=insight-direct]');
+    const rolesText = await text(s.cdp, '[data-testid=insight-roles]');
+    check('CR-17 B ① 「직접 해 본 사람」 묶음 맨 위: 윤바다·한가람이 이전 담당 기간과 「이 업무를 직접 해 봄」 이유로 나옴(윤바다가 먼저)', direct.includes('이 업무를 직접 해 봄(2026-06-01 ~ 2026-09-30)') && direct.includes('이 업무를 직접 해 봄(2025-03-01 ~ 2026-05-31)') && direct.indexOf('윤바다') < direct.indexOf('한가람') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=insight-direct] [data-testid=direct-chip]').length")) === 2, direct.slice(0, 160));
+    check('R-05 ① ④ 윤바다 카드에 비슷한 일(2025 행사)과 주제 이유도 함께 나옴', direct.includes('2025 행사') && direct.includes('같은 주제 「대사 불일치」(이름이 같은 주제, 연결 확인 전)'), direct.slice(0, 200));
+    check('R-05 ① 근거 버튼(공유 주제·업무)이 붙음', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=insight-direct] .evidence').length")) >= 4);
+    check('CR-17 B ② U-18: 역할 이름(운영 담당·정산 담당)은 아래 「사람 미확인(역할 이름)」 묶음에서 「역할 · 담당자 미연결」 표시, 직접 해 본 사람에는 없음', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=insight-roles] [data-testid=role-chip]').length")) >= 2 && rolesText.includes('운영 담당') && rolesText.includes('정산 담당') && !direct.includes('운영 담당') && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=insight-direct] [data-testid=role-chip]')")) && (await evaluate(s.cdp, "(() => { const d = document.querySelector('[data-testid=insight-direct-group]'); const r = document.querySelector('[data-testid=insight-roles-group]'); return !!d && !!r && !!(d.compareDocumentPosition(r) & Node.DOCUMENT_POSITION_FOLLOWING); })()")));
+    check('현재 담당자(서하늘)는 뺀다고 밝힘', (await text(s.cdp, '[data-testid=insight-excluded]')).includes('서하늘') && !direct.includes('서하늘') && !rolesText.includes('서하늘'));
     check('R-05 ③ 결정은 사람이 한다는 안내', (await text(s.cdp, '#detail')).includes('사람이 정합니다'));
     await shot(s.cdp, `${browser.name}-6-similar`);
     // 근거를 누르면 그래프에서 그 노드를 강조한다
-    await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=insight-people] .evidence')].find((b) => b.textContent === '2025 행사').click()");
+    await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=insight-direct] .evidence')].find((b) => b.textContent === '2025 행사').click()");
     await sleep(250);
-    check('근거 버튼 → 그래프에서 해당 노드 선택(패널은 그대로)', (await evaluate(s.cdp, "window.__wu.cy.$(':selected').map((n) => n.id()).join()")) === 'U-B/N-101' && !!(await evaluate(s.cdp, "!!document.querySelector('[data-testid=insight-people]')")));
-    // 오류: 주제·산출물 연결이 없는 업무 → 데이터 부족
-    await evaluate(s.cdp, `(() => { const p = document.querySelector('[data-testid=insight-work]'); p.value = 'U-A1/N-003'; p.dispatchEvent(new Event('change')); })()`);
+    check('근거 버튼 → 그래프에서 해당 노드 선택(패널은 그대로)', (await evaluate(s.cdp, "window.__wu.cy.$(':selected').map((n) => n.id()).join()")) === 'U-B/N-101' && !!(await evaluate(s.cdp, "!!document.querySelector('[data-testid=insight-direct]')")));
+    // CR-17 B ③ 이름 낱말만 같은 업무: 「2026 행사」 → 「2025 행사」를 한 윤바다가 낮은 점수 후보, 「이름만 같음」 표시와 「같은 일인지 확인」 이유
+    await evaluate(s.cdp, `(() => { const p = document.querySelector('[data-testid=insight-work]'); p.value = 'U-B/N-102'; p.dispatchEvent(new Event('change')); })()`);
     await sleep(150);
-    check('오류(R-05 ②): 연결이 없는 업무 → "데이터 부족"만 표시', (await text(s.cdp, '[data-testid=insight-insufficient]')).includes('데이터 부족') && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=insight-people]')")));
+    const nameOnlyText = await text(s.cdp, '[data-testid=insight-people]');
+    check('CR-17 B ③ 「2026 행사」: 윤바다가 이름 낱말 후보(1점)로 나오고 「이름만 같음」 표시와 「이름에 같은 낱말 「행사」 — 같은 일인지 확인」', nameOnlyText.includes('윤바다') && nameOnlyText.includes('1점') && nameOnlyText.includes('이름에 같은 낱말 「행사」 — 같은 일인지 확인') && !!(await evaluate(s.cdp, "!!document.querySelector('[data-testid=insight-people] [data-testid=name-only-chip]')")), nameOnlyText.slice(0, 160));
+    // 오류: 주제·산출물 연결도, 이름 낱말이 같은 업무도, 이전 담당도 없는 업무 → 데이터 부족
+    await evaluate(s.cdp, `(() => { const p = document.querySelector('[data-testid=insight-work]'); p.value = 'U-B/N-104'; p.dispatchEvent(new Event('change')); })()`);
+    await sleep(150);
+    check('오류(R-05 ②): 연결이 없는 업무 → "데이터 부족"만 표시', (await text(s.cdp, '[data-testid=insight-insufficient]')).includes('데이터 부족') && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=insight-people], [data-testid=insight-direct]')")));
     // 인수인계 초안의 유사 경험자 항목에도 같은 결과가 들어간다
     await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
     await clickTestId(s.cdp, 'btn-draft');
@@ -1415,7 +1422,12 @@ async function checkBrowser(browser, port) {
     await sleep(250);
     const sim = await text(s.cdp, '[data-testid=draft-item-유사_경험자]');
     // D3-31: 보내는 사람(윤바다)은 「문의」로 이미 나오므로 유사 경험자에서 뺀다 → 카드승인의 운영 담당·정산 담당만
-    check('인수인계 초안의 "유사 경험자" 항목에 카드승인 담당자와 근거 링크가 들어가고 보내는 사람(윤바다)은 빠짐', sim.includes('운영 담당(V-4002)') && !sim.includes('윤바다(V-1002)') && !sim.includes('이력 부족') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=draft-item-유사_경험자] .evidence').length")) >= 3);
+    // CR-17 B: 직접 해 본 사람(이전 담당 한가람)이 먼저, 이름 낱말만 같은 업무는 「같은 일인지 확인」, 역할 이름은 「사람 미확인」. 보내는 사람(윤바다)은 「문의」로 나오므로 빠진다
+    check('인수인계 초안의 "유사 경험자" 항목: 한가람(직접 해 봄)이 먼저, 역할 이름(운영 담당)은 뒤에, 보내는 사람(윤바다(V-1002))은 빠지고 근거 링크가 붙음', sim.includes('한가람') && sim.includes('운영 담당') && sim.indexOf('한가람') < sim.indexOf('운영 담당') && !sim.includes('윤바다(V-1002)') && !sim.includes('이력 부족') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=draft-item-유사_경험자] .evidence').length")) >= 3, sim.slice(0, 200));
+    // CR-17 E: 「받는 범위와 담당 공백」 — 업무 개요 다음 항목, 받는 사람(서하늘)이 지금 맡은 일과 지금 담당이 없는 업무(자료 수집·보고)
+    const rangeText = await text(s.cdp, '[data-testid=draft-item-받는_범위]');
+    const itemOrder = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid^=draft-item-]')].slice(0, 3).map((x) => x.dataset.testid.replace('draft-item-', '')).join()");
+    check('CR-17 E 초안 「받는 범위와 담당 공백」: 업무 개요 다음, 서하늘이 맡은 대사 확인과 근거 링크(대상이 「대사 확인」 하나라 범위 밖 자료 수집·보고의 공백 문장은 없음 — 지도 전체 대상의 공백 문장은 단위 테스트)', itemOrder === '업무_개요,받는_범위,세부_업무_절차' && rangeText.includes('받는 범위와 담당 공백') && rangeText.includes('서하늘') && rangeText.includes('대사 확인') && !rangeText.includes('이력 부족') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=draft-item-받는_범위] .evidence').length")) >= 2, `${itemOrder} / ${rangeText.slice(0, 200)}`);
     // 밀집·공백(부서 화면): 조직별 표, 끝난 업무는 "이전 담당자만 있음", 도하람 3개 밀집
     await evaluate(s.cdp, "window.__wu.select(null)");
     await clickTestId(s.cdp, 'btn-insight-universe');
@@ -1542,13 +1554,13 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, "(() => { const f = document.querySelector('[data-testid=draft-form]'); const set = (t, v) => { const e = f.querySelector('[data-testid=' + t + ']'); e.value = v; e.dispatchEvent(new Event('change')); }; set('draft-from', 'U-C/N-202'); set('draft-to', 'U-C/N-203'); f.querySelector('button[type=submit]').click(); })()");
     await sleep(250);
     const shortCount = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid^=draft-item-]')].filter((x) => x.textContent.includes('이력 부족')).length");
-    check('R-03 ② 예외 5: 「신규 교육 과정」 초안은 8개 항목이 "이력 부족"', shortCount === 8, String(shortCount));
+    check('R-03 ② 예외 5: 「신규 교육 과정」 초안은 7개 항목이 "이력 부족"(CR-17 E 「받는 범위와 담당 공백」은 담당 기록 없음을 공백으로 알려 채워짐)', shortCount === 7 && !(await text(s.cdp, '[data-testid=draft-item-받는_범위]')).includes('이력 부족'), String(shortCount));
     await shot(s.cdp, `${browser.name}-11-edu-short`);
     // T-12 사전 생성 초안: 신입 교육 운영, 이든빛 → 나래솔(데이터를 고치지 않은 상태)
     await evaluate(s.cdp, "(() => { const f = document.querySelector('[data-testid=draft-form]'); const set = (t, v) => { const e = f.querySelector('[data-testid=' + t + ']'); e.value = v; e.dispatchEvent(new Event('change')); }; set('draft-target', 'U-C/N-101'); set('draft-from', 'U-C/N-202'); set('draft-to', 'U-C/N-201'); f.querySelector('button[type=submit]').click(); })()");
     await sleep(250);
     const pregenChips = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=item-method]')].filter((x) => x.textContent === '사전 생성').length");
-    check('T-12 사전 생성: 생성 방식 표시와 9개 항목(이력 부족 제외)에 「사전 생성」, 근거 버튼 유지', (await text(s.cdp, '[data-testid=draft-method]')).includes('사전 생성') && pregenChips === 9 && (await text(s.cdp, '[data-testid=draft-item-세부_업무_절차]')).includes('강의실·강사 섭외를 마쳐야 교육을 열 수 있고') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=draft-item-세부_업무_절차] .evidence').length")) >= 4, String(pregenChips));
+    check('T-12 사전 생성: 생성 방식 표시와 10개 항목(이력 부족 제외)에 「사전 생성」, 근거 버튼 유지', (await text(s.cdp, '[data-testid=draft-method]')).includes('사전 생성') && pregenChips === 10 && (await text(s.cdp, '[data-testid=draft-item-세부_업무_절차]')).includes('강의실·강사 섭외를 마쳐야 교육을 열 수 있고') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=draft-item-세부_업무_절차] .evidence').length")) >= 4, String(pregenChips));
     await shot(s.cdp, `${browser.name}-11b-edu-pregen`);
     // 새로 입력한 데이터: 메모를 하나 더하면 최근 이슈만 규칙 기반으로 돌아간다(K-9)
     await evaluate(s.cdp, "window.__wu.select('U-C/N-101')");
@@ -2682,7 +2694,7 @@ async function checkBrowser(browser, port) {
     await sleep(300);
     const noKey = await evaluate(s.cdp, "({ live: !!document.querySelector('[data-testid=draft-live]'), calls: window.__wu.fakeLlm.calls.length, items: document.querySelectorAll('[data-testid^=draft-item-]').length, fb: (document.querySelector('[data-testid=draft-fallback]') || {}).textContent || '' })");
     // 처음 사용 3회차(W6)·CR-17 H: 키 없음 이유는 고장이 아닌 안내 — 「공급자 오류」·「대체함」 없이 실제 방식에 맞는 한 줄. 사전 생성 문장이 있는 예시 지도라 사전 생성으로 보인다
-    check('CR-15·CR-17 H 키가 없으면 「생성 중…」 표시도 호출도 없고 사전 생성 문장 + 키 없음 안내 한 줄(「공급자 오류」·「대체함」 없음)', !noKey.live && noKey.calls === 0 && noKey.items === 10 && noKey.fb === '키가 없어 미리 받아 둔 문장(사전 생성)으로 보여 줍니다 — 「설정」에서 키를 넣으면 Claude가 실시간으로 다시 씁니다' && !noKey.fb.includes('공급자 오류') && !noKey.fb.includes('대체함'), JSON.stringify(noKey));
+    check('CR-15·CR-17 H 키가 없으면 「생성 중…」 표시도 호출도 없고 사전 생성 문장 + 키 없음 안내 한 줄(「공급자 오류」·「대체함」 없음)', !noKey.live && noKey.calls === 0 && noKey.items === 11 && noKey.fb === '키가 없어 미리 받아 둔 문장(사전 생성)으로 보여 줍니다 — 「설정」에서 키를 넣으면 Claude가 실시간으로 다시 씁니다' && !noKey.fb.includes('공급자 오류') && !noKey.fb.includes('대체함'), JSON.stringify(noKey));
     check('처음 사용 W6 「Claude API」를 골랐지만 키가 없으면 키 없음 안내(draft-fallback, 노란 띠 아님)가 이미 같은 말을 하므로 맨 아래 한 줄(draft-live-hint)은 그리지 않음', await evaluate(s.cdp, "(() => { const f = document.querySelector('[data-testid=draft-fallback]'); return !!f && f.dataset.keyless === 'true' && !f.classList.contains('notice') && !document.querySelector('[data-testid=draft-live-hint]'); })()"));
     // 2) 키를 넣는다: 머리글 설명에 「(실시간)」, 저장은 이 브라우저 설정에만
     await settingsOpen();
@@ -2691,13 +2703,13 @@ async function checkBrowser(browser, port) {
     const keyOn = await evaluate(s.cdp, "({ status: (document.querySelector('[data-testid=settings-key-status]') || {}).textContent || '', title: document.getElementById('settings-open').getAttribute('title') || '' })");
     check('CR-15 키를 넣으면 상태 문구가 바뀌고 머리글 「설정」 설명에 Claude API(실시간)', keyOn.status.includes('키가 입력되어 있습니다') && keyOn.title.includes('Claude API(실시간)'), JSON.stringify(keyOn));
     await settingsClose();
-    // 3) 초안: 먼저 그리고(10항목) 「생성 중…」 → 응답이 오면 항목 단위로 교체하고 칩 「Claude API」
+    // 3) 초안: 먼저 그리고(11항목) 「생성 중…」 → 응답이 오면 항목 단위로 교체하고 칩 「Claude API」
     await evaluate(s.cdp, 'window.__wu.fakeLlm.delayMs = 700');
     await openDraft();
     await submitDraft();
     await sleep(150);
     const during = await evaluate(s.cdp, "({ note: (document.querySelector('[data-testid=draft-live]') || {}).textContent || '', aria: (document.querySelector('[data-testid=draft-live]') || {}).getAttribute && document.querySelector('[data-testid=draft-live]').getAttribute('aria-live'), items: document.querySelectorAll('[data-testid^=draft-item-]').length, claude: [...document.querySelectorAll('[data-testid=item-method]')].filter((c) => c.textContent === 'Claude API').length })");
-    check('CR-15 초안: 먼저 규칙 기반(사전 생성) 10항목이 그려지고 「생성 중…」(aria-live=polite)이 보임, 아직 Claude API 칩은 없음', during.note === '생성 중…' && during.aria === 'polite' && during.items === 10 && during.claude === 0, JSON.stringify(during));
+    check('CR-15 초안: 먼저 규칙 기반(사전 생성) 11항목이 그려지고 「생성 중…」(aria-live=polite)이 보임, 아직 Claude API 칩은 없음', during.note === '생성 중…' && during.aria === 'polite' && during.items === 11 && during.claude === 0, JSON.stringify(during));
     check('처음 사용 W4(FU-24) 키가 있으면 맨 아래 안내 한 줄(draft-live-hint)을 그리지 않음', await evaluate(s.cdp, "!document.querySelector('[data-testid=draft-live-hint]')"));
     const lockedDuring = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=draft-confirm]'); return b ? b.disabled : null; })()");
     check('CR-15 초안: 응답이 오면 「생성 중…」이 사라지고 항목이 교체됨(칩 「Claude API」), 생성 방식 표시도 바뀜', (await liveDone()) && (await chipCount()) >= 3 && (await text(s.cdp, '[data-testid=draft-method]')).includes('Claude API') && (await text(s.cdp, '[data-testid=draft-method-note]')).includes('원문 인용'), `칩 ${await chipCount()}`);
@@ -2728,7 +2740,7 @@ async function checkBrowser(browser, port) {
     await openDraft();
     await submitDraft();
     const failed = (await liveDone()) && (await evaluate(s.cdp, "({ fb: (document.querySelector('[data-testid=draft-fallback]') || {}).textContent || '', chips: [...document.querySelectorAll('[data-testid=item-method]')].filter((c) => c.textContent === 'Claude API').length, items: document.querySelectorAll('[data-testid^=draft-item-]').length })"));
-    check('CR-15 초안: 시간 초과면 「원래 문장을 유지함: …연결 실패·시간 초과」(먼저 그린 사전 생성 문장이 그대로) + 10항목, Claude API 칩 없음', !!failed && (failed.fb.includes('원래 문장을 유지함') || failed.fb.includes('규칙 기반으로 대체함')) && failed.fb.includes('연결 실패·시간 초과') && failed.chips === 0 && failed.items === 10, JSON.stringify(failed));
+    check('CR-15 초안: 시간 초과면 「원래 문장을 유지함: …연결 실패·시간 초과」(먼저 그린 사전 생성 문장이 그대로) + 11항목, Claude API 칩 없음', !!failed && (failed.fb.includes('원래 문장을 유지함') || failed.fb.includes('규칙 기반으로 대체함')) && failed.fb.includes('연결 실패·시간 초과') && failed.chips === 0 && failed.items === 11, JSON.stringify(failed));
     await setModel('claude-test-quote');
     await evaluate(s.cdp, "window.__wu.fakeLlm.mode = 'badquote'");
     await openDraft();
@@ -2931,8 +2943,8 @@ async function checkBrowser(browser, port) {
     await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1'", 8000);
   }
 
-  // ── W8·W9 업무정의서 한 장 읽기(처음 사용 점검 3회차, CR-17 J 승인안: 스위치 6개 켬 — authorPickOrg·summaryToWork·periodDeadline은 꺼짐): 법인세 중간예납 정의서(가상)를 붙여 「초벌 변환」 →
-  //    사람 2·산출물 1·「작성:」 줄은 작성 주체로 읽지 않아 작성 주체 칸이 비고 안내가 나옴(R12-2, ⑤ 꺼짐)·표준 양식 줄에 「권장 항목이 비어 있음」(설명·주기·마감은 ⑦⑧ 꺼짐이라 비어 있고, 관련 문서·담당은 채워짐)·담당 추정 알림(주 담당 1건)·노드 수 알림이 겁주지 않는 말 →
+  // ── W8·W9 업무정의서 한 장 읽기(처음 사용 점검 3회차, CR-17 J 승인안: 스위치 7개 켬 — summaryToWork·periodDeadline은 꺼짐, authorPickOrg는 키 「작성」·「작성 부서」 한정으로 켬): 법인세 중간예납 정의서(가상)를 붙여 「초벌 변환」 →
+  //    사람 2·산출물 1·「작성: 가상재무팀 류다온 / 2026-09-01」은 조직 낱말만 작성 주체 「가상재무팀」으로(⑤ 켬, 입력 안내 없음)·표준 양식 줄에 「권장 항목이 비어 있음」(설명·주기·마감은 ⑦⑧ 꺼짐이라 비어 있고, 관련 문서·담당은 채워짐)·담당 추정 알림(주 담당 1건)·노드 수 알림이 겁주지 않는 말 →
   //    이름 칸을 고치면 꼭지 이름과 대표 업무 이름이 함께 바뀌고 「업무 이름도 함께 바뀝니다」 안내(스위치 previewRenameWork 켬, ⑨). 가져오지 않고 닫는다(저장소 불변) ──
   {
     const W8_DOC = ['업무정의서: 법인세 중간예납 준비', '작성: 가상재무팀 류다온 / 2026-09-01', '1. 업무 개요', '매년 8월 법인세 중간예납 세액을 계산하고 신고서를 준비한다.', '2. 처리 절차',
@@ -2945,7 +2957,7 @@ async function checkBrowser(browser, port) {
     await sleep(300);
     const w8 = await evaluate(s.cdp, "({ summary: (document.querySelector('[data-testid=import-summary]') || {}).textContent || '', owner: (document.getElementById('import-owner') || {}).value || '', form: (document.querySelector('[data-testid=import-form] summary') || {}).textContent || '', notes: (document.querySelector('[data-testid=import-notes]') || {}).textContent || '', nodes: (document.querySelector('[data-testid=import-nodes]') || {}).textContent || '', sections: (document.querySelector('[data-testid=import-sections]') || {}).textContent || '' })");
     check('W8 업무정의서 한 장: 미리 보기 규모가 사람 2·산출물 1이고 주제(규칙 밖)가 없음', /사람 2/.test(w8.summary) && /산출물 1/.test(w8.summary) && !/주제/.test(w8.summary) && !w8.notes.includes('규칙에 없는 제목'), w8.summary);
-    check('W8 「작성: 가상재무팀 류다온 / 2026-09-01」은 작성 주체로 읽지 않아(R12-2) 작성 주체 칸이 비어 있고 입력 안내가 나오며, 노드 목록에 업무 이름의 접두어가 없음', w8.owner === '' && w8.notes.includes('원문에서 작성 주체를 읽지 못했습니다') && w8.nodes.includes('법인세 중간예납 준비') && !/(^|\s)업무정의서: 법인세 중간예납 준비 원문 §2/.test(w8.nodes), JSON.stringify([w8.owner, w8.nodes.slice(0, 160)]));
+    check('W8 「작성: 가상재무팀 류다온 / 2026-09-01」은 조직 낱말만 작성 주체로 읽어(⑤ 켬) 작성 주체 칸이 「가상재무팀」이고 입력 안내가 없으며, 노드 목록에 업무 이름의 접두어가 없음', w8.owner === '가상재무팀' && !w8.notes.includes('원문에서 작성 주체를 읽지 못했습니다') && w8.nodes.includes('법인세 중간예납 준비') && !/(^|\s)업무정의서: 법인세 중간예납 준비 원문 §2/.test(w8.nodes), JSON.stringify([w8.owner, w8.nodes.slice(0, 160)]));
     check('CR-17 J 표준 양식 줄이 「업무 1개 중 1개에 권장 항목이 비어 있음」(설명·주기·마감은 문장에서 고르지 않아 비어 있음, 담당·관련 문서는 채워짐) · 담당(수행) 추정 알림에 「주 담당·담당·정」 1건', w8.form.includes('업무 1개 중 1개에 권장 항목이 비어 있음') && w8.notes.includes('담당(수행) 연결 1건') && w8.notes.includes('담당 절에 「주 담당·담당·정」으로 적힌 사람'), w8.form + ' / ' + w8.notes.slice(0, 300));
     check('W8 노드 수 알림이 실패처럼 읽히지 않음(「10개 이상 목표」 없음, 「업무 하나짜리 문서라면 정상」 있음)', !w8.notes.includes('이상 목표') && w8.notes.includes('업무 하나짜리 문서라면 정상') && w8.summary.length > 0, w8.notes.slice(0, 200));
     await evaluate(s.cdp, "(() => { const e = document.getElementById('import-name'); e.value = '법인세 중간예납 신고 준비'; e.dispatchEvent(new Event('input', { bubbles: true })); })()");
@@ -3525,19 +3537,19 @@ async function checkBrowser(browser, port) {
       await evaluate(s.cdp, "(() => { const g = (id) => document.querySelector('[data-testid=' + id + ']'); g('draft-target').value = 'U-A1/N-000'; g('draft-target').dispatchEvent(new Event('change')); g('draft-from').value = 'U-A1/N-011'; g('draft-to').value = 'U-A1/N-012'; g('draft-form').querySelector('button[type=submit]').click(); })()");
       await sleep(600);
       const w10Made = await evaluate(s.cdp, "(() => { const item = document.querySelector('[data-testid=draft-item-산출물_문서]'); const chips = item ? [...item.querySelectorAll('.evidence')] : []; return { items: document.querySelectorAll('[data-testid^=draft-item-]').length, chips: chips.length, target: chips.some((c) => c.textContent.includes('점검표 양식')), note: document.querySelector('[data-testid=draft-rerun-note]').hidden }; })()");
-      check('W10 R11-5 준비: 대상 지도 전체·윤바다→서하늘 초안이 만들어졌고(10개 항목), 산출물·문서 항목에 「점검표 양식」 근거 칩이 있음', w10Made.items === 10 && w10Made.target && w10Made.note, JSON.stringify(w10Made));
+      check('W10 R11-5 준비: 대상 지도 전체·윤바다→서하늘 초안이 만들어졌고(11개 항목), 산출물·문서 항목에 「점검표 양식」 근거 칩이 있음', w10Made.items === 11 && w10Made.target && w10Made.note, JSON.stringify(w10Made));
       await evaluate(s.cdp, "(() => { document.querySelector('[data-testid=draft-result]').__w10 = 'same'; const sc = document.getElementById('detail').parentElement; sc.scrollTop = 200; window.__w10Scroll = sc.scrollTop; })()");
       await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=draft-item-산출물_문서] .evidence')].find((c) => c.textContent.includes('점검표 양식')).click()");
       await sleep(700);
       const w10Same = await evaluate(s.cdp, "(() => { const sc = document.getElementById('detail').parentElement; const res = document.querySelector('[data-testid=draft-result]'); const note = document.querySelector('[data-testid=draft-rerun-note]'); return { nbhd: !!window.__wu.nbhd, kept: !!res && res.__w10 === 'same', noteHidden: !note || note.hidden, ev: document.querySelectorAll('[data-testid=evidence-text]').length, scroll: sc.scrollTop, before: window.__w10Scroll, items: document.querySelectorAll('[data-testid^=draft-item-]').length, cyHas: !window.__wu.cy.getElementById('U-A1/N-021').empty() }; })()");
       check('W10 R11-5 주변만 보기 밖 노드의 근거 칩 → 전체 보기로 돌아와도 기록이 그대로면 「기록이 바뀌어…」 안내 없음, 초안 결과(같은 DOM)·근거 글 한 줄·패널 스크롤이 그대로',
-        !w10Same.nbhd && w10Same.cyHas && w10Same.kept && w10Same.noteHidden && w10Same.ev === 1 && w10Same.scroll === w10Same.before && w10Same.items === 10, JSON.stringify(w10Same));
+        !w10Same.nbhd && w10Same.cyHas && w10Same.kept && w10Same.noteHidden && w10Same.ev === 1 && w10Same.scroll === w10Same.before && w10Same.items === 11, JSON.stringify(w10Same));
       await shot(s.cdp, `${browser.name}-w10-draft-kept`);
       // 기록이 실제로 바뀌면(사람 추가) 같은 선택으로 다시 만들고 안내가 보인다
       await addViaForm('person', 'W10 시험 사람');
       await sleep(700);
       const w10Changed = await evaluate(s.cdp, "(() => { const res = document.querySelector('[data-testid=draft-result]'); const note = document.querySelector('[data-testid=draft-rerun-note]'); return { replaced: !res || res.__w10 !== 'same', noteShown: !!note && !note.hidden, items: document.querySelectorAll('[data-testid^=draft-item-]').length, to: document.querySelector('[data-testid=draft-to]').value }; })()");
-      check('W10 R11-5 기록이 실제로 바뀌면(사람 추가) 초안을 같은 선택으로 다시 만들고 「기록이 바뀌어 초안을 다시 만들었습니다」가 보임', w10Changed.replaced && w10Changed.noteShown && w10Changed.items === 10 && w10Changed.to === 'U-A1/N-012', JSON.stringify(w10Changed));
+      check('W10 R11-5 기록이 실제로 바뀌면(사람 추가) 초안을 같은 선택으로 다시 만들고 「기록이 바뀌어 초안을 다시 만들었습니다」가 보임', w10Changed.replaced && w10Changed.noteShown && w10Changed.items === 11 && w10Changed.to === 'U-A1/N-012', JSON.stringify(w10Changed));
 
       // R11-14 「관련 문서」 단추: 속성 칸이 아니라 노드 추가(유형 산출물·이 업무와 「산출」)로
       await evaluate(s.cdp, 'window.__wu.select(null)');

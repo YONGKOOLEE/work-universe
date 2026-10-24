@@ -1,5 +1,5 @@
 // 인수인계 초안 화면(R-03·R-04, T-07). 입력: 대상(유니버스 꼭지 또는 업무), 보내는 사람, 받는 사람.
-// 결과: 10개 항목(CR-6), 항목별 근거 링크, 생성 방식 표시, "초안" 상태. 확정은 사람이 한다.
+// 결과: 11개 항목(CR-6, CR-17 E), 항목별 근거 링크, 생성 방식 표시, "초안" 상태. 확정은 사람이 한다.
 
 import { buildHandoverDraft, scopeWorks } from '../rules/handover.js';
 import { similarExperts, similarSentences, workLoad } from '../rules/insight.js';

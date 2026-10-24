@@ -6,7 +6,7 @@ import { ANSWERS_V1 } from '../app/data/answers-v1.js';
 import { validateDocument } from '../app/src/model/validate.js';
 import { buildView, parseGid } from '../app/src/view/view.js';
 import { scanVirtualData } from '../tools/virtual-data-check.mjs';
-import { clone } from './helpers.js';
+import { clone, viewOf } from './helpers.js';
 
 const view = buildView(SAMPLE_A1);
 
@@ -75,8 +75,9 @@ test('정답 표의 근거 ID는 모두 데이터에 있다(근거 ID 유효율 
     for (const item of Object.values(d.items)) ids.push(...item.evidence);
   }
   for (const r of ANSWERS_V1.repeat_inefficiency) ids.push(r.work, ...r.evidence);
-  for (const s of ANSWERS_V1.similar_experts) ids.push(s.work);
   assert.ok(ids.length > 10);
+  // 유사 경험자 정답은 자기 화면(view)의 데이터에서 찾는다(CR-17 B: SE-3의 업무는 행사팀 소속이라 월말 정산 단독 화면에 없다)
+  for (const s of ANSWERS_V1.similar_experts) assert.ok(viewOf(s.view).lookup(s.work).found, `근거 ID가 데이터에 없음: ${s.work}`);
 
   const eventGids = new Set(view.events.map((e) => e.gid));
   for (const gid of ids) {
@@ -86,9 +87,9 @@ test('정답 표의 근거 ID는 모두 데이터에 있다(근거 ID 유효율 
   }
 });
 
-test('정답 표: 초안 10개 항목(CR-6)이 모두 있고, 확정 대기 항목에는 결정 작업이 적혀 있다', () => {
+test('정답 표: 초안 11개 항목(CR-6, CR-17 E)이 모두 있고, 확정 대기 항목에는 결정 작업이 적혀 있다', () => {
   const items = ANSWERS_V1.handover_drafts[0].items;
-  assert.deepEqual(Object.keys(items), ['업무_개요', '세부_업무_절차', '일정_마감', '주의사항', '진행_중', '산출물_문서', '관계자_연락처', '최근_이슈', '이전_인수인계', '유사_경험자']);
+  assert.deepEqual(Object.keys(items), ['업무_개요', '받는_범위', '세부_업무_절차', '일정_마감', '주의사항', '진행_중', '산출물_문서', '관계자_연락처', '최근_이슈', '이전_인수인계', '유사_경험자']);
   for (const item of Object.values(items)) if (item.status === 'pending') assert.ok(item.decide_in);
 });
 

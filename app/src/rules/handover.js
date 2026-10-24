@@ -1,5 +1,5 @@
 // 규칙 기반 인수인계 초안(D-09, R-03·R-04). 순수 함수이며 view(합성 뷰)만 입력으로 받는다(12.7 rules).
-// 10개 항목은 고정이고(CR-6) 항목마다 근거를 찾는 규칙이 있다. 근거가 없으면 "이력 부족"으로 두고 내용을 만들지 않는다.
+// 11개 항목은 고정이고(CR-6, CR-17 E로 「받는 범위와 담당 공백」 추가) 항목마다 근거를 찾는 규칙이 있다. 근거가 없으면 "이력 부족"으로 두고 내용을 만들지 않는다.
 // 모든 문장에 근거 ID(전역 참조)를 붙인다. LLM은 이 근거로 문장만 다듬는다(llm/connector.js).
 //
 // 업무 고유 정보는 데이터 틀을 바꾸지 않고 노드의 자유 속성(attrs)과 메모로 담는다(R-07). 속성 이름은 약속이다(02-design 5.6):
@@ -8,10 +8,13 @@
 import { displayName, periodText } from '../view/describe.js';
 import { parseGid, refGid } from '../view/view.js';
 import { CODES, DRAFT_TARGET_TYPES, memoCategoryOf } from '../model/schema.js';
+import { josa } from '../model/josa.js';
 import { memoTarget, openMemos } from './issues.js';
+import { densityGaps, personLoad } from './insight.js';
 
 export const HANDOVER_ITEMS = [
   { key: '업무_개요', title: '업무 개요' },
+  { key: '받는_범위', title: '받는 범위와 담당 공백' }, // CR-17 E
   { key: '세부_업무_절차', title: '세부 업무·절차' },
   { key: '일정_마감', title: '일정·마감' },
   { key: '주의사항', title: '주의사항·노하우' },
@@ -138,12 +141,51 @@ function flowOrder(view, works, workIds) {
   return { ordered: order.map((g) => byGid.get(g)), chains: [...groups.values()] };
 }
 
+/** 받는 범위 항목이 비었을 때(판정은 했는데 해당 업무·공백이 없음) 보이는 이유 */
+export const RANGE_NONE_REASON = '받는 사람이 맡을 업무와 담당 공백이 없습니다';
+
 const sentence = (text, evidence) => ({ text, evidence_ids: [...new Set(evidence)] });
 const name = (view, gid) => {
   const n = view.getNode(gid);
   if (!n) return '(찾을 수 없는 노드)';
   return displayName(n);
 };
+
+/**
+ * 받는 범위와 담당 공백 문장(CR-17 E).
+ * ① 받는 사람이 범위 업무 중 지금 수행 중인 업무 ② 범위 업무 중 지금 담당이 없는 업무(densityGaps의 공백). 같은 상태·같은 사람이면 한 문장으로 묶는다.
+ * noGap: 둘 다 없고 공백 판정도 할 수 있었다(담당 연결이 아예 없어 판정하지 못한 경우는 false → 「이력 부족」)
+ */
+function receivingRange(view, { to, works, workIds, asOf }) {
+  const sentences = [];
+  const nameOf = (gid) => name(view, gid);
+  const mineSet = new Set(((personLoad(view, to, { asOf }) || {}).works || []).map((w) => w.gid));
+  const mine = works.filter((w) => mineSet.has(w.gid));
+  if (mine.length) {
+    sentences.push(sentence(`${nameOf(to)}${josa(nameOf(to), '이/가')} 지금 맡은 일: ${mine.map((w) => w.label).join(', ')}.`, [to, ...mine.map((w) => w.gid)]));
+  }
+  const dg = densityGaps(view, { asOf });
+  const order = new Map(works.map((w, i) => [w.gid, i]));
+  const gaps = dg.gaps.filter((g) => workIds.has(g.gid)).sort((a, b) => order.get(a.gid) - order.get(b.gid));
+  const groups = new Map();
+  for (const g of gaps) {
+    const key = [g.kind, g.last_end, g.last_person && g.last_person.gid, g.next_start, g.next_person && g.next_person.gid].join('|');
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(g);
+  }
+  for (const list of groups.values()) {
+    const g = list[0];
+    const labels = list.map((x) => x.label).join('·');
+    const topic = `${labels}${josa(labels, '은/는')}`;
+    const text = g.kind === 'ended'
+      ? `${topic} ${g.last_end} 이후 지금 담당이 없습니다${g.last_person ? `(마지막 담당 ${g.last_person.label})` : ''} — 누가 맡을지 확인하세요.`
+      : g.kind === 'scheduled'
+        ? `${topic} 지금 담당이 없고 ${g.next_start}부터 ${g.next_person.label}${josa(g.next_person.label, '이/가')} 맡을 예정입니다 — 시작 전까지는 공백입니다.`
+        : `${topic} 담당 기록이 없습니다 — 누가 맡을지 확인하세요.`;
+    sentences.push(sentence(text, list.flatMap((x) => x.evidence_ids)));
+  }
+  return { sentences, noGap: sentences.length === 0 && dg.status !== 'insufficient' };
+}
 
 /**
  * @param {object} view buildView 결과
@@ -175,6 +217,11 @@ export function buildHandoverDraft(view, input) {
 
   // 1) 업무 개요: 꼭지 또는 대상 업무의 설명
   items.업무_개요 = start.description ? [sentence(`${start.label}: ${start.description}`, [start.gid])] : [];
+
+  // 1-2) 받는 범위와 담당 공백(CR-17 E): 받는 사람이 대상 범위 업무 중 지금 수행 중인 업무 + 범위 안에서 지금 담당이 없는 업무.
+  //    공백 판정은 인사이트 「밀집·공백」 탭과 같은 함수(densityGaps)를 쓴다(새 규칙을 만들지 않는다). 「지금」을 정할 기준일이 없으면 판정하지 않는다
+  const range = asOf ? receivingRange(view, { to, works, workIds, asOf }) : { sentences: [], noGap: false };
+  items.받는_범위 = range.sentences;
 
   // 2) 세부 업무·절차: 진행 순서로 나열. 업무별 설명·절차·사용 시스템. 선후행이 있으면 "진행 순서" 문장을 맨 앞에.
   //    이어진 묶음이 둘 이상이면 묶음마다 "진행 순서 ①: …" "진행 순서 ②: …"로 따로 쓴다(서로 무관한 사슬을 한 줄로 이으면 없는 순서를 말하게 된다, 검토9 R-1)
@@ -306,6 +353,8 @@ export function buildHandoverDraft(view, input) {
         insufficient: items[key].length === 0, // R-03 ② 근거가 없으면 이력 부족
         // 비교는 했지만 해당자가 없음(기록이 모자란 것과 다름, N-5). 문장이 없는 것은 같아 insufficient는 그대로 둔다
         ...(key === '유사_경험자' && items[key].length === 0 && input.similarNone ? { empty_reason: input.similarNone } : {}),
+        // 판정은 했지만 받는 사람이 맡을 업무도 담당 공백도 없음(기록이 모자란 것과 다름)
+        ...(key === '받는_범위' && items[key].length === 0 && range.noGap ? { empty_reason: RANGE_NONE_REASON } : {}),
       })),
     },
   };

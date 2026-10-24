@@ -1,5 +1,5 @@
 import { test } from 'node:test';
-import { allSamples, viewOf } from './helpers.js';
+import { allSamples, mkDoc, mkEdge, mkNode, viewOf } from './helpers.js';
 import assert from 'node:assert/strict';
 import { SAMPLE_A1 } from '../app/data/sample-a1.js';
 import { SAMPLE_CARD } from '../app/data/sample-card.js';
@@ -10,7 +10,7 @@ import { ANSWERS_V1 } from '../app/data/answers-v1.js';
 import { addEdge, addEvent, addNode, createUniverse, hideNode } from '../app/src/model/commands.js';
 import { validateDocument } from '../app/src/model/validate.js';
 import { buildView } from '../app/src/view/view.js';
-import { isCurrent, repeatInefficiency, similarExperts, similarSentences } from '../app/src/rules/insight.js';
+import { WEIGHTS, isCurrent, repeatInefficiency, similarExperts, similarSentences } from '../app/src/rules/insight.js';
 import { buildHandoverDraft } from '../app/src/rules/handover.js';
 
 const all = allSamples(); // T-13: 부서(U-D1)는 교육팀(U-C)까지 포함
@@ -21,10 +21,12 @@ test('사례 2와 부서 샘플은 검증을 통과한다', () => {
 });
 
 test('"대사 확인"의 유사 경험자는 윤바다이고 근거가 붙는다(정답 표 SE-1, R-05 ① ④)', () => {
+  // CR-17 B로 기대값 변경(2026-10-24): 역할 이름 노드(운영 담당·정산 담당)는 사람 목록에서 roles로 분리됐다
   const se = ANSWERS_V1.similar_experts.find((x) => x.id === 'SE-1');
   const r = similarExperts(viewOf(se.view), { works: [se.work], asOf: se.asOf });
   assert.equal(r.status, 'ok');
   assert.deepEqual(r.people.map((p) => p.gid), se.expected);
+  assert.deepEqual(r.roles.map((p) => p.gid), se.expected_roles);
   const p = r.people.find((x) => x.gid === 'U-A1/N-011');
   assert.equal(p.emp_no, 'V-1002');
   assert.equal(p.works[0].gid, 'U-B/N-101'); // 근거 업무: 2025 행사
@@ -32,7 +34,74 @@ test('"대사 확인"의 유사 경험자는 윤바다이고 근거가 붙는다
   assert.deepEqual([...p.evidence_ids].sort(), [...se.evidence['U-A1/N-011']].sort());
   // 모든 사람의 근거 ID가 실제 데이터에 있다
   const v = viewOf(se.view);
-  for (const person of r.people) for (const g of person.evidence_ids) assert.ok(v.lookup(g).found, g);
+  for (const person of [...r.direct, ...r.people, ...r.roles]) for (const g of person.evidence_ids) assert.ok(v.lookup(g).found, g);
+});
+
+// ── CR-17 B: 「직접 해 본 사람」·역할 이름 분리·이름 낱말 후보 ──
+test('B ①: 기준 업무의 이전 담당(윤바다·한가람)이 「직접 해 봄」 묶음으로 맨 위에 오고, 기간과 이유가 붙는다', () => {
+  const se = ANSWERS_V1.similar_experts.find((x) => x.id === 'SE-1');
+  const r = similarExperts(viewOf('U-D1'), { works: ['U-A1/N-001'], asOf: ASOF });
+  assert.deepEqual(r.direct.map((p) => p.gid), se.expected_direct); // 최근에 끝난 순: 윤바다(2026-09-30) → 한가람(2026-05-31)
+  const [yun, han] = r.direct;
+  assert.deepEqual(yun.direct_works.map((d) => [d.gid, d.period, d.reason]), [['U-A1/N-001', '2026-06-01 ~ 2026-09-30', '이 업무를 직접 해 봄(2026-06-01 ~ 2026-09-30)']]);
+  assert.equal(han.direct_works[0].period, '2025-03-01 ~ 2026-05-31');
+  assert.deepEqual(han.works, []); // 한가람은 다른 업무를 한 적이 없어 비슷한 일 줄이 없다
+  assert.equal(yun.works[0].gid, 'U-B/N-101'); // 윤바다는 비슷한 일(2025 행사)도 센다
+  assert.ok(yun.evidence_ids.includes('U-A1/N-001') && yun.evidence_ids.includes('U-A1/N-011'));
+  // 현재 담당자(서하늘)는 직접 해 본 사람이 아니라 제외 대상이다
+  assert.ok(![...r.direct, ...r.people, ...r.roles].some((p) => p.gid === 'U-A1/N-012'));
+  // 기준일이 윤바다 담당 중이면 그는 직접 해 본 사람이 아니라 현재 담당자다(앞의 제외 규칙 그대로)
+  const mid = similarExperts(viewOf('U-D1'), { works: ['U-A1/N-001'], asOf: '2026-07-01' });
+  assert.deepEqual(mid.direct.map((p) => p.label), ['한가람']);
+  // exclude로 뺀 사람은 직접 해 본 사람에도 나오지 않는다
+  const ex = similarExperts(viewOf('U-D1'), { works: ['U-A1/N-001'], asOf: ASOF, exclude: ['U-A1/N-011'] });
+  assert.deepEqual(ex.direct.map((p) => p.label), ['한가람']);
+});
+
+test('B ①: 같은 업무를 두 번 맡았으면 기간을 이어 보이고 한 줄이며, 아직 시작 전인 담당은 직접 해 본 것이 아니다', () => {
+  const v = buildView(mkDoc('U-B1', [mkNode('W1', 'work', '대사 확인'), mkNode('P1', 'person', '가상갑', { emp_no: 'V-9101' }), mkNode('P2', 'person', '가상을', { emp_no: 'V-9102' })],
+    [mkEdge('P1', 'W1', 'performs', { period: { start: '2025-01-01', end: '2025-06-30' } }), mkEdge('P1', 'W1', 'performs', { period: { start: '2026-01-01', end: '2026-03-31' } }),
+      mkEdge('P2', 'W1', 'performs', { period: { start: '2027-01-01' } })]));
+  const r = similarExperts(v, { works: ['U-B1/W1'], asOf: ASOF });
+  assert.equal(r.status, 'ok');
+  assert.deepEqual(r.direct.map((p) => p.label), ['가상갑']); // 가상을은 시작 예정
+  assert.equal(r.direct[0].direct_works.length, 1);
+  assert.equal(r.direct[0].direct_works[0].period, '2025-01-01 ~ 2025-06-30, 2026-01-01 ~ 2026-03-31');
+  assert.deepEqual([r.people, r.roles], [[], []]);
+});
+
+test('B ②: 역할 이름 노드(하위 유형 「역할」)는 사람 목록에서 빠지고 roles로 분리된다', () => {
+  const r = similarExperts(viewOf('U-D1'), { works: ['U-A1/N-001'], asOf: ASOF });
+  assert.deepEqual(r.roles.map((p) => p.label), ['운영 담당', '정산 담당']);
+  assert.ok(r.roles.every((p) => viewOf('U-D1').getNode(p.gid).subtype === '역할'));
+  assert.ok(!r.people.some((p) => ['운영 담당', '정산 담당'].includes(p.label)));
+  // 역할 이름만 나오는 업무도 결과 없음이 아니다(status ok, roles만)
+  const only = similarExperts(viewOf('U-D1'), { works: ['U-K1/N-101'], asOf: ASOF });
+  assert.equal(only.status, 'ok');
+  assert.deepEqual([only.direct.length, only.people.length, only.roles.length > 0], [0, 0, true]);
+});
+
+test('B ③: 주제·산출물을 공유하지 않아도 이름에 같은 낱말이 있는 업무의 담당자는 낮은 점수 후보이고 「같은 일인지 확인」 이유가 붙는다', () => {
+  // 「2026 행사」 → 「2025 행사」를 한 윤바다(현재 담당 도하람은 제외)
+  const r = similarExperts(viewOf('U-D1'), { works: ['U-B/N-102'], asOf: ASOF });
+  assert.equal(r.status, 'ok');
+  assert.deepEqual(r.people.map((p) => [p.label, p.score]), [['윤바다', WEIGHTS.token]]);
+  const w = r.people[0].works[0];
+  assert.deepEqual([w.gid, w.name_only, w.reasons], ['U-B/N-101', true, ['이름에 같은 낱말 「행사」 — 같은 일인지 확인']]);
+  assert.ok(r.excluded.some((x) => x.label === '도하람'));
+  // 주제·산출물을 공유한 후보는 name_only가 아니다
+  assert.equal(similarExperts(viewOf('U-D1'), { works: ['U-A1/N-001'], asOf: ASOF }).people[0].works[0].name_only, false);
+  // 흔한 낱말(업무·관리·처리·확인)만 같으면 후보가 아니다 — 「대사 확인」과 「출석 확인」
+  const stop = buildView(mkDoc('U-B3', [mkNode('A', 'work', '대사 확인'), mkNode('B', 'work', '출석 확인'), mkNode('P', 'person', '가상갑', { emp_no: 'V-9103' })], [mkEdge('P', 'B', 'performs')]));
+  assert.equal(similarExperts(stop, { works: ['U-B3/A'], asOf: ASOF }).status, 'insufficient');
+});
+
+test('B: 「데이터 부족」은 주제·산출물·이름 낱말·이전 담당이 모두 없을 때만이다', () => {
+  const lone = buildView(mkDoc('U-B4', [mkNode('A', 'work', '가나다'), mkNode('B', 'work', '라마바')], []));
+  assert.equal(similarExperts(lone, { works: ['U-B4/A'], asOf: ASOF }).status, 'insufficient');
+  // 주제가 있으면 비교는 했으므로 데이터 부족이 아니라 결과 없음
+  const topic = buildView(mkDoc('U-B5', [mkNode('A', 'work', '가나다'), mkNode('T', 'topic', '주제')], [mkEdge('A', 'T', 'relates_to')]));
+  assert.equal(similarExperts(topic, { works: ['U-B5/A'], asOf: ASOF }).status, 'none');
 });
 
 test('현재 담당자(서하늘)와 같은 업무만 했던 한가람은 나오지 않는다', () => {
@@ -55,7 +124,8 @@ test('이유: 이름만 같은 주제는 연결 확인 전이라고 밝히고, �
   assert.deepEqual(noLink.reasons, ['같은 주제 「대사 불일치」(이름이 같은 주제, 연결 확인 전)']);
   assert.equal(noLink.score, 3);
   // 사람이 확인해 이은 주제(정산팀의 카드승인 "대사")는 확인 전 표시가 없다
-  assert.deepEqual(people.find((p) => p.label === '운영 담당').works[0].reasons, ['같은 주제 「대사 불일치」']);
+  const roles = similarExperts(viewOf('U-D1'), { works: ['U-A1/N-001'], asOf: ASOF }).roles; // 역할 이름은 사람 목록과 분리(CR-17 B ②)
+  assert.deepEqual(roles.find((p) => p.label === '운영 담당').works[0].reasons, ['같은 주제 「대사 불일치」']);
 
   const linked = JSON.parse(JSON.stringify(SAMPLE_DEPT));
   linked.identity_links.push({ id: 'I-002', a: 'U-A1/N-030', b: 'U-B/N-302', kind: 'topic', method: 'human', status: 'confirmed', decided_by: '가상', decided_at: '2026-10-01T10:00:00+09:00' });
@@ -63,11 +133,18 @@ test('이유: 이름만 같은 주제는 연결 확인 전이라고 밝히고, �
   assert.deepEqual(r.people.find((p) => p.label === '윤바다').works[0].reasons, ['같은 주제 「대사 불일치」']);
 });
 
-test('비교할 다른 업무가 없으면 "none"(월말 정산만 열었을 때, 정답 표 SE-2)', () => {
+test('비교할 다른 업무가 없으면 비슷한 일을 해 본 사람은 없다(월말 정산만 열었을 때, 정답 표 SE-2). 이전 담당은 직접 해 본 사람으로 나온다', () => {
+  // CR-17 B로 기대값 변경(2026-10-24): 예전에는 status 'none'이었다. 이제 이전 담당(한가람·윤바다)이 「직접 해 봄」으로 나온다
   const se = ANSWERS_V1.similar_experts.find((x) => x.id === 'SE-2');
   const r = similarExperts(viewOf(se.view), { works: [se.work], asOf: se.asOf });
-  assert.equal(r.status, 'none');
+  assert.equal(r.status, 'ok');
   assert.deepEqual(r.people, []);
+  assert.deepEqual(r.direct.map((p) => p.gid), se.expected_direct);
+  // 이전 담당도 없고 비슷한 일도 없으면 "none"
+  const none = buildView(mkDoc('U-B6', [mkNode('A', 'work', '가나다'), mkNode('T', 'topic', '주제'), mkNode('P', 'person', '가상갑', { emp_no: 'V-9104' })], [mkEdge('A', 'T', 'relates_to'), mkEdge('P', 'A', 'performs', { period: { start: '2026-01-01' } })]));
+  const rn = similarExperts(none, { works: ['U-B6/A'], asOf: ASOF });
+  assert.equal(rn.status, 'none');
+  assert.deepEqual([rn.direct, rn.people, rn.roles], [[], [], []]);
 });
 
 test('주제·산출물 연결이 없는 업무는 "데이터 부족"이다(정답 표 SE-3, R-05 ②)', () => {
@@ -77,6 +154,11 @@ test('주제·산출물 연결이 없는 업무는 "데이터 부족"이다(정�
   assert.match(r.reason, /주제나 산출물/);
   assert.deepEqual(r.people, []);
   assert.equal(similarExperts(viewOf('U-D1'), { works: ['U-A1/N-999'], asOf: ASOF }).status, 'insufficient');
+  // 「보고」(U-A1/N-003)는 이제 데이터 부족이 아니다: 이전 담당(윤바다)이 직접 해 봤고, 「교육 결과 보고」가 이름 낱말이 같다(CR-17 B)
+  const report = similarExperts(viewOf('U-D1'), { works: ['U-A1/N-003'], asOf: ASOF });
+  assert.equal(report.status, 'ok');
+  assert.deepEqual(report.direct.map((p) => p.label), ['윤바다']);
+  assert.ok(report.people.every((p) => p.works.every((w) => w.name_only)));
 });
 
 test('숨긴 업무·숨긴 사람은 후보에서 빠진다', () => {
@@ -97,7 +179,8 @@ test('숨긴 업무·숨긴 사람은 후보에서 빠진다', () => {
 test('점수: 주제 3, 산출물 유형 2, 낱말 1. 더 많이 겹치는 업무를 한 사람이 위로 온다', () => {
   // 카드승인의 "정합성 조치"와 월말 정산 "대사 확인": 둘 다 대사 주제를 다룬다. 카드승인 쪽 업무는 담당자 이름이 역할이다
   const r = similarExperts(viewOf('U-D1'), { works: ['U-A1/N-001'], asOf: ASOF });
-  assert.deepEqual(r.people.map((p) => [p.label, p.score]), [['운영 담당', 3], ['윤바다', 3], ['정산 담당', 3]]); // 점수가 같으면 이름순
+  assert.deepEqual(r.people.map((p) => [p.label, p.score]), [['윤바다', 3]]);
+  assert.deepEqual(r.roles.map((p) => [p.label, p.score]), [['운영 담당', 3], ['정산 담당', 3]]); // 역할 이름은 따로(CR-17 B ②). 점수가 같으면 이름순
   assert.deepEqual(r.people.map((p) => p.score), [...r.people.map((p) => p.score)].sort((a, b) => b - a));
   // 산출물 유형이 겹치면 점수가 오른다: 기준 업무(대사 확인)가 「정산표」 산출물을 만들고, 다른 업무도 같은 유형을 만들면 +2
   const a1 = JSON.parse(JSON.stringify(SAMPLE_A1));
@@ -109,7 +192,7 @@ test('점수: 주제 3, 산출물 유형 2, 낱말 1. 더 많이 겹치는 업�
   more.nodes.push({ id: 'N-401', core_type: 'artifact', subtype: '정산표', label: '행사 정산표', hidden: false });
   more.edges.push({ id: 'L-050', source: 'N-101', target: 'N-401', core_type: 'produces', hidden: false });
   const boosted = similarExperts(viewOf('U-D1', { 'U-A1': a1, 'U-B': more }), { works: ['U-A1/N-001'], asOf: ASOF }).people;
-  assert.deepEqual(boosted.map((p) => [p.label, p.score]), [['윤바다', 7], ['운영 담당', 3], ['정산 담당', 3]]); // 윤바다는 자료 수집(같은 산출물 유형 +2)도 맡았다(검토6 P-2)
+  assert.deepEqual(boosted.map((p) => [p.label, p.score]), [['윤바다', 7]]); // 윤바다는 자료 수집(같은 산출물 유형 +2)도 맡았다(검토6 P-2). 역할 이름 둘은 roles로 분리(CR-17 B ②)
   assert.match(boosted[0].works[0].reasons.join(' '), /같은 산출물 유형 「정산표」/);
   // T-13: 「인수인계서」는 어떤 업무든 인계 때 생기므로 같아도 점수를 주지 않는다(GENERIC_ARTIFACT_TYPES)
   const handoverOnly = JSON.parse(JSON.stringify(SAMPLE_EVENT));
@@ -135,14 +218,23 @@ test('인수인계 초안의 "유사 경험자" 항목: 근거가 있는 문장�
   const item = draft.items.find((i) => i.key === '유사_경험자');
   assert.equal(item.insufficient, false);
   const mine = item.sentences.find((s) => s.text.startsWith('윤바다'));
-  assert.match(mine.text, /^윤바다\(V-1002\) — 「2025 행사」 수행\(2025-05-01 ~ 2025-12-15\)\. 같은 주제 「대사 불일치」/);
+  // CR-17 B: 직접 해 본 사람이 먼저(이전 담당), 비슷한 일은 그 뒤에 붙는다. 한가람(이전 담당)도 나온다
+  assert.match(mine.text, /^윤바다\(V-1002\) — 「대사 확인」을 직접 해 봄\(2026-06-01 ~ 2026-09-30\)\. 비슷한 일도 해 봄: 「2025 행사」 수행\(2025-05-01 ~ 2025-12-15\)\. 같은 주제 「대사 불일치」/);
+  assert.deepEqual(item.sentences.map((s) => s.text.split(' — ')[0]), ['윤바다(V-1002)', '한가람(V-1001)', '운영 담당(V-4002)', '정산 담당(V-4004)']);
+  assert.match(item.sentences[1].text, /^한가람\(V-1001\) — 「대사 확인」을 직접 해 봄\(2025-03-01 ~ 2026-05-31\)$/);
+  assert.match(item.sentences[2].text, /^운영 담당\(V-4002\) — 역할 이름\(사람 미확인\) — 「장애 시 재처리」 수행/);
   for (const s of item.sentences) {
     assert.ok(s.evidence_ids.length > 0);
     for (const g of s.evidence_ids) assert.ok(v.lookup(g).found, g);
   }
-  // 월말 정산만 열면 이력 부족(T-07 정답 표와 같음)
+  // 월말 정산만 열면 비슷한 일은 없다. 보내는·받는 사람을 뺀 이전 담당(한가람)만 「직접 해 봄」으로 나온다
+  // CR-17 B로 기대값 변경(2026-10-24): 예전에는 이력 부족이었다(이전 담당은 세지 않았음)
   const solo = viewOf('U-A1');
-  const none = buildHandoverDraft(solo, { target: 'U-A1/N-000', from: 'U-A1/N-011', to: 'U-A1/N-012', similar: similarSentences(similarExperts(solo, { works: ['U-A1/N-001'], asOf: ASOF })) }).draft;
+  const only = buildHandoverDraft(solo, { target: 'U-A1/N-000', from: 'U-A1/N-011', to: 'U-A1/N-012', similar: similarSentences(similarExperts(solo, { works: ['U-A1/N-001'], asOf: ASOF, exclude: ['U-A1/N-012', 'U-A1/N-011'] })) }).draft;
+  assert.deepEqual(only.items.find((i) => i.key === '유사_경험자').sentences.map((s) => s.text), ['한가람(V-1001) — 「대사 확인」을 직접 해 봄(2025-03-01 ~ 2026-05-31)']);
+  // 이전 담당도 비교할 연결도 없으면 이력 부족
+  const lone = buildView(mkDoc('U-B7', [mkNode('A', 'work', '가나다'), mkNode('P', 'person', '가상갑', { emp_no: 'V-9105' }), mkNode('Q', 'person', '가상을', { emp_no: 'V-9106' })], []));
+  const none = buildHandoverDraft(lone, { target: 'U-B7/A', from: 'U-B7/P', to: 'U-B7/Q', similar: similarSentences(similarExperts(lone, { works: ['U-B7/A'], asOf: ASOF })) }).draft;
   assert.equal(none.items.find((i) => i.key === '유사_경험자').insufficient, true);
 });
 

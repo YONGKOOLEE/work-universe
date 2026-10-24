@@ -49,7 +49,7 @@ const withDom = (fn) => async () => {
 };
 
 // ── FU-8: 「채우려면」 ──
-test('FU-8: 「채우려면」 표는 초안 10개 항목의 key를 빠짐없이, 군더더기 없이 덮는다', () => {
+test('FU-8: 「채우려면」 표는 초안 11개 항목의 key를 빠짐없이, 군더더기 없이 덮는다', () => {
   assert.deepEqual(Object.keys(FILL_HINTS).sort(), HANDOVER_ITEMS.map((i) => i.key).sort());
   for (const { key } of HANDOVER_ITEMS) {
     assert.match(fillHintOf(key), /^채우려면: .+/);

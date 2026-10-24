@@ -126,7 +126,7 @@ function similarView(o, view) {
   pick.addEventListener('change', () => { if (o.onWork) o.onWork(pick.value); run(); });
   run();
   return el('div', {},
-    el('p', { class: 'muted small' }, '고른 업무와 같은 주제·산출물 유형·낱말을 가진 다른 업무를 수행한 사람입니다. 현재 담당자는 뺍니다. 주제나 산출물 유형이 하나는 겹쳐야 후보가 됩니다. 점수는 겹친 수(주제 3, 산출물 유형 2, 이름 낱말 1)를 더한 것으로, 높을수록 비슷합니다.'),
+    el('p', { class: 'muted small' }, '먼저 고른 업무를 예전에 직접 한 사람(이전 담당)을 보여 주고, 그다음 같은 주제·산출물 유형·이름 낱말을 가진 다른 업무를 수행한 사람을 보여 줍니다. 현재 담당자는 뺍니다. 이름 낱말만 같은 업무는 같은 일이 아닐 수 있어 낮은 점수로 두고 확인을 권합니다. 점수는 겹친 수(주제 3, 산출물 유형 2, 이름 낱말 1)를 더한 것으로, 높을수록 비슷합니다. 사람 이름 없이 역할 이름만 있는 노드는 따로 묶습니다.'),
     el('label', { class: 'field' }, el('span', {}, '업무'), pick),
     out);
 }
@@ -139,27 +139,44 @@ function renderSimilar(box, view, r, onFocus) {
   } else if (r.status === 'none') {
     parts.push(el('p', { class: 'muted', 'data-testid': 'insight-none' }, `${r.reason}. 같은 주제를 가진 다른 업무가 아직 없습니다.`));
   } else {
+    // 순서(CR-17 B): 직접 해 본 사람 → 비슷한 일을 해 본 사람 → 사람 미확인(역할 이름)
+    const directIds = new Set(r.direct.map((p) => p.gid));
+    const rest = r.people.filter((p) => !directIds.has(p.gid)); // 직접 해 본 사람은 위 묶음 카드에 비슷한 일도 함께 보인다
+    const group = (testid, title, hint, list) => (list.length
+      ? el('section', { class: 'expert-group', 'data-testid': `${testid}-group` }, el('h3', {}, title), hint ? el('p', { class: 'muted small' }, hint) : null,
+        el('ol', { class: 'experts', 'data-testid': testid }, ...list.map((p) => expertCard(view, p, onFocus))))
+      : null);
     parts.push(
-      el('ol', { class: 'experts', 'data-testid': 'insight-people' },
-        ...r.people.map((p) =>
-          el('li', {},
-            el('div', { class: 'who' }, el('strong', {}, p.label), p.emp_no ? el('span', { class: 'muted small' }, ` ${p.emp_no}`) : null,
-              // 원문에 사람 이름이 없어 역할 이름으로 만든 노드는 실제 사람이 아님을 밝힌다(여섯 번째 검토 U-18)
-              (view.getNode(p.gid) || {}).subtype === SUBTYPE_ROLE ? el('span', { class: 'chip', 'data-testid': 'role-chip', title: '원문에 사람 이름이 없어 역할 이름으로 만든 노드입니다. 실제 담당자는 연결되어 있지 않습니다.' }, '역할 · 담당자 미연결') : null,
-              el('span', { class: 'chip' }, `${p.score}점`)),
-            ...p.works.map((w) =>
-              el('div', { class: 'why' },
-                el('div', {}, `「${w.label}」`, el('span', { class: 'muted small' }, ` ${w.universe_name}${w.period ? ` · ${w.period}` : ''}${w.current ? ' · 현재도 담당' : ''}`)),
-                el('div', { class: 'muted small' }, w.reasons.join(' · ')),
-              ),
-            ),
-            chips(view, p.evidence_ids, onFocus),
-          ),
-        ),
-      ),
+      group('insight-direct', `직접 해 본 사람 ${r.direct.length}명`, '고른 업무를 예전에 맡았다가 지금은 맡지 않는 사람입니다. 가장 최근에 끝난 순서입니다.', r.direct),
+      group('insight-people', `비슷한 일을 해 본 사람 ${rest.length}명`, null, rest),
+      group('insight-roles', `사람 미확인(역할 이름) ${r.roles.length}개`, '원문에 사람 이름이 없어 역할 이름으로 만든 노드입니다. 실제 담당자는 확인이 필요합니다.', r.roles),
     );
   }
   box.replaceChildren(...parts.filter(Boolean));
+}
+
+// 사람(또는 역할 이름) 카드 하나. 직접 해 본 기간 줄(있으면)이 먼저, 비슷한 일 줄이 뒤에 온다
+function expertCard(view, p, onFocus) {
+  const isRole = (view.getNode(p.gid) || {}).subtype === SUBTYPE_ROLE;
+  return el('li', {},
+    el('div', { class: 'who' }, el('strong', {}, p.label), p.emp_no ? el('span', { class: 'muted small' }, ` ${p.emp_no}`) : null,
+      // 원문에 사람 이름이 없어 역할 이름으로 만든 노드는 실제 사람이 아님을 밝힌다(여섯 번째 검토 U-18)
+      isRole ? el('span', { class: 'chip', 'data-testid': 'role-chip', title: '원문에 사람 이름이 없어 역할 이름으로 만든 노드입니다. 실제 담당자는 연결되어 있지 않습니다.' }, '역할 · 담당자 미연결') : null,
+      p.direct_works.length ? el('span', { class: 'chip', 'data-testid': 'direct-chip' }, '직접 해 봄') : null,
+      p.works.length ? el('span', { class: 'chip' }, `${p.score}점`) : null),
+    ...p.direct_works.map((d) =>
+      el('div', { class: 'why', 'data-testid': 'direct-why' }, el('div', {}, `「${d.label}」`), el('div', { class: 'muted small' }, d.reason))),
+    p.direct_works.length && p.works.length ? el('div', { class: 'muted small' }, '그 밖에 비슷한 일도 해 봄') : null,
+    ...p.works.map((w) =>
+      el('div', { class: 'why' },
+        el('div', {}, `「${w.label}」`, el('span', { class: 'muted small' }, ` ${w.universe_name}${w.period ? ` · ${w.period}` : ''}${w.current ? ' · 현재도 담당' : ''}`),
+          // 주제·산출물 유형은 겹치지 않고 이름 낱말만 같은 업무 — 오탐일 수 있다(CR-17 B ③)
+          w.name_only ? el('span', { class: 'chip', 'data-testid': 'name-only-chip', title: '주제·산출물 유형은 겹치지 않고 이름의 낱말만 같습니다. 같은 일인지 확인하세요.' }, '이름만 같음') : null),
+        el('div', { class: 'muted small' }, w.reasons.join(' · ')),
+      ),
+    ),
+    chips(view, p.evidence_ids, onFocus),
+  );
 }
 
 // ── 반복 비효율 ──

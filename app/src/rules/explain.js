@@ -7,12 +7,32 @@ const uniq = (ids) => [...new Set(ids)].sort();
 /** 유사 경험자 결과(similarExperts) */
 export function similarExplain(result, workGid) {
   if (!result || result.status !== 'ok') return null;
-  const top = result.people.slice(0, 3);
-  const rule = [{
-    text: `비슷한 업무를 해 본 사람은 ${result.people.length}명입니다. 점수가 높은 순서로 ${top.map((p) => `${p.label}(${p.score}점)`).join(', ')}입니다.`,
-    evidence_ids: uniq(top.flatMap((p) => p.evidence_ids)),
-  }];
-  return { target: `similar|${workGid}`, evidence_ids: uniq(result.people.flatMap((p) => p.evidence_ids)), rule };
+  const direct = result.direct || [];
+  const roles = result.roles || [];
+  const people = result.people; // 직접 해 본 사람도 비슷한 일을 했으면 여기에 센다(점수가 있다)
+  const top = people.slice(0, 3);
+  const rule = [];
+  // CR-17 B: 직접 해 본 사람 → 비슷한 일을 해 본 사람 → 역할 이름(사람 미확인) 순서
+  if (direct.length) {
+    rule.push({
+      text: `이 업무를 직접 해 본 사람은 ${direct.length}명입니다: ${direct.map((p) => `${p.label}(${p.direct_works[0].period})`).join(', ')}.`,
+      evidence_ids: uniq(direct.flatMap((p) => p.direct_works.flatMap((d) => d.evidence_ids))),
+    });
+  }
+  if (people.length) {
+    rule.push({
+      text: `비슷한 업무를 해 본 사람은 ${people.length}명입니다. 점수가 높은 순서로 ${top.map((p) => `${p.label}(${p.score}점)`).join(', ')}입니다.`,
+      evidence_ids: uniq(top.flatMap((p) => p.evidence_ids)),
+    });
+  }
+  if (roles.length) {
+    rule.push({
+      text: `사람 이름이 아니라 역할 이름만 있는 노드가 ${roles.length}개 있습니다: ${roles.map((p) => p.label).join(', ')}. 실제 담당자는 확인이 필요합니다.`,
+      // 역할 노드와 그가 맡은 업무만 근거로 든다(공유 주제 노드는 글이 짧아 원문 인용 검증에 쓰기 어렵고, 이 문장은 주제가 아니라 역할 이름을 말한다)
+      evidence_ids: uniq(roles.flatMap((p) => [p.gid, ...p.works.map((w) => w.gid)])),
+    });
+  }
+  return { target: `similar|${workGid}`, evidence_ids: uniq([...direct, ...people, ...roles].flatMap((p) => p.evidence_ids)), rule };
 }
 
 /** 반복 비효율 결과(repeatInefficiency) */

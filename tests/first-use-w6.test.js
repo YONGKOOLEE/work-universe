@@ -126,7 +126,7 @@ test('rerun: 같은 지도에서 이미 만든 선택으로 초안을 자동으�
   assert.equal(first.q('draft-rerun-note').hidden, true, '직접 만들었을 때는 한 줄이 없다');
   uninstallDom();
   const again = openDraft(pregen, { rerun: true });
-  assert.equal(again.qa('[data-testid^=draft-item-]').length, 10, '누르지 않아도 10개 항목이 그려진다');
+  assert.equal(again.qa('[data-testid^=draft-item-]').length, 11, '누르지 않아도 11개 항목이 그려진다');
   assert.equal(again.q('draft-rerun-note').hidden, false);
   assert.equal(again.q('draft-rerun-note').textContent, RERUN_NOTE);
   assert.equal(RERUN_NOTE, '기록이 바뀌어 초안을 다시 만들었습니다');
