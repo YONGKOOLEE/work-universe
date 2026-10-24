@@ -299,11 +299,12 @@ export function transferListText(plan, names, where) {
   return parts.join(' · ');
 }
 
-function confirmError(err) {
+function confirmError(err, transfer = false) {
   if (err.reason === 'transfer_scope') return '담당을 넘기려면 보내는 사람과 받는 사람이 이 화면의 업무 지도 안에 있어야 합니다. 아무것도 저장하지 않았습니다.';
   if (err.reason === 'no_work') return '보내는 사람이 맡았던(수행 연결) 업무가 이 범위에 없어 인수인계 이력을 남길 수 없습니다. 업무 하나를 대상으로 초안을 만들어 확정하세요.';
   if (err.reason === 'duplicate') return '같은 날 같은 사람 사이의 인수인계를 이미 확정했습니다. 다시 확정하지 않았습니다.';
-  return messageFor(err);
+  // 담당 넘기기를 켠 확정은 인수인계서·이력·담당 변경을 한 번에 저장한다: 어느 단계가 실패해도 아무것도 남지 않았음을 알린다(R15-16)
+  return transfer ? `${messageFor(err)} 아무것도 저장하지 않았습니다(인수인계서·담당 변경 모두).` : messageFor(err);
 }
 
 // 확정 영역: 사람이 내용을 확인한 뒤 누른다. 확정하면 인수인계서와 인수인계 이력이 저장된다(R-03 ③, CR-8)
@@ -336,7 +337,7 @@ function confirmBox(d, view, o) {
     if (r && !r.ok) {
       msg.className = 'form-message error';
       msg.dataset.code = r.error.code;
-      msg.textContent = confirmError(r.error);
+      msg.textContent = confirmError(r.error, moving);
     }
   });
   return el('div', { class: 'confirm-box', 'data-testid': 'confirm-box' },

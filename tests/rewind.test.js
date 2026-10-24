@@ -257,7 +257,7 @@ test('rewindOps 적용 뒤: 보이는 부분이 그 시점과 같고, 다시 되
   assert.equal(failed, 0);
 });
 
-test('되돌리기: 사용자 이력(메모)은 지우지 않는다, 뒤에 생긴 노드는 숨김(지우지 않음), 완전히 삭제한 항목는 되살리지 않는다', () => { // CR-18-2
+test('되돌리기: 사용자 이력(메모)은 지우지 않는다, 뒤에 생긴 노드는 숨김(지우지 않음), 완전히 삭제한 항목은 되살리지 않는다', () => { // CR-18-2
   const t = (n) => ({ now: `2026-10-02T00:0${n}:00Z`, random: rng(n + 40) });
   let d = emptyDoc();
   const a = addNode(d, { core_type: 'work', label: '옛 이름' }, t(1)); d = a.doc;
@@ -278,7 +278,7 @@ test('되돌리기: 사용자 이력(메모)은 지우지 않는다, 뒤에 생�
   assert.ok(r2.limits.some((l) => l.code === 'purged' && l.id === a.node.id));
   const plan2 = rewindOps(d, '2026-10-02T00:02:00Z');
   assert.ok(!plan2.ops.some((o) => o.op === 'restoreNode' && o.id === a.node.id));
-  // 재검증 결함 2(2026-10-23): 완전히 삭제한 항목는 숨기기 전 시점에서도 숨긴 채(보이는 자리표시는 검증 규칙 deleted ⇒ hidden 위반) // CR-18-2
+  // 재검증 결함 2(2026-10-23): 완전히 삭제한 항목은 숨기기 전 시점에서도 숨긴 채(보이는 자리표시는 검증 규칙 deleted ⇒ hidden 위반) // CR-18-2
   const pastA = r2.doc.nodes.find((n) => n.id === a.node.id);
   assert.equal(pastA.deleted, true);
   assert.equal(pastA.hidden, true);

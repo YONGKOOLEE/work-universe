@@ -112,7 +112,7 @@ export function shouldAutoStartTour({ tourOnce = TOUR_ONCE, done = null, scenari
 const ROWS = [
   { key: 'solo', label: '혼자만 아는 일' },
   { key: 'dense', label: '일 몰린 사람' },
-  { key: 'gaps', label: '담당 공백' },
+  { key: 'gaps', label: '담당자 빈 일' }, // 위험 요약(view/risk-summary.js)과 같은 이름(R15-6)
 ];
 const MINUS = '−';
 
@@ -179,7 +179,7 @@ export function inspectionSummaryText(d, cmp) {
     ...(d.solo ? top(d.soloItems, (x) => `  - 「${x.work}」 (${x.person}${x.level === 'high' ? ', 높음' : ', 주의'})`) : []),
     countLine(d.dense, '일 몰린 사람', '명'),
     ...(d.dense ? top(d.denseItems, (x) => `  - ${x.person} (${x.count}개 담당)`) : []),
-    countLine(d.gaps, '담당 공백', '개'),
+    countLine(d.gaps, '담당자 빈 일', '개'),
     ...(d.gaps ? top(d.gapItems, (x) => `  - 「${x.work}」`) : []),
     '',
   ];

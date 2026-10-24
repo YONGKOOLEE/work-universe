@@ -9,7 +9,7 @@ import { settingsPanel } from './settings.js';
 import { mergePanel } from './merge.js';
 import { SAMPLES, SAMPLE_GUIDE } from '../../data/index.js';
 import { startScreen } from './start.js';
-import { describeNode, describeUniverse, eventText, periodStatus } from '../view/describe.js';
+import { describeNode, describeUniverse, displayName, eventText, periodStatus } from '../view/describe.js';
 import { exposureOf, projectView } from '../view/collapse.js';
 import { parseGid, toGid } from '../view/view.js';
 import { PANEL, clampPanelWidth, maxPanelWidth } from '../view/panel.js';
@@ -630,7 +630,7 @@ function start() {
     };
     noteIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
     return el('div', { class: 'weekly-quick', 'data-testid': 'weekly-quick' },
-      el('p', { class: 'small' }, el('strong', {}, '이번 주 기록'), ' ', el('span', { class: 'muted' }, '업무 이력에 오늘 날짜의 메모를 남깁니다')),
+      el('p', { class: 'small' }, el('strong', {}, '이번 주 기록'), ' ', el('span', { class: 'muted' }, '업무 이력에 오늘 날짜의 메모를 남깁니다. 「진행 중」·「이슈」 기록은 「미해결」에 잡히니, 끝나면 「해결로 표시」하세요')),
       el('div', { class: 'row' }, workSel, catSel, noteIn, el('button', { type: 'button', 'data-testid': 'weekly-add', onclick: submit }, '기록')),
       msg);
   }
@@ -1068,7 +1068,7 @@ function start() {
       panel.replaceChildren(rewindPanel({
         points: app.editPoints(), at: rw.at, diff: rwPast.diff, limits: rwPast.limits,
         isNode: (id) => nodeById.has(id),
-        labelOf: (id) => (nodeById.get(id) || nowNode(id) || { label: '' }).label,
+        labelOf: (id) => { const n = nodeById.get(id) || nowNode(id); return n ? (n.deleted ? displayName(n) : n.label) : ''; }, // 완전히 삭제된 자리표시는 화면 이름 「(삭제된 항목)」으로(R15-5)
         gidOf: (id) => toGid(currentId(), id),
         onPick: pickRewind,
         onSelect: (g) => { reveal(g); select(view.canonical(g)); },
@@ -1208,7 +1208,7 @@ function start() {
       const recordsChanged = !sameMark(draftRecords, records);
       draftRecords = records;
       draftShell = shell;
-      panel.replaceChildren(draftPanel({ view, provider, target: drafting.target, preset: drafting.preset || (tour ? tour.preset() : undefined), rerun: draftShown, rerunNote: recordsChanged, onDraft: () => { draftShown = true; tourHook(); }, asOf: todayLocal(), viewDate, readOnly: app.readOnly, onFocus: showInGraph, onClose: () => { drafting = null; renderPanel(); graph.highlight(selected); },
+      panel.replaceChildren(draftPanel({ seenStorage: storage, view, provider, target: drafting.target, preset: drafting.preset || (tour ? tour.preset() : undefined), rerun: draftShown, rerunNote: recordsChanged, onDraft: () => { draftShown = true; tourHook(); }, asOf: todayLocal(), viewDate, readOnly: app.readOnly, onFocus: showInGraph, onClose: () => { drafting = null; renderPanel(); graph.highlight(selected); },
         // 확정(R-03 ③, CR-8): 저장되면 초안 화면을 닫고 새 인수인계서를 연다
         onConfirm: (input) => {
           const r = app.confirmHandover(input);

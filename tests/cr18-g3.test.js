@@ -232,14 +232,14 @@ test('D-3 기준이 없으면 안내 한 줄만(has=false)', () => {
   assert.equal(compareRisk(NOW, undefined).has, false);
 });
 
-test('D-3 기준이 있으면 항목별 증감(혼자만 아는 일 +1, 담당 공백 −1), 같으면 「변화 없음」', () => {
+test('D-3 기준이 있으면 항목별 증감(혼자만 아는 일 +1, 담당자 빈 일 −1), 같으면 「변화 없음」', () => {
   const base = makeBaseline({ solo: 2, dense: 1, gaps: 1 }, { at: '2026-10-17T09:00:00+09:00', asOf: '2026-10-17' });
   const c = compareRisk(NOW, base);
   assert.equal(c.has, true);
   assert.equal(c.same, false);
   assert.equal(c.savedDate, '2026-10-17');
   assert.deepEqual(c.rows.map((r) => [r.key, r.delta, r.text]), [['solo', 1, '+1'], ['dense', 0, '변화 없음'], ['gaps', -1, `${MINUS}1`]]);
-  assert.equal(c.text, `지난 점검(2026-10-17) 대비: 혼자만 아는 일 +1 · 일 몰린 사람 변화 없음 · 담당 공백 ${MINUS}1`);
+  assert.equal(c.text, `지난 점검(2026-10-17) 대비: 혼자만 아는 일 +1 · 일 몰린 사람 변화 없음 · 담당자 빈 일 ${MINUS}1`);
   const same = compareRisk(NOW, makeBaseline(NOW, { at: '2026-10-17T09:00:00+09:00' }));
   assert.equal(same.same, true);
   assert.equal(same.text, '지난 점검(2026-10-17) 대비: 변화 없음');
@@ -283,10 +283,10 @@ test('D-4 점검 요약 글: 지도 이름·기준일·숫자·상위 항목·�
   const cmp = compareRisk(d, makeBaseline({ solo: 6, dense: 1, gaps: 3 }, { at: '2026-10-17T09:00:00+09:00' }));
   const t = inspectionSummaryText(d, cmp);
   assert.ok(t.startsWith('점검 요약 — 가상 팀 지도\n기준일: 2026-10-24'));
-  assert.ok(t.includes('혼자만 아는 일: 7개') && t.includes('일 몰린 사람: 1명') && t.includes('담당 공백: 2개'));
+  assert.ok(t.includes('혼자만 아는 일: 7개') && t.includes('일 몰린 사람: 1명') && t.includes('담당자 빈 일: 2개'));
   assert.ok(t.includes('「업무1」 (가상갑, 높음)') && t.includes('「업무5」') && !t.includes('「업무6」') && t.includes('외 2건'), '상위 5개만, 나머지는 건수');
   assert.ok(t.includes('가상을 (4개 담당)') && t.includes('「빈 일 하나」'));
-  assert.ok(t.includes(`지난 점검(2026-10-17) 대비: 혼자만 아는 일 +1 · 일 몰린 사람 변화 없음 · 담당 공백 ${MINUS}1`));
+  assert.ok(t.includes(`지난 점검(2026-10-17) 대비: 혼자만 아는 일 +1 · 일 몰린 사람 변화 없음 · 담당자 빈 일 ${MINUS}1`));
   assert.ok(t.includes('혼자만 아는 일: 6 → 7 (+1)'));
   assert.ok(t.endsWith(SUMMARY_FAKE_NOTE));
   assert.ok(/가상/.test(SUMMARY_FAKE_NOTE));
@@ -294,7 +294,7 @@ test('D-4 점검 요약 글: 지도 이름·기준일·숫자·상위 항목·�
 
 test('D-4 점검 요약 글: 기준이 없으면 그 사실, 못 센 숫자는 「기록이 부족해 셀 수 없음」', () => {
   const t = inspectionSummaryText({ mapName: '지도', asOf: ASOF, solo: null, dense: null, gaps: 0, soloItems: [], denseItems: [], gapItems: [] }, null);
-  assert.ok(t.includes('혼자만 아는 일: 기록이 부족해 셀 수 없음') && t.includes('일 몰린 사람: 기록이 부족해 셀 수 없음') && t.includes('담당 공백: 0개'));
+  assert.ok(t.includes('혼자만 아는 일: 기록이 부족해 셀 수 없음') && t.includes('일 몰린 사람: 기록이 부족해 셀 수 없음') && t.includes('담당자 빈 일: 0개'));
   assert.ok(t.includes('지난 점검 대비: 아직 저장한 점검 없음'));
   assert.ok(!/null|undefined|NaN/.test(t));
 });

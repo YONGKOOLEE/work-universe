@@ -4113,7 +4113,7 @@ async function checkBrowser(browser, port) {
       await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-D1' && window.__wu.cy.nodes().length > 0", 8000);
       await sleep(300);
       const c2 = await g3Q('[data-testid=team-risk-compare]');
-      check(`G3 D-3 기준과 다르면 「혼자만 아는 일 +1」·「담당 공백 ${MINUS}1」·「일 몰린 사람 변화 없음」`, !!c2 && c2.text.includes('혼자만 아는 일 +1') && c2.text.includes(`담당 공백 ${MINUS}1`) && c2.text.includes('일 몰린 사람 변화 없음'), JSON.stringify(c2));
+      check(`G3 D-3 기준과 다르면 「혼자만 아는 일 +1」·「담당자 빈 일 ${MINUS}1」·「일 몰린 사람 변화 없음」`, !!c2 && c2.text.includes('혼자만 아는 일 +1') && c2.text.includes(`담당자 빈 일 ${MINUS}1`) && c2.text.includes('일 몰린 사람 변화 없음'), JSON.stringify(c2));
       // D-4
       await clickTestId(s.cdp, 'btn-team-risk-more');
       await sleep(400);
@@ -4127,7 +4127,7 @@ async function checkBrowser(browser, port) {
       await sleep(250);
       const copied = await evaluate(s.cdp, 'window.__g3Copied || ""');
       const mapName = await evaluate(s.cdp, 'window.__wu.doc.universe.name');
-      check('G3 D-4 「복사」: 지도 이름·기준일·세 숫자·지난 점검 대비(+1)·가상 안내가 한 장 글로 복사되고 단추가 「복사했습니다」로 바뀜', copied.startsWith(`점검 요약 — ${mapName}`) && /기준일: \d{4}-\d{2}-\d{2}/.test(copied) && copied.includes('혼자만 아는 일:') && copied.includes('일 몰린 사람:') && copied.includes('담당 공백:') && copied.includes('혼자만 아는 일 +1') && copied.includes('모두 가상') && (await text(s.cdp, '[data-testid=summary-copy]')) === '복사했습니다', copied.slice(0, 200));
+      check('G3 D-4 「복사」: 지도 이름·기준일·세 숫자·지난 점검 대비(+1)·가상 안내가 한 장 글로 복사되고 단추가 「복사했습니다」로 바뀜', copied.startsWith(`점검 요약 — ${mapName}`) && /기준일: \d{4}-\d{2}-\d{2}/.test(copied) && copied.includes('혼자만 아는 일:') && copied.includes('일 몰린 사람:') && copied.includes('담당자 빈 일:') && copied.includes('혼자만 아는 일 +1') && copied.includes('모두 가상') && (await text(s.cdp, '[data-testid=summary-copy]')) === '복사했습니다', copied.slice(0, 200));
       // 클립보드가 거절되면 고른 글 상자
       await evaluate(s.cdp, "Object.defineProperty(navigator, 'clipboard', { value: { writeText: () => Promise.reject(new Error('blocked')) }, configurable: true })");
       await clickTestId(s.cdp, 'summary-copy');
