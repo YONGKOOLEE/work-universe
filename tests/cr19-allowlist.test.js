@@ -132,13 +132,17 @@ test("R18 'none' 모드 화면: intro 글이 바뀌고, 처음에는 아무것�
   const open = textAddDialog({ dialog, app, getView: () => app.view, aiReady: () => false, readAi: () => null, onSaved: () => {}, defaultCheck: 'none' });
   open();
   const q = (id) => dialog.querySelector(`[data-testid=${id}]`);
-  assert.equal(q('text-add-intro').textContent.includes('처음에는 아무것도 체크되어 있지 않습니다 — 맞는 것을 체크하거나 「지도에 있는 것만 체크」「모두 체크」'), true); // R20-8: introNone이 「지도에 있는 것만 체크」도 말한다
+  // R21-1: 단추 이름이 「지도에 있는 항목끼리 연결 체크」로 바뀌고 안내가 「지도에 이미 있는 항목은 체크하지 않아도 연결에 쓰입니다」를 더한다(처음에는 아무것도 체크되어 있지 않다는 뜻은 그대로)
+  assert.equal(q('text-add-intro').textContent.includes('처음에는 아무것도 체크되어 있지 않습니다 — 맞는 항목·연결을 체크하거나 「지도에 있는 항목끼리 연결 체크」「모두 체크」'), true);
+  assert.ok(q('text-add-intro').textContent.includes('지도에 이미 있는 항목은 체크하지 않아도 연결에 쓰입니다')); // R20-8: introNone이 단추 이름도 말한다
   q('text-add-input').value = '서하늘이 자료 수집을 맡는다. 한가람이 점검을 맡는다';
   q('text-add-read').click();
   const nodes = dialog.querySelectorAll('[data-testid^=text-add-node-check-]');
-  assert.ok(nodes.length >= 3 && nodes.every((e) => !e.checked), '처음에는 아무것도 체크하지 않는다(지도에 있는 항목도)');
+  // R21-1: 지도에 이미 있는 항목(match, hold 아님)은 체크 칸이 없다 — 새 항목 칸만 있고 모두 체크 안 됨. 저장 명령이 0이라는 점은 아래 「넣을 항목이 없습니다」와 위 defaultSelection 시험이 지킨다
+  assert.ok(nodes.length >= 1 && nodes.every((e) => !e.checked), '처음에는 아무것도 체크하지 않는다(새 항목)');
+  assert.ok(dialog.querySelectorAll('[data-testid^=text-add-node-fixed-]').length >= 1, '지도에 있는 항목은 체크 칸 대신 「—」');
   assert.ok(dialog.querySelectorAll('[data-testid^=text-add-edge-check-]').every((e) => !e.checked));
-  assert.equal(q('text-add-count').textContent, '넣을 항목 0개(새로 만듦 0, 있는 항목에 연결 0)·연결 0개');
+  assert.equal(q('text-add-count').textContent, '넣을 항목 0개(새로 만듦)·연결 0개'); // R21-1: 개수 줄 새 모양
   q('text-add-save').click();
   assert.equal(q('text-add-message').textContent, '넣을 항목이 없습니다. 항목을 체크하세요.');
   const before = app.doc.edges.length;
@@ -149,7 +153,7 @@ test("R18 'none' 모드 화면: intro 글이 바뀌고, 처음에는 아무것�
   // R20-8: 쓰지 않던 intro(기존 글)를 없애, 시험용 모드를 줘도 안내 글은 하나(introNone)다
   const open2 = textAddDialog({ dialog, app, getView: () => app.view, aiReady: () => false, readAi: () => null, onSaved: () => {}, defaultCheck: 'existing-only' });
   open2();
-  assert.ok(q('text-add-intro').textContent.includes('「지도에 있는 것만 체크」'));
+  assert.ok(q('text-add-intro').textContent.includes('「지도에 있는 항목끼리 연결 체크」')); // R21-1 단추 이름
   // 모드를 주지 않으면 기본(none)
   const open3 = textAddDialog({ dialog, app, getView: () => app.view, aiReady: () => false, readAi: () => null, onSaved: () => {} });
   open3();

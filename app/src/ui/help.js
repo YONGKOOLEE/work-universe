@@ -10,7 +10,7 @@ export const HELP_TERMS_TITLE = '용어';
 export const HELP_TERMS = [
   { term: '업무 지도', desc: '업무를 묶은 한 단위입니다.' },
   { term: '항목', desc: '그래프의 동그라미 하나입니다. 사람·업무·산출물·주제·조직이 있습니다.' },
-  { term: '지도 중심', desc: '가운데 큰 동그라미입니다. 업무 지도 전체를 뜻합니다.' },
+  { term: '지도 중심', desc: '연두색 큰 동그라미입니다. 업무 지도 전체를 뜻합니다.' },
   { term: '근거 칩', desc: '문장 밑 「근거:」 옆의 작은 단추입니다. 누르면 그래프에서 그 항목이 빛납니다.' },
 ];
 export const HELP_GEN_TITLE = '문장은 이렇게 만들어집니다';

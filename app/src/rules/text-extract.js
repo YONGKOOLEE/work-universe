@@ -149,6 +149,34 @@ export const TEXT_PATTERN_DOC = Object.freeze([
 /** 읽지 못한 문장이 있는데 읽은 연결이 있을 때의 안내(notes와 화면 맨 위) */
 export const TEXT_UNREAD_CONTEXT_NOTE = '읽지 못한 문장이 있습니다 — 앞뒤 문장이 뜻을 바꾸지 않는지 확인한 뒤 체크하세요';
 
+/**
+ * R21: 읽지 못한 문장에 붙이는 이유(쉬운 말). 키는 TEXT_GUARDS의 why·sentenceVerdict의 why·sc.veto의 why 그대로
+ */
+export const TEXT_UNREAD_WHY = Object.freeze({
+  '날짜·기간': '날짜·기간이 들어 있어 읽지 않음',
+  '나열': '나열(쉼표·그리고·와/과 등)이라 누가 무엇인지 애매해 읽지 않음',
+  '표시': '확인·취소 표시가 있어 읽지 않음',
+  '부정': '부정(않다·없다 등)이 들어 있어 읽지 않음',
+  '시제': '지난 일이거나 예정이라 읽지 않음',
+  '양태·의문': '추측·가능·의문이라 읽지 않음',
+  '의문': '의문이라 읽지 않음',
+  '시점·가정': '임시·대신·가정 같은 말이 있어 읽지 않음',
+  '전해 들음·추측': '전해 들은 말이거나 추측이라 읽지 않음',
+  '조건': '조건(~면)이 들어 있어 읽지 않음',
+  '기호': '기호만 있는 줄이라 읽지 않음',
+  '너무 긴 문장': '문장이 너무 길어 읽지 않음',
+  '물음': '물음이라 읽지 않음',
+  '머리 문장 뒤': '「Q.」 같은 머리 문장 바로 뒤라 읽지 않음',
+  '앞 내용을 뒤집는 문장': '앞 내용을 취소·정정하는 문장이라 읽지 않음',
+  '동사 꼬리': '맡는다·만든다 같은 현재형이 아니라서 읽지 않음',
+  '쓰이지 않은 낱말': '읽은 모양 밖의 말이 섞여 있어 뜻이 달라질 수 있어 읽지 않음',
+  '선후행 뒤 주어': '「끝나면」 뒤에 다른 주어가 있어 읽지 않음',
+});
+/** 이유 키가 없거나 모르는 값이면 「모양 밖」 */
+export const TEXT_UNREAD_SHAPE_WHY = '읽는 모양에 맞지 않음(아래 「규칙으로 읽는 모양」 참고)';
+export const TEXT_UNREAD_PARTIAL_WHY = '이름은 읽었지만 연결 모양을 다 읽지 못함';
+export const unreadWhyText = (why) => (why && hasKey(TEXT_UNREAD_WHY, why) ? TEXT_UNREAD_WHY[why] : TEXT_UNREAD_SHAPE_WHY);
+
 /** 묶은 지도에서 글로 추가를 쓰지 못한다는 안내(화면 단추 자리의 한 줄과 같은 뜻) */
 export const TEXT_GROUPED_NOTE = '묶은 지도에서는 글로 추가를 쓸 수 없습니다 — 팀·업무 지도를 열어 넣으세요';
 
@@ -376,6 +404,12 @@ const relName = (t) => (hasKey(EDGE_TYPES, t) ? EDGE_TYPES[t] : t);
 const euro = (w) => {
   const b = batchimOf(w[w.length - 1]);
   return b > 0 && b !== 8 ? '으로' : '로';
+};
+
+/** 「을/를」: 마지막 글자가 한글이면 받침에 맞게, 아니면 「을(를)」 (R21 화면 문구용) */
+export const eulReul = (w) => {
+  const b = batchimOf(String(w).slice(-1) || ' ');
+  return b < 0 ? '을(를)' : b > 0 ? '을' : '를';
 };
 
 /**
@@ -1068,7 +1102,7 @@ export function empNoAfterName(text, name, empNo) {
 
 // ── 글 → 제안 ───────────────────────────────────────────────────────────────
 
-const emptyProposal = (notes) => ({ method: 'rule', nodes: [], edges: [], unread: [], partial: [], notes });
+const emptyProposal = (notes) => ({ method: 'rule', nodes: [], edges: [], unread: [], unreadWhy: [], partial: [], notes });
 
 /** 상한·잘림 안내를 notes에 더한다(규칙 읽기와 AI 읽기가 같은 문구를 쓴다) */
 export function capNotes(flags, limits = TEXT_LIMITS) {
@@ -1096,6 +1130,24 @@ export const knownNames = (view) => {
 };
 
 /**
+ * R21: 모양에 맞지 않는 문장의 이유. 「X이/가 Z를 만든다」(사람 등 업무가 아닌 것이 산출물을 만듦)는 스키마상 이을 수 없으므로 쓰는 법을 알려 준다
+ * (산출은 업무 → 산출물만). 그 밖은 「모양 밖」
+ */
+function shapeWhy(T) {
+  for (let i = 1; i < T.length; i += 1) {
+    if (!TEXT_WORDS.produceVerb.test(T[i].core) || !OBJ.has(T[i - 1].josa)) continue;
+    const oe = i - 1;
+    let k = oe - 1;
+    while (k >= 0 && bare(T[k]) && !isClauseVerb(T[k]) && oe - k <= TEXT_LIMITS.nameTokens) k -= 1;
+    if (k < 0 || !SUBJ.has(T[k].josa) || oe - k > TEXT_LIMITS.nameTokens) continue;
+    const z = phraseOf(T, k + 1, oe);
+    if (!z) continue;
+    return `사람이 만든 산출물은 이을 수 없습니다 — 「업무 이름에서 ${z.label}${eulReul(z.label)} 만든다」처럼 업무를 넣어 쓰세요`;
+  }
+  return TEXT_UNREAD_SHAPE_WHY;
+}
+
+/**
  * 줄글을 읽어 항목·연결 제안을 만든다. 모양(TEXT_PATTERNS)에 안 맞거나 애매한 문장은 unread에 둔다(지어내지 않는다).
  * 이름은 읽었는데 모양을 다 읽지 못한 문장(사번만 읽은 문장, 일부 모양이 빠진 문장)도 unread에 두고 partial에 표시한다(R16-5).
  * @param {string} text 붙여 넣은 글
@@ -1120,24 +1172,27 @@ export function extractFromText(text, view = null, opt = {}) {
   const b = createBuilder(limits);
   const known = knownNames(view);
   const unread = [];
+  const unreadWhy = []; // R21: unread와 같은 순서의 이유(쉬운 말)
   const partial = [];
   let ctxVeto = false;
   let prev = null; // 바로 앞 문장이 온전히 읽혔을 때만 {works}
   for (const v of classifySentences(sentences, known, limits)) {
     const { text: s, T } = v;
-    const skip = () => { unread.push(s); prev = null; };
+    const skip = (why) => { unread.push(s); unreadWhy.push(why); prev = null; };
     if (v.ctx) ctxVeto = true;
-    if (v.skip) { skip(); continue; }
+    if (v.skip) { skip(unreadWhyText(v.why)); continue; }
     const sc = makeScope(s, T, prev, known);
     for (const p of TEXT_PATTERNS) {
       p.run(sc);
       if (sc.vetoed) break;
     }
     if (!sc.vetoed && sc.edges.length && sc.unusedWord()) sc.veto('쓰이지 않은 낱말'); // R18 허용 목록(앞·사이·뒤 어디든 남으면 문장 전체)
-    if (sc.vetoed || !sc.nodes.length) { skip(); continue; }
+    if (sc.vetoed || !sc.nodes.length) { skip(sc.vetoed ? unreadWhyText(sc.vetoed) : shapeWhy(T)); continue; }
     const real = sc.commit(b);
     if (!sc.edges.length || sc.missed) {
       unread.push(s);
+      const sw = sc.edges.length ? TEXT_UNREAD_SHAPE_WHY : shapeWhy(T); // 연결이 하나도 없으면 모양 밖의 이유(사람이 만든 산출물 등)가 있는지 본다
+      unreadWhy.push(sw === TEXT_UNREAD_SHAPE_WHY ? TEXT_UNREAD_PARTIAL_WHY : sw);
       partial.push(s);
       prev = null;
     } else prev = { works: real.works };
@@ -1147,7 +1202,7 @@ export function extractFromText(text, view = null, opt = {}) {
   // R19 ①: 읽지 못한 문장(기호뿐인 줄, 문장 수 상한으로 잘린 뒷부분 포함)이 있는 글에서는 앞뒤 문장이 읽은 문장의 뜻을 바꿀 수 있다 — 'existing-only'에서도 연결을 처음 체크하지 않는다
   const unreadContext = (unread.length > 0 || truncated) && b.edges.length > 0;
   if (unreadContext) notes.push(TEXT_UNREAD_CONTEXT_NOTE);
-  const proposal = { method: 'rule', nodes: b.nodes, edges: b.edges, unread, partial, notes, ctxVeto, unreadContext };
+  const proposal = { method: 'rule', nodes: b.nodes, edges: b.edges, unread, unreadWhy, partial, notes, ctxVeto, unreadContext };
   return finalizeProposal(proposal, view);
 }
 
@@ -1162,15 +1217,29 @@ export function defaultSelection(proposal, mode = TEXT_DEFAULT_CHECK) {
   const nodes = {};
   const edges = {};
   const matched = new Map(proposal.nodes.map((n) => [n.key, !!n.match]));
+  const quoteOf = new Map(proposal.nodes.map((n) => [n.key, n.quote]));
   const none = mode === 'none';
   const existing = mode === 'existing-only';
   const part = new Set(proposal.partial || []); // R18 C: 일부만 읽은 문장의 항목·연결은 체크하지 않는다
   // 'all'도 hold·같은 이름 둘·이미 있는 연결·일부만 읽은 문장·뒤집는 문장이 있는 글(ctxVeto)은 체크하지 않는다. 'existing-only'는 거기에 더해 지도에 있는 것만, 읽지 못한 문장이 있는 글(unreadContext)은 연결을 체크하지 않는다
   for (const n of proposal.nodes) nodes[n.key] = { include: !none && !n.ambiguous && !n.hold && !part.has(n.quote) && (!existing || !!n.match), type: n.type, label: n.label, emp_no: n.emp_no || '' };
   for (const e of proposal.edges) {
-    edges[e.key] = { include: !none && !e.exists && !e.hold && !part.has(e.quote) && !proposal.ctxVeto && (!existing || (matched.get(e.from) && matched.get(e.to) && !proposal.unreadContext)), type: e.type };
+    // R21: 지도에 있는 항목(match, hold 아님)은 resolveSelection이 늘 연결의 끝으로 쓴다. 그래도 끝 항목이 일부만 읽은 문장에서 나왔으면(예전에는 항목 체크가 풀려 연결이 막혔다) 처음 체크에서는 그대로 뺀다
+    const endsOk = !part.has(quoteOf.get(e.from)) && !part.has(quoteOf.get(e.to));
+    edges[e.key] = { include: !none && !e.exists && !e.hold && !part.has(e.quote) && !proposal.ctxVeto && endsOk && (!existing || (matched.get(e.from) && matched.get(e.to) && !proposal.unreadContext)), type: e.type };
   }
   return { nodes, edges };
+}
+
+/**
+ * R21: 「지도에 있는 항목끼리 연결 체크」('existing-only')가 맥락 안전 규칙(읽지 못한 문장·앞 내용을 뒤집는 문장)만 아니었다면 체크했을 연결의 수.
+ * 화면이 「읽지 못한 문장이 있어 연결 n개는 체크하지 않았습니다」를 보이는 데 쓴다
+ */
+export function contextHeldBack(proposal) {
+  if (!(proposal.unreadContext || proposal.ctxVeto)) return 0;
+  const free = { ...proposal, unreadContext: false, ctxVeto: false };
+  const sel = defaultSelection(free, 'existing-only');
+  return proposal.edges.filter((e) => sel.edges[e.key].include).length;
 }
 
 const NEW_TYPES = Object.keys(NODE_TYPES).filter((k) => k !== 'root');
@@ -1178,7 +1247,7 @@ export const TEXT_NODE_TYPES = Object.freeze(NEW_TYPES);
 
 /**
  * 제안 + 사용자의 선택 → 화면과 명령이 함께 쓰는 최종 값.
- *  nodes[key]: {include, type, label, emp_no, problem:''|'empty'|'too_long', match:{id,gid,label}|null, ambiguous}
+ *  nodes[key]: {include, fixed(지도에 있는 항목이라 체크 없이 연결의 끝으로 쓰임), type, label, emp_no, problem:''|'empty'|'too_long', match:{id,gid,label}|null, ambiguous}
  *  edges[key]: {include(실제로 넣을지), wanted(사용자가 체크했는지), type, source, target(방향 반영한 항목 key), reason:''|'pair'|'end_missing'|'same', exists}
  * @param {object} selection {nodes:{key:{include?,type?,label?,emp_no?}}, edges:{key:{include?,type?}}} 빠진 값은 defaultSelection
  * @param {{id:string, core_type:string, label:string, emp_no:string}[]} cands docCandidates(doc) 또는 ownCandidates(view)
@@ -1194,9 +1263,12 @@ export function resolveSelection(proposal, selection, cands, docEdges = null) {
     const emp_no = type === 'person' ? String(s.emp_no ?? '').trim() : '';
     const problem = !label ? 'empty' : label.length > LABEL_MAX ? 'too_long' : '';
     const m = problem ? {} : findMatch(cands, { type, label, emp_no });
+    // R21: 지도에 이미 있는 항목(유일하게 맞고 확인할 것이 없음)은 체크 없이 늘 연결의 끝으로 쓴다(새로 만들지 않고 그 항목에 잇는다). 확인할 것(hold)이 있으면 사람이 체크해야 쓰인다
+    const fixed = !!m.hit && !m.ambiguous && !n.hold;
     nodes[n.key] = {
       key: n.key,
-      include: s.include !== false,
+      include: fixed || s.include !== false,
+      fixed,
       type,
       label,
       emp_no,

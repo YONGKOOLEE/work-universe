@@ -12,7 +12,7 @@
 
 import { LABEL_MAX, normalizeEmpNo, normalizeLabel } from '../model/schema.js';
 import {
-  TEXT_LIMITS, TEXT_NODE_TYPES, TEXT_UNREAD_CONTEXT_NOTE, TEXT_WORDS, capNotes, classifySentences, createBuilder, empNoAfterName, finalizeProposal, knownNames, nameInText, orientRelation, ownCandidates, splitSentencesEnd,
+  TEXT_LIMITS, TEXT_NODE_TYPES, TEXT_UNREAD_CONTEXT_NOTE, TEXT_WORDS, capNotes, classifySentences, createBuilder, empNoAfterName, finalizeProposal, knownNames, nameInText, orientRelation, ownCandidates, splitSentencesEnd, unreadWhyText,
 } from '../rules/text-extract.js';
 import { QUOTE_MAX, normalizeQuote } from './evidence-text.js';
 import { textFingerprint } from './ai-convert.js';
@@ -187,6 +187,7 @@ export function verifyAiExtract(text, parsed, view = null, opt = {}) {
   const overlap = (v, q) => { const sn = normalizeQuote(v.text); return q.includes(sn) || sn.includes(q); };
   const unreadV = verdicts.filter((v) => !qn.some((q) => overlap(v, q)));
   const unread = unreadV.map((v) => v.text);
+  const unreadWhy = unreadV.map((v) => (v.skip ? unreadWhyText(v.why) : 'Claude가 읽은 항목·연결에 들어 있지 않음')); // R21: 문장마다 이유 한 마디
   // R19-3: 연결의 인용이 든 문장 전체에 규칙과 같은 문장 가드(부정·시제·조건·전언·물음·표시 …)를 적용한다 — 걸리면 그 연결은 hold(처음 체크하지 않음).
   // 인용이 문장의 일부일 뿐이고 나머지에 다른 낱말이 남으면(「…맡는다」 뒤의 「는 것은 사실이 아니다」) 읽지 못한 부분이 있는 것으로 친다(unreadContext)
   let partialQuote = false;
@@ -212,6 +213,6 @@ export function verifyAiExtract(text, parsed, view = null, opt = {}) {
   // R19 ①: 읽지 못한 문장이 있는 글에서는 앞뒤 문장이 읽은 문장의 뜻을 바꿀 수 있다 — 안내하고 'existing-only'에서도 연결을 처음 체크하지 않는다
   const unreadContext = (unread.length > 0 || partialQuote) && b.edges.length > 0;
   if (unreadContext) notes.push(TEXT_UNREAD_CONTEXT_NOTE);
-  const proposal = finalizeProposal({ method: 'claude_api', ...(opt.model ? { model: opt.model } : {}), nodes: b.nodes, edges: b.edges, unread, partial: [], notes, unreadContext, ctxVeto }, view);
+  const proposal = finalizeProposal({ method: 'claude_api', ...(opt.model ? { model: opt.model } : {}), nodes: b.nodes, edges: b.edges, unread, unreadWhy, partial: [], notes, unreadContext, ctxVeto }, view);
   return { ok: true, proposal, dropped, counts };
 }

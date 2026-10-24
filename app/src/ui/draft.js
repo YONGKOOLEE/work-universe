@@ -3,6 +3,7 @@
 
 import { buildHandoverDraft, scopeWorks } from '../rules/handover.js';
 import { transferPlan } from '../view/transfer.js';
+import { currentHoldersText } from '../view/describe.js';
 import { similarExperts, similarSentences, workLoad } from '../rules/insight.js';
 import { nowIso, todayLocal } from './time.js';
 import { isNewSentence } from '../rules/draft-new.js';
@@ -56,7 +57,7 @@ const DRAFT_FIELDS = { target: '대상', from: '보내는 사람', to: '받는 �
 function draftError(err) {
   if (err.same_person) return '보내는 사람과 받는 사람이 같습니다.';
   if (err.code === 'E-REQUIRED') return `${DRAFT_FIELDS[err.field]}${josa(DRAFT_FIELDS[err.field], '을/를')} 고르세요.`;
-  if (err.field === 'target') return '대상은 지도 중심(업무 지도의 가운데 큰 동그라미)이나 업무만 고를 수 있습니다.';
+  if (err.field === 'target') return '대상은 지도 중심(업무 지도의 연두색 큰 동그라미)이나 업무만 고를 수 있습니다.';
   return messageFor(err);
 }
 
@@ -122,7 +123,7 @@ export function draftPanel(o) {
   const holder = el('p', { class: 'muted small', 'data-testid': 'draft-holder' });
   const showHolder = () => {
     const w = target.value ? workLoad(view, target.value, { asOf: o.asOf || todayLocal() }) : null;
-    holder.textContent = !w ? '' : w.current.length ? `현재 담당: ${w.current.map((p) => p.label).join(', ')}` : '현재 담당자 없음';
+    holder.textContent = !w ? '' : w.current.length ? `현재 담당: ${currentHoldersText(view, target.value, o.asOf || todayLocal(), w.current)}` : '현재 담당자 없음';
     if (w && w.current.length === 1 && !from.value && people.some((p) => p.gid === w.current[0].gid)) from.value = w.current[0].gid;
   };
   target.addEventListener('change', showHolder);

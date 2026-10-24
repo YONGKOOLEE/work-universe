@@ -624,7 +624,7 @@ const rows = (d, prefix) => d.all(`${prefix}-`).filter((e) => new RegExp(`^${pre
 test('CR-19 화면: 키가 없으면 「Claude로 읽기」 단추 대신 안내 한 줄, 규칙으로 읽기 → 미리 보기(항목 5·연결 4, 있는 항목에 연결·이미 있음)', withDom(() => {
   const d = openDialog();
   assert.equal(d.q('text-add-ai'), null);
-  assert.equal(d.q('text-add-ai-note').textContent, '키를 넣으면 Claude가 읽습니다');
+  assert.equal(d.q('text-add-ai-note').textContent, '「설정」에서 키를 넣으면 Claude가 읽습니다'); // R21-5: 키를 어디에 넣는지
   assert.ok(d.q('text-add-input').getAttribute('placeholder').includes('서하늘'));
   assert.equal(d.q('text-add-save').disabled, true);
   d.q('text-add-input').value = EXAMPLE;
@@ -632,25 +632,29 @@ test('CR-19 화면: 키가 없으면 「Claude로 읽기」 단추 대신 안내
   assert.equal(rows(d, 'text-add-node').length, 5);
   assert.equal(rows(d, 'text-add-edge').length, 4);
   // R17: 처음에는 지도에 이미 있는 항목만 체크 — 새로 만드는 항목은 「이름이 맞으면 체크」, 새 항목이 끝인 연결은 넣을 수 없음으로 보인다
-  assert.deepEqual([0, 1, 2, 3, 4].map((i) => !!d.q(`text-add-node-check-${i}`).checked), [true, true, true, false, false]);
+  // R21-1: 지도에 이미 있는 항목(0~2번)은 체크 칸이 없고(「—」) 늘 연결의 끝으로 쓰인다. 새 항목(3·4번)만 체크 칸이 있고 처음에는 체크되어 있지 않다
+  assert.deepEqual([0, 1, 2].map((i) => [d.q(`text-add-node-check-${i}`), !!d.q(`text-add-node-fixed-${i}`)]), [[null, true], [null, true], [null, true]]);
+  assert.deepEqual([3, 4].map((i) => !!d.q(`text-add-node-check-${i}`).checked), [false, false]);
   assert.deepEqual([0, 1, 2, 3, 4].map((i) => d.q(`text-add-node-status-${i}`).textContent), [
-    '있는 항목 「서하늘」에 연결', '있는 항목 「대사 확인」에 연결', '있는 항목 「보고」에 연결', '새로 만듦 — 이름이 맞으면 체크', '새 사람 — 이름이 맞으면 체크',
+    '지도에 있는 항목 — 새로 만들지 않고 이어 씁니다', '지도에 있는 항목 — 새로 만들지 않고 이어 씁니다', '지도에 있는 항목 — 새로 만들지 않고 이어 씁니다', '새로 만듦 — 이름이 맞으면 체크', '새 사람 — 이름이 맞으면 체크',
   ]);
-  assert.deepEqual([0, 1, 2, 3].map((j) => d.q(`text-add-edge-status-${j}`).textContent), ['이미 있음', '이미 있음', '끝 항목을 넣지 않아 넣을 수 없습니다', '끝 항목을 넣지 않아 넣을 수 없습니다']);
-  // R20-7: 연결이 닿지 않는 지도의 항목은 저장해도 바뀌는 것이 없으니 세지 않고 알린다(예전: 넣을 항목 3개(…있는 항목에 연결 3)·연결 0개)
-  assert.equal(d.q('text-add-count').textContent, '넣을 항목 0개(새로 만듦 0, 있는 항목에 연결 0)·연결 0개 (연결이 없는 지도의 항목 3개는 바뀌는 것이 없습니다)');
+  // R21-2: 「끝 항목」 대신 체크해야 하는 항목의 이름을 보인다. 이 연결은 체크할 수 있고(체크하면 새 끝 항목도 함께 체크)
+  assert.deepEqual([0, 1, 2, 3].map((j) => d.q(`text-add-edge-status-${j}`).textContent), ['이미 있음', '이미 있음', '「월말 정산 보고서」를 체크하면 넣을 수 있습니다', '「도하람」을 체크하면 넣을 수 있습니다']);
+  assert.equal(d.q('text-add-edge-check-2').disabled, false);
+  // R20-7·R21-1: 지도에 있는 항목은 「넣을 항목」에 세지 않는다(예전: 넣을 항목 3개(새로 만듦 0, 있는 항목에 연결 3)·연결 0개 …)
+  assert.equal(d.q('text-add-count').textContent, '넣을 항목 0개(새로 만듦)·연결 0개');
   // 「모두 해제」→「모두 체크」: 모두 체크는 예전 기본 선택(이미 있는 연결은 제외)으로 돌아간다
   d.q('text-add-uncheck-all').click();
-  assert.equal(d.q('text-add-count').textContent, '넣을 항목 0개(새로 만듦 0, 있는 항목에 연결 0)·연결 0개');
+  assert.equal(d.q('text-add-count').textContent, '넣을 항목 0개(새로 만듦)·연결 0개');
   d.q('text-add-check-all').click();
   assert.deepEqual([0, 1, 2, 3, 4].map((i) => d.q(`text-add-node-status-${i}`).textContent), [
-    '있는 항목 「서하늘」에 연결', '있는 항목 「대사 확인」에 연결', '있는 항목 「보고」에 연결', '새로 만듦', '새로 만듦 · 확인 필요(사람인지 확실하지 않음)',
+    '지도에 있는 항목 — 새로 만들지 않고 이어 씁니다', '지도에 있는 항목 — 새로 만들지 않고 이어 씁니다', '지도에 있는 항목 — 새로 만들지 않고 이어 씁니다', '새로 만듦', '새로 만듦 · 확인 필요(사람인지 확실하지 않음)',
   ]);
   assert.deepEqual([0, 1, 2, 3].map((j) => d.q(`text-add-edge-status-${j}`).textContent), ['이미 있음', '이미 있음', '새 연결', '새 연결']);
   assert.ok(!d.q('text-add-edge-check-0').checked, '이미 있는 연결은 체크하지 않는다');
   assert.equal(d.q('text-add-edge-check-2').checked, true);
-  // R20-7: 서하늘·대사 확인은 이미 있는 연결뿐이라 저장해도 바뀌는 것이 없다 — 세지 않고 알린다(예전: 넣을 항목 5개(새로 만듦 2, 있는 항목에 연결 3)·연결 2개)
-  assert.equal(d.q('text-add-count').textContent, '넣을 항목 3개(새로 만듦 2, 있는 항목에 연결 1)·연결 2개 (연결이 없는 지도의 항목 2개는 바뀌는 것이 없습니다)');
+  // R20-7·R21-1: 서하늘·대사 확인은 이미 있는 연결뿐이라 저장해도 바뀌는 것이 없다 — 「이어 씀」에 세지 않는다(예전: 넣을 항목 3개(새로 만듦 2, 있는 항목에 연결 1)·연결 2개 (연결이 없는 지도의 항목 2개는 …))
+  assert.equal(d.q('text-add-count').textContent, '넣을 항목 2개(새로 만듦)·연결 2개 · 지도 항목 1개 이어 씀');
   assert.equal(d.q('text-add-method').textContent, '규칙으로 읽었습니다.');
   assert.ok(d.q('text-add-node-quote-0').textContent.includes('서하늘(V-1003)이 대사 확인을 맡는다'));
   assert.equal(d.q('text-add-unread'), null, '읽지 못한 문장이 없으면 목록을 그리지 않는다');
@@ -666,8 +670,16 @@ test('CR-19 화면: 읽기 → 항목 하나 체크 풀기 → 저장 → 그만
   d.q('text-add-check-all').click(); // R17: 처음에는 지도에 있는 항목만 체크 — 예전 흐름은 「모두 체크」 뒤에 한다
   d.check('text-add-node-check-4', false); // 도하람
   assert.equal(d.q('text-add-node-status-4').textContent, '새 사람 — 이름이 맞으면 체크', 'R17: 체크를 푼 새 사람은 「넣지 않음」 대신 이름을 확인하라는 글');
-  assert.equal(d.q('text-add-edge-status-3').textContent, '끝 항목을 넣지 않아 넣을 수 없습니다');
-  assert.equal(d.q('text-add-edge-check-3').disabled, true);
+  // R21-2: 끝 항목의 체크를 풀면 그 항목에 걸린 연결도 풀린다. 상태 칸은 「끝 항목」 대신 이름을 보이고, 연결은 체크할 수 있다(체크하면 끝 항목도 함께 체크)
+  assert.equal(d.q('text-add-edge-status-3').textContent, '「도하람」을 체크하면 넣을 수 있습니다');
+  assert.equal(d.q('text-add-edge-check-3').disabled, false);
+  assert.equal(!!d.q('text-add-edge-check-3').checked, false);
+  d.check('text-add-edge-check-3', true);
+  assert.equal(d.q('text-add-node-check-4').checked, true, 'R21-2: 연결을 체크하면 새 끝 항목도 함께 체크');
+  assert.equal(d.q('text-add-edge-status-3').textContent, '새 연결');
+  d.check('text-add-node-check-4', false);
+  assert.equal(!!d.q('text-add-edge-check-3').checked, false, 'R21-2: 끝 항목을 풀면 그 연결도 풀린다');
+  assert.equal(d.q('text-add-edge-status-3').textContent, '「도하람」을 체크하면 넣을 수 있습니다');
   d.q('text-add-save').click();
   assert.equal(d.q('text-add-done').textContent, '항목 1개·연결 1개를 넣었습니다');
   assert.equal(app.doc.nodes.length, before.nodes + 1);
@@ -727,7 +739,9 @@ test('CR-19 화면: 읽지 못한 문장 목록과 못 읽은 글 안내', withD
   const d = openDialog();
   d.q('text-add-input').value = '오늘 날씨가 좋다. 서하늘이 점검을 맡는다.';
   d.q('text-add-read').click();
-  assert.equal(d.q('text-add-unread-0').textContent, '오늘 날씨가 좋다');
+  // R21-4: 문장마다 이유 한 마디(R21 전에는 문장만). 읽지 못한 문장 목록은 표 위(맥락 안내 바로 아래)에 있다
+  assert.equal(d.q('text-add-unread-0').textContent, '오늘 날씨가 좋다 — 읽는 모양에 맞지 않음(아래 「규칙으로 읽는 모양」 참고)');
+  assert.equal(d.q('text-add-unread-why-0').textContent, ' — 읽는 모양에 맞지 않음(아래 「규칙으로 읽는 모양」 참고)');
   assert.equal(rows(d, 'text-add-node').length, 2);
   d.q('text-add-input').value = '오늘 날씨가 좋다.';
   d.q('text-add-read').click();
@@ -746,7 +760,7 @@ test('CR-19 화면(R16): 이름만 읽은 문장은 「(일부만 읽음)」, �
   // R16-5 부분 표시, R16-6 사번 충돌(가람솔(V-1003): 지도의 V-1003은 서하늘)
   d.q('text-add-input').value = '도하람(V-2001)은 신입이다. 가람솔(V-1003)이 월말 점검을 맡는다.';
   d.q('text-add-read').click();
-  assert.equal(d.q('text-add-unread-0').textContent, '도하람(V-2001)은 신입이다 (일부만 읽음)');
+  assert.equal(d.q('text-add-unread-0').textContent, '도하람(V-2001)은 신입이다 (일부만 읽음) — 이름은 읽었지만 연결 모양을 다 읽지 못함'); // R21-4: 이유 한 마디
   const gi = [0, 1, 2].find((i) => d.q(`text-add-node-label-${i}`).value === '가람솔');
   assert.ok(!d.q(`text-add-node-check-${gi}`).checked, '사번 충돌 항목은 처음에 체크하지 않는다');
   assert.equal(d.q(`text-add-node-status-${gi}`).textContent, '넣지 않음 · 사번은 「서하늘」과 같고 이름이 다릅니다 — 확인한 뒤 체크하세요');

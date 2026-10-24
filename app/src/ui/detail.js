@@ -1,6 +1,7 @@
 // 상세 패널 그리기. 내용은 view/describe.js가 만들고, 여기서는 DOM으로 옮기기만 한다.
 import { el } from './dom.js';
 import { previewContent } from '../rules/starter-steps.js';
+import { NAMES_CUT_NOTE, namesText } from '../rules/daily-use.js';
 
 // 이력이 많으면(업무당 1년 30~50건, 조력자 의견 2026-10-12) 최근 것만 먼저 보이고 이전 것은 「모두 보기」로 편다
 export const HISTORY_SHOW = 10; // 접었을 때 보이는 최근 이력 수
@@ -65,7 +66,7 @@ export function renderNodeDetail(panel, d, { onFocus, extra = null, toolbar = nu
           el('span', { class: 'arrow', title: l.direction === 'out' ? '이 항목에서 나가는 연결' : '이 항목으로 들어오는 연결' }, l.direction === 'out' ? '→' : '←'),
           el('button', { type: 'button', class: 'link', onclick: () => onFocus(l.other.gid) }, l.other.label),
           el('span', { class: 'muted small' }, ` ${l.other.type_label}`),
-          l.status ? el('span', { class: `chip status-${l.status_key === 'current' ? 'current' : 'other'}`, 'data-testid': 'link-status' }, l.status) : null,
+          l.status ? el('span', { class: `chip status-${l.status_key === 'current' ? 'current' : 'other'}`, title: l.status_key === 'handover' ? '이 날 다른 사람이 담당을 이어받았습니다. 판정(인사이트·초안)에서는 이 날까지 담당으로 셉니다' : null, 'data-testid': 'link-status' }, l.status) : null,
           l.period ? el('div', { class: 'muted small' }, l.period) : null,
           l.note ? el('div', { class: 'muted small' }, l.note) : null,
           linkTools(l),
@@ -102,6 +103,18 @@ export function renderUniverseSummary(panel, s, shown = null, extras = {}) {
     if (r.compare) {
       panel.append(el('p', { class: 'risk-summary risk-compare', 'data-testid': 'team-risk-compare', 'data-has-baseline': r.compare.has ? 'true' : 'false' }, r.compare.text, ' ',
         r.compare.canSave ? el('button', { type: 'button', class: 'small-btn', 'data-testid': 'btn-risk-baseline-save', onclick: r.compare.onSave }, '이번 점검 저장') : null));
+      // 무엇이 바뀌었는지(FU5-1): 저장해 둔 이름 목록이 있고 이름이 바뀐 것이 있을 때만 접힌 상자. 예전 기준(이름 없음)은 숫자만
+      if (r.compare.changes) {
+        panel.append(el('details', { class: 'risk-changes', 'data-testid': 'team-risk-changes' },
+          el('summary', {}, '바뀐 것 보기'),
+          ...r.compare.changes.map((c) => el('div', { class: 'risk-change', 'data-testid': 'risk-change', 'data-key': c.key },
+            el('strong', {}, c.label),
+            c.added.length ? el('p', { class: 'small', 'data-testid': 'risk-change-added' }, `늘어남: ${namesText(c.added)}`) : null,
+            c.removed.length ? el('p', { class: 'small', 'data-testid': 'risk-change-removed' }, `줄어듦: ${namesText(c.removed)}`) : null,
+            c.addedUnknown ? el('p', { class: 'muted small' }, NAMES_CUT_NOTE) : null))));
+      }
+      // 저장 직후 알림(FU5-2)
+      if (r.compare.savedNote) panel.append(el('p', { class: 'notice', role: 'status', 'data-testid': 'risk-baseline-saved' }, r.compare.savedNote));
     }
   }
   if (s.missing.length) panel.append(el('p', { class: 'notice' }, `찾을 수 없는 하위 업무 지도:${s.missing.join(', ')}`));
@@ -146,5 +159,5 @@ export function renderUniverseSummary(panel, s, shown = null, extras = {}) {
       ? el('p', {}, '아직 항목이 없습니다. 아래 「사람·업무·문서 추가」에서 첫 업무를 추가하세요. 업무정의서가 있으면 머리글의 「가져오기·내보내기」로 초벌을 만들 수도 있습니다.')
       : el('p', {}, '그래프에서 항목을 클릭하면 속성, 연결된 항목, 이력이 여기에 보입니다.'),
     empty ? null : el('p', {}, '아래 「인수인계 초안 만들기」와 「인사이트 보기」도 눌러 보세요.'),
-    el('p', { class: 'muted small', 'data-testid': 'term-note' }, '업무 지도는 업무를 묶은 한 단위, 항목은 그래프의 동그라미 하나, 지도 중심은 업무 지도의 중심(가운데 큰 동그라미)입니다.')));
+    el('p', { class: 'muted small', 'data-testid': 'term-note' }, '업무 지도는 업무를 묶은 한 단위, 항목은 그래프의 동그라미 하나, 지도 중심은 업무 지도의 중심(연두색 큰 동그라미)입니다.')));
 }

@@ -10,10 +10,43 @@ export const TOUR_ONCE_NOTE = '따라 하기는 머리글 「?」 → 「따라 
 export const BASELINE_MAX = 30;
 /** D-1: 지도 이름·id 최대 길이(깨진 설정값 방어) */
 const ID_MAX = 100;
+/** FU5-1: 점검 기준에 함께 남기는 목록당 항목 이름 최대 수(넘으면 앞에서부터 이만큼만 저장하고 names.cut에 잘렸음을 표시) */
+export const BASELINE_NAMES_MAX = 30;
+/** FU5-1: 항목 이름 하나의 최대 길이(깨진 설정값 방어) */
+const NAME_MAX = 100;
+const NAME_KEYS = ['solo', 'dense', 'gaps'];
 
 const isStamp = (s) => typeof s === 'string' && !Number.isNaN(Date.parse(s));
 const isDay = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const countOrNull = (v) => (Number.isInteger(v) && v >= 0 && v <= 1e6 ? v : null);
+
+/**
+ * 점검 기준에 붙는 항목 이름 목록(FU5-1): { solo:string[], dense:string[], gaps:string[], cut:{solo?:true,...} }.
+ * 문자열만, 앞뒤 공백을 뗀 뒤 비지 않고 NAME_MAX 이하, 중복 없이 앞에서부터 BASELINE_NAMES_MAX개. 넘쳐서 잘렸으면 cut에 표시.
+ * 목록이 하나도 없으면(예전 기준) undefined. 목록이 없는 키는 그 목록만 빠진다(그 목록은 숫자만 비교)
+ */
+export function cleanBaselineNames(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const out = {};
+  const cut = {};
+  for (const k of NAME_KEYS) {
+    if (!Array.isArray(v[k])) continue;
+    // 글자가 아닌 값이 섞인 목록은 깨진 것으로 보고 그 목록만 버린다(빈 목록으로 남으면 지금 목록 전부가 「늘어남」으로 틀리게 나온다)
+    if (v[k].some((x) => typeof x !== 'string')) continue;
+    const seen = new Set();
+    for (const x of v[k]) {
+      if (typeof x !== 'string') continue;
+      const t = x.trim();
+      if (t && t.length <= NAME_MAX) seen.add(t);
+    }
+    const all = [...seen];
+    out[k] = all.slice(0, BASELINE_NAMES_MAX);
+    if (all.length > BASELINE_NAMES_MAX || v.cut?.[k] === true) cut[k] = true;
+  }
+  if (!Object.keys(out).length) return undefined;
+  if (Object.keys(cut).length) out.cut = cut;
+  return out;
+}
 
 // ── 설정값 다듬기(깨진 값은 없는 것으로) ─────────────────────────────────────
 
@@ -31,7 +64,7 @@ export function cleanTourDone(v) {
 }
 
 /**
- * 지도별 점검 기준: { 지도id: {solo, dense, gaps, at, asOf} }. 숫자는 정수 또는 null(그때 못 셌음), at은 저장 시각, asOf는 기준일(없을 수 있음).
+ * 지도별 점검 기준: { 지도id: {solo, dense, gaps, at, asOf, names?} }(names: 항목 이름 목록, 예전 기준에는 없음). 숫자는 정수 또는 null(그때 못 셌음), at은 저장 시각, asOf는 기준일(없을 수 있음).
  * BASELINE_MAX개를 넘으면 at이 늦은 것부터 남긴다. 없으면 undefined
  */
 export function cleanRiskBaselines(v) {
@@ -41,6 +74,8 @@ export function cleanRiskBaselines(v) {
     if (!id || id.length > ID_MAX || !b || typeof b !== 'object' || !isStamp(b.at)) continue;
     const row = { solo: countOrNull(b.solo), dense: countOrNull(b.dense), gaps: countOrNull(b.gaps), at: b.at };
     if (isDay(b.asOf)) row.asOf = b.asOf;
+    const names = cleanBaselineNames(b.names);
+    if (names) row.names = names;
     rows.push([id, row]);
   }
   rows.sort((a, b) => Date.parse(b[1].at) - Date.parse(a[1].at));
@@ -69,9 +104,10 @@ export function isEditedSample(doc) {
  * @param {{id:string,name:string,is_sample?:boolean}[]} universes
  * @param {Record<string,{modified:string|null, edited:boolean}>} info 지도 id → 마지막 수정일·샘플 수정 여부
  * @param {string} lastOpenedId
- * @returns {{id:string, name:string, modified:string|null, kind:'mine'|'edited-sample'|'recent-sample'}[]} (universes 항목의 나머지 필드를 그대로 가진다)
+ * @param {Record<string,{at:string}>} [baselines] 지도 id → 저장한 점검 기준(FU5-4). 점검을 저장한 지도는 마지막으로 연 지도가 바뀌어도 남고(샘플이면 'checked-sample'), checked(마지막 점검 날짜)가 붙는다
+ * @returns {{id:string, name:string, modified:string|null, checked:string|null, kind:'mine'|'edited-sample'|'recent-sample'|'checked-sample'}[]} (universes 항목의 나머지 필드를 그대로 가진다)
  */
-export function startMaps(universes, info, lastOpenedId = '') {
+export function startMaps(universes, info, lastOpenedId = '', baselines = null) {
   const rows = [];
   for (const u of universes || []) {
     const i = (info && info[u.id]) || { modified: null, edited: false };
@@ -79,9 +115,12 @@ export function startMaps(universes, info, lastOpenedId = '') {
     if (!u.is_sample) kind = 'mine';
     else if (i.edited) kind = 'edited-sample';
     else if (u.id === lastOpenedId) kind = 'recent-sample';
-    if (kind) rows.push({ ...u, modified: i.modified || null, kind });
+    const b = baselines && Object.prototype.hasOwnProperty.call(baselines, u.id) ? baselines[u.id] : null;
+    const checked = b && isStamp(b.at) ? b.at.slice(0, 10) : null;
+    if (!kind && checked) kind = 'checked-sample';
+    if (kind) rows.push({ ...u, modified: i.modified || null, checked, kind });
   }
-  const rank = (r) => (r.modified ? 0 : r.id === lastOpenedId ? 1 : 2);
+  const rank = (r) => (r.modified ? 0 : r.id === lastOpenedId || r.checked ? 1 : 2);
   rows.sort((a, b) => rank(a) - rank(b)
     || (a.modified && b.modified && a.modified !== b.modified ? (a.modified < b.modified ? 1 : -1) : 0)
     || String(a.name).localeCompare(String(b.name), 'ko') || (a.id < b.id ? -1 : 1));
@@ -98,6 +137,8 @@ export function resumeTarget(universes, lastOpenedId) {
 export const resumeLabel = (name) => `지난번 지도 이어서 보기: ${name}`;
 export const modifiedLabel = (modified) => (modified ? `마지막 수정 ${modified}` : '수정한 적 없음');
 export const MAP_KIND_LABEL = { 'edited-sample': '고친 샘플', 'recent-sample': '최근 연 샘플' };
+/** FU5-4: 점검을 저장한 지도에 붙는 표시 */
+export const checkedLabel = (checked) => `점검 저장한 지도 · 마지막 점검 ${checked}`;
 
 // ── D-2: 따라 하기는 한 번만 ────────────────────────────────────────────────
 
@@ -123,15 +164,56 @@ export function deltaText(now, before) {
   return d === 0 ? '변화 없음' : d > 0 ? `+${d}` : `${MINUS}${-d}`;
 }
 
+const uniqNames = (arr) => (Array.isArray(arr) ? [...new Set(arr.filter((x) => typeof x === 'string').map((x) => x.trim()).filter(Boolean))] : null);
+
+/** 점검 입력(view/risk-summary.js inspectionInput 결과)에서 세 목록의 항목 이름을 뽑는다. 숫자를 못 센 목록(null)은 뺀다 */
+export function namesFromInspection(d) {
+  const out = {};
+  if (d && d.solo !== null && d.solo !== undefined && Array.isArray(d.soloItems)) out.solo = d.soloItems.map((x) => x.work);
+  if (d && d.dense !== null && d.dense !== undefined && Array.isArray(d.denseItems)) out.dense = d.denseItems.map((x) => x.person);
+  if (d && d.gaps !== null && d.gaps !== undefined && Array.isArray(d.gapItems)) out.gaps = d.gapItems.map((x) => x.work);
+  return out;
+}
+
+/**
+ * 저장한 이름 목록과 지금 이름 목록을 비교해 무엇이 늘고 줄었는지 낸다(FU5-1).
+ * 저장한 쪽 목록이 30개에서 잘렸으면 「늘어남」은 가릴 수 없어(뒤에 있던 것이 새로 보임) addedUnknown으로 표시하고 줄어든 것만 낸다.
+ * 어느 쪽이든 그 목록의 이름이 없으면(예전 기준·못 센 목록) 그 목록은 건너뛴다. 하나도 비교할 수 없으면 null
+ * @returns {{key:string,label:string,added:string[],removed:string[],addedUnknown:boolean}[]|null} 바뀐 목록만
+ */
+export function nameChanges(nowNames, baseNames) {
+  if (!nowNames || !baseNames) return null;
+  const out = [];
+  let comparable = false;
+  for (const { key, label } of ROWS) {
+    const now = uniqNames(nowNames[key]);
+    const base = uniqNames(baseNames[key]);
+    if (!now || !base) continue;
+    comparable = true;
+    const cut = !!(baseNames.cut && baseNames.cut[key]);
+    const added = cut ? [] : now.filter((x) => !base.includes(x));
+    const removed = base.filter((x) => !now.includes(x));
+    if (added.length || removed.length || cut) out.push({ key, label, added, removed, addedUnknown: cut });
+  }
+  return comparable ? out : null;
+}
+
+/** 이름 목록 한 줄 글: 「가, 나, 다」 (많으면 앞 NAMES_SHOW개 + 「외 n개」) */
+export const NAMES_SHOW = 8;
+export const namesText = (list) => `${list.slice(0, NAMES_SHOW).map((x) => `「${x}」`).join(', ')}${list.length > NAMES_SHOW ? ` 외 ${list.length - NAMES_SHOW}개` : ''}`;
+export const NAMES_CUT_NOTE = `저장한 이름이 ${BASELINE_NAMES_MAX}개를 넘어 늘어난 것은 가릴 수 없습니다`;
+
 /**
  * 지금 숫자와 저장해 둔 기준을 비교한다.
  * @param {{solo:number|null,dense:number|null,gaps:number|null}} now
- * @param {{solo:number|null,dense:number|null,gaps:number|null,at:string}|null|undefined} baseline
- * @returns {{has:boolean, rows:{key:string,label:string,now:number|null,before:number|null,delta:number|null,text:string}[], text:string, same:boolean, savedDate:string|null}}
+ * @param {{solo:number|null,dense:number|null,gaps:number|null,at:string,names?:object}|null|undefined} baseline
+ * @param {{solo?:string[],dense?:string[],gaps?:string[]}} [nowNames] 지금 세 목록의 항목 이름(없으면 이름 비교 안 함)
+ * @returns {{has:boolean, rows:{key:string,label:string,now:number|null,before:number|null,delta:number|null,text:string}[], text:string, same:boolean, savedDate:string|null, changes:ReturnType<typeof nameChanges>}}
+ *   changes: 이름이 바뀐 목록(없으면 null = 이름 비교 못 함/예전 기준, 빈 배열 = 이름도 그대로)
  */
-export function compareRisk(now, baseline) {
+export function compareRisk(now, baseline, nowNames = null) {
   if (!baseline) {
-    return { has: false, rows: [], same: false, savedDate: null, text: '아직 저장한 점검 없음 — 「이번 점검 저장」을 누르면 다음에 비교합니다' };
+    return { has: false, rows: [], same: false, savedDate: null, changes: null, text: '아직 저장한 점검 없음 — 「이번 점검 저장」을 누르면 다음에 비교합니다' };
   }
   const rows = ROWS.map(({ key, label }) => {
     const n = now ? now[key] : null;
@@ -142,13 +224,30 @@ export function compareRisk(now, baseline) {
   const same = rows.every((r) => r.delta === 0);
   const savedDate = typeof baseline.at === 'string' ? baseline.at.slice(0, 10) : null;
   const body = same ? '변화 없음' : rows.map((r) => `${r.label} ${r.text}`).join(' · ');
-  return { has: true, rows, same, savedDate, text: `지난 점검(${savedDate || '?'}) 대비: ${body}` };
+  return { has: true, rows, same, savedDate, changes: nameChanges(nowNames, baseline.names), text: `지난 점검(${savedDate || '?'}) 대비: ${body}` };
 }
 
-/** 저장할 기준 한 건(설정 riskBaseline[지도id]) */
-export function makeBaseline(now, { at, asOf }) {
+/** 이름이 바뀐 목록을 「늘어남: …」「줄어듦: …」 줄로(점검 요약 글·화면 공용). 바뀐 것이 없으면 [] */
+export function changeLines(changes, indent = '') {
+  const lines = [];
+  for (const c of changes || []) {
+    lines.push(`${indent}${c.label}`);
+    if (c.added.length) lines.push(`${indent}  늘어남: ${namesText(c.added)}`);
+    if (c.removed.length) lines.push(`${indent}  줄어듦: ${namesText(c.removed)}`);
+    if (c.addedUnknown) lines.push(`${indent}  (${NAMES_CUT_NOTE})`);
+  }
+  return lines;
+}
+
+/** FU5-2: 「이번 점검 저장」 직후 알림 한 줄 */
+export const baselineSavedNote = (at) => `이번 점검을 저장했습니다(${typeof at === 'string' ? at.slice(0, 10) : '?'}) — 다음에 열면 이 숫자와 비교합니다`;
+
+/** 저장할 기준 한 건(설정 riskBaseline[지도id]). names(세 목록의 항목 이름)를 주면 목록당 BASELINE_NAMES_MAX개까지 함께 남긴다 */
+export function makeBaseline(now, { at, asOf, names }) {
   const row = { solo: countOrNull(now && now.solo), dense: countOrNull(now && now.dense), gaps: countOrNull(now && now.gaps), at };
   if (isDay(asOf)) row.asOf = asOf;
+  const n = cleanBaselineNames(names);
+  if (n) row.names = n;
   return row;
 }
 
@@ -184,7 +283,9 @@ export function inspectionSummaryText(d, cmp) {
     '',
   ];
   if (cmp && cmp.has) {
-    lines.push(cmp.text, ...(cmp.same ? [] : cmp.rows.map((r) => `  - ${r.label}: ${r.before === null ? '?' : r.before} → ${r.now === null ? '?' : r.now} (${r.text})`)), '');
+    lines.push(cmp.text, ...(cmp.same ? [] : cmp.rows.map((r) => `  - ${r.label}: ${r.before === null ? '?' : r.before} → ${r.now === null ? '?' : r.now} (${r.text})`)));
+    if (cmp.changes && cmp.changes.length) lines.push('바뀐 것:', ...changeLines(cmp.changes, '  '));
+    lines.push('');
   } else {
     lines.push('지난 점검 대비: 아직 저장한 점검 없음', '');
   }

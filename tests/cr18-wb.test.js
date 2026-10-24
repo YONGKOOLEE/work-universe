@@ -276,7 +276,9 @@ test('CR-18-3 읽기 전용(canMake:false)이면 끝 카드의 만들기 단추�
   assert.equal(t.tour.info().mode, 'off');
 }));
 
-test('CR-18-4 사용자가 못 쓰는 관계를 직접 먼저 골랐고 쓸 수 있는 관계가 둘 이상이면 바꾸지 않는다(저장할 때 E-PAIR 안내). 하나뿐이면 자동으로 바꾼다', withDom(() => {
+// 변경(FU5-9, CR-18 범위 안 보완): 예전에는 직접 먼저 고른 못 쓰는 관계를 두어 저장할 때 E-PAIR 오류를 보였다. 처음 사용 점검 5회차에서 실무자가
+// 「이 조합에는 못 씀」 묶음의 「관련」이 골라진 채 남아 오류를 봤다 → 못 쓰는 값은 고른 채 두지 않고 쓸 수 있는 첫 관계로 바꾸며 한 줄로 알린다(영향: R-02 연결 추가, CR-18-4)
+test('FU5-9 사용자가 먼저 고른 관계가 상대를 고른 뒤 못 쓰게 되면 쓸 수 있는 첫 관계로 바꾸고 한 줄로 알린다. 하나뿐이면 자동으로 바꾼다', withDom(() => {
   const topic = node('N-140', 'topic', '가상 주제');
   const work = node('N-141', 'work', '가상 업무');
   const org = node('N-142', 'org', '가상 조직');
@@ -284,10 +286,14 @@ test('CR-18-4 사용자가 못 쓰는 관계를 직접 먼저 골랐고 쓸 수 
   const rel = q(form, 'edge-type');
   pick(rel, 'performs'); // 주제는 업무를 수행할 수 없다(쓸 수 있는 것: 관련·참조 둘)
   pick(q(form, 'edge-other'), work.id);
-  assert.equal(rel.value, 'performs');
+  assert.equal(rel.value, 'relates_to', '못 쓰는 값을 고른 채 두지 않음');
   assert.ok(groupOf(rel).children.some((o) => o.value === 'performs' && o.disabled));
-  // 손대지 않은 기본값이면 쓸 수 있는 첫 관계로
+  const note = q(form, 'edge-only');
+  assert.equal(note.hidden, false);
+  assert.equal(note.textContent, '(고른 「수행」은 이 조합에 쓸 수 없어 「관련」으로 바꿨습니다)');
+  // 손대지 않은 기본값이면 쓸 수 있는 첫 관계로(알림 없이)
   const form2 = edgeForm({ node: topic, candidates: [work], onSubmit: () => ({ ok: true }), onCancel() {} });
   pick(q(form2, 'edge-other'), work.id);
   assert.equal(q(form2, 'edge-type').value, 'relates_to');
+  assert.equal(q(form2, 'edge-only').hidden, true);
 }));

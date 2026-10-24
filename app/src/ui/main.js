@@ -9,7 +9,7 @@ import { settingsPanel } from './settings.js';
 import { mergePanel } from './merge.js';
 import { SAMPLES, SAMPLE_GUIDE } from '../../data/index.js';
 import { startScreen } from './start.js';
-import { describeNode, describeUniverse, displayName, eventText, periodStatus } from '../view/describe.js';
+import { currentHoldersText, describeNode, describeUniverse, displayName, eventText, periodStatus } from '../view/describe.js';
 import { exposureOf, projectView } from '../view/collapse.js';
 import { parseGid, toGid } from '../view/view.js';
 import { PANEL, clampPanelWidth, maxPanelWidth } from '../view/panel.js';
@@ -31,8 +31,8 @@ import { hiddenNodesOf } from '../rules/hidden.js';
 import { nowIso, todayLocal } from './time.js';
 import { personLoad, repeatPatternsFor, workLoad } from '../rules/insight.js';
 import { riskNoteFor } from '../rules/insight-risk.js';
-import { TOUR_ONCE, TOUR_ONCE_NOTE, compareRisk, isEditedSample, lastModifiedDate, makeBaseline, resumeTarget, shouldAutoStartTour, startMaps } from '../rules/daily-use.js';
-import { soloWorksOf, soloWorksText, teamRiskParts, teamRiskSummary } from '../view/risk-summary.js';
+import { TOUR_ONCE, TOUR_ONCE_NOTE, baselineSavedNote, compareRisk, isEditedSample, lastModifiedDate, makeBaseline, namesFromInspection, resumeTarget, shouldAutoStartTour, startMaps } from '../rules/daily-use.js';
+import { inspectionInput, soloWorksOf, soloWorksText, teamRiskParts, teamRiskSummary } from '../view/risk-summary.js';
 import { monthAsOf, timeMonths } from '../rules/flow.js';
 import { splitHint, workFormMissing } from '../rules/form.js';
 import { starterSteps } from '../rules/starter-steps.js';
@@ -315,7 +315,7 @@ function start() {
     }
     $('start-screen').replaceChildren(startScreen({
       universes: startUniverses,
-      maps: startMaps(startUniverses, mapInfo, settings.lastOpenedId || ''),
+      maps: startMaps(startUniverses, mapInfo, settings.lastOpenedId || '', settings.riskBaseline || null),
       resume: resumeTarget(startUniverses, settings.lastOpenedId || ''),
       guide: SAMPLE_GUIDE,
       warnings: [...app.warnings.map((w) => messageFor(w)), ...(embedWarning ? [embedWarning] : [])],
@@ -335,6 +335,7 @@ function start() {
   let insight = null; // 인사이트 화면: {work, kind}
   let issues = null; // 미해결 이슈 목록 화면(R-20): {target}
   let hiddenOpen = false; // 숨긴 항목 목록 화면(R-21)
+  let rwGraphSnap = null; // 편집 되감기에 들어가기 전 그래프 배치·배율(FU5-7)
   let rw = null; // 편집 되감기 중이면 {at}(CR-14 A). 옛 지도를 읽기 전용으로 본다. 저장하지 않는다
   let rwPast = null; // 되감기 중인 시점의 app.viewAt 결과 {doc, view, diff, limits}
   // 따라 하기(CR-13 A): 완료 조건에 쓰는 표시. 따라 하기를 시작할 때 지운다
@@ -387,6 +388,7 @@ function start() {
   let nbhd = null;
   let filterState = { types: [], person: null };
   let exploreNote = null;
+  let baselineNote = ''; // 「이번 점검 저장」 직후의 알림 한 줄(FU5-2). 다른 항목을 고르면 사라진다
   let view = app.view;
   let display = projectView(view, { expanded });
 
@@ -686,15 +688,19 @@ function start() {
   // 지난 점검 대비(D-3): 기준(숫자·저장 시각)은 이 브라우저 설정에만 지도별로 둔다. 문서·내보내기·백업에는 들어가지 않는다
   const riskBaselineOf = () => (settings.riskBaseline || {})[currentId()] || null;
   const canSaveBaseline = () => !!storage && !app.readOnly && !rw; // 읽기 전용·내용 포함 파일·되감기 중에는 저장 단추를 끈다(보기는 된다)
-  function riskCompareFor(nums) {
-    const cmp = compareRisk(nums, riskBaselineOf());
+  function riskCompareFor(nums, names) {
+    const cmp = compareRisk(nums, riskBaselineOf(), names);
     return {
       text: cmp.has || canSaveBaseline() ? cmp.text : '아직 저장한 점검 없음(이 화면에서는 저장할 수 없습니다)',
       has: cmp.has,
       canSave: canSaveBaseline(),
+      changes: cmp.changes && cmp.changes.length ? cmp.changes : null,
+      savedNote: baselineNote,
       onSave: () => {
-        settings.riskBaseline = { ...(settings.riskBaseline || {}), [currentId()]: makeBaseline(nums, { at: nowIso(), asOf: asOf() }) };
+        const at = nowIso();
+        settings.riskBaseline = { ...(settings.riskBaseline || {}), [currentId()]: makeBaseline(nums, { at, asOf: asOf(), names }) };
         saveSettings(storage, settings);
+        baselineNote = baselineSavedNote(at);
         renderPanel();
       },
     };
@@ -738,7 +744,7 @@ function start() {
     if (!w) return null;
     const text = w.work_ended ? '기간이 끝난 업무'
       : w.work_scheduled ? `시작 전 업무(${w.work_start}부터)`
-      : w.kind === 'covered' ? `${viewDate ? `${viewDate} 기준 담당` : '현재 담당'}: ${w.current.map((p) => p.label).join(', ')}`
+      : w.kind === 'covered' ? `${viewDate ? `${viewDate} 기준 담당` : '현재 담당'}: ${currentHoldersText(view, gid, asOf(), w.current, { past: !!viewDate })}`
       : w.kind === 'scheduled' ? `공백 — 시작 예정 담당자만 있음(${w.next_person.label}, ${w.next_start}부터)`
       : w.kind === 'ended' ? `공백 — 이전 담당자만 있음(${w.last_person.label}, ${w.last_end}까지). 끝난 업무인지 확인`
       : '공백 — 담당 기록 없음';
@@ -1247,7 +1253,9 @@ function start() {
       // 묶은 지도(하위 유니버스가 있는 꼭지)만 위험 요약 한 줄(FU-10). 인사이트 탭과 같은 기준일·같은 밀집 기준의 같은 계산이다
       const grouped = (view.ref_links || []).length > 0;
       const riskNums = grouped ? teamRiskSummary(view, { asOf: asOf(), n: currentDenseN() }) : null;
-      const riskSummary = grouped ? { parts: teamRiskParts(riskNums), onMore: () => openInsight('', 'risk'), compare: riskCompareFor(riskNums) } : null;
+      // 이름 목록(FU5-1): 저장할 때 같이 남기고 지난 점검과 비교한다. 숫자와 같은 기준일·밀집 기준의 같은 계산이라 숫자와 어긋나지 않는다
+      const riskNames = grouped ? namesFromInspection(inspectionInput(view, { asOf: asOf(), n: currentDenseN(), mapName: '' })) : null;
+      const riskSummary = grouped ? { parts: teamRiskParts(riskNums), onMore: () => openInsight('', 'risk'), compare: riskCompareFor(riskNums, riskNames) } : null;
       renderUniverseSummary(panel, summary, display.nodes.length, { split: splitHint(app.doc), starter: starterSteps(app.doc, view), onOpenFolder: folder && folder.state.supported && !rw && !app.readOnly ? openFolderTab : null, riskSummary, universeId: app.doc.universe.id, onSelect: (g) => { reveal(g); select(view.canonical(g)); } });
       // 꼭지만 있으면 「노드 추가」를 펼쳐 둔다(검토5 U-5). 안내 문구(detail.js)와 같은 기준: 하위 유니버스를 묶은 화면은 노드가 있으므로 건드리지 않는다
       if (summary.node_total <= 1 && !app.readOnly) document.querySelector('details.add').open = true;
@@ -1293,7 +1301,7 @@ function start() {
   }
 
   function select(gid) {
-    if (gid !== selected) editing = null;
+    if (gid !== selected) { editing = null; baselineNote = ''; }
     settingsOpen = false;
     merging = false;
     drafting = null;
@@ -1513,6 +1521,7 @@ function start() {
   function enterRewind() {
     const points = app.editPoints();
     if (!app.rewindAvailable() || points.length < 2) return;
+    rwGraphSnap = graph.snapshot(); // FU5-7: 나올 때 이 배치·배율로 되돌린다
     nbhd = null;
     editing = null;
     drafting = null;
@@ -1541,6 +1550,8 @@ function start() {
     app.setRewinding(false);
     syncRewindShell();
     refresh();
+    graph.restore(rwGraphSnap); // FU5-7: 들어가기 전 배치·배율(그 사이 생긴 항목은 render가 놓은 자리 그대로)
+    rwGraphSnap = null;
   }
 
   function revertRewind() {
@@ -1552,6 +1563,7 @@ function start() {
     if (!window.confirm(confirmText(pv, at, labelOf))) return;
     const r = app.rewindTo(at);
     if (!r.ok) return window.alert(failText(r.error));
+    rwGraphSnap = null; // 되돌리면 지도 내용이 바뀌므로 들어가기 전 배치로 돌리지 않는다
     rw = null;
     rwPast = null;
     app.setRewinding(false);
@@ -1641,7 +1653,14 @@ function start() {
   }
 
   // 「전체 보기」: 주변만 보기 중이면 전체 그래프로 돌아가고(R-17 ④), 아니면 화면에 맞춘다
-  $('fit').addEventListener('click', () => (nbhd ? leaveNbhd() : graph.fit()));
+  // 원인(FU5-6): 항목을 하나 고르면(접힌 묶음을 눌러 펼칠 때도 그 항목이 선택됨) 그 항목과 이웃만 또렷하고 나머지는 흐려지는데, 「전체 보기」는 화면 배율만 맞추고
+  // 선택을 풀지 않아 흐림이 남았다. 「전체 보기」는 이름대로 전체가 또렷이 보이게 선택도 푼다(Esc·「← 지도 전체 보기」와 같은 동작).
+  // 편집 양식·초안·통합·인사이트·설정 등 패널 작업이 열려 있으면 그 작업이 사라지지 않게 배율만 맞춘다(선택 강조는 작업을 닫으면 풀 수 있다)
+  $('fit').addEventListener('click', () => {
+    if (nbhd) { leaveNbhd(); return; }
+    if (selected && !rw && !editing && !drafting && !merging && !settingsOpen && !insight && !issues && !hiddenOpen) select(null);
+    graph.fit();
+  });
 
   // Esc: 노드 선택 해제(R-17 ⑧). 입력 칸·대화상자·펼친 메뉴 안에서는 그쪽이 먼저 처리한다(찾기 칸은 stopPropagation)
   document.addEventListener('keydown', (e) => {

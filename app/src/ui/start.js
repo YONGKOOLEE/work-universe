@@ -4,7 +4,7 @@
 // 용어(CR-16 ②): 처음 보이는 글에서는 「업무 지도」라고 쓴다. 단추 이름도 「새 업무 지도」처럼 같은 말을 쓴다(CR-17 A). data-testid는 그대로다.
 
 import { el } from './dom.js';
-import { MAP_KIND_LABEL, modifiedLabel, resumeLabel } from '../rules/daily-use.js';
+import { MAP_KIND_LABEL, checkedLabel, modifiedLabel, resumeLabel } from '../rules/daily-use.js';
 
 // CR-16 ①: 처음 보는 사람에게 "왜"를 한 줄로. 담당자가 바뀔 때(전) → 기록이 쌓이는 업무 지도 → 근거 달린 초안·경고(후). 글과 CSS 화살표만 쓴다
 // 셋째 칸 본문(FU-4, 처음 사용 점검 2026-10-24): 첫 화면에 AI가 하는 일이 보이게 한다. 키가 없어도 사전 생성 문장(개발 중 Claude가 작성)으로 보이므로 거짓이 아니다
@@ -21,7 +21,7 @@ export const TEAM_NOTE = '팀원 각자 만든 지도는 공유 폴더(「폴더
 // 검토5 U-2·U-3·U-6·U-8: 순서대로 따라가면 끊기지 않게, 버튼 이름은 화면과 같게, "꼭지"는 여기서 한 번 설명한다
 const STEPS = [
   ['동그라미(항목)를 눌러 보세요 — 하늘색 동그라미(업무)부터', '오른쪽에 속성, 연결된 항목, 지금까지의 이력이 나옵니다(이력은 아래로 내리면 보입니다). 마우스를 올리면 연결된 것만 밝아집니다. 가장 큰 연두색 동그라미는 지도 중심, 곧 이 업무 지도의 한가운데입니다.'],
-  ['「인수인계 초안 만들기」를 눌러 보세요', '업무나 지도 중심(가운데 큰 동그라미)을 골랐을 때, 또는 빈 곳을 눌러 선택을 풀었을 때 보입니다(사람·산출물을 고르면 보이지 않습니다). 담당자가 바뀔 때 필요한 내용을 이력에서 모아 초안으로 만들어 줍니다. 문장마다 근거를 확인할 수 있습니다.'],
+  ['「인수인계 초안 만들기」를 눌러 보세요', '업무나 지도 중심(연두색 큰 동그라미)을 골랐을 때, 또는 빈 곳을 눌러 선택을 풀었을 때 보입니다(사람·산출물을 고르면 보이지 않습니다). 담당자가 바뀔 때 필요한 내용을 이력에서 모아 초안으로 만들어 줍니다. 문장마다 근거를 확인할 수 있습니다.'],
   ['「인사이트 보기」를 눌러 보세요', '비슷한 일을 해 본 사람(유사 경험자), 같은 설명이 되풀이되는 패턴(반복 비효율), 일이 몰린 사람과 담당자 없는 업무(밀집·공백), 기간별 변화(흐름 변화)를 근거와 함께 보여 줍니다. 항목을 고른 뒤에도, 빈 곳을 눌러 선택을 푼 뒤에도 보입니다.'],
   ['「새 업무 지도 만들기」로 업무 하나부터 만들어 보세요', '첫 업무 이름·담당자·산출물을 적으면 작은 지도가 바로 생기고, 「사람·업무·문서 추가」로 하나씩 늘려 내 업무를 지도처럼 만들 수 있습니다. 업무정의서가 있으면 「문서·파일 가져오기」(업무 지도를 연 뒤에는 머리글의 「가져오기·내보내기」)에 붙여 넣어 초벌을 만들 수도 있습니다.'],
 ];
@@ -58,6 +58,7 @@ export function startScreen(o) {
     return el('li', { class: 'card', 'data-testid': `${sample ? 'mine-card' : 'card'}-${u.id}`, 'data-kind': u.kind },
       el('div', { class: 'card-head' }, el('strong', {}, u.name), el('span', { class: 'chip' }, u.level), MAP_KIND_LABEL[u.kind] ? el('span', { class: 'chip', 'data-testid': 'map-kind' }, MAP_KIND_LABEL[u.kind]) : null),
       el('p', { class: 'muted small', 'data-testid': 'map-modified' }, modifiedLabel(u.modified)),
+      u.checked ? el('p', { class: 'muted small', 'data-testid': 'map-checked' }, checkedLabel(u.checked)) : null,
       el('p', { class: 'muted small' }, u.ref_count ? `하위 업무 지도 ${u.ref_count}개를 묶음` : `항목 ${u.node_count}개`),
       el('button', { type: 'button', 'data-testid': `${sample ? 'mine-open' : 'open'}-${u.id}`, onclick: () => o.onOpen(u.id) }, '열기'),
     );
@@ -92,7 +93,7 @@ export function startScreen(o) {
         o.onImport ? el('button', { type: 'button', 'data-testid': 'start-import', disabled: o.readOnly, onclick: o.onImport }, '문서·파일 가져오기') : null,
       ),
       el('p', { class: 'muted small' }, '모든 이름과 데이터는 가상입니다. 설치나 로그인은 필요 없습니다.'),
-      el('p', { class: 'muted small', 'data-testid': 'start-terms' }, '용어: 업무 지도는 업무를 묶은 한 단위, 항목은 그래프의 동그라미 하나, 지도 중심은 업무 지도의 중심(가운데 큰 동그라미)입니다.'),
+      el('p', { class: 'muted small', 'data-testid': 'start-terms' }, '용어: 업무 지도는 업무를 묶은 한 단위, 항목은 그래프의 동그라미 하나, 지도 중심은 업무 지도의 중심(연두색 큰 동그라미)입니다.'),
     ),
     el('section', {}, el('h2', {}, '내 업무 지도'),
       mine.length

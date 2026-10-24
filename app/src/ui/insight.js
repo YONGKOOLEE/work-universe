@@ -9,7 +9,7 @@ import { METHOD_LABELS, afterQuiet, explainInsight, explainInsightAsync, isLive,
 import { el } from './dom.js';
 import { evidenceChips } from './evidence.js';
 import { summaryBar } from './check-summary.js';
-import { compareRisk, inspectionSummaryText } from '../rules/daily-use.js';
+import { compareRisk, inspectionSummaryText, namesFromInspection } from '../rules/daily-use.js';
 import { inspectionInput } from '../view/risk-summary.js';
 import { todayLocal } from './time.js';
 import { SUBTYPE_ROLE } from '../model/schema.js';
@@ -109,7 +109,7 @@ export function insightPanel(o) {
   const summaryAsOf = () => o.asOf || todayLocal();
   const buildSummary = () => {
     const d = inspectionInput(view, { asOf: summaryAsOf(), n: denseN, mapName: o.mapName || '업무 지도' });
-    return inspectionSummaryText(d, o.baseline ? compareRisk(d, o.baseline) : null);
+    return inspectionSummaryText(d, o.baseline ? compareRisk(d, o.baseline, namesFromInspection(d)) : null);
   };
   return el('div', { class: 'insight' },
     el('h2', {}, '인사이트'),
@@ -124,6 +124,8 @@ export function insightPanel(o) {
 }
 
 // ── 유사 경험자 ──
+/** FU5-5: 탭 설명 아래 한 줄 */
+export const SIMILAR_PERSON_HINT = '사람이 빠질 때 누가 대신하는지는 그래프에서 그 사람을 고르면 「이 사람 일, 누가 대신할 수 있나」에 나옵니다.';
 function similarView(o, view) {
   const works = view.nodes.filter((n) => n.core_type === 'work' && !n.hidden);
   const pick = el('select', { 'data-testid': 'insight-work' });
@@ -145,6 +147,8 @@ function similarView(o, view) {
   run();
   return el('div', {},
     el('p', { class: 'muted small' }, '먼저 고른 업무를 예전에 직접 한 사람(이전 담당)을 보여 주고, 그다음 같은 주제·산출물 유형·이름 낱말을 가진 다른 업무를 수행한 사람을 보여 줍니다. 현재 담당자는 뺍니다. 이름 낱말만 같은 업무는 같은 일이 아닐 수 있어 낮은 점수로 두고 확인을 권합니다. 점수는 겹친 수(주제 3, 산출물 유형 2, 이름 낱말 1)를 더한 것으로, 높을수록 비슷합니다. 사람 이름 없이 역할 이름만 있는 항목은 따로 묶습니다.'),
+    // FU5-5: 사람이 빠질 때를 묻는 사람이 이 탭에서 길을 잃지 않게
+    el('p', { class: 'muted small', 'data-testid': 'similar-person-hint' }, SIMILAR_PERSON_HINT),
     el('label', { class: 'field' }, el('span', {}, '업무'), pick),
     out);
 }

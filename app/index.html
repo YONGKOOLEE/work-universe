@@ -106,6 +106,13 @@
   /* 처음 사용 점검 W3: 묶은 지도 위험 요약(FU-10), 접힌 사번 충돌(FU-13), 노드 상세의 「← 지도 전체 보기」(FU-6), 사람 상세의 「이 사람만 아는 일」(FU-12) */
   .risk-summary { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; font-size: 13px; margin: 0 0 10px; }
   .risk-compare { margin-top: -4px; } /* 위험 요약 바로 아래 「지난 점검 대비」(CR-18 D-3) */
+  details.risk-changes { margin: 0 0 10px; } /* 「바뀐 것 보기」(FU5-1) */
+  details.risk-changes > summary { cursor: pointer; }
+  details.risk-changes .risk-change { margin: 6px 0 0; }
+  details.risk-changes .risk-change p { margin: 2px 0 0; }
+  details.summary-preview { margin: 6px 0 0; } /* 「미리 보기」(FU5-3) */
+  details.summary-preview > summary { cursor: pointer; }
+  details.summary-preview pre { white-space: pre-wrap; font: inherit; margin: 6px 0 0; padding: 8px; background: var(--panel); border-radius: 6px; max-height: 260px; overflow: auto; }
   .summary-bar { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; margin: 0 0 10px; } /* 인사이트 위 「점검 요약」(CR-18 D-4) */
   .summary-bar p { margin: 4px 0 0; }
   .start-resume { margin: 0 0 6px; } /* 시작 화면 「지난번 지도 이어서 보기」(CR-18 D-1) */

@@ -547,5 +547,31 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
     fit() {
       fitTo(undefined, 40);
     },
+
+    /**
+     * 화면 상태 저장(FU5-7): 항목 자리·배율·이동·칸 크기. 편집 되감기처럼 배치를 다시 계산하는 화면에 들어가기 전에 찍어 두고, 돌아올 때 restore로 되돌린다.
+     * 원인: 되감기에 들어갈 때 배치를 새로 계산(relayout)하고 위쪽에 머리 띠가 생기며, 나올 때는 항목만 다시 그려 그 배치·배율이 그대로 남았다
+     */
+    snapshot() {
+      syncSize();
+      return { pos: new Map(cy.nodes().map((n) => [n.id(), { ...n.position() }])), zoom: cy.zoom(), pan: { ...cy.pan() }, w: cy.width(), h: cy.height() };
+    },
+
+    /** snapshot으로 되돌린다. 없어진 항목은 건너뛰고(새로 생긴 항목은 render가 놓은 자리 그대로), 칸 크기가 달라졌으면 가운데를 유지한다 */
+    restore(snap) {
+      if (!snap) return;
+      syncSize();
+      cy.nodes().forEach((n) => {
+        const p = snap.pos.get(n.id());
+        if (p) n.position(p);
+      });
+      cy.nodes().removeStyle('font-size text-max-width text-outline-width z-index');
+      cy.viewport({ zoom: snap.zoom, pan: { x: snap.pan.x + (cy.width() - snap.w) / 2, y: snap.pan.y + (cy.height() - snap.h) / 2 } });
+      applyTinyLabels();
+      for (const id of bigLabels) {
+        const n = cy.getElementById(id);
+        if (n.nonempty()) sizeLabel(n);
+      }
+    },
   };
 }

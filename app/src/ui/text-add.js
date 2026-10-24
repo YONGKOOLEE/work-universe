@@ -5,7 +5,7 @@
 import { el } from './dom.js';
 import { messageFor } from './messages.js';
 import { EDGE_TYPES, NODE_TYPES, allowedRelations } from '../model/schema.js';
-import { TEXT_DEFAULT_CHECK, TEXT_LIMITS, TEXT_UNREAD_CONTEXT_NOTE, TEXT_NODE_TYPES, TEXT_PATTERN_DOC, defaultSelection, docCandidates, extractFromText, proposalToOps, resolveSelection } from '../rules/text-extract.js';
+import { TEXT_DEFAULT_CHECK, TEXT_LIMITS, TEXT_UNREAD_CONTEXT_NOTE, TEXT_NODE_TYPES, TEXT_PATTERN_DOC, contextHeldBack, defaultSelection, docCandidates, eulReul, extractFromText, proposalToOps, resolveSelection } from '../rules/text-extract.js';
 
 /** 화면 문구(한 곳). 용어: 「항목」「지도 중심」 */
 export const TEXT_ADD = Object.freeze({
@@ -14,7 +14,7 @@ export const TEXT_ADD = Object.freeze({
   inputLabel: '붙여 넣을 글',
   read: '규칙으로 읽기',
   ai: 'Claude로 읽기',
-  noKey: '키를 넣으면 Claude가 읽습니다',
+  noKey: '「설정」에서 키를 넣으면 Claude가 읽습니다', // R21: 키를 어디에 넣는지
   aiBusy: 'Claude가 읽는 중… (최대 60초)', // 글로 추가의 호출 제한 llm/providers.js LLM_EXTRACT_TIMEOUT_MS(60초)와 같은 값
   aiFail: (reason) => `AI 읽기 실패: ${reason} — 규칙으로 읽은 결과를 보여 줍니다`,
   methodRule: '규칙으로 읽었습니다.',
@@ -24,10 +24,14 @@ export const TEXT_ADD = Object.freeze({
   noNodes: '읽을 수 있는 문장이 없었습니다. 아래 「규칙으로 읽는 모양」에 맞게 써 보세요.',
   unreadTitle: (n) => `읽지 못한 문장 ${n}개`,
   unreadNote: '모양에 맞지 않거나 뜻이 애매해(부정·지난 일·예정·날짜·나열 등) 지어내지 않고 건너뛴 문장입니다.',
-  introNone: '몇 문장짜리 글(회의 메모·인수인계 메모)을 붙여 넣으면 사람·업무·산출물·조직을 찾아 미리 보여 줍니다. 처음에는 아무것도 체크되어 있지 않습니다 — 맞는 것을 체크하거나 「지도에 있는 것만 체크」「모두 체크」를 누르세요. 고친 뒤 「저장」을 눌러야 들어갑니다.',
-  checkExisting: '지도에 있는 것만 체크',
-  onMap: (label) => `지도에 있음 — 「${label}」에 연결(체크하면 넣습니다)`,
+  introNone: '몇 문장짜리 글(회의 메모·인수인계 메모)을 붙여 넣으면 사람·업무·산출물·조직을 찾아 미리 보여 줍니다. 처음에는 아무것도 체크되어 있지 않습니다 — 맞는 항목·연결을 체크하거나 「지도에 있는 항목끼리 연결 체크」「모두 체크」를 누르세요. 지도에 이미 있는 항목은 체크하지 않아도 연결에 쓰입니다. 연결을 체크하면 그 연결의 새 항목도 함께 체크됩니다. 고친 뒤 「저장」을 눌러야 들어갑니다.',
+  checkExisting: '지도에 있는 항목끼리 연결 체크', // R21: 이 단추는 연결만 체크한다(지도에 있는 항목은 체크 없이 쓰인다)
+  mapFixed: '지도에 있는 항목 — 새로 만들지 않고 이어 씁니다',
   onMapEdge: '지도에 있는 두 항목 사이 — 체크하면 넣습니다',
+  endMissing: (names) => `${names.map((x) => `「${x}」`).join('·')}${eulReul(names[names.length - 1])} 체크하면 넣을 수 있습니다`,
+  endNoName: '끝 항목의 이름을 넣으세요',
+  heldBack: (n) => `읽지 못한 문장이 있어 연결 ${n}개는 체크하지 않았습니다 — 위의 읽지 못한 문장을 확인한 뒤 직접 체크하세요`,
+  noExistingEdge: '지도에 있는 두 항목 사이에 새로 넣을 연결이 없습니다',
   checkAll: '모두 체크',
   uncheckAll: '모두 해제',
   newItem: '새로 만듦 — 이름이 맞으면 체크',
@@ -35,12 +39,13 @@ export const TEXT_ADD = Object.freeze({
   partialTag: ' (일부만 읽음)', // 이름은 읽었지만 모양을 다 읽지 못한 문장
   stale: '글이 바뀌었습니다 — 다시 읽으세요',
   shapesTitle: '규칙으로 읽는 모양',
-  attach: ' 새 업무는 지도 중심(가운데 큰 동그라미)에 바로 연결하기',
+  attach: ' 새 업무는 지도 중심(연두색 큰 동그라미)에 바로 연결하기',
   save: '저장',
   close: '닫기',
   nothingToSave: '넣을 항목이 없습니다. 항목을 체크하세요.',
   emptyText: '글을 붙여 넣으세요.',
-  count: (nNew, nOld, nEdge, nIdle = 0) => `넣을 항목 ${nNew + nOld}개(새로 만듦 ${nNew}, 있는 항목에 연결 ${nOld})·연결 ${nEdge}개${nIdle ? ` (연결이 없는 지도의 항목 ${nIdle}개는 바뀌는 것이 없습니다)` : ''}`,
+  // R21: 지도에 있는 항목은 새로 넣는 것이 아니므로 「넣을 항목」에서 빼고 따로 「이어 씀」으로 센다
+  count: (nNew, nEdge, nMap = 0) => `넣을 항목 ${nNew}개(새로 만듦)·연결 ${nEdge}개${nMap ? ` · 지도 항목 ${nMap}개 이어 씀` : ''}`,
   done: (n, m, skipped) => `항목 ${n}개·연결 ${m}개를 넣었습니다${skipped ? `(이미 있어 건너뛴 연결 ${skipped}개)` : ''}`,
 });
 
@@ -60,7 +65,7 @@ function errorText(error, kind, relation) {
  * @returns {()=>void} 대화상자를 여는 함수
  */
 export function textAddDialog(o) {
-  const st = { open: false, proposal: null, sel: defaultSelection({ nodes: [], edges: [] }), method: '', model: '', fallback: '', dropped: 0, busy: false, run: 0, message: '', done: '', errors: new Map(), attach: true, readText: '', stale: false };
+  const st = { open: false, checkNote: '', proposal: null, sel: defaultSelection({ nodes: [], edges: [] }), method: '', model: '', fallback: '', dropped: 0, busy: false, run: 0, message: '', done: '', errors: new Map(), attach: true, readText: '', stale: false };
   let input;
   let readBtn;
   let aiBtn;
@@ -88,6 +93,7 @@ export function textAddDialog(o) {
     st.errors = new Map();
     st.message = '';
     st.done = '';
+    st.checkNote = '';
   }
 
   function readRule() {
@@ -186,10 +192,10 @@ export function textAddDialog(o) {
 
   const nodeStatus = (n, f) => {
     if (f.problem) return { state: 'problem', text: f.problem === 'empty' ? '이름을 넣으세요' : '이름이 너무 깁니다(최대 100자)' };
+    if (f.fixed) return { state: 'map', text: TEXT_ADD.mapFixed }; // R21: 지도에 있는 항목은 체크 칸 없이 늘 연결의 끝으로 쓴다
     if (!f.include) {
       if (f.ambiguous) return { state: 'off', text: '같은 이름이 둘 이상 있습니다 — 체크하면 새 항목으로 만듭니다' };
       if (n.hold) return { state: 'hold', text: `넣지 않음 · ${holdText(n.hold)}` }; // R19-6: 지도에 있는 항목이어도 확인 이유를 먼저 보인다
-      if (f.match) return { state: 'off-map', text: TEXT_ADD.onMap(f.match.label) }; // R19: 처음에는 아무것도 체크하지 않지만 지도에 있는 항목은 표시해 고르기 쉽게
       // R17: 새로 만드는 항목은 처음에 체크하지 않는다 — 이름이 맞는지 사람이 보고 체크
       return { state: 'new-off', text: f.type === 'person' ? TEXT_ADD.newPerson : TEXT_ADD.newItem };
     }
@@ -198,13 +204,13 @@ export function textAddDialog(o) {
     return { state: 'new', text: `새로 만듦${n.unsure && f.type === 'person' ? ' · 확인 필요(사람인지 확실하지 않음)' : ''}${n.hold ? ` · ${n.hold}` : ''}` };
   };
 
-  const edgeStatus = (f, a, b, e) => {
+  const edgeStatus = (f, a, b, e, miss) => {
     if (f.reason === 'pair') return { state: 'pair', text: '이 두 항목의 유형에는 이 관계를 쓸 수 없습니다 — 관계를 다시 고르세요' };
     if (f.exists) return { state: 'exists', text: '이미 있음' }; // 이미 지도에 같은 연결이 있으면 끝 항목 체크와 관계없이 그 사실을 먼저 보인다
     if (f.reason === 'end_missing') {
-      // R19: 두 끝이 모두 지도에 있으면 「지도에 있음」 표시 — 끝 항목을 체크하면 넣을 수 있다
-      if (a && b && a.match && b.match) return { state: 'end', text: '지도에 있는 두 항목 사이 — 끝 항목을 체크하면 넣을 수 있습니다' };
-      return { state: 'end', text: '끝 항목을 넣지 않아 넣을 수 없습니다' };
+      // R21: 「끝 항목」 대신 체크해야 하는 항목의 이름을 보인다
+      const names = miss.filter((x) => x.label).map((x) => x.label);
+      return { state: 'end', text: names.length ? TEXT_ADD.endMissing(names) : TEXT_ADD.endNoName };
     }
     if (f.reason === 'same') return { state: 'same', text: '두 끝이 같은 항목이라 넣을 수 없습니다' };
     // R19-3: 연결 자체에 확인 사유가 있으면(예: Claude가 인용한 원문 문장에 부정·조건이 있음) 그 이유를 보인다
@@ -212,6 +218,31 @@ export function textAddDialog(o) {
     if (!f.wanted) return a && b && a.match && b.match ? { state: 'off-map', text: TEXT_ADD.onMapEdge } : { state: 'off', text: '넣지 않음' };
     return { state: 'new', text: '새 연결' };
   };
+
+  const nodeOf = (key) => st.proposal.nodes.find((n) => n.key === key);
+  /** 연결의 끝 항목 중 아직 넣지 않기로 된 것(체크하면 넣을 수 있는 것) — 앞 항목·뒤 항목 순서 */
+  const missingEnds = (f, r = resolved()) => {
+    return [r.nodes[f.source], r.nodes[f.target]].filter((x) => !x.include || x.problem);
+  };
+  /** 연결을 체크할 때 함께 체크해도 되는 끝 항목인가: 이름 문제·같은 이름 둘 이상·확인할 것(hold)이 없는 항목만 */
+  const autoCheckable = (x) => !x.problem && !x.ambiguous && !(nodeOf(x.key) || {}).hold;
+
+  /** R21: 연결을 체크하면 그 연결의 새 끝 항목도 함께 체크한다. 풀면 끝 항목은 그대로 둔다 */
+  function onEdgeCheck(e, on) {
+    edgeSel(e.key).include = on;
+    if (on) {
+      const r = resolved();
+      for (const x of missingEnds(r.edges[e.key], r)) if (autoCheckable(x)) nodeSel(x.key).include = true;
+    }
+    render();
+  }
+
+  /** R21: 항목 체크를 풀면 그 항목에 걸린 연결도 함께 푼다(다시 체크해도 연결은 사람이 다시 체크) */
+  function onNodeCheck(nodeKey, on) {
+    nodeSel(nodeKey).include = on;
+    if (!on) for (const e of st.proposal.edges) if (e.from === nodeKey || e.to === nodeKey) edgeSel(e.key).include = false;
+    render();
+  }
 
   function onTypeChange(nodeKey, type) {
     nodeSel(nodeKey).type = type;
@@ -230,7 +261,9 @@ export function textAddDialog(o) {
     const syncLabel = (e) => { nodeSel(n.key).label = e.target.value; };
     const syncEmp = (e) => { nodeSel(n.key).emp_no = e.target.value; };
     const main = el('tr', { class: err || f.problem ? 'row-error' : '', 'data-testid': `text-add-node-${i}` },
-      el('td', {}, el('input', { type: 'checkbox', 'data-testid': `text-add-node-check-${i}`, checked: f.include, 'aria-label': `${i + 1}번 항목 넣기`, onchange: (e) => { nodeSel(n.key).include = e.target.checked; render(); } })),
+      el('td', {}, f.fixed
+        ? el('span', { class: 'muted', 'data-testid': `text-add-node-fixed-${i}`, title: TEXT_ADD.mapFixed, 'aria-label': `${i + 1}번 항목은 ${TEXT_ADD.mapFixed}` }, '—')
+        : el('input', { type: 'checkbox', 'data-testid': `text-add-node-check-${i}`, checked: f.include, 'aria-label': `${i + 1}번 항목 넣기`, onchange: (e) => onNodeCheck(n.key, e.target.checked) })),
       el('td', {}, el('select', { 'data-col': 'type', 'data-testid': `text-add-node-type-${i}`, 'aria-label': `${i + 1}번 항목 유형`, onchange: (e) => onTypeChange(n.key, e.target.value) },
         ...TEXT_NODE_TYPES.map((t) => el('option', { value: t, selected: t === f.type }, TYPE_LABEL(t))))),
       el('td', {}, el('input', { type: 'text', 'data-col': 'label', 'data-testid': `text-add-node-label-${i}`, value: f.label, maxlength: 100, autocomplete: 'off', 'aria-label': `${i + 1}번 항목 이름`, oninput: syncLabel, onchange: (e) => { syncLabel(e); render(); } })),
@@ -248,12 +281,14 @@ export function textAddDialog(o) {
     const err = st.errors.get(e.key);
     const a = r.nodes[f.source];
     const b = r.nodes[f.target];
-    const status = edgeStatus(f, a, b, e);
+    const miss = f.reason === 'end_missing' ? missingEnds(f, r) : [];
+    const status = edgeStatus(f, a, b, e, miss);
     const rels = allowedRelations(a.type, b.type);
     const known = rels.some((x) => x.relation === f.type);
-    const locked = !!f.reason;
+    // R21: 끝 항목만 빠진 연결(체크하면 끝 항목도 함께 체크됨)은 체크할 수 있다. 관계가 안 맞거나 두 끝이 같거나, 끝 항목에 확인할 것·이름 문제가 있으면 잠근다
+    const locked = f.reason === 'pair' || f.reason === 'same' || (f.reason === 'end_missing' && miss.some((x) => !autoCheckable(x)));
     const main = el('tr', { class: err ? 'row-error' : '', 'data-testid': `text-add-edge-${j}` },
-      el('td', {}, el('input', { type: 'checkbox', 'data-testid': `text-add-edge-check-${j}`, checked: f.include, disabled: locked, 'aria-label': `${j + 1}번 연결 넣기`, onchange: (ev) => { edgeSel(e.key).include = ev.target.checked; render(); } })),
+      el('td', {}, el('input', { type: 'checkbox', 'data-testid': `text-add-edge-check-${j}`, checked: f.include, disabled: locked, 'aria-label': `${j + 1}번 연결 넣기`, onchange: (ev) => onEdgeCheck(e, ev.target.checked) })),
       el('td', { 'data-testid': `text-add-edge-from-${j}` }, `${a.label || '(이름 없음)'} (${TYPE_LABEL(a.type)})`),
       el('td', {}, el('select', { 'data-col': 'relation', 'data-testid': `text-add-edge-type-${j}`, 'aria-label': `${j + 1}번 연결 관계`, onchange: (ev) => { if (ev.target.value) { edgeSel(e.key).type = ev.target.value; render(); } } },
         ...(known ? [] : [el('option', { value: '', selected: true }, '관계를 고르세요')]),
@@ -273,6 +308,15 @@ export function textAddDialog(o) {
     if (p) {
       const r = resolved();
       if (p.unreadContext && p.edges.length) parts.push(el('p', { class: 'notice', role: 'status', 'data-testid': 'text-add-context-note' }, TEXT_UNREAD_CONTEXT_NOTE));
+      // R21: 읽지 못한 문장 목록은 맥락 안내 바로 아래(표 위)에 — 어느 문장 때문에 연결이 체크되지 않았는지 바로 보인다. 문장마다 이유 한 마디
+      if (p.unread && p.unread.length) {
+        parts.push(el('div', { 'data-testid': 'text-add-unread' },
+          el('h3', {}, TEXT_ADD.unreadTitle(p.unread.length)),
+          el('p', { class: 'muted small' }, TEXT_ADD.unreadNote),
+          el('ul', { class: 'small' }, ...p.unread.map((s, k) => el('li', { 'data-testid': `text-add-unread-${k}` },
+            `${s}${(p.partial || []).includes(s) ? TEXT_ADD.partialTag : ''}`,
+            (p.unreadWhy || [])[k] ? el('span', { class: 'muted', 'data-testid': `text-add-unread-why-${k}` }, ` — ${p.unreadWhy[k]}`) : null)))));
+      }
       parts.push(el('p', { class: 'muted small', 'data-testid': 'text-add-method' }, st.method === 'claude_api' ? TEXT_ADD.methodAi(st.model) : TEXT_ADD.methodRule));
       if (st.fallback) parts.push(el('p', { class: 'notice', role: 'status', 'data-testid': 'text-add-fallback' }, st.fallback));
       for (const n of (p.notes || []).filter((x) => !(p.unreadContext && x === TEXT_UNREAD_CONTEXT_NOTE))) parts.push(el('p', { class: 'notice', 'data-testid': 'text-add-note' }, n));
@@ -281,6 +325,7 @@ export function textAddDialog(o) {
           el('button', { type: 'button', 'data-testid': 'text-add-check-existing', onclick: () => setAll(true, 'existing-only') }, TEXT_ADD.checkExisting),
           el('button', { type: 'button', 'data-testid': 'text-add-check-all', onclick: () => setAll(true) }, TEXT_ADD.checkAll),
           el('button', { type: 'button', 'data-testid': 'text-add-uncheck-all', onclick: () => setAll(false) }, TEXT_ADD.uncheckAll)));
+        if (st.checkNote) parts.push(el('p', { class: 'notice', role: 'status', 'data-testid': 'text-add-check-note' }, st.checkNote)); // R21: 단추를 눌렀는데 연결이 체크되지 않은 이유
         parts.push(el('h3', {}, TEXT_ADD.nodesTitle(p.nodes.length)));
         parts.push(el('div', { class: 'batch-wrap' }, el('table', { class: 'dg-table batch-grid', 'data-testid': 'text-add-nodes' },
           head(['넣기', '유형', '이름', '사번', '상태', '원문 구절']), el('tbody', {}, ...p.nodes.flatMap((n, i) => nodeRow(n, i, r))))));
@@ -289,12 +334,6 @@ export function textAddDialog(o) {
         parts.push(el('h3', {}, TEXT_ADD.edgesTitle(p.edges.length)));
         parts.push(el('div', { class: 'batch-wrap' }, el('table', { class: 'dg-table batch-grid', 'data-testid': 'text-add-edges' },
           head(['넣기', '앞 항목', '관계', '뒤 항목', '상태', '원문 구절']), el('tbody', {}, ...p.edges.flatMap((e, j) => edgeRow(e, j, r))))));
-      }
-      if (p.unread && p.unread.length) {
-        parts.push(el('div', { 'data-testid': 'text-add-unread' },
-          el('h3', {}, TEXT_ADD.unreadTitle(p.unread.length)),
-          el('p', { class: 'muted small' }, TEXT_ADD.unreadNote),
-          el('ul', { class: 'small' }, ...p.unread.map((s, k) => el('li', { 'data-testid': `text-add-unread-${k}` }, `${s}${(p.partial || []).includes(s) ? TEXT_ADD.partialTag : ''}`)))));
       }
     }
     parts.push(el('details', { class: 'small', 'data-testid': 'text-add-shapes' },
@@ -316,10 +355,9 @@ export function textAddDialog(o) {
       const inc = p.nodes.filter((n) => r.nodes[n.key].include && !r.nodes[n.key].problem);
       const inEdges = p.edges.map((e) => r.edges[e.key]).filter((x) => x.include);
       const linked = (n) => inEdges.some((x) => x.source === n.key || x.target === n.key);
+      // R21: 지도에 있는 항목은 새로 넣는 것이 아니다(저장 명령 없음) — 넣을 항목에서 빼고, 체크한 연결이 닿는 것만 「이어 씀」으로 센다
       const olds = inc.filter((n) => r.nodes[n.key].match);
-      // R19-7: 지도에 있는 항목은 체크한 연결이 닿을 때만 바뀌는 것이 있다(저장 명령이 없다) — 연결이 없는 것은 세지 않고 알린다
-      const nOld = olds.filter(linked).length;
-      countLine.textContent = TEXT_ADD.count(inc.length - olds.length, nOld, inEdges.length, olds.length - nOld);
+      countLine.textContent = TEXT_ADD.count(inc.length - olds.length, inEdges.length, olds.filter(linked).length);
     } else countLine.textContent = '';
     saveBtn.disabled = !p || busy || o.app.readOnly || st.stale;
     staleLine.textContent = p && !busy && st.stale ? TEXT_ADD.stale : '';
@@ -335,6 +373,13 @@ export function textAddDialog(o) {
     const d = defaultSelection(st.proposal, mode);
     for (const n of st.proposal.nodes) nodeSel(n.key).include = on ? d.nodes[n.key].include : false;
     for (const e of st.proposal.edges) edgeSel(e.key).include = on ? d.edges[e.key].include : false;
+    // R21: 「지도에 있는 항목끼리 연결 체크」가 맥락 안전 규칙(읽지 못한 문장 등) 때문에 뺀 연결이 있으면 이유를 알린다
+    st.checkNote = '';
+    if (on && mode === 'existing-only') {
+      const held = contextHeldBack(st.proposal);
+      if (held) st.checkNote = TEXT_ADD.heldBack(held);
+      else if (!st.proposal.edges.some((e) => d.edges[e.key].include)) st.checkNote = TEXT_ADD.noExistingEdge;
+    }
     render();
   }
 

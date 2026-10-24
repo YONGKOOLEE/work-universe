@@ -27,9 +27,15 @@ export function downloadText(name, text) {
  */
 export function summaryBar(o) {
   const note = el('div', { 'data-testid': 'summary-extra' });
+  // 미리 보기(FU5-3): 복사·내려받기·인쇄될 글 그대로. 열 때마다, 그리고 단추를 누를 때 다시 만든다
+  const previewText = el('pre', { 'data-testid': 'summary-preview-text' });
+  const preview = el('details', { class: 'summary-preview', 'data-testid': 'summary-preview' }, el('summary', {}, '미리 보기'), previewText);
+  const refreshPreview = () => { if (preview.open) previewText.textContent = o.build(); };
+  preview.addEventListener('toggle', refreshPreview);
   const copyBtn = el('button', { type: 'button', class: 'small-btn', 'data-testid': 'summary-copy' }, '복사');
   copyBtn.addEventListener('click', async () => {
     const text = o.build();
+    refreshPreview();
     note.replaceChildren();
     copyBtn.textContent = '복사';
     try {
@@ -45,13 +51,19 @@ export function summaryBar(o) {
   });
   const downBtn = el('button', { type: 'button', class: 'small-btn', 'data-testid': 'summary-download' }, '내려받기(.txt)');
   downBtn.addEventListener('click', () => {
-    const r = downloadText(summaryFileName(o.mapName, o.asOf), o.build());
-    note.replaceChildren(...(r.ok ? [] : [el('p', { class: 'notice', role: 'alert', 'data-testid': 'summary-download-blocked' }, SUMMARY_DOWNLOAD_BLOCKED)]));
+    const name = summaryFileName(o.mapName, o.asOf);
+    const r = downloadText(name, o.build());
+    refreshPreview();
+    // 내려받기 알림(FU5-3): 브라우저가 어디에 저장했는지는 앱이 알 수 없으므로 파일 이름만 알린다
+    note.replaceChildren(r.ok
+      ? el('p', { class: 'muted small', role: 'status', 'data-testid': 'summary-downloaded' }, `「${name}」를 내려받았습니다`)
+      : el('p', { class: 'notice', role: 'alert', 'data-testid': 'summary-download-blocked' }, SUMMARY_DOWNLOAD_BLOCKED));
   });
   const printBtn = el('button', { type: 'button', class: 'small-btn', 'data-testid': 'summary-print' }, '인쇄');
   printBtn.addEventListener('click', () => printHtml(summaryPrintHtml(o.build(), `점검 요약 — ${o.mapName}`)));
   return el('div', { class: 'summary-bar', 'data-testid': 'summary-bar' },
     el('div', { class: 'row' }, el('strong', {}, '점검 요약'), copyBtn, downBtn, printBtn),
     el('p', { class: 'muted small' }, `위험·몰림·공백 숫자를 한 장 글로 모읍니다. ${SUMMARY_FAKE_NOTE}`),
+    preview,
     note);
 }

@@ -3,6 +3,7 @@
 
 import { EDGE_TYPES, MEMO_CATEGORIES, eventTypeLabel, memoCategoryOf } from '../model/schema.js';
 import { refGid } from './view.js';
+import { josa } from '../model/josa.js';
 
 const FIELD_NAMES = {
   label: '이름', description: '설명', attrs: '속성', tags: '태그', period: '기간', subtype: '하위 유형', emp_no: '사번', note: '메모', exposed: '상위 화면에서 보이기',
@@ -29,6 +30,41 @@ export function periodText(period, asOf = null) {
 }
 
 const STATUS_LABEL = { current: '현재', ended: '종료', scheduled: '예정' };
+
+/**
+ * 담당을 넘긴 날(FU5-8) — 화면 표시용. 담당 판정(periodStatus·인사이트·초안)은 바꾸지 않는다: 끝 날짜가 기준일인 수행은 그날도 「현재」로 센다.
+ * 같은 업무에 기준일에 시작하는 다른 사람의 수행이 있으면, 기준일에 끝나는 수행의 사람은 「오늘까지(넘김)」으로 보인다.
+ * @returns {Set<string>} 그날 담당을 넘기는 사람의 gid(없으면 빈 집합)
+ */
+export function handingOverToday(view, workGid, asOf) {
+  const out = new Set();
+  if (!asOf) return out;
+  const w = view.canonical(workGid);
+  const edges = view.edges.filter((e) => !e.hidden && !e.synthetic && e.core_type === 'performs' && e.target === w && e.period);
+  const starters = edges.filter((e) => e.period.start === asOf).map((e) => e.source);
+  for (const e of edges) {
+    if (e.period.end === asOf && periodStatus(e.period, asOf) === 'current' && starters.some((p) => p !== e.source)) out.add(e.source);
+  }
+  return out;
+}
+
+/** 넘기는 날의 표시 글: 기준일이 오늘이 아니면(시간 보기) 「오늘」 대신 「그날」 */
+export const handoverLabel = (past) => (past ? '그날까지(넘김)' : '오늘까지(넘김)');
+
+/**
+ * 「현재 담당: …」 줄의 이름 글(FU5-8). 담당을 넘기는 사람이 있으면 받는 쪽만 현재로 보이고 「(표나래는 오늘까지)」를 덧붙인다.
+ * 넘기는 사람만 남으면(받는 사람이 현재 목록에 없는 경우) 그대로 모두 보인다
+ * @param {{gid:string,label:string}[]} current workLoad의 current(규칙 결과 그대로)
+ */
+export function currentHoldersText(view, workGid, asOf, current, { past = false } = {}) {
+  const handing = handingOverToday(view, workGid, asOf);
+  const going = current.filter((p) => handing.has(p.gid));
+  const staying = current.filter((p) => !handing.has(p.gid));
+  if (!going.length || !staying.length) return current.map((p) => p.label).join(', ');
+  const day = past ? '그날' : '오늘';
+  const who = going.length > 1 ? `${going.map((p) => p.label).join(', ')} 모두` : `${going[0].label}${josa(going[0].label, '은/는')}`;
+  return `${staying.map((p) => p.label).join(', ')} (${who} ${day}까지)`;
+}
 
 /** 문장·근거 칩에 쓰는 노드 이름. 숨긴 노드는 표시를 붙인다(4절 "숨김 후 참조"). 초안·이력 문장·근거 칩이 모두 이것을 쓴다(검토5 C-2) */
 export const displayName = (node) => (node.deleted ? '(삭제된 항목)' : node.hidden ?`${node.label}(숨김 처리된 항목)` : node.label);
@@ -179,6 +215,12 @@ export function describeNode(view, gid, { asOf = null, past = false } = {}) {
   const others = node.merged_from.map((g) => view.rawNode(g)).filter(Boolean);
   if (others.length) rows.push({ label: '같은 항목', value: `${others.map((n) => n.universe_name).join(', ')}의 항목과 합쳐져 있음` });
 
+  const handingCache = new Map(); // 업무 gid → 그날 담당을 넘기는 사람들
+  const isHandover = (edge) => {
+    if (!asOf || edge.core_type !== 'performs' || edge.synthetic || !edge.period || edge.period.end !== asOf) return false;
+    if (!handingCache.has(edge.target)) handingCache.set(edge.target, handingOverToday(view, edge.target, asOf));
+    return handingCache.get(edge.target).has(edge.source);
+  };
   const links = view
     .neighbors(gid)
     .map(({ edge, direction, other }) => ({
@@ -189,8 +231,9 @@ export function describeNode(view, gid, { asOf = null, past = false } = {}) {
       relation_type: edge.core_type,
       period: periodText(edge.period, asOf),
       // 수행 연결은 기준일 기준 현재·종료·예정을 붙인다(사람·업무 상세에서 지금 담당을 구분하도록)
-      status_key: asOf && edge.core_type === 'performs' && !edge.synthetic ? periodStatus(edge.period, asOf) : null,
-      status: asOf && edge.core_type === 'performs' && !edge.synthetic ? (past && periodStatus(edge.period, asOf) === 'current' ? '그때 담당' : STATUS_LABEL[periodStatus(edge.period, asOf)]) : null,
+      // 담당을 넘긴 날(FU5-8): 표시만 「오늘까지(넘김)」(status_key 'handover')으로. 담당 판정은 그대로 current다
+      status_key: asOf && edge.core_type === 'performs' && !edge.synthetic ? (isHandover(edge) ? 'handover' : periodStatus(edge.period, asOf)) : null,
+      status: asOf && edge.core_type === 'performs' && !edge.synthetic ? (isHandover(edge) ? handoverLabel(past) : past && periodStatus(edge.period, asOf) === 'current' ? '그때 담당' : STATUS_LABEL[periodStatus(edge.period, asOf)]) : null,
       note: edge.note || '',
       other: { gid: other.gid, label: other.label, type_label: other.type_label },
     }))

@@ -10,7 +10,7 @@ import { folderTab } from './folder-tab.js';
 import { CONVERT_RULES, docWorkLabel } from '../rules/doc-convert.js';
 
 const KIND_TEXT = {
-  overview: () => '개요 → 지도 중심(가운데 큰 동그라미)의 이름·목적·배경, 그리고 범위·이해관계자',
+  overview: () => '개요 → 지도 중심(연두색 큰 동그라미)의 이름·목적·배경, 그리고 범위·이해관계자',
   scope: (n) => `범위 → 업무 ${n}개`,
   scope_out: () => '범위 제외 → 업무 지도 설명',
   steps: (n) => `업무 흐름 → 대표 업무의 절차 속성 ${n}단계(항목으로 만들지 않음)`,

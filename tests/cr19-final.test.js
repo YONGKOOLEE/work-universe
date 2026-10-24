@@ -322,7 +322,9 @@ test('R20-7 개수 줄: 연결이 닿지 않는 지도의 항목은 세지 않�
   d.type('text-add-input', '서하늘이 대사 확인을 맡는다.');
   d.q('text-add-read').click();
   d.q('text-add-check-existing').click(); // 서하늘·대사 확인은 지도에 있고 연결도 이미 있어 체크할 연결이 없다
-  assert.equal(d.q('text-add-count').textContent, '넣을 항목 0개(새로 만듦 0, 있는 항목에 연결 0)·연결 0개 (연결이 없는 지도의 항목 2개는 바뀌는 것이 없습니다)');
+  // R21-1: 지도에 있는 항목은 「넣을 항목」에 세지 않고(체크 칸도 없음), 닿는 연결이 없으면 「이어 씀」에도 세지 않는다 — 예전 「연결이 없는 지도의 항목 2개는 바뀌는 것이 없습니다」 줄은 없어졌다
+  assert.equal(d.q('text-add-count').textContent, '넣을 항목 0개(새로 만듦)·연결 0개');
+  assert.equal(d.q('text-add-check-note').textContent, '지도에 있는 두 항목 사이에 새로 넣을 연결이 없습니다'); // R21-3: 단추를 눌렀는데 체크된 연결이 없는 이유
   d.q('text-add-save').click();
   assert.equal(d.q('text-add-message').textContent, '넣을 항목이 없습니다. 항목을 체크하세요.');
 }));

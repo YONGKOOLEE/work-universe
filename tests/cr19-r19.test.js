@@ -105,22 +105,24 @@ test('R19 화면: 기본(none)은 아무것도 체크 안 됨 + 지도에 있는
   q('text-add-input').value = '변경 전:\n서하늘이 자료 수집을 맡는다. 한가람이 점검을 맡는다';
   q('text-add-read').click();
   const checks = () => dialog.querySelectorAll('[data-testid^=text-add-node-check-]').map((e) => !!e.checked);
-  assert.ok(checks().length >= 3 && checks().every((c) => !c));
-  assert.equal(q('text-add-count').textContent, '넣을 항목 0개(새로 만듦 0, 있는 항목에 연결 0)·연결 0개');
+  // R21-1: 지도에 있는 항목은 체크 칸이 없다(늘 연결의 끝으로 쓰임). 남은 체크 칸(새 항목)은 모두 해제
+  assert.ok(checks().length >= 1 && checks().every((c) => !c));
+  assert.equal(q('text-add-count').textContent, '넣을 항목 0개(새로 만듦)·연결 0개');
   const statuses = dialog.querySelectorAll('[data-testid^=text-add-node-status-]').map((e) => e.textContent);
-  assert.ok(statuses.includes('지도에 있음 — 「서하늘」에 연결(체크하면 넣습니다)'), JSON.stringify(statuses));
+  assert.ok(statuses.includes('지도에 있는 항목 — 새로 만들지 않고 이어 씁니다'), JSON.stringify(statuses)); // R21-1: 예전 「지도에 있음 — 「서하늘」에 연결(체크하면 넣습니다)」(이미 있는 사람을 넣는다는 오해)
   assert.ok(statuses.includes('새로 만듦 — 이름이 맞으면 체크'));
   assert.equal(q('text-add-context-note').textContent, TEXT_UNREAD_CONTEXT_NOTE, '화면 맨 위 안내 줄');
   assert.ok(!dialog.querySelectorAll('[data-testid=text-add-note]').some((e) => e.textContent === TEXT_UNREAD_CONTEXT_NOTE), '같은 안내를 두 번 그리지 않는다');
   const edgeStatus = dialog.querySelectorAll('[data-testid^=text-add-edge-status-]').map((e) => e.textContent);
-  assert.ok(edgeStatus.includes('지도에 있는 두 항목 사이 — 끝 항목을 체크하면 넣을 수 있습니다') || edgeStatus.includes('이미 있음'), JSON.stringify(edgeStatus));
-  // 지도에 있는 것만 체크: 항목은 체크, 읽지 못한 문장이 있는 글이라 연결은 체크하지 않음
+  assert.ok(edgeStatus.includes('지도에 있는 두 항목 사이 — 체크하면 넣습니다') || edgeStatus.includes('이미 있음'), JSON.stringify(edgeStatus)); // R21-1: 두 끝이 지도에 있으면 끝 항목을 체크할 필요가 없다
+  // 지도에 있는 항목끼리 연결 체크: 읽지 못한 문장이 있는 글이라 연결은 체크하지 않음 — R21-3: 그 이유를 단추 아래에 보인다. 새 항목은 이 단추가 체크하지 않는다
   q('text-add-check-existing').click();
-  const afterEx = checks();
-  assert.ok(afterEx.filter(Boolean).length >= 2 && afterEx.some((c) => !c));
+  assert.ok(checks().every((c) => !c), '새 항목은 체크하지 않는다');
+  assert.equal(q('text-add-check-note').textContent, '읽지 못한 문장이 있어 연결 1개는 체크하지 않았습니다 — 위의 읽지 못한 문장을 확인한 뒤 직접 체크하세요', 'R21-3: 맥락 안전 규칙으로 뺀 연결 수와 이유');
   assert.equal(q('text-add-count').textContent.includes('연결 0개'), true);
   q('text-add-uncheck-all').click();
   assert.ok(checks().every((c) => !c));
+  assert.equal(q('text-add-check-note'), null, '다른 단추를 누르면 안내가 사라진다');
   q('text-add-check-all').click();
   assert.equal(q('text-add-count').textContent.includes('연결 0개'), false, '모두 체크는 사용자의 선택이라 연결도 체크(읽지 못한 문장 안내만)');
 }));

@@ -96,8 +96,18 @@ export class FakeEl {
 
   /** 이벤트를 일으킨다(없는 이벤트 객체는 preventDefault만 있는 것으로) */
   fire(type, evt = {}) {
-    const e = { preventDefault() {}, target: this, ...evt };
-    for (const fn of this.listeners.get(type) || []) fn(e);
+    let stopped = false;
+    const e = { preventDefault() {}, stopImmediatePropagation() { stopped = true; }, target: this, ...evt };
+    for (const fn of this.listeners.get(type) || []) {
+      if (stopped) break;
+      fn(e);
+    }
+  }
+
+  /** 가장 가까운 조상(자기 포함) 중 태그 이름이 맞는 것(태그 선택자만 지원) */
+  closest(tag) {
+    for (let n = this; n && n.nodeType === 1; n = n.parentNode) if (n.tagName === String(tag).toUpperCase()) return n;
+    return null;
   }
 
   click() { if (!this.disabled) this.fire('click'); }
