@@ -345,7 +345,7 @@ async function checkBrowser(browser, port) {
 
   // 처음 화면: 유니버스 개요와 범례
   const summary = await text(s.cdp, '#detail');
-  check('처음 화면: 유니버스 개요와 사용법 안내', summary.includes('월말 정산 점검') && summary.includes('노드를 클릭하면'), summary.slice(0, 60));
+  check('처음 화면: 유니버스 개요와 사용법 안내', summary.includes('월말 정산 점검') && summary.includes('항목을 클릭하면'), summary.slice(0, 60)); // CR-18-2
   check('범례에 노드 유형이 보임', (await evaluate(s.cdp, "document.querySelectorAll('#legend li').length")) >= 5);
   await shot(s.cdp, `${browser.name}-1-start`);
 
@@ -385,7 +385,7 @@ async function checkBrowser(browser, port) {
   const blank = await evaluate(s.cdp, 'window.__blank');
   for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await s.cdp.send('Input.dispatchMouseEvent', { type, x: blank.x, y: blank.y, button: 'left', clickCount: 1 });
   await sleep(200);
-  check('빈 곳 클릭 → 선택 해제, 개요로 복귀', (await evaluate(s.cdp, 'window.__wu.selected')) === null && (await text(s.cdp, '#detail')).includes('노드를 클릭하면'));
+  check('빈 곳 클릭 → 선택 해제, 개요로 복귀', (await evaluate(s.cdp, 'window.__wu.selected')) === null && (await text(s.cdp, '#detail')).includes('항목을 클릭하면')); // CR-18-2
 
   // 여섯 번째 검토 U-1: 업무 유형이면 사번 칸이 보이지 않는다(hidden 속성이 CSS에 지던 결함). 사람이면 보인다
   const empH = () => evaluate(s.cdp, "(() => { const e = document.querySelector('#add-slot [data-testid=node-empno]'); const f = e && e.closest('label, .field'); return f ? Math.round(f.getBoundingClientRect().height) : -1; })()");
@@ -399,7 +399,7 @@ async function checkBrowser(browser, port) {
   const empty = await submitAdd(s.cdp, 'work', '   ');
   check('오류: 이름 누락 → E-REQUIRED, 받침에 맞는 조사(「이름을」)', empty.code === 'E-REQUIRED' && empty.text.includes('이름을 입력하세요'), empty.text);
   const dup = await submitAdd(s.cdp, 'work', '대사 확인');
-  check('오류: 중복 → E-DUP + 기존 노드 링크', dup.code === 'E-DUP' && dup.text.includes('기존 노드 보기'), dup.text);
+  check('오류: 중복 → E-DUP + 기존 노드 링크', dup.code === 'E-DUP' && dup.text.includes('기존 항목 보기'), dup.text); // CR-18-2
 
   const added = await submitAdd(s.cdp, 'artifact', newLabel);
   check('노드 1개 추가·저장', added.code === 'OK' && (await nodeCount(s.cdp)) === NODES + 1 && (await hasLabel(s.cdp, newLabel)), added.text);
@@ -514,7 +514,7 @@ async function checkBrowser(browser, port) {
   // N-5: 유니버스 전체가 대상이면 비교할 다른 업무가 없어 '해당 없음'(이력 부족과 구별). R-03 ② 이력 부족은 교육팀 신규 과정 단계에서 확인
   const simItem = await text(s.cdp, '[data-testid=draft-item-유사_경험자]');
   check('N-5·CR-17 B 유사 경험자: 지도 전체 대상이면 이전 담당 한가람이 「직접 해 봄」으로 먼저 나오고 이력 부족이 아님(해당 없음과 이력 부족의 구별은 단위 테스트 SE-2)', simItem.includes('한가람') && simItem.includes('직접 해 봄') && !simItem.includes('이력 부족'), simItem.slice(0, 120));
-  check('숨긴 노드가 근거면 "숨김 처리된 노드"로 표시(점검표 양식을 숨긴 상태)', (await text(s.cdp, '[data-testid=draft-item-산출물_문서]')).includes('점검표 양식(숨김 처리된 노드)'));
+  check('숨긴 노드가 근거면 "숨김 처리된 항목"로 표시(점검표 양식을 숨긴 상태)', (await text(s.cdp, '[data-testid=draft-item-산출물_문서]')).includes('점검표 양식(숨김 처리된 항목)')); // CR-18-2
   // 근거를 누르면 패널은 그대로 두고 그래프에서 그 노드를 보여 준다
   // CR-6 새 항목: 절차·마감·주의사항·진행 중·문의 연락처가 실제로 보인다
   const rich = {
@@ -869,7 +869,7 @@ async function checkBrowser(browser, port) {
     await sleep(250);
     const hb = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=help-box]'); if (!b) return null; const r = b.getBoundingClientRect(); const q = (id) => document.querySelector('[data-testid=' + id + ']'); const t = q('help-tour'); return { open: b.open, w: r.width, h: r.height, terms: [...document.querySelectorAll('[data-testid=help-terms] dt')].map((e) => e.textContent), gen: [...document.querySelectorAll('[data-testid=help-gen] dt')].map((e) => e.textContent), intro: (q('help-intro') || {}).textContent || '', tour: t ? t.textContent : null, tourSize: t ? t.getBoundingClientRect().width > 0 : false, close: (q('help-close') || {}).textContent || '', text: b.textContent, inView: r.top >= 0 && r.bottom <= window.innerHeight }; })()");
     check('처음 사용 W2(FU-9) 「?」 → 도움말 상자가 열리고 크기가 있으며 화면 안에 들어옴(따라 하기는 아직 시작되지 않음)', !!hb && hb.open === true && hb.w > 0 && hb.h > 0 && hb.inView && (await tourInfo()).mode === 'off', JSON.stringify(hb && { ...hb, text: '' }));
-    check('처음 사용 W2(FU-9) 도움말 한 줄 설명과 용어 4개(업무 지도·노드·꼭지·근거 칩)·생성 방식 3개(사전 생성·규칙 기반·Claude API)', !!hb && hb.intro.includes('누가 언제 무엇을 했는지 기록해 두고') && hb.intro.includes('「혼자만 아는 업무」 경고') && JSON.stringify(hb.terms) === JSON.stringify(['업무 지도', '노드', '꼭지', '근거 칩']) && JSON.stringify(hb.gen) === JSON.stringify(['사전 생성', '규칙 기반', 'Claude API']), JSON.stringify(hb && { terms: hb.terms, gen: hb.gen }));
+    check('처음 사용 W2(FU-9) 도움말 한 줄 설명과 용어 4개(업무 지도·노드·꼭지·근거 칩)·생성 방식 3개(사전 생성·규칙 기반·Claude API)', !!hb && hb.intro.includes('누가 언제 무엇을 했는지 기록해 두고') && hb.intro.includes('「혼자만 아는 업무」 경고') && JSON.stringify(hb.terms) === JSON.stringify(['업무 지도', '항목', '지도 중심', '근거 칩']) && JSON.stringify(hb.gen) === JSON.stringify(['사전 생성', '규칙 기반', 'Claude API']), JSON.stringify(hb && { terms: hb.terms, gen: hb.gen })); // CR-18-2
     check('처음 사용 W2(FU-9) 도움말 상자에 「따라 하기 다시 보기」(크기 있음)와 「닫기」 단추가 있고 "null" 글자가 없음', !!hb && hb.tour === '따라 하기 다시 보기' && hb.tourSize && hb.close === '닫기' && !hb.text.includes('null'));
     await shot(s.cdp, `${browser.name}-0c-help-box`);
     await s.cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
@@ -1168,7 +1168,7 @@ async function checkBrowser(browser, port) {
   await clickTestId(s.cdp, 'import-convert');
   await sleep(300);
   const pv = await text(s.cdp, '[data-testid=import-preview]');
-  check('T-17 예시 문서 초벌 변환 → 미리 보기(노드 18개, 세분화 맞음, 원문 근거 18/18, 표시 보존)', (await text(s.cdp, '[data-testid=import-summary]')).includes('노드 18개') && (await text(s.cdp, '[data-testid=import-granularity]')).includes('맞음') && (await text(s.cdp, '[data-testid=import-source]')).includes('18/18') && (await text(s.cdp, '[data-testid=import-marks]')).includes('[미확인] 노드 2개'), pv.slice(0, 120));
+  check('T-17 예시 문서 초벌 변환 → 미리 보기(노드 18개, 세분화 맞음, 원문 근거 18/18, 표시 보존)', (await text(s.cdp, '[data-testid=import-summary]')).includes('항목 18개') && (await text(s.cdp, '[data-testid=import-granularity]')).includes('맞음') && (await text(s.cdp, '[data-testid=import-source]')).includes('18/18') && (await text(s.cdp, '[data-testid=import-marks]')).includes('[미확인] 항목 2개'), pv.slice(0, 120)); // CR-18-2
   check('T-17 원문의 절 → 유니버스 표(업무 흐름은 절차 속성, 질문·리스크는 메모)', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=import-sections] tbody tr').length")) === 9 && pv.includes('절차 속성 5단계') && pv.includes('메모 5건'));
   check('U-6: 작성 주체만 비었으면 빨간 오류가 아니라 안내(notice)로 보이고 「가져오기」는 막힘', await evaluate(s.cdp, "(() => { const e = document.querySelector('[data-testid=import-errors]'); return !!e && !e.classList.contains('error-text') && e.classList.contains('notice') && !e.textContent.includes('가져올 수 없습니다'); })()") && await evaluate(s.cdp, "document.querySelector('[data-testid=import-confirm]').disabled"));
   check('U-7: 변환 단추 옆에 「생성 방식: 사전 생성」 대신 규칙으로 읽는다는 안내', (await text(s.cdp, '[data-testid=import-method-note]')).includes('규칙으로 읽습니다') && !(await text(s.cdp, '#import-dialog')).includes('생성 방식: 사전 생성'));
@@ -1682,7 +1682,7 @@ async function checkBrowser(browser, port) {
     check('R-17 ⑧ 선택이 없을 때 Esc → 아무 일 없음(오류 없음, 유니버스 요약 그대로)', (await evaluate(s.cdp, 'window.__wu.selected')) === null && (await text(s.cdp, '#detail')).length > 0);
     // ② 없는 이름, Enter 바로 누르기
     await typeFind('없는이름xyz');
-    check('R-17 ② 없는 이름 → 「찾는 노드 없음」', (await text(s.cdp, '[data-testid=find-none]')).includes('찾는 노드 없음'));
+    check('R-17 ② 없는 이름 → 「찾는 항목 없음」', (await text(s.cdp, '[data-testid=find-none]')).includes('찾는 항목 없음')); // CR-18-2
     // 검토 B-5·6: 결과 목록에서 Esc → 목록이 닫힌 채 찾기 칸으로(다시 열리지 않음), 찾기 칸 Esc는 글자를 지우지 않음
     await typeFind('대사');
     await key('ArrowDown', 'ArrowDown', 40);
@@ -1711,7 +1711,7 @@ async function checkBrowser(browser, port) {
     const offRows = await hitRows();
     check('R-22 ① 끔: 이름 일치만 남고 위치 표시가 없음', offRows.length > 0 && offRows.length === wi && offRows.every((h) => h.endsWith('|')), JSON.stringify(offRows));
     await typeFind('가상정산시스템');
-    check('R-22 ① 끔: 설명·속성에만 있는 낱말은 「찾는 노드 없음」', (await text(s.cdp, '[data-testid=find-none]')).includes('찾는 노드 없음'));
+    check('R-22 ① 끔: 설명·속성에만 있는 낱말은 「찾는 항목 없음」', (await text(s.cdp, '[data-testid=find-none]')).includes('찾는 항목 없음')); // CR-18-2
     await evaluate(s.cdp, "document.querySelector('[data-testid=find-wide]').click()");
     await sleep(150);
     check('R-22 ① 다시 켜면 다시 찾음', (await hitRows()).length === 2);
@@ -1845,7 +1845,7 @@ async function checkBrowser(browser, port) {
     const countLonely = await shownCount();
     await clickTestId(s.cdp, 'btn-nbhd');
     await sleep(300);
-    check('R-17 ④ 오류: 이웃 없는 노드 → 「이어진 노드 없음」 알림, 화면 그대로', (await text(s.cdp, '[data-testid=explore-note]')).includes('이어진 노드 없음') && (await evaluate(s.cdp, 'window.__wu.nbhd')) === null && (await shownCount()) === countLonely);
+    check('R-17 ④ 오류: 이웃 없는 노드 → 「이어진 항목 없음」 알림, 화면 그대로', (await text(s.cdp, '[data-testid=explore-note]')).includes('이어진 항목 없음') && (await evaluate(s.cdp, 'window.__wu.nbhd')) === null && (await shownCount()) === countLonely); // CR-18-2
     // 숨긴 노드는 찾기에 나오지 않음
     await evaluate(s.cdp, "window.confirm = () => true");
     await evaluate(s.cdp, "(document.querySelector('[data-testid=btn-hide]') || { click() {} }).click()");
@@ -1967,7 +1967,7 @@ async function checkBrowser(browser, port) {
   await sleep(150);
   await evaluate(s.cdp, 'window.__wu.select(null)');
   await sleep(150);
-  check('R7-5: 개요에 용어 한 줄(업무 지도·노드·꼭지)', (await text(s.cdp, '[data-testid=term-note]')).includes('꼭지'));
+  check('R7-5: 개요에 용어 한 줄(업무 지도·노드·꼭지)', (await text(s.cdp, '[data-testid=term-note]')).includes('지도 중심')); // CR-18-2
   // ── 사용자 화면 확인 의견 2026-10-17: 사람·업무·문서 추가 때 함께 이을 노드, 연결 수정에서 관계·상대 바꾸기 ──
   await s.cdp.send('Emulation.setDeviceMetricsOverride', { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false });
   await evaluate(s.cdp, "window.confirm = () => true; window.__wu.select(null)");
@@ -2221,7 +2221,7 @@ async function checkBrowser(browser, port) {
   await clickTestId(s.cdp, 'table-save');
   await sleep(300);
   const t19err = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid^=table-msg-]')].map((e) => e.textContent)");
-  check('R-18 ③: 오류 행 3개(이름 빔·기존과 중복·모르는 유형)를 사유와 함께 표시하고 아무것도 저장하지 않음', (await t19Count()) === t19n1 && (await t19Events()) === t19e1 && t19err[0] === '' && t19err[1].includes('이름') && t19err[2].includes('같은 노드') && t19err[3].includes('알 수 없는 유형') && (await evaluate(s.cdp, "document.getElementById('table-dialog').open")), JSON.stringify(t19err));
+  check('R-18 ③: 오류 행 3개(이름 빔·기존과 중복·모르는 유형)를 사유와 함께 표시하고 아무것도 저장하지 않음', (await t19Count()) === t19n1 && (await t19Events()) === t19e1 && t19err[0] === '' && t19err[1].includes('이름') && t19err[2].includes('같은 항목') && t19err[3].includes('알 수 없는 유형') && (await evaluate(s.cdp, "document.getElementById('table-dialog').open")), JSON.stringify(t19err)); // CR-18-2
   check('R-18 ③: 「아무것도 저장하지 않았습니다」 안내', (await text(s.cdp, '[data-testid=table-message]')).includes('아무것도 저장하지 않았습니다'));
   await shot(s.cdp, `${browser.name}-19b-table-error`);
   await evaluate(s.cdp, "(() => { const set = (i, k, v) => { document.querySelector('[data-testid=table-' + k + '-' + i + ']').value = v; }; set(1, 'label', 'T19 오류시험 나'); set(2, 'label', 'T19 오류시험 둘'); set(3, 'type', '주제'); set(3, 'label', 'T19 오류시험 다'); })()");
@@ -2374,7 +2374,7 @@ async function checkBrowser(browser, port) {
   await clickTestId(s.cdp, 'btn-hide');
   await sleep(300);
   const r21Count = await evaluate(s.cdp, "(() => { const e = document.querySelector('[data-testid=hidden-count]'); if (!e) return null; const r = e.getBoundingClientRect(); return { count: e.dataset.count, text: e.textContent, w: r.width, h: r.height }; })()");
-  check('R-21 ① 숨기면 그래프에서 빠지고 개요에 「숨긴 노드 1개」가 크기를 가지고 보임', !!r21Count && r21Count.count === '1' && r21Count.text.includes('숨긴 노드 1개') && r21Count.w > 0 && r21Count.h > 0 && (await nodeCount(s.cdp)) === r21.nodes - 1 && (await edgeCount(s.cdp)) < r21.edges, JSON.stringify([r21Count, r21]));
+  check('R-21 ① 숨기면 그래프에서 빠지고 개요에 「숨긴 항목 1개」가 크기를 가지고 보임', !!r21Count && r21Count.count === '1' && r21Count.text.includes('숨긴 항목 1개') && r21Count.w > 0 && r21Count.h > 0 && (await nodeCount(s.cdp)) === r21.nodes - 1 && (await edgeCount(s.cdp)) < r21.edges, JSON.stringify([r21Count, r21])); // CR-18-2
   await clickTestId(s.cdp, 'btn-hidden');
   await sleep(200);
   const r21List = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=hidden-item]')].map((li) => ({ id: li.dataset.id, text: li.textContent, btn: !!li.querySelector('[data-testid=btn-restore]') }))");
@@ -2441,13 +2441,13 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, `[...document.querySelectorAll('[data-testid=hidden-item]')].find((x) => x.dataset.id === ${JSON.stringify(idB)}).querySelector('[data-testid=btn-purge]').click()`);
     await sleep(400);
     const msgB = await evaluate(s.cdp, 'window.__delMsgs.at(-1)');
-    check('삭제 (나) 확인 문구: 연결 n개도 함께 지워지고 이력은 「(삭제된 노드)」로 남음', typeof msgB === 'string' && msgB.includes('완전히 지웁니다') && /연결 \d+개도 함께/.test(msgB) && msgB.includes('(삭제된 노드)'), String(msgB));
+    check('삭제 (나) 확인 문구: 연결 n개도 함께 지워지고 이력은 「(삭제된 항목)」로 남음', typeof msgB === 'string' && msgB.includes('완전히 지웁니다') && /연결 \d+개도 함께/.test(msgB) && msgB.includes('(삭제된 항목)'), String(msgB)); // CR-18-2
     check('삭제 (나) 목록에서 사라짐(자리표시는 목록에 안 나옴)', await evaluate(s.cdp, `![...document.querySelectorAll('[data-testid=hidden-item]')].some((x) => x.dataset.id === ${JSON.stringify(idB)})`));
-    check('삭제 (나) 문서: 이름 「(삭제된 노드)」, deleted·hidden true, 내용·연결 제거, 이력(소속 변경)은 유지, 검증용 이벤트 1건', await evaluate(s.cdp, `(() => { const d = window.__wu.doc; const n = d.nodes.find((x) => x.id === ${JSON.stringify(idB)}); return !!n && n.label === '(삭제된 노드)' && n.deleted === true && n.hidden === true && !d.edges.some((e) => e.source === n.id || e.target === n.id) && d.events.some((e) => e.type === 'affiliation_change' && e.payload.person_id === n.id) && d.events.filter((e) => e.payload && e.payload.target_id === n.id && e.payload.after && e.payload.after.deleted === true).length === 1; })()`));
-    check('삭제 (나) 그래프·찾기에 자리표시가 나오지 않음', !(await hasLabel(s.cdp, '(삭제된 노드)')) && !(await hasLabel(s.cdp, '삭제 시험 담당자')));
+    check('삭제 (나) 문서: 저장 이름 「(삭제된 노드)」(화면은 「(삭제된 항목)」), deleted·hidden true, 내용·연결 제거, 이력(소속 변경)은 유지, 검증용 이벤트 1건', await evaluate(s.cdp, `(() => { const d = window.__wu.doc; const n = d.nodes.find((x) => x.id === ${JSON.stringify(idB)}); return !!n && n.label === '(삭제된 노드)' && n.deleted === true && n.hidden === true && !d.edges.some((e) => e.source === n.id || e.target === n.id) && d.events.some((e) => e.type === 'affiliation_change' && e.payload.person_id === n.id) && d.events.filter((e) => e.payload && e.payload.target_id === n.id && e.payload.after && e.payload.after.deleted === true).length === 1; })()`)); // CR-18-2
+    check('삭제 (나) 그래프·찾기에 자리표시가 나오지 않음', !(await hasLabel(s.cdp, '(삭제된 항목)')) && !(await hasLabel(s.cdp, '(삭제된 노드)')) && !(await hasLabel(s.cdp, '삭제 시험 담당자'))); // CR-18-2
     await delSelect(`U-A1/${idB}`);
     const histB = await text(s.cdp, '[data-testid=history]');
-    check('삭제 (나) 그 노드를 가리킨 이력이 「(삭제된 노드)」로 보임', histB.includes('(삭제된 노드)') && !histB.includes('삭제 시험 담당자'), histB.slice(0, 160));
+    check('삭제 (나) 그 노드를 가리킨 이력이 「(삭제된 항목)」로 보임', histB.includes('(삭제된 항목)') && !histB.includes('삭제 시험 담당자'), histB.slice(0, 160)); // CR-18-2
     await shot(s.cdp, `${browser.name}-cr13d-c-purged-history`);
     check('삭제 화면에 "null" 글자 없음', (await nullTextSpots(s.cdp)).length === 0, (await nullTextSpots(s.cdp)).join(','));
     await evaluate(s.cdp, 'window.__wu.select(null)');
@@ -2896,7 +2896,7 @@ async function checkBrowser(browser, port) {
     const shown = await waitFor(s.cdp, `!!${aiChip}`, 5000);
     const done = await evaluate(s.cdp, `(() => ({ chip: ${aiChip} ? ${aiChip}.textContent : '', method: (document.querySelector('[data-testid=import-method]') || {}).textContent || '', dropped: (document.querySelector('[data-testid=import-ai-dropped] summary') || {}).textContent || '', droppedList: (document.querySelector('[data-testid=import-ai-dropped]') || {}).textContent || '', summary: (document.querySelector('[data-testid=import-summary]') || {}).textContent || '', gran: !!document.querySelector('[data-testid=import-granularity]'), source: (document.querySelector('[data-testid=import-source]') || {}).textContent || '', rows: document.querySelectorAll('[data-testid=import-sections] tbody tr').length, nodes: (document.querySelector('[data-testid=import-nodes]') || {}).textContent || '', live: (document.querySelector('[data-testid=ai-convert-live]') || {}).textContent, aiTag: !!document.querySelector('.error-text[data-testid=import-errors]') }))()`);
     check('CR-15 T-37 미리 보기 머리에 칩 「AI 변환 · 모델명」과 Claude API(실시간) 방식 안내가 보이고 규칙 방식 문구는 없음', shown && done.chip === 'AI 변환 · claude-opus-5-5' && done.method.includes('Claude API(실시간)') && !done.method.includes('규칙 v1') && done.live === '', JSON.stringify(done));
-    check('CR-15 T-37 미리 보기: 노드 표(업무 5·사람 3·산출물 3·주제 3)와 원문 근거 15/15, 세분화 줄(월말 정산 수준)은 없음', shown && done.summary.includes('노드 15개') && done.summary.includes('업무 5') && done.summary.includes('사람 3') && done.summary.includes('산출물 3') && done.summary.includes('주제 3') && done.source === '노드 15/15개' && !done.gran && done.rows === 6 && done.nodes.includes('승인취소') && done.nodes.includes('절차: ①'), JSON.stringify({ summary: done.summary, source: done.source, rows: done.rows, gran: done.gran }));
+    check('CR-15 T-37 미리 보기: 노드 표(업무 5·사람 3·산출물 3·주제 3)와 원문 근거 15/15, 세분화 줄(월말 정산 수준)은 없음', shown && done.summary.includes('항목 15개') && done.summary.includes('업무 5') && done.summary.includes('사람 3') && done.summary.includes('산출물 3') && done.summary.includes('주제 3') && done.source === '항목 15/15개' && !done.gran && done.rows === 6 && done.nodes.includes('승인취소') && done.nodes.includes('절차: ①'), JSON.stringify({ summary: done.summary, source: done.source, rows: done.rows, gran: done.gran })); // CR-18-2
     check('CR-15 T-37 「원문 인용이 확인되지 않아 뺀 항목 1개」(펼치면 지어낸 업무 사유)가 보임', done.dropped === '원문 인용이 확인되지 않아 뺀 항목 1개' && done.droppedList.includes('지어낸 업무') && done.droppedList.includes('원문에서 인용을 찾지 못함') && !done.nodes.includes('지어낸 업무'), JSON.stringify({ dropped: done.dropped, list: done.droppedList }));
     await shot(s.cdp, `${browser.name}-42-ai-convert-preview`);
     // 4) 같은 글로 다시 누르면 호출이 늘지 않는다(메모리 캐시)
@@ -2918,7 +2918,7 @@ async function checkBrowser(browser, port) {
     await pressAi();
     const failedShown = await waitFor(s.cdp, "!!document.querySelector('[data-testid=import-fallback]')", 5000);
     const failed = await evaluate(s.cdp, "({ fb: (document.querySelector('[data-testid=import-fallback]') || {}).textContent || '', chip: !!document.querySelector('[data-testid=import-ai-chip]'), nodes: (document.querySelector('[data-testid=import-summary]') || {}).textContent || '', method: (document.querySelector('[data-testid=import-method]') || {}).textContent || '', live: (document.querySelector('[data-testid=ai-convert-live]') || {}).textContent })");
-    check('CR-15 T-37 실패(시간 초과) → 「AI 변환 실패: 연결 실패·시간 초과 — 규칙 변환 결과를 보여 줍니다」 + 규칙 변환 미리 보기(노드 18), AI 칩 없음', failedShown && failed.fb === 'AI 변환 실패: 연결 실패·시간 초과 — 규칙 변환 결과를 보여 줍니다' && !failed.chip && failed.nodes.includes('노드 18개') && failed.method.includes('규칙 v1') && failed.live === '', JSON.stringify(failed));
+    check('CR-15 T-37 실패(시간 초과) → 「AI 변환 실패: 연결 실패·시간 초과 — 규칙 변환 결과를 보여 줍니다」 + 규칙 변환 미리 보기(노드 18), AI 칩 없음', failedShown && failed.fb === 'AI 변환 실패: 연결 실패·시간 초과 — 규칙 변환 결과를 보여 줍니다' && !failed.chip && failed.nodes.includes('항목 18개') && failed.method.includes('규칙 v1') && failed.live === '', JSON.stringify(failed)); // CR-18-2
     // 7) 응답을 기다리다 글을 바꾸면 응답은 버려진다
     await evaluate(s.cdp, "window.__wu.fakeLlm.mode = 'convert'; window.__wu.fakeLlm.delayMs = 600; window.__aiErr = []; window.addEventListener('error', (e) => window.__aiErr.push(String(e.message))); window.addEventListener('unhandledrejection', (e) => window.__aiErr.push(String(e.reason)))");
     await clickTestId(s.cdp, 'import-tab-doc');

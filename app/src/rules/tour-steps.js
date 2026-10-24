@@ -119,7 +119,7 @@ const TEAM_STEPS = {
   },
   find: {
     id: 'find',
-    task: '위의 「노드 찾기」에 "대사"를 넣고 결과 하나를 고르세요.',
+    task: '위의 「항목 찾기」에 "대사"를 넣고 결과 하나를 고르세요.',
     target: () => [{ sel: '[data-testid=find-input]' }],
     done: (s) => !!s.foundGid,
   },

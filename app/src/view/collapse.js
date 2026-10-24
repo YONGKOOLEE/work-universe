@@ -35,7 +35,7 @@ export function exposureIndex(view) {
 export function exposureOf(view, gid, index = null) {
   const node = view.rawNode(gid);
   if (!node) return { exposed: false, explicit: false, reason: '' };
-  if (node.core_type === 'root') return { exposed: true, explicit: false, reason: '꼭지' };
+  if (node.core_type === 'root') return { exposed: true, explicit: false, reason: '지도 중심' };
   if (typeof node.exposed === 'boolean') {
     return { exposed: node.exposed, explicit: true, reason: node.exposed ? '직접 드러냄' : '직접 숨김' };
   }

@@ -63,9 +63,9 @@ export function diffText(diff) {
 
 /** 한계 안내 문장들(limits 코드별). 항상 보이는 고정 한계 한 줄이 맨 앞에 온다 */
 export function limitTexts(limits) {
-  const out = ['「바로 삭제」한 노드와 하위 유형 추가는 기록이 남지 않아 여기에 보이지 않습니다.'];
+  const out = ['「바로 삭제」한 항목과 하위 유형 추가는 기록이 남지 않아 여기에 보이지 않습니다.'];
   const n = (code) => limits.filter((l) => l.code === code).length;
-  if (n('purged')) out.push(`「완전히 삭제」한 노드 ${n('purged')}개는 내용을 지웠으므로 「(삭제된 노드)」 자리표시로만 보입니다.`);
+  if (n('purged')) out.push(`「완전히 삭제」한 항목 ${n('purged')}개는 내용을 지웠으므로 「(삭제된 항목)」 자리표시로만 보입니다.`);
   if (n('identity_detail')) out.push('같은 사람·업무 판정의 점수·이유·판정자는 기록에 없어, 판정 상태만 그때로 보입니다.');
   return out;
 }
@@ -77,13 +77,13 @@ export function confirmText(preview, at, labelOf = pointLabel) {
   const shown = c.restore_nodes + c.add_edges;
   const edited = c.update_nodes + c.update_edges;
   const lines = [`지도를 ${labelOf(at)} 시점으로 되돌립니다.`];
-  lines.push(`- 그 뒤 생기거나 그때 숨겨져 있던 노드·연결 ${hidden}개는 숨겨집니다(지워지지 않습니다).`);
-  lines.push(`- 그 뒤 숨긴 노드·연결 ${shown}개는 다시 보입니다.`);
+  lines.push(`- 그 뒤 생기거나 그때 숨겨져 있던 항목·연결 ${hidden}개는 숨겨집니다(지워지지 않습니다).`);
+  lines.push(`- 그 뒤 숨긴 항목·연결 ${shown}개는 다시 보입니다.`);
   lines.push(`- 그 뒤 바뀐 내용 ${edited}건은 그때 값으로 돌아갑니다.`);
   const extra = c.hide_refs + c.add_refs + c.identity;
   if (extra) lines.push(`- 묶음·같은 사람 판정 ${extra}건도 그때 상태로 맞춥니다.`);
   const skipped = preview.limits.filter((l) => ['purged_skip', 'edge_end_hidden', 'identity_created_after'].includes(l.code)).length;
-  if (skipped) lines.push('- 되살릴 수 없는 일부(완전히 삭제한 노드 등)는 그대로 둡니다.');
+  if (skipped) lines.push('- 되살릴 수 없는 일부(완전히 삭제한 항목 등)는 그대로 둡니다.');
   lines.push('메모·인수인계·담당 같은 사용자 기록은 그대로 남습니다. 되돌린 기록도 이력에 남아, 다시 되감을 수 있습니다.');
   return lines.join('\n');
 }
@@ -121,7 +121,7 @@ export function rewindEntry({ points, onOpen }) {
       el('button', { type: 'button', 'data-testid': 'btn-rewind', disabled: !enough, onclick: onOpen, title: '지도가 언제 어떻게 고쳐졌는지 시점을 골라, 그때 모습을 읽기 전용으로 보고 필요하면 되돌립니다' }, '편집 되감기')),
     el('p', { class: 'muted small', 'data-testid': 'rewind-hint' }, enough
       ? '고친 시점을 골라 그때의 지도를 봅니다(읽기 전용). 업무가 언제 누구 것이었나를 보는 「시간 보기」와 다릅니다.'
-      : '고친 기록이 아직 없습니다. 노드를 고치거나 추가하면 그 시점이 생겨, 나중에 되감을 수 있습니다.'));
+      : '고친 기록이 아직 없습니다. 항목을 고치거나 추가하면 그 시점이 생겨, 나중에 되감을 수 있습니다.'));
 }
 
 /** 머리 띠(그래프 위). 같은 요소를 다시 채운다 */
@@ -167,11 +167,11 @@ export function rewindPanel(o) {
     ...nodeChanges.slice(0, 30).map((c) => el('li', {}, el('button', { type: 'button', class: 'link', onclick: () => o.onSelect(o.gidOf(c.id)) }, o.labelOf(c.id) || c.id), el('span', { class: 'muted small' }, ` — ${c.note}`))));
   return el('div', { 'data-testid': 'rewind-panel' },
     el('h2', {}, '편집 되감기'),
-    el('p', { class: 'muted small' }, '시점을 고르면 그때의 지도를 읽기 전용으로 그립니다. 주황 테두리는 지금과 달라진 노드입니다. 노드를 누르면 그때 값이 보입니다.'),
+    el('p', { class: 'muted small' }, '시점을 고르면 그때의 지도를 읽기 전용으로 그립니다. 주황 테두리는 지금과 달라진 항목입니다. 항목을 누르면 그때 값이 보입니다.'),
     el('label', { class: 'rewind-bar-label' }, '시점 막대 ', bar),
     el('p', { class: 'rewind-now', 'data-testid': 'rewind-now' }, `고른 시점: ${timeLabel(o.at)}`),
     el('p', { class: 'rewind-summary', 'data-testid': 'rewind-summary' }, diffText(o.diff)),
-    nodeChanges.length ? el('div', {}, el('h3', {}, '지금과 다른 노드'), changed) : null,
+    nodeChanges.length ? el('div', {}, el('h3', {}, '지금과 다른 항목'), changed) : null,
     el('h3', {}, '고친 시점'),
     list,
     ...limitTexts(o.limits).map((t) => el('p', { class: 'muted small', 'data-testid': 'rewind-limit' }, t)),

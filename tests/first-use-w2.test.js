@@ -64,7 +64,7 @@ test('시작 화면 처음 보이는 글(「…」 밖)에 유니버스·노드�
 
 test('FU-9 도움말 문구: 한 줄 설명·용어 4개·생성 방식 3개 이름과 순서', () => {
   assert.equal(HELP_INTRO, '이 앱은 업무마다 누가 언제 무엇을 했는지 기록해 두고, 담당자가 바뀔 때 근거 달린 인수인계 초안과 「혼자만 아는 업무」 경고를 만듭니다.');
-  assert.deepEqual(HELP_TERMS.map((t) => t.term), ['업무 지도', '노드', '꼭지', '근거 칩']);
+  assert.deepEqual(HELP_TERMS.map((t) => t.term), ['업무 지도', '항목', '지도 중심', '근거 칩']); // CR-18-2
   assert.deepEqual(HELP_GEN.map((t) => t.term), ['사전 생성', '규칙 기반', 'Claude API']);
   assert.ok(HELP_TERMS[1].desc.includes('사람·업무·산출물·주제·조직'));
   assert.ok(HELP_TERMS[2].desc.includes('업무 지도 전체'));

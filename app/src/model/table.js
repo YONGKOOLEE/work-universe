@@ -338,7 +338,7 @@ export function linkSummary(result) {
   const freshWork = rows.filter((r) => r.aux && r.node.core_type === 'work').length;
   const already = rows.filter((r) => r.kind === 'skipped' && r.reason === 'already_assigned').length;
   const dup = rows.filter((r) => r.kind === 'skipped' && r.reason === 'duplicate_edge').length;
-  let text = `노드 ${(result.created || []).length}개, 연결 ${links}개를 만들었습니다(새로 만든 사람·산출물 ${fresh}개${freshWork ? `, 새 업무 ${freshWork}개` : ''}).`;
+  let text = `항목 ${(result.created || []).length}개, 연결 ${links}개를 만들었습니다(새로 만든 사람·산출물 ${fresh}개${freshWork ? `, 새 업무 ${freshWork}개` : ''}).`;
   if (already) text += ` 이미 담당 중이라 건너뛴 담당 ${already}건.`;
   if (dup) text += ` 이미 있는 연결 ${dup}건은 건너뛰었습니다.`;
   return text;

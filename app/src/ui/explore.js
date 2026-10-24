@@ -5,13 +5,13 @@ import { el } from './dom.js';
 
 // 바꾸기 쉬운 값은 한 곳에(연속 진행 모드 원칙, decisions-pending 6절 C10-5)
 export const EXPLORE = {
-  FILTER_MODE: 'dim', // 거르기에서 빠진 노드: 'dim'(흐리게, 추천대로 2026-10-04) | 'hide'(숨기기)
+  FILTER_MODE: 'dim', // 거르기에서 빠진 항목: 'dim'(흐리게, 추천대로 2026-10-04) | 'hide'(숨기기)
   LABEL_MIN_PX: 6, // 화면에서 이 크기(px)보다 작아지는 이름은 숨긴다(R-17 ⑦)
-  LABEL_READ_PX: 15, // 마우스를 올리거나 고른 노드의 이름은 화면에서 이 크기 이상으로(R-17 ⑦)
-  ROOT_MIN_PX: 11, // 꼭지(유니버스) 이름은 숨기지 않고 화면에서 이 크기 이상으로(검토: 125% 노트북 첫 화면에 이름이 하나도 없음, decisions-pending C10-6). 0이면 꼭지도 숨김
-  FIRST_READ_PX: 11, // 묶은 지도(팀·부서)를 처음 열 때 노드 이름이 화면에서 이 크기보다 작으면 지도 중심을 가운데 두고 배율을 올려 시작한다(CR-18-1, 4회차 「펼치면 거의 못 읽음」). 0이면 끔. 「전체 보기」는 그대로 전체를 맞춘다
+  LABEL_READ_PX: 15, // 마우스를 올리거나 고른 항목의 이름은 화면에서 이 크기 이상으로(R-17 ⑦)
+  ROOT_MIN_PX: 11, // 지도 중심(유니버스) 이름은 숨기지 않고 화면에서 이 크기 이상으로(검토: 125% 노트북 첫 화면에 이름이 하나도 없음, decisions-pending C10-6). 0이면 지도 중심도 숨김
+  FIRST_READ_PX: 11, // 묶은 지도(팀·부서)를 처음 열 때 항목 이름이 화면에서 이 크기보다 작으면 지도 중심을 가운데 두고 배율을 올려 시작한다(CR-18-1, 4회차 「펼치면 거의 못 읽음」). 0이면 끔. 「전체 보기」는 그대로 전체를 맞춘다
   EXPAND_NOTE_MS: 8000, // 접힌 묶음 안에 또 접힌 묶음이 있다는 안내가 떠 있는 시간(CR-18-1). 다음 조작 때도 사라진다
-  NBHD_PROMOTE_ABOVE: 15, // 그래프에 그려진 노드가 이 수를 넘으면 노드 상세 첫 줄에 「주변만 보기」를 꺼낸다(D8-3, 2026-10-17). 샘플: 월말 정산 10·행사 9는 「더 보기」 안, 교육 18·팀 19·조직관리 24·카드승인 38은 첫 줄
+  NBHD_PROMOTE_ABOVE: 15, // 그래프에 그려진 항목이 이 수를 넘으면 항목 상세 첫 줄에 「주변만 보기」를 꺼낸다(D8-3, 2026-10-17). 샘플: 월말 정산 10·행사 9는 「더 보기」 안, 교육 18·팀 19·조직관리 24·카드승인 38은 첫 줄
   RESULT_LIMIT: 30, // 찾기 결과 목록에 보이는 수(더 있으면 "더 길게 입력" 안내)
 };
 
@@ -30,12 +30,12 @@ export function exploreBar(o) {
   let hits = [];
 
   // ── 찾기(R-17 ①②⑧) ──
-  const input = el('input', { type: 'search', placeholder: '노드 찾기 (이름 일부, 예: 대사)', 'aria-label': '노드 찾기', 'data-testid': 'find-input', autocomplete: 'off', 'aria-controls': 'find-results' });
+  const input = el('input', { type: 'search', placeholder: '항목 찾기 (이름 일부, 예: 대사)', 'aria-label': '항목 찾기', 'data-testid': 'find-input', autocomplete: 'off', 'aria-controls': 'find-results' });
   // 「설명·속성까지」(T-26, R-22 ①, D-24): 기본 켬. 저장하지 않는다(화면을 열 때마다 켬, L-27과 같은 방식)
   const wide = el('input', { type: 'checkbox', checked: true, 'data-testid': 'find-wide' });
   wide.addEventListener('change', () => { if (input.value.trim()) showResults(); });
   const wideLabel = el('label', { class: 'check small find-wide' }, wide, '설명·속성까지');
-  const results = el('ul', { id: 'find-results', class: 'find-results', 'data-testid': 'find-results', hidden: true, 'aria-label': '찾은 노드' });
+  const results = el('ul', { id: 'find-results', class: 'find-results', 'data-testid': 'find-results', hidden: true, 'aria-label': '찾은 항목' });
   const close = () => { results.hidden = true; };
   const pick = (gid) => {
     close();
@@ -57,7 +57,7 @@ export function exploreBar(o) {
           el('span', { class: 'name' }, h.label), el('span', { class: 'chip' }, h.type_label), h.where ? el('span', { class: 'where', 'data-testid': 'find-where' }, h.where) : null, el('span', { class: 'uname' }, h.universe_name)))),
         hits.length > shown.length ? el('li', { class: 'more muted small', 'data-testid': 'find-more' }, `외 ${hits.length - shown.length}개 — 더 길게 입력하면 좁혀집니다`) : null,
       ].filter(Boolean)
-      : [el('li', { class: 'none', 'data-testid': 'find-none', role: 'status' }, `찾는 노드 없음: 「${q}」`)]));
+      : [el('li', { class: 'none', 'data-testid': 'find-none', role: 'status' }, `찾는 항목 없음: 「${q}」`)]));
     results.hidden = false;
   }
   let quietFocus = false; // 결과 목록에서 Esc로 돌아올 때는 목록을 다시 열지 않는다
@@ -115,7 +115,7 @@ export function exploreBar(o) {
   const details = el('details', { class: 'filter-box', 'data-testid': 'filter-box' },
     el('summary', { 'data-testid': 'filter-open' }, '거르기'),
     el('div', { class: 'filter-panel' },
-      el('div', { class: 'muted small' }, `노드 유형 — 고른 유형만 또렷하게, ${dimText}(업무 지도의 중심 노드인 꼭지는 늘 보임)`), typeBox,
+      el('div', { class: 'muted small' }, `항목 유형 — 고른 유형만 또렷하게, ${dimText}(가운데 큰 동그라미인 지도 중심은 늘 보임)`), typeBox,
       el('div', { class: 'muted small' }, '사람 하나 — 그 사람과 맡은 업무(지난 담당 포함)만 또렷하게'), personSel,
       el('button', { type: 'button', class: 'small-btn', 'data-testid': 'filter-clear-panel', onclick: () => clear() }, '거르기 모두 풀기')));
   details.addEventListener('toggle', () => { if (details.open) renderFilterInputs(); });

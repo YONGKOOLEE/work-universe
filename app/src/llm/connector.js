@@ -130,7 +130,7 @@ export function convertDocumentWith(text, { provider = null, ruleConvert }) {
     return rule({ code: FALLBACK, reason: '변환 결과가 형식 검증을 통과하지 못해 규칙 기반으로 변환했습니다' });
   }
   if (!d.nodes.every((n) => n && n.attrs && typeof n.attrs.원문 === 'string' && n.attrs.원문.trim())) {
-    return rule({ code: FALLBACK, reason: '원문 근거가 없는 노드가 있어 규칙 기반으로 변환했습니다' });
+    return rule({ code: FALLBACK, reason: '원문 근거가 없는 항목이 있어 규칙 기반으로 변환했습니다' });
   }
   return { ok: true, doc: d, report: got.report || null, method: provider.method, fallback: null, note: null };
 }

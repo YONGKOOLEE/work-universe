@@ -172,7 +172,7 @@ export const RANGE_NONE_REASON = '받는 사람이 이 범위에서 지금 맡�
 const sentence = (text, evidence) => ({ text, evidence_ids: [...new Set(evidence)] });
 const name = (view, gid) => {
   const n = view.getNode(gid);
-  if (!n) return '(찾을 수 없는 노드)';
+  if (!n) return '(찾을 수 없는 항목)';
   return displayName(n);
 };
 

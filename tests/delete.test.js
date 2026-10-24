@@ -142,7 +142,7 @@ test('purgeNode: 자리표시로 비운다(필드 제거·deleted·hidden 유지
   assert.equal(r.ok, true);
   const n = r.doc.nodes.find((x) => x.id === 'N-020');
   assert.deepEqual(Object.keys(n).sort(), ['core_type', 'created_at', 'deleted', 'hidden', 'id', 'label', 'updated_at']);
-  assert.equal(n.label, '(삭제된 노드)');
+  assert.equal(n.label, '(삭제된 노드)'); // 저장 값은 그대로(CR-18-2는 화면 글만)
   assert.equal(n.deleted, true);
   assert.equal(n.hidden, true);
   assert.equal(n.updated_at, T3.now);
@@ -242,20 +242,20 @@ test('결함 주입: 가리키는 이력이 있는데 통째로 빼면 검증이
 });
 
 // ── 화면에 보이는 모양 ──
-test('메모·인수인계가 자리표시 노드를 가리키면 「(삭제된 노드)」로 보인다', () => {
+test('메모·인수인계가 자리표시 노드를 가리키면 「(삭제된 항목)」으로 보인다', () => { // CR-18-2
   const { r } = purgedArtifact();
   const v = buildView(r.doc, () => null);
   const node = v.getNode('U-A1/N-020');
   assert.equal(node.deleted, true);
-  assert.equal(displayName(node), '(삭제된 노드)');
+  assert.equal(displayName(node), '(삭제된 항목)'); // CR-18-2
   const ev = v.events.find((e) => e.id === 'E-002');
-  assert.match(eventText(v, ev), /\(삭제된 노드\)/);
+  assert.match(eventText(v, ev), /\(삭제된 항목\)/); // CR-18-2
   assert.doesNotMatch(eventText(v, ev), /숨김 처리된/);
   const own = v.events.find((e) => e.payload && e.payload.after && e.payload.after.deleted === true);
   assert.match(eventText(v, own), /^완전히 삭제\(내용 지움: /);
   // 상세에서도 이력 문장이 같다
   const d = describeNode(v, 'U-A1/N-001', { asOf: '2026-10-05' });
-  assert.ok(d.history.some((h) => /\(삭제된 노드\)/.test(h.text)));
+  assert.ok(d.history.some((h) => /\(삭제된 항목\)/.test(h.text))); // CR-18-2
 });
 
 test('숨긴 노드 목록에서 자리표시 노드는 빠지고, 남은 숨긴 노드에는 연결 수가 붙는다', () => {
@@ -342,7 +342,7 @@ test('app.deleteNodeNow·purgeNode: 저장은 문서 1회, 다시 열어도 유�
   const reopened = open(storage).doc;
   const n = reopened.nodes.find((x) => x.id === b.node.id);
   assert.equal(n.deleted, true); // 연결이 있었으므로 자리표시로 남는다
-  assert.equal(n.label, '(삭제된 노드)');
+  assert.equal(n.label, '(삭제된 노드)'); // 저장 값은 그대로(CR-18-2는 화면 글만)
   assert.equal(reopened.edges.some((x) => x.id === e.edge.id), false);
 });
 

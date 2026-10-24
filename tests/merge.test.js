@@ -85,7 +85,7 @@ test('R-11 ② ④ ⑤: 사람이 "같은 업무"로 확정하면 통합 화면�
   assert.deepEqual({ b: storage.getItem('wu:v1:u:U-B'), c: storage.getItem('wu:v1:u:U-C') }, before); // R-11 ⑤
   // R-11 ④: 통합 결과도 같은 방식으로 탐색·초안
   const d = describeNode(v, 'U-B/N-103', { asOf: '2026-10-03' });
-  assert.ok(d.found && d.rows.some((x) => x.label === '같은 노드'));
+  assert.ok(d.found && d.rows.some((x) => x.label === '같은 항목')); // CR-18-2
   assert.ok(d.history.some((h) => h.text.includes('같은 업무로 확인')));
   const draft = buildHandoverDraft(v, { target: 'U-C/N-101', from: 'U-C/N-202', to: 'U-C/N-201' });
   assert.equal(draft.ok, true);

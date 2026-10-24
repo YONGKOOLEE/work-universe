@@ -37,7 +37,7 @@ test('미리 보기: 문서 변환 결과의 구성·원문 근거·표시 보�
   const p = previewImport(converted(), { existing: [] });
   assert.equal(p.ok, true);
   assert.equal(p.node_total, 18);
-  assert.deepEqual(p.counts.map((c) => `${c.label} ${c.count}`), ['꼭지 1', '사람 5', '업무 5', '산출물 3', '주제 4']);
+  assert.deepEqual(p.counts.map((c) => `${c.label} ${c.count}`), ['지도 중심 1', '사람 5', '업무 5', '산출물 3', '주제 4']); // CR-18-2
   assert.equal(p.memo_total, 8);
   assert.deepEqual(p.source, { with: 18, total: 18, missing: [] });
   assert.deepEqual(p.marks, { 가정: 2, 미확인: 2 });

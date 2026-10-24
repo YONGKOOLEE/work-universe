@@ -207,7 +207,7 @@ export function restoreNode(doc, nodeId, ctx) {
   if (!node) return fail(CODES.SCHEMA, { field: 'id' });
   if (node.core_type === 'root') return fail(CODES.SCHEMA, { field: 'core_type' });
   if (!node.hidden) return { ok: true, doc, node, event: null };
-  if (node.deleted) return fail(CODES.SCHEMA, { field: 'id', deleted: true }); // 완전히 삭제한 노드는 되살릴 수 없다
+  if (node.deleted) return fail(CODES.SCHEMA, { field: 'id', deleted: true }); // 완전히 삭제한 항목은 되살릴 수 없다
   const dup = findDuplicateNode(doc.nodes, node, nodeId);
   if (dup) return fail(CODES.DUP, { existing_id: dup.id });
 
@@ -224,6 +224,7 @@ export function restoreNode(doc, nodeId, ctx) {
 // ── 삭제(CR-13 D): 바로 삭제와 숨긴 뒤 완전히 삭제(자리표시) ──────────────────
 
 /** 완전히 삭제한 노드의 이름. 이 노드를 가리키던 이력은 이 이름으로 보인다 */
+// 저장되는 자리표시 이름이라 CR-18-2 용어 바꾸기에서도 그대로 둔다(저장 값 불변). 화면에는 view/describe.js displayName이 「(삭제된 항목)」으로 보인다
 export const DELETED_LABEL = '(삭제된 노드)';
 // 자리표시로 만들 때 지우는 노드 필드
 const PURGE_FIELDS = ['description', 'attrs', 'emp_no', 'subtype', 'tags', 'period', 'exposed'];
@@ -694,8 +695,8 @@ export function applyBatch(doc, ops, ctx) {
   const warnings = [];
   const errors = [];
   const rows = [];
-  const createdRow = new Map(); // 묶음 안에서 만든 노드 id → 행 번호
-  const rowNode = new Map(); // 행 번호 → 그 행에서 만든 노드 id ('@행번호' 표식 해석용)
+  const createdRow = new Map(); // 묶음 안에서 만든 항목 id → 행 번호
+  const rowNode = new Map(); // 행 번호 → 그 행에서 만든 항목 id ('@행번호' 표식 해석용)
   const failedRows = new Set(); // 실패한 행 번호(그 행을 가리키는 연결은 건너뜀)
   const createdEdges = [];
   const assignments = [];

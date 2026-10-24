@@ -53,7 +53,7 @@ test('재검증 8: 범위 밖 업무가 숨김이면 메모 표기에 숨김 표
   const d = buildHandoverDraft(buildView(hidden), { target: 'U-C/N-102', from: 'U-C/N-202', to: 'U-C/N-201' }).draft;
   const issues = d.items.find((i) => i.key === '최근_이슈').sentences.map((s) => s.text);
   assert.ok(issues.length > 0);
-  for (const t of issues) assert.ok(t.endsWith('(「신입 교육 운영(숨김 처리된 노드)」 메모)'), t);
+  for (const t of issues) assert.ok(t.endsWith('(「신입 교육 운영(숨김 처리된 항목)」 메모)'), t); // CR-18-2
 });
 
 test('재검증 6: 실명 알림은 문서 변환 결과만, 번호 알림은 이름·사번 칸도 본다(가상 사번 V-####는 아님)', () => {

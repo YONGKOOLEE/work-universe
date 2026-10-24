@@ -327,21 +327,21 @@ function start() {
     if (CHECK_MODE) window.__wu = { start: true, readOnly: app.readOnly };
     return;
   }
-  let selected = null; // 선택한 노드의 전역 ID
+  let selected = null; // 선택한 항목의 전역 ID
   let editing = null; // 편집 중인 양식: {kind:'node'|'edge'|'event'|'edge-edit', edgeId?}
   let drafting = null; // 인수인계 초안 화면: {target}
   let insight = null; // 인사이트 화면: {work, kind}
   let issues = null; // 미해결 이슈 목록 화면(R-20): {target}
-  let hiddenOpen = false; // 숨긴 노드 목록 화면(R-21)
+  let hiddenOpen = false; // 숨긴 항목 목록 화면(R-21)
   let rw = null; // 편집 되감기 중이면 {at}(CR-14 A). 옛 지도를 읽기 전용으로 본다. 저장하지 않는다
   let rwPast = null; // 되감기 중인 시점의 app.viewAt 결과 {doc, view, diff, limits}
   // 따라 하기(CR-13 A): 완료 조건에 쓰는 표시. 따라 하기를 시작할 때 지운다
   let draftShown = false; // 초안 결과가 그려졌음
   let draftDomLive = false; // 지금 화면 패널에 이 drafting의 초안 창이 그려져 있음(다시 그리기 전에 고른 값을 읽을 수 있다)
-  let draftRecords = null; // 초안 창을 마지막으로 그린 때의 기록 판 표지(문서 객체·되감기 시점·노드·연결·이력 수). 기록이 바뀌었는지 가린다(R11-5)
+  let draftRecords = null; // 초안 창을 마지막으로 그린 때의 기록 판 표지(문서 객체·되감기 시점·항목·연결·이력 수). 기록이 바뀌었는지 가린다(R11-5)
   let draftShell = null; // 같은 때의 화면 조건 표지(기준일·읽기 전용·생성 방식·오늘). 바뀌면 창만 다시 그린다
   let evidenceUsed = false; // 초안의 근거 칩을 눌렀음
-  let foundGid = null; // 「노드 찾기」로 고른 노드
+  let foundGid = null; // 「항목 찾기」로 고른 항목
   let tourSaved = false; // 따라 하기를 시작한 뒤 저장이 한 번 성공했음(handover 5단계 안내용)
   let tour = null;
   const tourHook = () => { if (tour) tour.check(); };
@@ -440,7 +440,7 @@ function start() {
           : null,
         // 노드가 많은 화면(부서 등)은 글자가 작다: 확대·이동 방법을 범례 끝에 알린다(재검증 5-2)
         display.nodes.some((n) => n.merged_from && n.merged_from.length)
-          ? el('li', { class: 'legend-note', 'data-testid': 'legend-merged' }, '숫자 없는 이중 테두리: 같은 사람으로 합친 노드')
+          ? el('li', { class: 'legend-note', 'data-testid': 'legend-merged' }, '숫자 없는 이중 테두리: 같은 사람으로 합친 항목')
           : null,
         el('li', { class: 'legend-note', 'data-testid': 'legend-zoom' }, '마우스 휠: 확대·축소 · 빈 곳 끌기: 이동'),
       ].filter(Boolean),
@@ -456,7 +456,7 @@ function start() {
     if (isChildRoot) {
       // 주변만 보기 화면(display)에는 접힘 정보가 없으므로 펼침 목록으로 판정한다. 누르면 주변만 보기를 끝내고 펼치거나 접는다(toggle)
       const info = nbhd ? (expanded.has(node.universe_id) ? null : { hidden_count: null }) : display.collapsed.get(node.universe_id);
-      const infoText = !info ? '펼쳐져 있음' : info.hidden_count == null ? '접혀 있음(펼치면 주변만 보기를 끝내고 전체 그래프에서 펼칩니다)' : `접혀 있음: 세부 노드 ${info.hidden_count}개가 가려져 있습니다.`;
+      const infoText = !info ? '펼쳐져 있음' : info.hidden_count == null ? '접혀 있음(펼치면 주변만 보기를 끝내고 전체 그래프에서 펼칩니다)' : `접혀 있음: 세부 항목 ${info.hidden_count}개가 가려져 있습니다.`;
       box.append(
         el('p', { class: 'muted small' }, infoText),
         el('div', { class: 'row' },
@@ -470,7 +470,7 @@ function start() {
       return box;
     }
     if (node.core_type === 'root') return null;
-    if (node.hidden || node.deleted) return null; // 숨긴·삭제한 노드는 고칠 수 없으므로 「위층에 드러내기」 체크칸을 보이지 않는다(검토 R13 재검증 5)
+    if (node.hidden || node.deleted) return null; // 숨긴·삭제한 항목은 고칠 수 없으므로 「위층에 드러내기」 체크칸을 보이지 않는다(검토 R13 재검증 5)
     const { universe_id: uid, local_id: lid } = parseGid(gid);
     const own = uid === app.doc.universe.id;
     // 이 유니버스를 묶은 상위 유니버스가 없으면 "드러내기"는 뜻이 없으므로 보이지 않는다(검토5 U-4)
@@ -488,7 +488,7 @@ function start() {
     const where = own ? `「${parents.map((p) => p.name).join('」·「')}」` : '상위 업무 지도';
     // el()은 null 자식을 걸러 내므로 box.append(…, null)처럼 "null" 글자가 들어가지 않는다(검토5 U-1)
     box.append(el('div', {},
-      el('label', { class: 'check' }, cb, ` ${where} 화면에서도 이 노드 보이기`),
+      el('label', { class: 'check' }, cb, ` ${where} 화면에서도 이 항목 보이기`),
       el('div', { class: 'muted small' }, `지금 적용: ${exp.explicit ? '직접 지정' : '기본 규칙'}(${exp.reason})`),
       own ? el('div', { class: 'muted small' }, `${where}${josa(where, '은/는')} 이 업무 지도를 묶은 상위 업무 지도입니다.`) : null,
       owner ? el('div', { class: 'muted small', 'data-testid': 'exposed-owner' }, `바꾸면 원본 업무 지도 「${owner}」에 저장됩니다.`) : null,
@@ -587,7 +587,7 @@ function start() {
       const extra = plan.existing
         ? `같은 이름의 사람이 이미 있어 새로 만들지 않고 연결만 했습니다${plan.ignored ? ' (입력한 소속·연락처는 반영하지 않았습니다 — 그 사람의 「수정」에서 고치세요)' : ''}.`
         : `새 사람으로 만들었습니다.${b.warnings.map((w) => ` ${messageFor(w)}`).join('')}`;
-      afterSave(b, gid); // refresh()가 상세를 다시 그린다(연결된 노드에 협업자가 보인다)
+      afterSave(b, gid); // refresh()가 상세를 다시 그린다(연결된 항목에 협업자가 보인다)
       $('detail').prepend(el('p', { class: 'ok-notice', role: 'status', 'data-testid': 'collab-done' }, `「${name}」${josa(name, '을/를')} 이 업무의 협업자로 이었습니다(참조). ${extra}`));
     };
     for (const box of [nameIn, affIn, conIn]) box.querySelector('input').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
@@ -884,7 +884,7 @@ function start() {
 
   // 자주 쓰는 단추만 한 줄에 두고 나머지는 「더 보기」(details)로 접는다(R7-2). details는 키보드(Tab·Enter·Space)로 열린다
   function historyJumpButton() {
-    return el('button', { type: 'button', 'data-testid': 'btn-history-jump', title: '이 노드의 이력 목록으로 내려갑니다', onclick: () => {
+    return el('button', { type: 'button', 'data-testid': 'btn-history-jump', title: '이 항목의 이력 목록으로 내려갑니다', onclick: () => {
       const h = document.querySelector('[data-testid="history-heading"]');
       if (!h) return;
       h.scrollIntoView({ block: 'start' });
@@ -913,7 +913,7 @@ function start() {
     if (!isOwn(gid)) {
       return el('div', {}, el('div', { class: 'row toolbar' }, draftButton(gid), historyJumpButton(), ...first),
         moreTools([insightButton(gid), insightAllButton(), ...nbMore]),
-        el('p', { class: 'muted small' }, '다른 업무 지도의 노드입니다. 고치려면 ',
+        el('p', { class: 'muted small' }, '다른 업무 지도의 항목입니다. 고치려면 ',
           el('button', { type: 'button', class: 'link', onclick: () => openUniverse(node.universe_id) }, `「${node.universe_name}」 열기`), '.'));
     }
     if (app.readOnly) {
@@ -939,7 +939,7 @@ function start() {
   }
 
   function hideSelected(node) {
-    if (!window.confirm(`「${node.label}」${josa(node.label, '을/를')} 숨깁니다. 그래프에서 사라지지만 이력과 근거로서의 내용은 남습니다. 다시 보이게 하려면 업무 지도 개요(아무것도 고르지 않은 화면)의 「숨긴 노드」에서 「되살리기」를 누르세요.`)) return;
+    if (!window.confirm(`「${node.label}」${josa(node.label, '을/를')} 숨깁니다. 그래프에서 사라지지만 이력과 근거로서의 내용은 남습니다. 다시 보이게 하려면 업무 지도 개요(아무것도 고르지 않은 화면)의 「숨긴 항목」에서 「되살리기」를 누르세요.`)) return;
     const r = app.hideNode(node.id);
     if (!r.ok) return window.alert(messageFor(r.error));
     afterSave(r, null);
@@ -947,7 +947,7 @@ function start() {
 
   // 연결·이력이 없는 노드(막 만든 실수 노드)는 바로 지운다. 그 밖의 노드는 숨긴 뒤 「숨긴 노드」 목록에서 완전히 삭제한다(CR-13 D)
   function deleteSelected(node) {
-    if (!window.confirm(`「${node.label}」${josa(node.label, '을/를')} 지웁니다. 연결·이력이 없는 노드라 바로 지워지고 되돌릴 수 없습니다.`)) return;
+    if (!window.confirm(`「${node.label}」${josa(node.label, '을/를')} 지웁니다. 연결·이력이 없는 항목이라 바로 지워지고 되돌릴 수 없습니다.`)) return;
     const r = app.deleteNodeNow(node.id);
     if (!r.ok) return window.alert(messageFor(r.error));
     afterSave(r, null);
@@ -1088,8 +1088,8 @@ function start() {
           const n = hiddenNodesOf(app.doc).find((h) => h.id === id);
           const label = node ? node.label : '';
           const msg = app.canDeleteNow(id).ok
-            ? `「${label}」${josa(label, '을/를')} 완전히 지웁니다. 연결·이력이 없는 노드라 되돌릴 수 없습니다.`
-            : `「${label}」${josa(label, '을/를')} 완전히 지웁니다. 연결 ${n ? n.edge_count : 0}개도 함께 지워지고 되돌릴 수 없습니다. 이 노드를 언급한 이력은 남고 「(삭제된 노드)」로 보입니다.`;
+            ? `「${label}」${josa(label, '을/를')} 완전히 지웁니다. 연결·이력이 없는 항목이라 되돌릴 수 없습니다.`
+            : `「${label}」${josa(label, '을/를')} 완전히 지웁니다. 연결 ${n ? n.edge_count : 0}개도 함께 지워지고 되돌릴 수 없습니다. 이 항목을 언급한 이력은 남고 「(삭제된 항목)」으로 보입니다.`;
           if (!window.confirm(msg)) return { ok: true, cancelled: true };
           const r = app.purgeNode(id);
           if (r.ok) afterSave(r, selected);
@@ -1224,7 +1224,7 @@ function start() {
           const listOf = (ws) => ws.map((w) => `「${nameOf(w)}」`).join('·');
           const tr = r.transfer;
           const handoverTail = !tr
-            ? '현재 담당은 그대로입니다 — 담당을 넘기려면 업무를 누르고 「연결된 노드」에서 보내는 사람의 「수행」 줄 옆 「연결 수정」으로 끝 날짜를 넣고, 받는 사람은 「연결 추가」에서 「수행」으로 이으세요.'
+            ? '현재 담당은 그대로입니다 — 담당을 넘기려면 업무를 누르고 「연결된 항목」에서 보내는 사람의 「수행」 줄 옆 「연결 수정」으로 끝 날짜를 넣고, 받는 사람은 「연결 추가」에서 「수행」으로 이으세요.'
             : [
               tr.moved.length
                 ? `담당도 넘겼습니다: ${tr.moved.map((w) => `「${nameOf(w)}」 ${nameOf(input.draft.from)} → ${nameOf(input.draft.to)}(오늘부터)`).join(' · ')}`
@@ -1285,7 +1285,7 @@ function start() {
       panel.prepend(...[el('button', { type: 'button', class: 'small-btn', 'data-testid': 'btn-rewind-list', onclick: () => select(null) }, '← 시점 목록으로'), note].filter(Boolean));
     } else {
       // 노드를 고르면 지도 전체 화면(「인수인계 초안 만들기」·「인사이트 보기」)이 사라지므로 맨 위에서 돌아갈 수 있게 한다(FU-6). Esc와 같은 동작: 선택만 푼다
-      panel.prepend(el('div', { class: 'detail-back' }, el('button', { type: 'button', class: 'small-btn', 'data-testid': 'detail-back-universe', title: '노드 선택을 풀고 지도 전체 화면으로 돌아갑니다(Esc와 같음)', onclick: () => select(null) }, '← 지도 전체 보기')));
+      panel.prepend(el('div', { class: 'detail-back' }, el('button', { type: 'button', class: 'small-btn', 'data-testid': 'detail-back-universe', title: '항목 선택을 풀고 지도 전체 화면으로 돌아갑니다(Esc와 같음)', onclick: () => select(null) }, '← 지도 전체 보기')));
     }
     return detail;
   }
@@ -1301,7 +1301,7 @@ function start() {
     selected = gid;
     graph.highlight(gid);
     renderPanel();
-    if (exploreNote) { // 「찾음」·「이어진 노드 없음」 알림은 다른 노드를 고르면 지운다
+    if (exploreNote) { // 「찾음」·「이어진 항목 없음」 알림은 다른 항목을 고르면 지운다
       exploreNote = null;
       renderExploreStatus();
     }
@@ -1418,7 +1418,7 @@ function start() {
   // 키보드로 고른 경우 상세 패널 제목으로 초점을 옮겨 Tab으로 이어서 읽을 수 있게 한다
   function goTo(gid) {
     const g = view.canonical(gid);
-    foundGid = g; // 따라 하기: 노드 찾기로 골랐음(select가 화면을 그리며 알리므로 먼저 둔다)
+    foundGid = g; // 따라 하기: 항목 찾기로 골랐음(select가 화면을 그리며 알리므로 먼저 둔다)
     reveal(g);
     select(g);
     exploreNote = { text: `찾음: 「${(view.getNode(g) || { label: g }).label}」` };
@@ -1436,7 +1436,7 @@ function start() {
     if (!d) return;
     if (d.neighbor_count === 0) {
       // 이웃이 없으면 화면은 그대로 두고 알린다(R-17 ④)
-      exploreNote = { text: `이어진 노드 없음: 「${view.getNode(gid).label}」${josa(view.getNode(gid).label, '은/는')} 연결된 노드가 없어 주변만 보기를 할 수 없습니다.`, warn: true };
+      exploreNote = { text: `이어진 항목 없음: 「${view.getNode(gid).label}」${josa(view.getNode(gid).label, '은/는')} 연결된 항목이 없어 주변만 보기를 할 수 없습니다.`, warn: true };
       return renderExploreStatus();
     }
     nbhd = { center: d.center, depth };
@@ -1458,8 +1458,8 @@ function start() {
     const node = view.getNode(gid);
     if (!node || node.hidden) return null;
     const on = nbhd && nbhd.center === view.canonical(gid);
-    return [on && nbhd.depth === 1 ? null : el('button', { type: 'button', 'data-testid': 'btn-nbhd', title: '이 노드와 바로 이어진 노드만 남겨 다시 배치합니다(데이터는 바뀌지 않음)', onclick: () => enterNbhd(gid, 1) }, '주변만 보기'),
-        on && nbhd.depth === 2 ? null : el('button', { type: 'button', 'data-testid': 'btn-nbhd2', title: '두 단계 떨어진 노드까지 남깁니다', onclick: () => enterNbhd(gid, 2) }, '주변 2단계'),
+    return [on && nbhd.depth === 1 ? null : el('button', { type: 'button', 'data-testid': 'btn-nbhd', title: '이 항목과 바로 이어진 항목만 남겨 다시 배치합니다(데이터는 바뀌지 않음)', onclick: () => enterNbhd(gid, 1) }, '주변만 보기'),
+        on && nbhd.depth === 2 ? null : el('button', { type: 'button', 'data-testid': 'btn-nbhd2', title: '두 단계 떨어진 항목까지 남깁니다', onclick: () => enterNbhd(gid, 2) }, '주변 2단계'),
         nbhd ? el('button', { type: 'button', 'data-testid': 'btn-nbhd-exit', onclick: leaveNbhd }, '전체 보기로') : null].filter(Boolean);
   }
 
@@ -1473,7 +1473,7 @@ function start() {
         el('button', { type: 'button', class: 'small-btn', 'data-testid': 'filter-clear', onclick: () => bar.clear() }, '거르기 풀기')));
     }
     if (nbhd) {
-      parts.push(el('span', { class: 'grp' }, el('span', { class: 'on', 'data-testid': 'nbhd-on' }, `주변만 보기: 「${(view.getNode(nbhd.center) || { label: '?' }).label}」 ${nbhd.depth}단계 — 노드 ${display.nodes.length}개`),
+      parts.push(el('span', { class: 'grp' }, el('span', { class: 'on', 'data-testid': 'nbhd-on' }, `주변만 보기: 「${(view.getNode(nbhd.center) || { label: '?' }).label}」 ${nbhd.depth}단계 — 항목 ${display.nodes.length}개`),
         el('button', { type: 'button', class: 'small-btn', 'data-testid': 'nbhd-depth', onclick: () => enterNbhd(nbhd.center, nbhd.depth === 1 ? 2 : 1) }, nbhd.depth === 1 ? '2단계로' : '1단계로'),
         el('button', { type: 'button', class: 'small-btn', 'data-testid': 'nbhd-exit', onclick: leaveNbhd }, '전체 보기로')));
     }
@@ -1577,18 +1577,18 @@ function start() {
       }
     }
     view = rw ? rwPast.view : app.view;
-    if (rw && selected && !view.getNode(selected)) selected = null; // 그 시점에 없던 노드
+    if (rw && selected && !view.getNode(selected)) selected = null; // 그 시점에 없던 항목
     renderRewindBand();
     // 주변만 보기 중이면 그 노드와 이웃만. 가운데 노드가 사라졌거나(숨김) 고른 노드가 주변 밖이면(주변 밖에 노드 추가 등) 전체로 돌아가 다시 배치한다
     let nd = nbhd ? neighborhoodDisplay(view, nbhd.center, nbhd.depth) : null;
     if (nd && selected && !nd.nodes.some((n) => n.gid === view.canonical(selected))) nd = null;
-    if (nd && nd.neighbor_count === 0) { // 이웃을 숨겨 혼자 남으면 들어갈 때(이어진 노드 없음)와 같은 규칙으로 전체로
+    if (nd && nd.neighbor_count === 0) { // 이웃을 숨겨 혼자 남으면 들어갈 때(이어진 항목 없음)와 같은 규칙으로 전체로
       nd = null;
-      exploreNote = { text: '이어진 노드가 없어져 전체 그래프로 돌아갔습니다.', warn: true };
+      exploreNote = { text: '이어진 항목이 없어져 전체 그래프로 돌아갔습니다.', warn: true };
     }
     const left = !!nbhd && !nd;
     if (left) nbhd = null;
-    if (nbhd) nbhd.center = nd.center; // 통합 확인으로 가운데 노드가 다른 노드에 합쳐지면 대표 ID로
+    if (nbhd) nbhd.center = nd.center; // 통합 확인으로 가운데 항목이 다른 항목에 합쳐지면 대표 ID로
     display = nd || projectView(view, { expanded });
     // 시간 막대를 먼저 그려 그래프 영역 높이가 정해진 뒤 배치·맞춤을 한다(아래쪽 노드가 잘리지 않게)
     renderTimebar();
@@ -1600,7 +1600,7 @@ function start() {
     refreshAddCandidates();
     renderPanel();
     showBackupNudge(); // 변경이 쌓일 때마다 기준을 다시 본다
-    if (left) graph.relayout(); // 주변만 보기의 고리 배치를 그대로 두면 나머지 노드가 한 줄로 쌓인다
+    if (left) graph.relayout(); // 주변만 보기의 고리 배치를 그대로 두면 나머지 항목이 한 줄로 쌓인다
   }
 
   function toggle(universeId) {
@@ -1874,8 +1874,8 @@ function start() {
     slot.replaceChildren(
       ...(doneText ? [el('p', { class: 'ok-text', 'data-testid': 'add-done' }, doneText)] : []),
       el('div', { class: 'row' },
-        el('button', { type: 'button', 'data-testid': 'btn-table-add', title: '스프레드시트에서 복사한 표를 붙여 넣거나 칸에 써서 노드 여러 개를 한 번에 추가합니다', onclick: () => openTable('add') }, '표로 추가'),
-        el('button', { type: 'button', 'data-testid': 'btn-table-edit', title: '지금 업무 지도의 노드를 표로 펼쳐 한꺼번에 고칩니다', onclick: () => openTable('edit') }, '표로 고치기')),
+        el('button', { type: 'button', 'data-testid': 'btn-table-add', title: '스프레드시트에서 복사한 표를 붙여 넣거나 칸에 써서 항목 여러 개를 한 번에 추가합니다', onclick: () => openTable('add') }, '표로 추가'),
+        el('button', { type: 'button', 'data-testid': 'btn-table-edit', title: '지금 업무 지도의 항목을 표로 펼쳐 한꺼번에 고칩니다', onclick: () => openTable('edit') }, '표로 고치기')),
       nodeForm({
         mode: 'add',
         subtypes: app.subtypes(),
@@ -1962,7 +1962,7 @@ function start() {
     const mineText = mine.length ? `
 
 직접 만들거나 가져온 업무 지도 ${mine.length}개(${mine.map((u) => `「${u.name}」`).join(', ')})도 지워집니다. 남기려면 먼저 「가져오기·내보내기」에서 내보내세요.` : '';
-    if (!window.confirm(`모든 가상 데이터를 초기 샘플로 되돌립니다. 샘플에 추가한 노드와 직접 묶은 업무 지도는 사라집니다.${mineText}`)) return;
+    if (!window.confirm(`모든 가상 데이터를 초기 샘플로 되돌립니다. 샘플에 추가한 항목과 직접 묶은 업무 지도는 사라집니다.${mineText}`)) return;
     const r = app.resetAll();
     if (r && !r.ok) return window.alert(messageFor(r.error));
     $('import-dialog').close();
@@ -1997,7 +1997,7 @@ function start() {
     nbhd: !!nbhd,
     insightOpen: !!insight,
     insightKind: insight ? insight.kind : null,
-    editing: !!editing && editing.kind === 'node', // 노드 수정 양식이 열려 있음
+    editing: !!editing && editing.kind === 'node', // 항목 수정 양식이 열려 있음
     saved: tourSaved,
     rewinding: !!rw,
     readOnly: app.readOnly,

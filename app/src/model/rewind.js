@@ -267,7 +267,7 @@ export function rewindOps(current, at) {
   }
   const staying = current.nodes.filter((n) => !n.hidden && !n.deleted && !hiddenNow.has(n.id) && tNode.has(n.id));
   // 2) 지금 이름(사번)이 다른 노드의 그때 이름(사번)이나 되살릴 노드의 이름과 겹치면, 그 노드를 먼저 임시 값으로 비켜 둔다
-  const claimed = new Map(); // 중복 키 → 그 키를 갖게 될 노드 id들
+  const claimed = new Map(); // 중복 키 → 그 키를 갖게 될 항목 id들
   const claim = (key, id) => { if (key) (claimed.get(key) || claimed.set(key, []).get(key)).push(id); };
   for (const n of staying) claim(nodeDupKey(tNode.get(n.id)), n.id);
   for (const id of restored) { claim(nodeDupKey(cNode.get(id)), id); claim(nodeDupKey(tNode.get(id)), id); }

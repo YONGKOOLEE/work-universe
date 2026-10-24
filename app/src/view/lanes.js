@@ -14,7 +14,7 @@ export const LANES = {
 };
 
 const TOPIC_SUB_COST = 120; // 주제 띠에서 한 칸 아래로 내리는 벌점(가로 이동 120과 같은 값)
-const LAYER = { root: 0, org: 0, person: 1, work: 2, artifact: 3, topic: 4 }; // root: 묶음 화면에서 하위 유니버스의 꼭지
+const LAYER = { root: 0, org: 0, person: 1, work: 2, artifact: 3, topic: 4 }; // root: 묶음 화면에서 하위 유니버스의 지도 중심
 
 /**
  * @param {{id:string, core_type:string, label:string, size?:number}[]} nodes

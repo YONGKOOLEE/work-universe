@@ -206,7 +206,7 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
       // 찾기로 고른 노드: 노란 테두리(잠시)
       // 따라 하기가 짚는 노드(CR-13 A, ui/tour.js가 깜빡이거나 고정으로 켠다)
       { selector: 'node.tour-target', style: { 'border-color': '#ffd84d', 'border-width': 8, 'border-style': 'solid' } },
-      { selector: 'node.rw-changed', style: { 'border-color': '#ff9f43', 'border-width': 6, 'border-style': 'solid' } }, // 편집 되감기: 지금과 달라진 노드
+      { selector: 'node.rw-changed', style: { 'border-color': '#ff9f43', 'border-width': 6, 'border-style': 'solid' } }, // 편집 되감기: 지금과 달라진 항목
       { selector: 'node.found', style: { 'border-color': '#ffd84d', 'border-width': 6 } },
       // 거르기에서 빠졌어도 고른·찾은·마우스를 올린 노드는 보인다(R-17 ①⑦: 거르기 중 찾기로 고르거나 새로 추가한 노드). 'hide'여도 같다
       { selector: 'node.filtered-out:selected, node.filtered-out.found, node.filtered-out.hover', style: { display: 'element', opacity: 1, 'text-opacity': 1 } },
@@ -269,7 +269,7 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
   }
 
   // 노드와 이웃만 또렷하게, 나머지는 흐리게. 클릭(선택)과 마우스 올림(미리 보기)이 함께 쓴다
-  let nbhdCenter = null; // 주변만 보기의 가운데 노드(없으면 null)
+  let nbhdCenter = null; // 주변만 보기의 가운데 항목(없으면 null)
   function focusOn(node) {
     cy.elements().removeClass('faded hood');
     if (!node || node.empty()) return;
@@ -283,11 +283,11 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
   }
 
   let selectedGid = null;
-  let rwMarks = new Set(); // 편집 되감기에서 지금과 다른 노드의 gid
+  let rwMarks = new Set(); // 편집 되감기에서 지금과 다른 항목의 gid
   const applyRwMarks = () => {
     cy.nodes().forEach((n) => n.toggleClass('rw-changed', rwMarks.has(n.id())));
   };
-  let timeOff = new Set(); // 시간 슬라이더의 기준일에 유효하지 않은 노드·연결
+  let timeOff = new Set(); // 시간 슬라이더의 기준일에 유효하지 않은 항목·연결
   const applyTimeOff = () => {
     cy.elements().removeClass('time-off');
     for (const id of timeOff) cy.getElementById(id).addClass('time-off');
@@ -452,7 +452,7 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
     render(display, selectedGid) {
       setFlow(false);
       const before = new Map(cy.nodes().map((n) => [n.id(), { ...n.position() }]));
-      bigLabels.clear(); // 요소를 새로 만들면 덮어쓴 글자 크기도 사라진다(고른 노드는 아래 highlight가 다시 키운다)
+      bigLabels.clear(); // 요소를 새로 만들면 덮어쓴 글자 크기도 사라진다(고른 항목은 아래 highlight가 다시 키운다)
       cy.elements().remove();
       cy.add(toElements(display));
       cy.edges().toggleClass('labeled', cy.edges().length <= LABEL_EDGE_LIMIT);

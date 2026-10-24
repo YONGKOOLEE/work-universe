@@ -31,7 +31,7 @@ export function periodText(period, asOf = null) {
 const STATUS_LABEL = { current: '현재', ended: '종료', scheduled: '예정' };
 
 /** 문장·근거 칩에 쓰는 노드 이름. 숨긴 노드는 표시를 붙인다(4절 "숨김 후 참조"). 초안·이력 문장·근거 칩이 모두 이것을 쓴다(검토5 C-2) */
-export const displayName = (node) => (node.deleted ? '(삭제된 노드)' : node.hidden ?`${node.label}(숨김 처리된 노드)` : node.label);
+export const displayName = (node) => (node.deleted ? '(삭제된 항목)' : node.hidden ?`${node.label}(숨김 처리된 항목)` : node.label);
 
 /** 이름에 띄어쓰기 없이 긴 낱말(10자 이상)이 있는가. 그래프가 그런 이름만 글자 단위로 줄바꿈한다(화면 점검 S-3, 재검증) */
 export const hasLongWord = (label, max = 9) => String(label || '').split(/\s+/).some((w) => w.length > max);
@@ -108,7 +108,7 @@ export function eventText(view, ev, { tagIssue = false } = {}) {
     case 'updated':
       if (p.target_kind === 'identity_link' && ev.link) {
         const raw = (g) => { const n = view.rawNode(g); return n ? `${n.label}(${n.universe_name})` : g; };
-        const what = { person: '사람으로', work: '업무로', topic: '주제로' }[ev.link.kind] || '노드로';
+        const what = { person: '사람으로', work: '업무로', topic: '주제로' }[ev.link.kind] || '항목으로';
         const verdict = ev.type === 'updated' ? (p.after && p.after.status) : ev.link.status;
         const word = verdict === 'confirmed' ? `같은 ${what} 확인` : verdict === 'rejected' ? `다른 ${what} 판정` : '확인 대기로 둠';
         return `통합 확인 — ${raw(ev.link.a)} · ${raw(ev.link.b)}: ${word}${ev.link.method === 'emp_no_auto' ? '(사번 자동)' : ''}`;
@@ -177,7 +177,7 @@ export function describeNode(view, gid, { asOf = null, past = false } = {}) {
     value: node.origin === 'ref' ? `참조한 업무 지도: ${node.universe_name}` : `이 업무 지도(${node.universe_name})`,
   });
   const others = node.merged_from.map((g) => view.rawNode(g)).filter(Boolean);
-  if (others.length) rows.push({ label: '같은 노드', value: `${others.map((n) => n.universe_name).join(', ')}의 노드와 합쳐져 있음` });
+  if (others.length) rows.push({ label: '같은 항목', value: `${others.map((n) => n.universe_name).join(', ')}의 항목과 합쳐져 있음` });
 
   const links = view
     .neighbors(gid)
@@ -205,7 +205,7 @@ export function describeNode(view, gid, { asOf = null, past = false } = {}) {
     after: !!asOf && ev.occurred_at > asOf,
   }));
 
-  return { found: true, gid: node.gid, title: node.label, core_type: node.core_type, hidden, deleted: !!node.deleted, rows, links, no_links: links.length === 0, history };
+  return { found: true, gid: node.gid, title: node.deleted ? displayName(node) : node.label, core_type: node.core_type, hidden, deleted: !!node.deleted, rows, links, no_links: links.length === 0, history };
 }
 
 /** 노드를 고르지 않았을 때 보여 줄 유니버스 개요. */

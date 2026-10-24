@@ -141,7 +141,7 @@ function messageBox() {
       box.dataset.code = result.error.code;
       box.append(messageFor(result.error, ctx));
       if (result.error.existing_id && onFocusLocal && ctx.kind !== 'edge') {
-        box.append(' ', el('button', { type: 'button', class: 'link', onclick: () => onFocusLocal(result.error.existing_id) }, '기존 노드 보기'));
+        box.append(' ', el('button', { type: 'button', class: 'link', onclick: () => onFocusLocal(result.error.existing_id) }, '기존 항목 보기'));
       }
       // 오류가 화면 밖에 있으면 못 보므로(FU-35) 단추 바로 위의 이 자리로 스크롤한다
       if (typeof box.scrollIntoView === 'function') box.scrollIntoView({ block: 'nearest' });
@@ -234,7 +234,7 @@ export function nodeForm(o) {
 
   // 추가할 때만: 꼭지에 바로 연결(포함). 업무는 기본으로 켠다 — 연결 없이 떠 있는 노드를 줄이기 위해
   const attach = el('input', { type: 'checkbox', 'data-testid': 'node-attach', checked: type.value === 'work' });
-  const attachField = el('label', { class: 'check' }, attach, ' 업무 지도의 중심 노드(꼭지)에 바로 연결하기');
+  const attachField = el('label', { class: 'check' }, attach, ' 지도 중심(가운데 큰 동그라미)에 바로 연결하기');
   if (o.mode === 'add') type.addEventListener('change', () => { attach.checked = type.value === 'work'; });
 
   // 추가할 때만(선택): 상대 노드를 골라 노드와 연결을 한 번에 저장한다. 비워 두면 연결 없이 노드만 추가한다
@@ -242,7 +242,7 @@ export function nodeForm(o) {
   function linkFields() {
     const other = select([['', '(연결하지 않음)']], '', { 'data-testid': 'node-link-other' });
     const relation = select(relationChoices(), 'relates_to', { 'data-testid': 'node-link-type' });
-    const direction = select([['out', '새 노드 → 상대'], ['in', '상대 → 새 노드']], 'out', { 'data-testid': 'node-link-direction' });
+    const direction = select([['out', '새 항목 → 상대'], ['in', '상대 → 새 항목']], 'out', { 'data-testid': 'node-link-direction' });
     const onlyNote = onlyHint('node-link-only');
     const detail = el('div', { class: 'link-detail', hidden: true }, field('관계', relation), onlyNote, field('방향', direction));
     const candidates = () => o.getCandidates();
@@ -256,7 +256,7 @@ export function nodeForm(o) {
       detail.hidden = !other.value;
       const picked = other.value ? candidates().find((n) => n.id === other.value) : null;
       markRelationOptions(relation, picked ? type.value : null, picked ? picked.core_type : null, onlyNote); // 쓸 수 있는 관계를 위로·못 쓰는 관계는 아래 묶음(FU-35, CR-18-4)
-      if (!other.value) return; // 상대나 새 노드 유형이 바뀔 때마다 알맞은 관계·방향을 다시 추천한다(직접 고르는 것은 그 뒤에)
+      if (!other.value) return; // 상대나 새 항목 유형이 바뀔 때마다 알맞은 관계·방향을 다시 추천한다(직접 고르는 것은 그 뒤에)
       const t = candidates().find((n) => n.id === other.value);
       const sug = t && suggestRelation(type.value, t.core_type);
       if (sug) {
@@ -268,8 +268,8 @@ export function nodeForm(o) {
     other.addEventListener('change', sync);
     type.addEventListener('change', sync);
     fill();
-    const box = el('div', { class: 'link-group', 'data-testid': 'node-link' }, field('함께 이을 노드(선택)', other), detail,
-      el('p', { class: 'muted small' }, '노드를 고르면 추가와 연결이 한 번에 저장됩니다. 연결할 수 없는 조합이면 저장하기 전에 알려 드립니다.'));
+    const box = el('div', { class: 'link-group', 'data-testid': 'node-link' }, field('함께 이을 항목(선택)', other), detail,
+      el('p', { class: 'muted small' }, '항목을 고르면 추가와 연결이 한 번에 저장됩니다. 연결할 수 없는 조합이면 저장하기 전에 알려 드립니다.'));
     return { el: box, other, relation, direction, candidates, fill };
   }
 
@@ -277,11 +277,11 @@ export function nodeForm(o) {
   const form = el(
     'form',
     { class: 'editor', novalidate: true, 'data-testid': `node-form-${o.mode}` },
-    o.mode === 'edit' ? el('h3', {}, '노드 수정') : null,
+    o.mode === 'edit' ? el('h3', {}, '항목 수정') : null,
     o.mode === 'add' ? field('유형', type) : null,
     subtypeField,
     field('이름', label),
-    isRoot ? el('p', { class: 'muted small' }, '꼭지 이름은 업무 지도 이름과 같아서 바꿀 수 없습니다.') : null,
+    isRoot ? el('p', { class: 'muted small' }, '지도 중심 이름은 업무 지도 이름과 같아서 바꿀 수 없습니다.') : null,
     field('설명', description),
     empField,
     field('속성', attrs.el),
@@ -350,7 +350,7 @@ export function nodeForm(o) {
 export function edgeForm(o) {
   const relation = select(relationChoices(), 'relates_to', { 'data-testid': 'edge-type' });
   const direction = select([['out', `${o.node.label} → 상대`], ['in', `상대 → ${o.node.label}`]], 'out', { 'data-testid': 'edge-direction' });
-  const other = select(nodeOptions(o.candidates, { empty: '상대 노드를 고르세요' }), '', { 'data-testid': 'edge-other' });
+  const other = select(nodeOptions(o.candidates, { empty: '상대 항목을 고르세요' }), '', { 'data-testid': 'edge-other' });
   const onlyNote = onlyHint('edge-only');
   let touched = false; // 사용자가 관계 칸을 직접 고른 뒤인가(손대지 않은 기본값만 자동으로 바꾼다)
   relation.addEventListener('change', () => { touched = true; });
@@ -374,7 +374,7 @@ export function edgeForm(o) {
     onlyNote,
     field('하위 유형(선택, 예: 참조 > 검토함)', sub.el),
     field('방향', direction),
-    field('상대 노드', other),
+    field('상대 항목', other),
     field('기간(선택, 담당·소속 기간)', period.el),
     field('메모(선택)', note),
     msg.box,
@@ -443,7 +443,7 @@ export function edgeEditForm(o) {
     field('관계', relation),
     onlyNote,
     field('방향', direction),
-    field('상대 노드', other),
+    field('상대 항목', other),
     field('기간', period.el),
     field('메모', note),
     msg.box,

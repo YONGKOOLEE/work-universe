@@ -17,8 +17,8 @@ test('E-PAIR: 꼭지 「시스템개발」 → 사람 「이용구」에 소속�
   const text = messageFor({ code: 'E-PAIR' }, { kind: 'edge', relation: 'belongs_to', source, target, suggestions: allowedRelations('root', 'person') });
   // 조사는 받침에 맞춘다(여섯 번째 검토 U-14로 「은(는)」·「을(를)」 표기를 고침)
   assert.match(text, /「소속」은 사람 → 조직, 조직 → 조직만 가능합니다\./);
-  assert.match(text, /「시스템개발」은 꼭지, 「이용구」는 사람입니다\./);
-  assert.match(text, /이 두 노드에는 「포함」\(시스템개발 → 이용구\)을 쓸 수 있습니다\./);
+  assert.match(text, /「시스템개발」은 지도 중심, 「이용구」는 사람입니다\./); // CR-18-2
+  assert.match(text, /이 두 항목에는 「포함」\(시스템개발 → 이용구\)을 쓸 수 있습니다\./); // CR-18-2
   // 반대 방향으로만 되는 관계는 방향을 바꿔 안내한다
   const back = messageFor({ code: 'E-PAIR' }, { kind: 'edge', relation: 'performs', source: { label: '보고', core_type: 'work' }, target: { label: '서하늘', core_type: 'person' }, suggestions: allowedRelations('work', 'person') });
   assert.match(back, /「수행」\(서하늘 → 보고\)/);

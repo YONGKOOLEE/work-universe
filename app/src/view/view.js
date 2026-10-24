@@ -144,7 +144,7 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
       const rawTarget = toGid(doc.universe.id, e.target);
       const source = canonical(rawSource);
       const target = canonical(rawTarget);
-      if (source === target) continue; // 합쳐진 두 노드 사이의 연결은 자기 연결이 되므로 그리지 않는다
+      if (source === target) continue; // 합쳐진 두 항목 사이의 연결은 자기 연결이 되므로 그리지 않는다
       // 합쳐진 노드의 한쪽을 숨기면(= 삭제, D-04) 그 쪽 끝점의 연결은 대표 노드에 남기지 않는다(여덟 번째 검토 1)
       const endHidden = (raw, rep) => !!rawHidden.get(raw) && (rep !== raw || nodeByGid.get(rep).merged_from.length > 0);
       edges.push({

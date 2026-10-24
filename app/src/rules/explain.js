@@ -27,7 +27,7 @@ export function similarExplain(result, workGid) {
   }
   if (roles.length) {
     rule.push({
-      text: `사람 이름이 아니라 역할 이름만 있는 노드가 ${roles.length}개 있습니다: ${roles.map((p) => p.label).join(', ')}. 실제 담당자는 확인이 필요합니다.`,
+      text: `사람 이름이 아니라 역할 이름만 있는 항목이 ${roles.length}개 있습니다: ${roles.map((p) => p.label).join(', ')}. 실제 담당자는 확인이 필요합니다.`,
       // 역할 노드와 그가 맡은 업무만 근거로 든다(공유 주제 노드는 글이 짧아 원문 인용 검증에 쓰기 어렵고, 이 문장은 주제가 아니라 역할 이름을 말한다)
       evidence_ids: uniq(roles.flatMap((p) => [p.gid, ...p.works.map((w) => w.gid)])),
     });

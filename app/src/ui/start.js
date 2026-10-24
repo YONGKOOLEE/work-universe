@@ -20,9 +20,9 @@ export const TEAM_NOTE = '팀원 각자 만든 지도는 공유 폴더(「폴더
 
 // 검토5 U-2·U-3·U-6·U-8: 순서대로 따라가면 끊기지 않게, 버튼 이름은 화면과 같게, "꼭지"는 여기서 한 번 설명한다
 const STEPS = [
-  ['동그라미(노드)를 눌러 보세요 — 하늘색 동그라미(업무)부터', '오른쪽에 속성, 연결된 노드, 지금까지의 이력이 나옵니다(이력은 아래로 내리면 보입니다). 마우스를 올리면 연결된 것만 밝아집니다. 가장 큰 연두색 동그라미는 꼭지, 곧 이 업무 지도의 중심 노드입니다.'],
-  ['「인수인계 초안 만들기」를 눌러 보세요', '업무나 꼭지(업무 지도의 중심 노드)를 골랐을 때, 또는 빈 곳을 눌러 선택을 풀었을 때 보입니다(사람·산출물을 고르면 보이지 않습니다). 담당자가 바뀔 때 필요한 내용을 이력에서 모아 초안으로 만들어 줍니다. 문장마다 근거를 확인할 수 있습니다.'],
-  ['「인사이트 보기」를 눌러 보세요', '비슷한 일을 해 본 사람(유사 경험자), 같은 설명이 되풀이되는 패턴(반복 비효율), 일이 몰린 사람과 담당자 없는 업무(밀집·공백), 기간별 변화(흐름 변화)를 근거와 함께 보여 줍니다. 노드를 고른 뒤에도, 빈 곳을 눌러 선택을 푼 뒤에도 보입니다.'],
+  ['동그라미(항목)를 눌러 보세요 — 하늘색 동그라미(업무)부터', '오른쪽에 속성, 연결된 항목, 지금까지의 이력이 나옵니다(이력은 아래로 내리면 보입니다). 마우스를 올리면 연결된 것만 밝아집니다. 가장 큰 연두색 동그라미는 지도 중심, 곧 이 업무 지도의 한가운데입니다.'],
+  ['「인수인계 초안 만들기」를 눌러 보세요', '업무나 지도 중심(가운데 큰 동그라미)을 골랐을 때, 또는 빈 곳을 눌러 선택을 풀었을 때 보입니다(사람·산출물을 고르면 보이지 않습니다). 담당자가 바뀔 때 필요한 내용을 이력에서 모아 초안으로 만들어 줍니다. 문장마다 근거를 확인할 수 있습니다.'],
+  ['「인사이트 보기」를 눌러 보세요', '비슷한 일을 해 본 사람(유사 경험자), 같은 설명이 되풀이되는 패턴(반복 비효율), 일이 몰린 사람과 담당자 없는 업무(밀집·공백), 기간별 변화(흐름 변화)를 근거와 함께 보여 줍니다. 항목을 고른 뒤에도, 빈 곳을 눌러 선택을 푼 뒤에도 보입니다.'],
   ['「새 업무 지도 만들기」로 업무 하나부터 만들어 보세요', '첫 업무 이름·담당자·산출물을 적으면 작은 지도가 바로 생기고, 「사람·업무·문서 추가」로 하나씩 늘려 내 업무를 지도처럼 만들 수 있습니다. 업무정의서가 있으면 「문서·파일 가져오기」(업무 지도를 연 뒤에는 머리글의 「가져오기·내보내기」)에 붙여 넣어 초벌을 만들 수도 있습니다.'],
 ];
 
@@ -45,7 +45,7 @@ export function startScreen(o) {
     return el('li', { class: `card${g.recommended ? ' recommended' : ''}`, 'data-testid': `card-${u.id}` },
       el('div', { class: 'card-head' }, el('strong', {}, u.name), el('span', { class: 'chip' }, u.level)),
       el('p', { class: 'muted' }, g.tagline || u.description || ''),
-      el('p', { class: 'muted small' }, u.ref_count ? `하위 업무 지도 ${u.ref_count}개를 묶음` : `노드 ${u.node_count}개`),
+      el('p', { class: 'muted small' }, u.ref_count ? `하위 업무 지도 ${u.ref_count}개를 묶음` : `항목 ${u.node_count}개`),
       g.try ? el('p', { class: 'try' }, `해 볼 것: ${g.try}`) : null,
       el('button', { type: 'button', class: g.recommended ? 'primary' : '', 'data-testid': `open-${u.id}`, onclick: () => o.onOpen(u.id) }, '열기'),
     );
@@ -58,7 +58,7 @@ export function startScreen(o) {
     return el('li', { class: 'card', 'data-testid': `${sample ? 'mine-card' : 'card'}-${u.id}`, 'data-kind': u.kind },
       el('div', { class: 'card-head' }, el('strong', {}, u.name), el('span', { class: 'chip' }, u.level), MAP_KIND_LABEL[u.kind] ? el('span', { class: 'chip', 'data-testid': 'map-kind' }, MAP_KIND_LABEL[u.kind]) : null),
       el('p', { class: 'muted small', 'data-testid': 'map-modified' }, modifiedLabel(u.modified)),
-      el('p', { class: 'muted small' }, u.ref_count ? `하위 업무 지도 ${u.ref_count}개를 묶음` : `노드 ${u.node_count}개`),
+      el('p', { class: 'muted small' }, u.ref_count ? `하위 업무 지도 ${u.ref_count}개를 묶음` : `항목 ${u.node_count}개`),
       el('button', { type: 'button', 'data-testid': `${sample ? 'mine-open' : 'open'}-${u.id}`, onclick: () => o.onOpen(u.id) }, '열기'),
     );
   };
@@ -92,7 +92,7 @@ export function startScreen(o) {
         o.onImport ? el('button', { type: 'button', 'data-testid': 'start-import', disabled: o.readOnly, onclick: o.onImport }, '문서·파일 가져오기') : null,
       ),
       el('p', { class: 'muted small' }, '모든 이름과 데이터는 가상입니다. 설치나 로그인은 필요 없습니다.'),
-      el('p', { class: 'muted small', 'data-testid': 'start-terms' }, '용어: 업무 지도는 업무를 묶은 한 단위, 노드는 그래프의 동그라미 하나, 꼭지는 업무 지도의 중심 노드(가운데 큰 동그라미)입니다.'),
+      el('p', { class: 'muted small', 'data-testid': 'start-terms' }, '용어: 업무 지도는 업무를 묶은 한 단위, 항목은 그래프의 동그라미 하나, 지도 중심은 업무 지도의 중심(가운데 큰 동그라미)입니다.'),
     ),
     el('section', {}, el('h2', {}, '내 업무 지도'),
       mine.length

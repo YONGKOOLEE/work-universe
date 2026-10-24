@@ -69,11 +69,11 @@ test('E11 인수인계의 보내는 사람과 받는 사람이 같으면 거부�
   assert.equal(messageFor(r.error), '보내는 사람과 받는 사람이 같습니다.');
 });
 
-test('E11 찾을 수 없는 다른 유니버스 참조는 "undefined"가 아니라 "(찾을 수 없는 노드)"로 표시한다', () => {
+test('E11 찾을 수 없는 다른 유니버스 참조는 "undefined"가 아니라 "(찾을 수 없는 항목)"로 표시한다', () => { // CR-18-2
   const d = addEvent(SAMPLE_A1, { type: 'handover', occurred_at: '2026-10-02', payload: { work_id: 'N-001', from_person_id: 'U-NOPE/N-1', to_person_id: 'N-012' } }, ctx).doc;
   const v = buildView(d);
   const p = repeatInefficiency(v).patterns.find((x) => x.kind === 'handover_chain');
-  assert.ok(p.steps.some((s) => s.text.includes('(찾을 수 없는 노드) → 서하늘')));
+  assert.ok(p.steps.some((s) => s.text.includes('(찾을 수 없는 항목) → 서하늘'))); // CR-18-2
   assert.ok(!JSON.stringify(p).includes('undefined'));
   const draft = buildHandoverDraft(v, { target: 'U-A1/N-000', from: 'U-A1/N-011', to: 'U-A1/N-010' }).draft;
   assert.ok(!JSON.stringify(draft).includes('U-NOPE/N-1 →'));
@@ -98,7 +98,7 @@ test('E14 숨긴 노드는 고칠 수 없다(근거 내용 보존)', () => {
   const hidden = hideNode(SAMPLE_A1, 'N-020', ctx).doc;
   const r = updateNode(hidden, 'N-020', { label: '바꾼 이름' }, ctx);
   assert.deepEqual(r.error, { code: 'E-SCHEMA', field: 'id', hidden: true });
-  assert.match(messageFor(r.error), /숨긴 노드는 고칠 수 없습니다/);
+  assert.match(messageFor(r.error), /숨긴 항목은 고칠 수 없습니다/); // CR-18-2
 });
 
 test('E16 긴 글 상한: 메모 내용·설명·속성 값 2000자, 단위·작성 주체 100자', async () => {

@@ -108,7 +108,7 @@ async function walk(browser, port) {
     // 2단계
     const clicked = await clickNode(cdp, '대사 확인');
     const p2 = await panel(cdp);
-    check('2단계: 「대사 확인」 동그라미를 마우스로 누르면 속성·연결·이력, 현재 담당, 반복 비효율 표시', clicked && p2.includes('연결된 노드') && p2.includes('이력') && p2.includes('현재 담당') && p2.includes('반복 비효율'), p2.slice(0, 80));
+    check('2단계: 「대사 확인」 동그라미를 마우스로 누르면 속성·연결·이력, 현재 담당, 반복 비효율 표시', clicked && p2.includes('연결된 항목') && p2.includes('이력') && p2.includes('현재 담당') && p2.includes('반복 비효율'), p2.slice(0, 80)); // CR-18-2
     await shot(cdp, `${browser.name}-g2-node`);
     // 3단계: 빈 곳 → 인수인계 초안 만들기 → 윤바다 → 서하늘 → 초안 만들기
     const box = await ev(cdp, "(() => { const r = document.getElementById('graph').getBoundingClientRect(); return { x: r.left + 12, y: r.top + 12 }; })()");
@@ -166,7 +166,7 @@ async function walk(browser, port) {
     const pickedOk = !!findPos && await clickText(cdp, '대사 확인', '[data-testid=find-hit]');
     await sleep(500);
     const p7 = await panel(cdp);
-    check(`7단계: 「${findLabel}」 칸에 "대사"를 넣고 결과 「대사 확인」을 누르면 상세가 열림`, pickedOk && p7.includes('대사 확인') && p7.includes('연결된 노드'), p7.slice(0, 40));
+    check(`7단계: 「${findLabel}」 칸에 "대사"를 넣고 결과 「대사 확인」을 누르면 상세가 열림`, pickedOk && p7.includes('대사 확인') && p7.includes('연결된 항목'), p7.slice(0, 40)); // CR-18-2
     const before7 = await ev(cdp, 'window.__wu.cy.nodes().length');
     // D8-3: 노드가 많은 화면(부서 등)에서는 「주변만 보기」가 첫 줄에 있어 「더 보기」를 열 필요가 없다. 안 보이면 「더 보기」를 연다(안내문은 두 경우를 모두 말한다)
     const nbVisible = () => ev(cdp, "!![...document.querySelectorAll('#detail button')].find((b) => b.offsetParent && b.textContent.includes('주변만 보기'))");

@@ -56,7 +56,7 @@ const DRAFT_FIELDS = { target: '대상', from: '보내는 사람', to: '받는 �
 function draftError(err) {
   if (err.same_person) return '보내는 사람과 받는 사람이 같습니다.';
   if (err.code === 'E-REQUIRED') return `${DRAFT_FIELDS[err.field]}${josa(DRAFT_FIELDS[err.field], '을/를')} 고르세요.`;
-  if (err.field === 'target') return '대상은 꼭지(업무 지도의 중심 노드)나 업무만 고를 수 있습니다.';
+  if (err.field === 'target') return '대상은 지도 중심(업무 지도의 가운데 큰 동그라미)이나 업무만 고를 수 있습니다.';
   return messageFor(err);
 }
 
@@ -354,7 +354,7 @@ function roleChip(view, itemKey, sentence) {
     const n = view.getNode(g);
     return n && n.core_type === 'person' && n.subtype === SUBTYPE_ROLE;
   });
-  return hasRole ? el('span', { class: 'chip', 'data-testid': 'role-chip', title: '원문에 사람 이름이 없어 역할 이름으로 만든 노드입니다. 실제 담당자는 연결되어 있지 않습니다.' }, '역할 · 담당자 미연결') : null;
+  return hasRole ? el('span', { class: 'chip', 'data-testid': 'role-chip', title: '원문에 사람 이름이 없어 역할 이름으로 만든 그래프 항목입니다. 실제 담당자는 연결되어 있지 않습니다.' }, '역할 · 담당자 미연결') : null;
 }
 
 // 초안 끝 「다음에 해 볼 것」 한 줄. 읽기 전용에서도 보인다(보기만 하는 이동). main.js가 두 이벤트를 받는다(계약, 이름을 바꾸지 말 것)

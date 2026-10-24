@@ -35,7 +35,7 @@ export const CONVERT_RULES = {
   cr17j: {
     assignPerforms: true, // 담당 절의 「주 담당·담당·정」 사람 → 문서의 업무가 하나뿐일 때 업무 performs(+ 알림 C-PERFORMS-GUESS·C-ASSIGN-SKIPPED). 끄면 연결 없음(D-P3)
     namedPersonPlain: true, // 담당 절에서 이름 모양(한글 2~4자)인 사람을 하위 유형 「역할」 없는 사람으로. 끄면 모두 「역할」(12.9.1 v1: 이해관계자는 역할)
-    relatedDocLink: true, // 「관련 문서」 절의 산출물 → 대표 업무 relatedDocEdge 연결(업무 하나짜리 문서). 끄면 꼭지 contains(v1: 산출물은 꼭지가 담음)
+    relatedDocLink: true, // 「관련 문서」 절의 산출물 → 대표 업무 relatedDocEdge 연결(업무 하나짜리 문서). 끄면 지도 중심 contains(v1: 산출물은 지도 중심이 담음)
     pathToLocation: true, // 산출물 이름 뒤 괄호가 경로 모양이면 설명 대신 속성 「위치」로. 끄면 괄호는 설명(v1: 괄호는 설명)
     authorPickOrg: true, // 키가 「작성」·「작성 부서」인 줄은 조직 낱말(…팀·…부·…실·…본부·…센터·…파트·…그룹)로 끝나는 덩어리까지만 작성 주체로(없으면 입력받기), 한 줄에 키가 여럿이면 「작성 부서」 칸만. 「작성자」·「작성 주체」는 값 그대로. 끄면 모두 값 그대로이고 그냥 「작성:」은 작성 주체로 읽지 않음(D-P6: 변경 없음, R12-2)
     authorDate: true, // 「작성(자/부서/주체):」 값 속의 날짜를 작성일로 읽음. 끄면 작성일은 따로 적힌 날짜만
@@ -383,7 +383,7 @@ export function parseDocument(text) {
         cells.forEach((c, i) => { if (i > 0 && c) prev[i] = prev[i] ? `${prev[i]} ${c}` : c; });
         continue;
       }
-      if (!cells[0]) continue; // 이어 붙일 앞 행도 없으면 이름이 없어 노드로 만들 수 없다
+      if (!cells[0]) continue; // 이어 붙일 앞 행도 없으면 이름이 없어 항목으로 만들 수 없다
       table.rows.push(cells);
       continue;
     }
@@ -853,7 +853,7 @@ export function convertDocument(text, ctx) {
 
   const rawName = info.name || parsed.title || cleanText(src.split('\n').find((l) => l.trim()) || '');
   const name = truncate(stripMarks(rawName) || '이름 없는 문서', LABEL_MAX, notes, '이름');
-  const nameMarks = marksOf(rawName); // 이름에 붙은 [가정]·[미확인]은 꼭지의 표시·상태로 남긴다
+  const nameMarks = marksOf(rawName); // 이름에 붙은 [가정]·[미확인]은 지도 중심의 표시·상태로 남긴다
 
   // 2) 노드 모으기. 같은 유형·이름은 하나로 합치고 원문 근거를 잇는다(12.1 중복 규칙)
   const nodes = [];
@@ -1086,7 +1086,7 @@ export function convertDocument(text, ctx) {
     if (prose.length) pushProseTopic(s, prose, 'C-PEOPLE-PROSE');
   }
   const roles = [];
-  const roleDuty = new Map(); // 역할 노드 → [{text, ref}] 원문에 적힌 하는 일(담당 추정의 근거)
+  const roleDuty = new Map(); // 역할 항목 → [{text, ref}] 원문에 적힌 하는 일(담당 추정의 근거)
   const assigns = []; // 담당 절에서 「주 담당·담당·정」으로 적힌 사람: {r, key, ref}
   let hasRoleNode = false;
   for (const item of roleItems) {

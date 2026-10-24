@@ -8,7 +8,7 @@ import { messageFor } from './messages.js';
 export function hiddenEntry(nodes, { onOpen }) {
   if (!nodes.length) return null;
   return el('p', { class: 'notice', 'data-testid': 'hidden-count', 'data-count': String(nodes.length) },
-    el('button', { type: 'button', class: 'link', 'data-testid': 'btn-hidden', onclick: onOpen }, `숨긴 노드 ${nodes.length}개`), ' 그래프에서 숨긴 노드를 다시 보이게 할 수 있습니다');
+    el('button', { type: 'button', class: 'link', 'data-testid': 'btn-hidden', onclick: onOpen }, `숨긴 항목 ${nodes.length}개`), ' 그래프에서 숨긴 항목을 다시 보이게 할 수 있습니다');
 }
 
 /**
@@ -19,12 +19,12 @@ export function hiddenPanel(o) {
   const wrap = el('div', { 'data-testid': 'hidden-panel' });
   const msg = el('p', { class: 'notice', 'data-testid': 'hidden-error', hidden: true });
   wrap.append(
-    el('div', { class: 'row' }, el('h2', {}, `숨긴 노드 ${o.nodes.length}개`), el('button', { type: 'button', 'data-testid': 'hidden-close', onclick: o.onClose }, '닫기')),
-    el('p', { class: 'muted small' }, '「되살리기」를 누르면 노드가 그래프에 다시 나타나고, 숨기기 전의 연결과 이력이 그대로 보입니다. 이력에는 「되살림」이 한 줄 남습니다. 필요 없는 노드는 「완전히 삭제」로 지울 수 있습니다(되돌릴 수 없음).'),
+    el('div', { class: 'row' }, el('h2', {}, `숨긴 항목 ${o.nodes.length}개`), el('button', { type: 'button', 'data-testid': 'hidden-close', onclick: o.onClose }, '닫기')),
+    el('p', { class: 'muted small' }, '「되살리기」를 누르면 항목이 그래프에 다시 나타나고, 숨기기 전의 연결과 이력이 그대로 보입니다. 이력에는 「되살림」이 한 줄 남습니다. 필요 없는 항목은 「완전히 삭제」로 지울 수 있습니다(되돌릴 수 없음).'),
     msg,
   );
   if (!o.nodes.length) {
-    wrap.append(el('p', { class: 'muted', 'data-testid': 'hidden-empty' }, '숨긴 노드가 없습니다.'));
+    wrap.append(el('p', { class: 'muted', 'data-testid': 'hidden-empty' }, '숨긴 항목이 없습니다.'));
     return wrap;
   }
   const ul = el('ul', { class: 'issue-list', 'data-testid': 'hidden-list' });
@@ -36,7 +36,7 @@ export function hiddenPanel(o) {
         const r = o.onRestore(n.id);
         if (r && !r.ok) {
           const dup = r.error && r.error.existing_id ? o.labelOf(r.error.existing_id) : '';
-          msg.textContent = `${messageFor(r.error)}${dup ? ` 같은 이름의 보이는 노드: 「${dup}」. 그 노드를 고치거나 이름을 바꾼 뒤 다시 시도하세요.` : ''}`;
+          msg.textContent = `${messageFor(r.error)}${dup ? ` 같은 이름의 보이는 항목: 「${dup}」. 그 항목을 고치거나 이름을 바꾼 뒤 다시 시도하세요.` : ''}`;
           msg.dataset.code = r.error.code;
           msg.hidden = false;
         }

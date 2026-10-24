@@ -189,6 +189,6 @@ test('자기 자신으로 가는 연결은 만들지 않는다(그래프에 안 
 test('오류 문구: 사번 길이 초과는 길이 문구, 자기 연결은 자기 연결 문구(2026-10-18)', async () => {
   const { messageFor } = await import('../app/src/ui/messages.js');
   assert.match(messageFor({ code: 'E-SCHEMA', field: 'emp_no', too_long: 100 }), /너무 깁니다/);
-  assert.match(messageFor({ code: 'E-SCHEMA', field: 'emp_no' }), /사람 노드에만/);
+  assert.match(messageFor({ code: 'E-SCHEMA', field: 'emp_no' }), /사람 항목에만/); // CR-18-2
   assert.match(messageFor({ code: 'E-SCHEMA', field: 'target', self_loop: true }, { kind: 'edge' }), /자기 자신/);
 });

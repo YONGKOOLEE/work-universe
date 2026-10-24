@@ -80,7 +80,7 @@ test('1: 샘플 팀 화면에서 U-A1 업무를 숨기면 대사 주제 연결�
 function legacyExposureOf(view, gid) {
   const node = view.rawNode(gid);
   if (!node) return { exposed: false, explicit: false, reason: '' };
-  if (node.core_type === 'root') return { exposed: true, explicit: false, reason: '꼭지' };
+  if (node.core_type === 'root') return { exposed: true, explicit: false, reason: '지도 중심' }; // CR-18-2
   if (typeof node.exposed === 'boolean') return { exposed: node.exposed, explicit: true, reason: node.exposed ? '직접 드러냄' : '직접 숨김' };
   const own = view.edges.filter((e) => !e.hidden && !e.synthetic && e.universe_id === node.universe_id);
   const canon = view.canonical(gid);

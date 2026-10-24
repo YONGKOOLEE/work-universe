@@ -35,7 +35,7 @@ export function isCurrent(period, asOf) {
 // 업무 하나의 비교 기준: 주제(대표 노드·이름), 산출물 유형(하위 유형 이름), 라벨 토큰
 function profileOf(view, work) {
   const topics = [];
-  const artifactTypes = new Map(); // 하위 유형 이름 → 산출물 노드 gid들
+  const artifactTypes = new Map(); // 하위 유형 이름 → 산출물 항목 gid들
   let hasLink = false;
   for (const e of view.edges) {
     if (!live(e) || e.source !== work.gid) continue;
@@ -294,7 +294,7 @@ export function repeatInefficiency(view, { asOf = null } = {}) {
     const steps = list.map((ev, i) => {
       const referenced = i === 0 ? null : continuesPrevious(view, ev, list.slice(0, i));
       const art = ev.payload.artifact_id ? view.getNode(eventGidIn(ev, ev.payload.artifact_id)) : null;
-      const nm = (id) => (id && view.getNode(eventGidIn(ev, id))?.label) || '(찾을 수 없는 노드)';
+      const nm = (id) => (id && view.getNode(eventGidIn(ev, id))?.label) || '(찾을 수 없는 항목)';
       const who = `${nm(ev.payload.from_person_id)} → ${nm(ev.payload.to_person_id)}`;
       const note = i === 0 ? '' : referenced ? ' — 이전 인수인계서를 이어받음' : ' — 이전 인수인계서를 이어받지 않음';
       return { event_gid: ev.gid, date: fmtDate(ev.occurred_at), referenced, text: `${ev.occurred_at} ${who}${art ? ` (인수인계서: ${art.label})` : ' (인수인계서 없음)'}${note}` };

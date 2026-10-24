@@ -194,7 +194,7 @@ function renderMerge(o, plan, aiHead) {
     workList,
     el('h3', {}, `판정 기록 ${decided.length}건`),
     history,
-    el('p', { class: 'muted small' }, '같다고 확인하면 그래프에서 한 노드로 보입니다. 다르다고 판정한 쌍은 다시 묻지 않습니다.'),
+    el('p', { class: 'muted small' }, '같다고 확인하면 그래프에서 한 항목으로 보입니다. 다르다고 판정한 쌍은 다시 묻지 않습니다.'),
     el('div', { class: 'row' }, el('button', { type: 'button', onclick: o.onClose }, '닫기')),
   );
 }

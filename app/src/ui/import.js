@@ -10,16 +10,16 @@ import { folderTab } from './folder-tab.js';
 import { CONVERT_RULES, docWorkLabel } from '../rules/doc-convert.js';
 
 const KIND_TEXT = {
-  overview: () => '개요 → 업무 지도의 중심 노드(꼭지)의 이름·목적·배경, 그리고 범위·이해관계자',
+  overview: () => '개요 → 지도 중심(가운데 큰 동그라미)의 이름·목적·배경, 그리고 범위·이해관계자',
   scope: (n) => `범위 → 업무 ${n}개`,
   scope_out: () => '범위 제외 → 업무 지도 설명',
-  steps: (n) => `업무 흐름 → 대표 업무의 절차 속성 ${n}단계(노드로 만들지 않음)`,
-  topic: () => '주제 노드 1개(항목은 설명에)',
+  steps: (n) => `업무 흐름 → 대표 업무의 절차 속성 ${n}단계(항목으로 만들지 않음)`,
+  topic: () => '주제 1개(문서의 항목은 설명에)',
   people: (n) => `사람·역할 ${n}개`,
   cautions: (n) => `주의사항 → 대표 업무의 주의사항 속성 ${n}줄`,
   artifacts: (n) => `산출물 ${n}개`,
   memos: (n) => `메모 ${n}건`,
-  toc: () => '목차 → 건너뜀(노드로 만들지 않음)',
+  toc: () => '목차 → 건너뜀(항목으로 만들지 않음)',
   ai_work: (n) => `업무 ${n}개(절차는 업무의 절차 속성에)`,
   ai_person: (n) => `사람·역할 ${n}개`,
   ai_artifact: (n) => `산출물 ${n}개`,
@@ -49,13 +49,13 @@ export function noteText(n) {
     case 'C-NO-OWNER': return '원문에서 작성 주체를 읽지 못했습니다(「작성:」·「작성 부서:」 줄은 …팀·…부 같은 조직 이름이 있을 때만, 날짜뿐인 값은 읽지 않습니다). 위 「작성 주체」 칸에 팀·부서 이름을 입력해야 가져올 수 있습니다.';
     case 'C-DATE-ASSUMED': return `원문에 작성일이 없어 메모(질문·리스크) 날짜를 변환한 날(${n.date})로 적었습니다.`;
     case 'C-TOPIC-GUESS': return `규칙에 없는 제목의 절 ${n.count}개를 주제로 만들었습니다(표에 「규칙 밖」 표시). 맞는지 확인하세요.`;
-    case 'C-TOO-MANY': return `노드가 ${n.count}개로, 정한 세분화(월말 정산 수준, ${n.max}개 이하)보다 많습니다. 범위 항목을 묶을 수 있는지 확인하세요.`;
-    case 'C-TOO-FEW': return `노드가 ${n.count}개로 적습니다. 업무 하나짜리 문서라면 정상입니다. 업무가 여러 개인 문서라면 「AI로 변환」(설정에서 키를 넣었을 때)을 쓰거나 업무별로 나눠 변환하세요. 제목(#)·표·번호 목록이 있는지도 확인하세요.`;
+    case 'C-TOO-MANY': return `그래프 항목이 ${n.count}개로, 정한 세분화(월말 정산 수준, ${n.max}개 이하)보다 많습니다. 문서의 범위 항목을 묶을 수 있는지 확인하세요.`;
+    case 'C-TOO-FEW': return `그래프 항목이 ${n.count}개로 적습니다. 업무 하나짜리 문서라면 정상입니다. 업무가 여러 개인 문서라면 「AI로 변환」(설정에서 키를 넣었을 때)을 쓰거나 업무별로 나눠 변환하세요. 제목(#)·표·번호 목록이 있는지도 확인하세요.`;
     // 아래 두 알림 중 담당 절(「주 담당·담당·정」) 관련은 변환 스위치 CONVERT_RULES.cr17j.assignPerforms가 켜졌을 때만 나온다(CR-17 J 승인안은 켬)
     case 'C-ASSIGN-SKIPPED': return `담당 절에 「주 담당·담당·정」으로 적힌 사람 ${n.count}명은 업무가 여러 개라 어느 업무의 담당인지 알 수 없어 업무에 잇지 않았습니다. 필요하면 연결을 직접 추가하세요.`;
     case 'C-PERFORMS-GUESS': return `담당(수행) 연결 ${n.count}건을 추정했습니다 — ${n.assigned ? `${n.count - n.assigned > 0 ? `${n.count - n.assigned}건은 원문의 역할 「하는 일」 항목이 업무 이름과 같은 경우이고, ` : ''}${n.assigned}건은 담당 절에 「주 담당·담당·정」으로 적힌 사람을 업무가 하나뿐인 문서의 그 업무에 이은 것입니다` : '원문의 역할 「하는 일」 항목이 업무 이름과 같은 경우만이고(결재·검토처럼 이름이 일부만 들어간 항목은 잇지 않음)'}. 기간이 없어 '지금 담당'으로 계산됩니다. 맞는지 확인하세요.`;
     case 'C-ROW-NO-NAME': return `${n.ref} 표의 ${n.row}번째 행은 이름 칸이 비어 있어 건너뛰었습니다. 원문을 확인하세요.`;
-    case 'C-NO-NAME': return `${n.ref}의 「${n.text}」는 이름이 없어(표시·번호·괄호뿐) 노드로 만들지 않았습니다. 원문을 확인하세요.`;
+    case 'C-NO-NAME': return `${n.ref}의 「${n.text}」는 이름이 없어(표시·번호·괄호뿐) 항목으로 만들지 않았습니다. 원문을 확인하세요.`;
     case 'C-TABLE-NAME-COL': return `${n.ref} 표에서 ${n.col}번째 칸을 업무 이름으로 썼습니다(첫 칸은 구분·순서로 보임). 이름이 엉뚱하면 표 머리글을 「업무」로 바꿔 다시 변환하세요.`;
     case 'C-NO-SCOPE': return '원문에서 범위(업무 목록)를 찾지 못해 문서 이름으로 업무 하나를 만들었습니다.';
     case 'C-NO-STRUCTURE': return '제목(#)이 없어 구조를 거의 읽지 못했습니다. 마크다운 제목·표·번호 목록이 있으면 더 잘 바뀝니다.';
@@ -73,7 +73,7 @@ function warningText(w, from) {
   if (w.code === 'W-REAL-NAME-LIKE') return `실명처럼 보이는 사람 이름 ${w.count}개가 있습니다(${w.labels.join(', ')}). 이 도구는 가상 데이터용입니다. 실제 이름이면 가져오기 전에 역할 이름(예: 정산 담당)으로 바꾸세요.`;
   if (w.code === 'W-EMPNO-LIKE') return `사번·주민번호처럼 보이는 숫자(6자리 이상)가 ${w.count}곳에 있습니다. 실제 번호면 지우거나 V-0000 형식의 가상 사번으로 바꾸세요.`;
   if (w.code === 'W-SAME-NAME' && from === 'json') return `이름·단위가 같은 업무 지도「${w.name}」(${w.level})가 이미 있습니다. 가져오면 따로 하나 더 생깁니다.`;
-  if (w.code === 'W-NO-SOURCE') return `원문 근거가 없는 노드 ${w.count}개가 있습니다(${w.ids.slice(0, 5).join(', ')}${w.ids.length > 5 ? ' …' : ''}).`;
+  if (w.code === 'W-NO-SOURCE') return `원문 근거가 없는 항목 ${w.count}개가 있습니다(${w.ids.slice(0, 5).join(', ')}${w.ids.length > 5 ? ' …' : ''}).`;
   if (w.code === 'W-SAME-NAME') return `이름·단위가 같은 업무 지도「${w.name}」(${w.level})가 이미 있습니다. 같은 문서를 다시 가져오는 것이면 위에서 이름을 바꾸거나 취소하세요. 가져오면 따로 하나 더 생깁니다.`;
   if (w.code === 'W-MISSING-CHILD') return `이 업무 지도가 묶는 하위 업무 지도가 이 브라우저에 없습니다(${w.ids.join(', ')}). 가져와도 그 부분은 비어 보입니다.`;
   return messageFor(w);
@@ -296,16 +296,16 @@ export function importDialog(o) {
       blocks.push(el('p', { class: 'error-text', 'data-testid': 'import-errors' }, `형식 버전이 다릅니다(파일: ${doc.schema_version ?? '없음'}, 이 앱: ${SCHEMA_VERSION}). 가져오지 않았습니다.`));
     } else {
       const summary = el('dl', { 'data-testid': 'import-summary' },
-        el('dt', {}, '규모'), el('dd', {}, `노드 ${p.node_total}개(${p.counts.map((c) => `${c.label} ${c.count}`).join(', ')}), 연결 ${p.edge_total}개, 메모 ${p.memo_total}건`));
+        el('dt', {}, '규모'), el('dd', {}, `항목 ${p.node_total}개(${p.counts.map((c) => `${c.label} ${c.count}`).join(', ')}), 연결 ${p.edge_total}개, 메모 ${p.memo_total}건`));
       if (report && report.target) {
         const { min, max } = report.target;
         // 노드가 적어도 업무 하나를 적은 문서면 정상이다: 실패처럼 읽히지 않게 한마디 붙인다
         const oneWork = (doc.nodes || []).filter((n) => n && n.core_type === 'work' && !n.hidden).length <= 1;
         const fit = report.node_count > max ? '많음' : report.node_count < min ? (oneWork ? '적음 — 업무 하나짜리 문서라면 정상' : '적음') : '맞음';
-        summary.append(el('dt', {}, '세분화'), el('dd', { 'data-testid': 'import-granularity' }, `월말 정산 수준(노드 ${min}~${max}개) — ${fit}`));
+        summary.append(el('dt', {}, '세분화'), el('dd', { 'data-testid': 'import-granularity' }, `월말 정산 수준(항목 ${min}~${max}개) — ${fit}`));
       }
-      if (p.source) summary.append(el('dt', {}, '원문 근거'), el('dd', { 'data-testid': 'import-source' }, `노드 ${p.source.with}/${p.source.total}개`));
-      summary.append(el('dt', {}, '표시 보존'), el('dd', { 'data-testid': 'import-marks' }, `[미확인] 노드 ${p.marks.미확인}개, [가정] 노드 ${p.marks.가정}개`));
+      if (p.source) summary.append(el('dt', {}, '원문 근거'), el('dd', { 'data-testid': 'import-source' }, `항목 ${p.source.with}/${p.source.total}개`));
+      summary.append(el('dt', {}, '표시 보존'), el('dd', { 'data-testid': 'import-marks' }, `[미확인] 항목 ${p.marks.미확인}개, [가정] 항목 ${p.marks.가정}개`));
       blocks.push(summary);
 
       // 작성 주체만 비어 있는 것은 실패가 아니라 "입력할 차례"다: 빨간 오류 대신 안내로 둔다(여섯 번째 검토 U-6). 가져오기 버튼은 그대로 막힌다
@@ -342,7 +342,7 @@ export function importDialog(o) {
             el('td', {}, s.ref), el('td', {}, s.title), el('td', {}, s.merged ? `같은 이름의 주제 「${s.merged}」에 합침` : (KIND_TEXT[s.kind] || (() => s.kind))(s.made) + (s.unknown ? ' · 규칙 밖' : '')))))));
       }
 
-      blocks.push(el('h4', {}, '노드'));
+      blocks.push(el('h4', {}, '항목'));
       const nodes = (doc.nodes || []).filter((n) => n && !n.hidden);
       const groups = new Map();
       for (const n of nodes) {
@@ -409,7 +409,7 @@ export function importDialog(o) {
     aiLive = aiBtn ? el('p', { class: 'muted small', 'data-testid': 'ai-convert-live', 'aria-live': 'polite' }, st.aiBusy ? AI_CONVERT_WAIT : '') : null;
     const body = st.tab === 'folder' ? folderTab(o, render) : st.tab === 'export' ? exportBody() : st.tab === 'doc'
       ? el('div', { class: 'editor' },
-        el('p', { class: 'muted small' }, '업무정의서 같은 문서를 붙여 넣으면 제목(#)·표·번호 목록을 규칙으로 읽어 업무 지도 초벌을 만듭니다. 업무 흐름은 절차 속성으로, 요건·예외 같은 절은 주제 하나로 묶어 노드를 10~20개 정도로 만듭니다(월말 정산 수준).'),
+        el('p', { class: 'muted small' }, '업무정의서 같은 문서를 붙여 넣으면 제목(#)·표·번호 목록을 규칙으로 읽어 업무 지도 초벌을 만듭니다. 업무 흐름은 절차 속성으로, 요건·예외 같은 절은 주제 하나로 묶어 항목을 10~20개 정도로 만듭니다(월말 정산 수준).'),
         el('p', { class: 'muted small', 'data-testid': 'import-plain-note' }, '한글·워드에서 복사한 일반 글(1. 개요 / 가. …)도 됩니다.'),
         el('textarea', { id: 'import-doc', rows: '9', 'aria-label': '문서 원문', placeholder: '# 업무 이름\n## 1. 개요\n| 항목 | 내용 |\n…', oninput: onDocInput }, st.docText),
         el('div', { class: 'row' },

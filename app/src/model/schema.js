@@ -4,7 +4,7 @@ export const SCHEMA_VERSION = '1.0';
 
 // 노드 핵심 유형(12.2 nodes[].core_type) → 화면 표시 이름
 export const NODE_TYPES = {
-  root: '꼭지',
+  root: '지도 중심',
   person: '사람',
   work: '업무',
   artifact: '산출물',

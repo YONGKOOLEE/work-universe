@@ -16,7 +16,7 @@ test('이벤트의 사람·업무·산출물·조직·주제 칸에는 그 유�
     type: 'handover', occurred_at: '2026-10-02', payload: { work_id: 'N-011', from_person_id: 'N-010', to_person_id: 'N-012' },
   }, ctx);
   assert.deepEqual(bad, { ok: false, error: { code: 'E-SCHEMA', field: 'work_id', expected: 'work' } });
-  assert.equal(messageFor(bad.error), '업무 칸에는 업무 노드만 고를 수 있습니다.');
+  assert.equal(messageFor(bad.error), '업무 칸에는 업무 항목만 고를 수 있습니다.'); // CR-18-2
   const memo = addEvent(SAMPLE_A1, { type: 'memo', occurred_at: '2026-10-02', payload: { target_id: 'N-001', topic_ids: ['N-001'] } }, ctx);
   assert.equal(memo.error.field, 'topic_ids');
   // 메모 대상(target_id)은 어떤 노드든 된다
@@ -34,7 +34,7 @@ test('숨긴 노드에는 새 연결을 만들 수 없다', () => {
   const doc = hideNode(SAMPLE_A1, 'N-021', ctx).doc;
   const r = addEdge(doc, { source: 'N-002', target: 'N-021', core_type: 'references' }, ctx);
   assert.deepEqual(r.error, { code: 'E-SCHEMA', field: 'target', hidden: true });
-  assert.equal(messageFor(r.error, { kind: 'edge' }), '숨긴 노드에는 연결할 수 없습니다.');
+  assert.equal(messageFor(r.error, { kind: 'edge' }), '숨긴 항목에는 연결할 수 없습니다.'); // CR-18-2
 });
 
 test('저장소 값이 깨져 있어도 멈추지 않고, 샘플은 다시 넣는다', () => {

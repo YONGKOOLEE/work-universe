@@ -303,11 +303,11 @@ test('FU-20: 「관련」 연결이 주제 아닌 노드에 걸려 거절되면 
   const source = { label: '월말 정산 점검', core_type: 'work' };
   const target = { label: '서하늘', core_type: 'person' };
   const text = messageFor({ code: 'E-PAIR' }, { kind: 'edge', relation: 'relates_to', source, target, suggestions: allowedRelations('work', 'person') });
-  assert.match(text, /「관련」은 꼭지 외 모든 노드 → 주제만 가능합니다\./); // 기존 문구는 그대로
+  assert.match(text, /「관련」은 지도 중심 외 모든 항목 → 주제만 가능합니다\./); // 기존 문구는 그대로 // CR-18-2
   assert.match(text, /사람을 업무에 이으려면 「수행」\(사람 → 업무\)/);
   assert.match(text, /「산출」\(업무 → 산출물\)/);
   assert.match(text, /「참조」/);
-  assert.match(text, /「관련」은 대상이 주제 노드일 때만 씁니다\.$/);
+  assert.match(text, /「관련」은 대상이 주제 항목일 때만 씁니다\.$/); // CR-18-2
   // 노드 정보가 없을 때도 같은 안내
   assert.match(messageFor({ code: 'E-PAIR' }, { kind: 'edge', relation: 'relates_to' }), /사람을 업무에 이으려면 「수행」/);
   // 다른 관계의 거절 문구는 바뀌지 않는다

@@ -78,5 +78,5 @@ test('view.exists: 노드·이력의 전역 참조면 true(숨긴 노드 포함)
 
 test('displayName: 숨긴 노드에만 표시를 붙인다', () => {
   assert.equal(displayName({ label: '점검표', hidden: false }), '점검표');
-  assert.equal(displayName({ label: '점검표', hidden: true }), '점검표(숨김 처리된 노드)');
+  assert.equal(displayName({ label: '점검표', hidden: true }), '점검표(숨김 처리된 항목)'); // CR-18-2
 });

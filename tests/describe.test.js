@@ -76,14 +76,14 @@ test('수정 이벤트는 바뀐 필드와 변경 전 값을 보인다', () => {
   assert.equal(last.text, '수정 — 이름: 2026-06 인수인계서 → 2026-06 인수인계서(수정)');
 });
 
-test('숨긴 노드도 상세는 나오고 hidden으로 알린다. 이력 문장에는 "숨김 처리된 노드"가 붙는다', () => {
+test('숨긴 노드도 상세는 나오고 hidden으로 알린다. 이력 문장에는 "숨김 처리된 항목"가 붙는다', () => { // CR-18-2
   const v = buildView(hideNode(SAMPLE_A1, 'N-020', T).doc);
   const d = describeNode(v, 'U-A1/N-020');
   assert.equal(d.found, true);
   assert.equal(d.hidden, true);
   assert.equal(d.title, '2026-06 인수인계서');
   const h = describeNode(v, 'U-A1/N-011').history.find((x) => x.type_label === '인수인계');
-  assert.match(h.text, /근거: 2026-06 인수인계서\(숨김 처리된 노드\)/);
+  assert.match(h.text, /근거: 2026-06 인수인계서\(숨김 처리된 항목\)/); // CR-18-2
 });
 
 test('없는 노드는 found:false', () => {

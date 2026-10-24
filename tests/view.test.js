@@ -31,7 +31,7 @@ test('단일 유니버스: 노드·연결·이벤트가 전역 ID로 나오고 �
   assert.equal(v.getNode('U-A1/N-001').label, '대사 확인');
   assert.equal(v.getNode('U-A1/N-001').origin, 'own');
   assert.equal(v.edges.find((e) => e.id === 'L-002').source, 'U-A1/N-011');
-  assert.equal(v.nodes.find((n) => n.id === 'N-000').type_label, '꼭지');
+  assert.equal(v.nodes.find((n) => n.id === 'N-000').type_label, '지도 중심'); // CR-18-2
   assert.equal(JSON.stringify(EXAMPLE_12_6), before);
   assert.deepEqual(buildView(EXAMPLE_12_6).nodes, v.nodes); // 같은 입력 → 같은 결과
 });

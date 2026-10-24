@@ -39,19 +39,19 @@ function historyList(items) {
 export function renderNodeDetail(panel, d, { onFocus, extra = null, toolbar = null, linkTools = () => null }) {
   panel.replaceChildren();
   if (!d.found) {
-    panel.append(el('p', { class: 'muted' }, '노드를 찾을 수 없습니다.'));
+    panel.append(el('p', { class: 'muted' }, '항목을 찾을 수 없습니다.'));
     return;
   }
   panel.append(el('h2', {}, d.title));
   if (toolbar) panel.append(toolbar);
-  if (d.hidden) panel.append(el('p', { class: 'notice', 'data-testid': 'hidden-note' }, d.deleted ? '완전히 삭제된 노드입니다. 내용은 지워졌고, 이 노드를 언급한 이력만 남아 있습니다.' : '숨김 처리된 노드입니다. 내용과 이력은 유지됩니다.'));
+  if (d.hidden) panel.append(el('p', { class: 'notice', 'data-testid': 'hidden-note' }, d.deleted ? '완전히 삭제된 항목입니다. 내용은 지워졌고, 이 항목을 언급한 이력만 남아 있습니다.' : '숨김 처리된 항목입니다. 내용과 이력은 유지됩니다.'));
 
   const dl = el('dl', { 'data-testid': 'attrs' });
   for (const r of d.rows) dl.append(el('dt', {}, r.label), el('dd', {}, r.value));
   panel.append(dl);
   if (extra) panel.append(extra);
 
-  panel.append(el('h3', {}, '연결된 노드'));
+  panel.append(el('h3', {}, '연결된 항목'));
   if (d.no_links) {
     panel.append(el('p', { class: 'muted', 'data-testid': 'no-links' }, '연결 없음'));
   } else {
@@ -62,7 +62,7 @@ export function renderNodeDetail(panel, d, { onFocus, extra = null, toolbar = nu
           'li',
           {},
           el('span', { class: 'chip' }, l.relation),
-          el('span', { class: 'arrow', title: l.direction === 'out' ? '이 노드에서 나가는 연결' : '이 노드로 들어오는 연결' }, l.direction === 'out' ? '→' : '←'),
+          el('span', { class: 'arrow', title: l.direction === 'out' ? '이 항목에서 나가는 연결' : '이 항목으로 들어오는 연결' }, l.direction === 'out' ? '→' : '←'),
           el('button', { type: 'button', class: 'link', onclick: () => onFocus(l.other.gid) }, l.other.label),
           el('span', { class: 'muted small' }, ` ${l.other.type_label}`),
           l.status ? el('span', { class: `chip status-${l.status_key === 'current' ? 'current' : 'other'}`, 'data-testid': 'link-status' }, l.status) : null,
@@ -89,7 +89,7 @@ export function renderUniverseSummary(panel, s, shown = null, extras = {}) {
     el('dt', {}, '규모'),
     el('dd', {}, shown !== null && shown < s.node_total
       ? `지금 화면 ${shown}개 · 접힌 것까지 전체 ${s.node_total}개(${s.counts.map((c) => `${c.type_label} ${c.count}`).join(', ')}), 연결 ${s.edge_total}개`
-      : `노드 ${s.node_total}개(${s.counts.map((c) => `${c.type_label} ${c.count}`).join(', ')}), 연결 ${s.edge_total}개`),
+      : `항목 ${s.node_total}개(${s.counts.map((c) => `${c.type_label} ${c.count}`).join(', ')}), 연결 ${s.edge_total}개`),
   );
   if (s.period) dl.append(el('dt', {}, '이력 기간'), el('dd', {}, `${s.period.first} ~ ${s.period.last}`));
   panel.append(dl);
@@ -114,7 +114,7 @@ export function renderUniverseSummary(panel, s, shown = null, extras = {}) {
   if (s.stale_links.length) panel.append(el('p', { class: 'notice', 'data-testid': 'stale-links' }, `사번이 바뀌어 더는 맞지 않는 사번 자동 연결 ${s.stale_links.length}건은 합치지 않았습니다. 다시 확인이 필요합니다.`));
   // 큰 유니버스: 업무별로 나누라는 안내(막지 않는다)
   if (extras.split) {
-    panel.append(el('p', { class: 'hint', 'data-testid': 'split-hint' }, `${extras.universeId === 'U-K1' ? '이 샘플은 단계마다 노드를 만든 비교 자료입니다. ' : ''}노드 ${s.node_total}개 — 한 화면에 다 그리면 이름이 작아집니다(월말 정산 점검은 업무 3개·노드 10개). 업무 하나씩 업무 지도로 만들고 「업무 지도 묶기」로 묶으면 위에서는 접혀 보입니다. 지금은 「노드 찾기」나, 노드를 고른 뒤 「주변만 보기」로 좁혀 보세요.`));
+    panel.append(el('p', { class: 'hint', 'data-testid': 'split-hint' }, `${extras.universeId === 'U-K1' ? '이 샘플은 단계마다 항목을 만든 비교 자료입니다. ' : ''}항목 ${s.node_total}개 — 한 화면에 다 그리면 이름이 작아집니다(월말 정산 점검은 업무 3개·항목 10개). 업무 하나씩 업무 지도로 만들고 「업무 지도 묶기」로 묶으면 위에서는 접혀 보입니다. 지금은 「항목 찾기」나, 항목을 고른 뒤 「주변만 보기」로 좁혀 보세요.`));
   }
   // 「처음 할 일」: 새로 만든 유니버스가 다음에 할 일 3단계(다 하면 사라진다). 새 사람에게 가장 필요한 안내라 일반 안내보다 위에 둔다
   if (extras.starter) {
@@ -143,8 +143,8 @@ export function renderUniverseSummary(panel, s, shown = null, extras = {}) {
   const empty = s.node_total <= 1;
   panel.append(el('div', { class: 'hint', 'data-testid': 'hint' },
     empty
-      ? el('p', {}, '아직 노드가 없습니다. 아래 「사람·업무·문서 추가」에서 첫 업무를 추가하세요. 업무정의서가 있으면 머리글의 「가져오기·내보내기」로 초벌을 만들 수도 있습니다.')
-      : el('p', {}, '그래프에서 노드를 클릭하면 속성, 연결된 노드, 이력이 여기에 보입니다.'),
+      ? el('p', {}, '아직 항목이 없습니다. 아래 「사람·업무·문서 추가」에서 첫 업무를 추가하세요. 업무정의서가 있으면 머리글의 「가져오기·내보내기」로 초벌을 만들 수도 있습니다.')
+      : el('p', {}, '그래프에서 항목을 클릭하면 속성, 연결된 항목, 이력이 여기에 보입니다.'),
     empty ? null : el('p', {}, '아래 「인수인계 초안 만들기」와 「인사이트 보기」도 눌러 보세요.'),
-    el('p', { class: 'muted small', 'data-testid': 'term-note' }, '업무 지도는 업무를 묶은 한 단위, 노드는 그래프의 동그라미 하나, 꼭지는 업무 지도의 중심 노드입니다.')));
+    el('p', { class: 'muted small', 'data-testid': 'term-note' }, '업무 지도는 업무를 묶은 한 단위, 항목은 그래프의 동그라미 하나, 지도 중심은 업무 지도의 중심(가운데 큰 동그라미)입니다.')));
 }

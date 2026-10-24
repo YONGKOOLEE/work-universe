@@ -203,11 +203,11 @@ test('대상이 업무면 그 업무와 하위 업무만 범위다(카드승인 
   assert.ok(texts(d, '관계자_연락처').some((s) => s.startsWith('A사 결제 담당')));
 });
 
-test('숨긴 산출물이 근거면 "숨김 처리된 노드"로 표시하고 근거는 유지한다(4절 숨김 후 참조)', () => {
+test('숨긴 산출물이 근거면 "숨김 처리된 항목"로 표시하고 근거는 유지한다(4절 숨김 후 참조)', () => { // CR-18-2
   const doc = hideNode(SAMPLE_A1, 'N-020', ctx).doc;
   const d = buildHandoverDraft(buildView(doc), { target: answer.target, from: answer.from, to: answer.to }).draft;
   const prev = item(d, '이전_인수인계').sentences[0];
-  assert.match(prev.text, /2026-06 인수인계서\(숨김 처리된 노드\)/);
+  assert.match(prev.text, /2026-06 인수인계서\(숨김 처리된 항목\)/); // CR-18-2
   assert.ok(prev.evidence_ids.includes('U-A1/N-020'));
   assert.ok(itemEvidence(item(d, '산출물_문서')).includes('U-A1/N-020'));
 });

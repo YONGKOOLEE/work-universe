@@ -69,7 +69,7 @@ test('B 설명 요청: 직접 해 본 사람 → 비슷한 일 → 역할 이름
   assert.deepEqual(req.rule.map((s) => s.text.split(' ')[0]), ['이', '비슷한', '사람']);
   assert.match(req.rule[0].text, /^이 업무를 직접 해 본 사람은 2명입니다: 윤바다\(2026-06-01 ~ 2026-09-30\), 한가람\(2025-03-01 ~ 2026-05-31\)\.$/);
   assert.match(req.rule[1].text, /^비슷한 업무를 해 본 사람은 1명입니다\. 점수가 높은 순서로 윤바다\(3점\)입니다\.$/);
-  assert.match(req.rule[2].text, /^사람 이름이 아니라 역할 이름만 있는 노드가 2개 있습니다: 운영 담당, 정산 담당\./);
+  assert.match(req.rule[2].text, /^사람 이름이 아니라 역할 이름만 있는 항목이 2개 있습니다: 운영 담당, 정산 담당\./); // CR-18-2
   for (const s of req.rule) {
     assert.ok(s.evidence_ids.length > 0);
     for (const g of s.evidence_ids) assert.ok(v.lookup(g).found, g);

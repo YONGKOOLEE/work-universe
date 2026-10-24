@@ -17,6 +17,9 @@ export const HANDOVER_SCENARIOS = [
   { id: 'H1', view: 'U-A1', target: 'U-A1/N-000', from: 'U-A1/N-011', to: 'U-A1/N-012', note: '월말 정산(시연 기본): 윤바다 → 서하늘' },
   { id: 'H2', view: 'U-D1', target: 'U-A1/N-000', from: 'U-A1/N-011', to: 'U-A1/N-012', note: '같은 초안을 부서 화면에서(유사 경험자가 채워짐)' },
   { id: 'H3', view: 'U-C', target: 'U-C/N-101', from: 'U-C/N-202', to: 'U-C/N-201', note: '교육팀 신입 교육 운영: 이든빛 → 나래솔' },
+  // CR-18-7(재검증 R14-4, L-56): 같은 초안을 다른 묶음 화면에서 열면 유사 경험자 근거가 달라진다
+  { id: 'H4', view: 'U-T1', target: 'U-A1/N-000', from: 'U-A1/N-011', to: 'U-A1/N-012', note: '월말 정산 초안을 팀(가상정산팀) 화면에서' },
+  { id: 'H5', view: 'U-D1', target: 'U-C/N-101', from: 'U-C/N-202', to: 'U-C/N-201', note: '교육팀 초안을 부서 화면에서' },
 ];
 
 export const EXPLAIN_SCENARIOS = [

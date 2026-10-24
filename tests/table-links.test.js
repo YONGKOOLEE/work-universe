@@ -61,7 +61,7 @@ test('없는 이름은 새 노드로 만든다(사람·산출물은 꼭지에 �
   assert.equal(edgesOf(r.doc, 'precedes').length, 1);
   assert.equal(edgesOf(r.doc, 'performs').length, 1);
   assert.equal(r.rows.filter((x) => x.aux).length, 3);
-  assert.match(linkSummary(r), /노드 4개, 연결 3개를 만들었습니다\(새로 만든 사람·산출물 2개, 새 업무 1개\)/);
+  assert.match(linkSummary(r), /항목 4개, 연결 3개를 만들었습니다\(새로 만든 사람·산출물 2개, 새 업무 1개\)/); // CR-18-2
 });
 
 test('같은 이름이 여러 행에서 나와도 한 번만 만든다', () => {
