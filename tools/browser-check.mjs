@@ -828,12 +828,14 @@ async function checkBrowser(browser, port) {
     await clickTestId(s.cdp, 'btn-rewind-back');
     await sleep(300);
     check('CR-13 A 근거 칩을 누르면 끝 카드: 「끝! 이제 내 업무로 해 볼까요?」, 「내 업무 지도 만들기」, 「닫기」, 접힌 상태면 「도구 더 보기」 안내 한 줄(강제로 펼치지 않음)', ti.mode === 'end' && (await text(s.cdp, '[data-testid=tour-end]')) === '끝! 이제 내 업무로 해 볼까요?' && (await text(s.cdp, '[data-testid=tour-make]')) === '내 업무 지도 만들기' && (await text(s.cdp, '[data-testid=tour-skip]')) === '닫기' && (await text(s.cdp, '[data-testid=tour-tools-hint]')).includes('「도구 더 보기」에서 흐름 정렬·거르기도 써 보세요') && (await evaluate(s.cdp, 'window.__wu.toolsOpen')) === false, JSON.stringify(ti));
+    const wbEnd = await evaluate(s.cdp, "(() => { const m = document.querySelector('[data-testid=tour-mine]'); const g = document.querySelector('[data-testid=tour-end-guide]'); const k = document.querySelector('[data-testid=tour-make]'); return { mine: m ? { text: m.textContent, primary: m.classList.contains('primary'), disabled: m.disabled, visible: m.checkVisibility() } : null, guide: g ? g.textContent : '', make: !!k, skip: !!document.querySelector('[data-testid=tour-skip]') }; })()");
+    check('처음 사용 W-B(CR-18-3) 따라 하기 끝 카드: 안내 「예시를 봤으면, 내 업무 이름 하나로 작은 지도를 만들어 보세요.」, 으뜸 단추 「이제 내 업무로 해 보기」(켜짐·보임), 기존 「내 업무 지도 만들기」·「닫기」도 그대로', !!wbEnd.mine && wbEnd.mine.text === '이제 내 업무로 해 보기' && wbEnd.mine.primary && !wbEnd.mine.disabled && wbEnd.mine.visible && wbEnd.guide === '예시를 봤으면, 내 업무 이름 하나로 작은 지도를 만들어 보세요.' && wbEnd.make && wbEnd.skip, JSON.stringify(wbEnd));
     await shot(s.cdp, `${browser.name}-36e-tour-end`);
-    await evaluate(s.cdp, "document.querySelector('[data-testid=tour-make]').click()");
+    await evaluate(s.cdp, "document.querySelector('[data-testid=tour-mine]').click()");
     await sleep(300);
-    check('CR-13 A 끝 카드 「내 업무 지도 만들기」 → 새 업무 지도 대화상자가 열리고 따라 하기 카드는 닫힘', (await evaluate(s.cdp, "document.getElementById('create-dialog').open")) && (await tourInfo()).mode === 'off' && (await evaluate(s.cdp, "document.getElementById('tour-slot').hidden")));
+    check('CR-13 A·W-B 끝 카드 「이제 내 업무로 해 보기」 → 「내 업무 지도 만들기」 창이 열리고 따라 하기 카드는 닫힘', (await evaluate(s.cdp, "document.getElementById('create-dialog').open")) && (await tourInfo()).mode === 'off' && (await evaluate(s.cdp, "document.getElementById('tour-slot').hidden")));
     const dEnd = await dlgInfo();
-    check('N-3 끝 카드 「내 업무 지도 만들기」로 열면 「내 업무 지도 만들기」 모양(첫 업무 칸 맨 위, 지도 정보 접힘, 초점은 업무 이름)', dEnd.title === '내 업무 지도 만들기' && dEnd.work && !dEnd.name && dEnd.metaInInfo && !dEnd.infoOpen && dEnd.focus === 'create-start-work', JSON.stringify(dEnd));
+    check('N-3·W-B 끝 카드 「이제 내 업무로 해 보기」로 열면 「내 업무 지도 만들기」 모양(첫 업무 칸 맨 위, 지도 정보 접힘, 초점은 업무 이름)', dEnd.title === '내 업무 지도 만들기' && dEnd.work && !dEnd.name && dEnd.metaInInfo && !dEnd.infoOpen && dEnd.focus === 'create-start-work', JSON.stringify(dEnd));
     await shot(s.cdp, `${browser.name}-36f-mine-dialog-from-end`);
     const authorSet = await evaluate(s.cdp, "(JSON.parse(localStorage.getItem('wu:v1:settings') || '{}').authorName || '')");
     await evaluate(s.cdp, "(() => { document.getElementById('create-start-work').value = '재검증 시험 업무'; document.querySelector('#create-form button[type=submit]').click(); })()");
@@ -981,6 +983,7 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, "document.getElementById('fit').click()");
     await sleep(600);
     check('CR-13 A team 5단계 → 「전체 보기」로 돌아오면(주변만 보기 해제) 끝 카드', (await tourInfo()).mode === 'end' && (await text(s.cdp, '[data-testid=tour-end]')) === '끝! 이제 내 업무로 해 볼까요?' && (await text(s.cdp, '[data-testid=tour-card] .tour-count')) === '따라 하기 5/5 끝' && !(await evaluate(s.cdp, 'window.__wu.nbhd')));
+    check('처음 사용 W-B(CR-18-3) 팀 따라 하기 끝 카드에도 안내 한 줄과 「이제 내 업무로 해 보기」', (await text(s.cdp, '[data-testid=tour-mine]')) === '이제 내 업무로 해 보기' && (await text(s.cdp, '[data-testid=tour-end-guide]')) === '예시를 봤으면, 내 업무 이름 하나로 작은 지도를 만들어 보세요.');
     await shot(s.cdp, `${browser.name}-37d-tour-team-end`);
     await evaluate(s.cdp, "document.querySelector('[data-testid=tour-skip]').click()");
     // 「?」: 다른 유니버스(U-K1)에서는 두 시나리오 고르기 → 팀을 고르면 U-D1이 열리고 team 시작
@@ -3356,9 +3359,9 @@ async function checkBrowser(browser, port) {
       const personOpt = await evaluate(s.cdp, "(() => { const o = [...document.querySelector('[data-testid=edge-other]').options].find((x) => x.textContent.includes('(사람)')); return o ? o.value : null; })()");
       await evaluate(s.cdp, `(() => { const o = document.querySelector('[data-testid=edge-other]'); o.value = ${JSON.stringify(personOpt)}; o.dispatchEvent(new Event('change')); })()`);
       await sleep(150);
-      const rel = await evaluate(s.cdp, "(() => Object.fromEntries([...document.querySelector('[data-testid=edge-type]').options].map((o) => [o.value, { disabled: o.disabled, text: o.textContent }])))()");
+      const rel = await evaluate(s.cdp, "(() => Object.fromEntries([...document.querySelector('[data-testid=edge-type]').options].map((o) => [o.value, { disabled: o.disabled, text: o.textContent, group: o.parentElement.tagName === 'OPTGROUP' ? o.parentElement.label : '' }])))()");
       check('W5 FU-35 연결 추가: 상대를 고르기 전에는 관계가 전부 켜져 있음', before === 0, String(before));
-      check('W5 FU-35 연결 추가: 업무↔사람을 고르면 「수행」은 켜짐, 「관련」은 disabled + 「(이 조합에는 못 씀)」', !!personOpt && rel.performs && rel.performs.disabled === false && rel.performs.text === '수행' && rel.relates_to.disabled === true && rel.relates_to.text === '관련 (이 조합에는 못 씀)', JSON.stringify(rel));
+      check('W5 FU-35 연결 추가: 업무↔사람을 고르면 「수행」은 켜짐, 「관련」은 disabled이고 「이 조합에는 못 씀」 묶음 안(CR-18-4로 보기 글 꼬리표 대신 묶음)', !!personOpt && rel.performs && rel.performs.disabled === false && rel.performs.text === '수행' && rel.relates_to.disabled === true && rel.relates_to.text === '관련' && rel.relates_to.group === '이 조합에는 못 씀' && rel.performs.group === '', JSON.stringify(rel));
       // FU-35 오류 위치: 「관련」(사람 → 업무)로 실제로 저장해 보면 E-PAIR가 「연결」 단추 바로 위에, 화면 안에 보임
       await evaluate(s.cdp, "(() => { const t = document.querySelector('[data-testid=edge-type]'); t.value = 'relates_to'; t.dispatchEvent(new Event('change')); const d = document.querySelector('[data-testid=edge-direction]'); d.value = 'in'; d.dispatchEvent(new Event('change')); document.querySelector('[data-testid=edge-form] button[type=submit]').click(); })()");
       await sleep(250);
@@ -3379,13 +3382,46 @@ async function checkBrowser(browser, port) {
       await sleep(150);
       const nBefore2 = await evaluate(s.cdp, 'window.__wu.doc.nodes.length');
       await evaluate(s.cdp, "document.querySelector('details.add').open = true");
-      const addRel = await evaluate(s.cdp, "(() => { const slot = document.getElementById('add-slot'); const t = slot.querySelector('[data-testid=node-type]'); t.value = 'person'; t.dispatchEvent(new Event('change')); const o = slot.querySelector('[data-testid=node-link-other]'); const w = [...o.options].find((x) => x.textContent.includes('(업무)')); o.value = w.value; o.dispatchEvent(new Event('change')); const r = slot.querySelector('[data-testid=node-link-type]'); return Object.fromEntries([...r.options].map((x) => [x.value, { disabled: x.disabled, text: x.textContent }])); })()");
-      check('W5 FU-35 사람·업무·문서 추가: 사람 + 업무를 고르면 「관련」은 disabled + 「(이 조합에는 못 씀)」, 추천된 「수행」은 켜짐', addRel.relates_to.disabled === true && addRel.relates_to.text === '관련 (이 조합에는 못 씀)' && addRel.performs.disabled === false, JSON.stringify(addRel));
+      const addRel = await evaluate(s.cdp, "(() => { const slot = document.getElementById('add-slot'); const t = slot.querySelector('[data-testid=node-type]'); t.value = 'person'; t.dispatchEvent(new Event('change')); const o = slot.querySelector('[data-testid=node-link-other]'); const w = [...o.options].find((x) => x.textContent.includes('(업무)')); o.value = w.value; o.dispatchEvent(new Event('change')); const r = slot.querySelector('[data-testid=node-link-type]'); return Object.fromEntries([...r.options].map((x) => [x.value, { disabled: x.disabled, text: x.textContent, group: x.parentElement.tagName === 'OPTGROUP' ? x.parentElement.label : '' }])); })()");
+      check('W5 FU-35 사람·업무·문서 추가: 사람 + 업무를 고르면 「관련」은 disabled이고 「이 조합에는 못 씀」 묶음 안, 추천된 「수행」은 켜짐(CR-18-4)', addRel.relates_to.disabled === true && addRel.relates_to.text === '관련' && addRel.relates_to.group === '이 조합에는 못 씀' && addRel.performs.disabled === false, JSON.stringify(addRel));
       await evaluate(s.cdp, "(() => { const slot = document.getElementById('add-slot'); slot.querySelector('[data-testid=node-label]').value = 'W5 시험'; const r = slot.querySelector('[data-testid=node-link-type]'); r.value = 'relates_to'; r.dispatchEvent(new Event('change')); slot.querySelector('button[type=submit]').click(); })()");
       await sleep(250);
       const addErr = await evaluate(s.cdp, "(() => { const slot = document.getElementById('add-slot'); const m = slot.querySelector('[data-testid=form-message]'); const btn = slot.querySelector('button[type=submit]'); const r = m.getBoundingClientRect(); const br = btn.getBoundingClientRect(); return { code: m.dataset.code, above: r.bottom <= br.top + 1, inView: r.top >= 0 && r.bottom <= window.innerHeight, nodes: window.__wu.doc.nodes.length }; })()");
       check('W5 FU-35 사람·업무·문서 추가 실패(E-PAIR): 오류가 「추가」 단추 바로 위에 있고 화면 안에 보이며 아무것도 저장되지 않음', addErr.code === 'E-PAIR' && addErr.above && addErr.inView && addErr.nodes === nBefore2, JSON.stringify(addErr));
       await shot(s.cdp, `${browser.name}-w5-add-error`);
+      // ── 처음 사용 W-B(CR-18-4): 관계 고르기 — 쓸 수 있는 관계가 위, 못 쓰는 관계는 아래 묶음, 하나뿐이면 자동 선택 + 한 줄 ──
+      const wbOpts = (testid) => evaluate(s.cdp, `(() => { const r = document.querySelector('[data-testid=${testid}]'); return { value: r.value, top: [...r.children].filter((c) => c.tagName === 'OPTION').map((o) => o.value), group: (r.querySelector('optgroup') || { label: '' }).label, grouped: [...r.querySelectorAll('optgroup option')].map((o) => o.value + (o.disabled ? ':d' : '')), lastIsGroup: r.lastElementChild.tagName === 'OPTGROUP' }; })()`);
+      // 사람·업무·문서 추가: 조직 + 업무 → 「참조」 하나
+      await evaluate(s.cdp, "(() => { const slot = document.getElementById('add-slot'); const t = slot.querySelector('[data-testid=node-type]'); t.value = 'org'; t.dispatchEvent(new Event('change')); const o = slot.querySelector('[data-testid=node-link-other]'); const w = [...o.options].find((x) => x.textContent.includes('(업무)')); o.value = w.value; o.dispatchEvent(new Event('change')); })()");
+      await sleep(150);
+      const wbAddOrg = await wbOpts('node-link-type');
+      const wbAddNote = await evaluate(s.cdp, "(() => { const n = document.querySelector('[data-testid=node-link-only]'); return { text: n.textContent, visible: n.checkVisibility() }; })()");
+      check('처음 사용 W-B(CR-18-4) 사람·업무·문서 추가: 조직 + 업무를 고르면 관계가 「참조」로 자동 선택, 쓸 수 있는 것은 그 하나뿐(목록 맨 위), 나머지는 아래 「이 조합에는 못 씀」 묶음(disabled), 칸 옆에 「(이 조합은 「참조」만 됩니다)」', wbAddOrg.value === 'references' && JSON.stringify(wbAddOrg.top) === '["references"]' && wbAddOrg.group === '이 조합에는 못 씀' && wbAddOrg.lastIsGroup && wbAddOrg.grouped.length === 6 && wbAddOrg.grouped.every((x) => x.endsWith(':d')) && wbAddNote.visible && wbAddNote.text === '(이 조합은 「참조」만 됩니다)', JSON.stringify([wbAddOrg, wbAddNote]));
+      await shot(s.cdp, `${browser.name}-wb-relation-auto`);
+      // 사람 + 업무: 「수행」·「참조」가 위, 「관련」 등은 아래, 안내 없음
+      await evaluate(s.cdp, "(() => { const slot = document.getElementById('add-slot'); const t = slot.querySelector('[data-testid=node-type]'); t.value = 'person'; t.dispatchEvent(new Event('change')); })()");
+      await sleep(150);
+      const wbAddPerson = await wbOpts('node-link-type');
+      const wbAddPersonNote = await evaluate(s.cdp, "document.querySelector('[data-testid=node-link-only]').hidden");
+      check('처음 사용 W-B(CR-18-4) 사람·업무·문서 추가: 사람 + 업무면 「수행」·「참조」가 위, 「관련」은 아래 묶음(disabled), 「수행」이 선택돼 있고 한 줄 안내는 숨김', wbAddPerson.value === 'performs' && JSON.stringify(wbAddPerson.top) === '["performs","references"]' && wbAddPerson.group === '이 조합에는 못 씀' && wbAddPerson.grouped.includes('relates_to:d') && wbAddPerson.lastIsGroup && wbAddPersonNote === true, JSON.stringify([wbAddPerson, wbAddPersonNote]));
+      // 연결 추가: 사용자가 먼저 고른 「참조」는 같은 쓸 수 있는 값이면 상대를 고른 뒤에도 그대로
+      await evaluate(s.cdp, "document.querySelector('details.add').open = false; window.__wu.select('U-A1/N-012')");
+      await sleep(200);
+      await clickTestId(s.cdp, 'btn-edge');
+      await sleep(200);
+      await evaluate(s.cdp, "(() => { const r = document.querySelector('[data-testid=edge-type]'); r.value = 'references'; r.dispatchEvent(new Event('change')); const o = document.querySelector('[data-testid=edge-other]'); const w = [...o.options].find((x) => x.textContent.includes('(업무)')); o.value = w.value; o.dispatchEvent(new Event('change')); })()");
+      await sleep(150);
+      const wbEdgeKeep = await wbOpts('edge-type');
+      check('처음 사용 W-B(CR-18-4) 연결 추가: 사람 → 업무에서 먼저 고른 「참조」가 상대를 고른 뒤에도 그대로, 목록은 「수행」·「참조」 위 + 못 쓰는 묶음 아래', wbEdgeKeep.value === 'references' && JSON.stringify(wbEdgeKeep.top) === '["performs","references"]' && wbEdgeKeep.lastIsGroup, JSON.stringify(wbEdgeKeep));
+      // 사람 → 사람은 「참조」뿐 → 자동 + 안내 한 줄
+      await evaluate(s.cdp, "(() => { const r = document.querySelector('[data-testid=edge-type]'); r.value = 'relates_to'; r.dispatchEvent(new Event('change')); const o = document.querySelector('[data-testid=edge-other]'); const w = [...o.options].find((x) => x.textContent.includes('(사람)')); o.value = w.value; o.dispatchEvent(new Event('change')); })()");
+      await sleep(150);
+      const wbEdgePp = await wbOpts('edge-type');
+      const wbEdgeNote = await evaluate(s.cdp, "(() => { const n = document.querySelector('[data-testid=edge-only]'); return { text: n.textContent, visible: n.checkVisibility() }; })()");
+      check('처음 사용 W-B(CR-18-4) 연결 추가: 사람 → 사람은 「참조」 하나뿐이라 자동 선택(직접 골라 둔 「관련」은 못 쓰는 값이라 바뀜), 칸 옆 「(이 조합은 「참조」만 됩니다)」', wbEdgePp.value === 'references' && JSON.stringify(wbEdgePp.top) === '["references"]' && wbEdgeNote.visible && wbEdgeNote.text === '(이 조합은 「참조」만 됩니다)', JSON.stringify([wbEdgePp, wbEdgeNote]));
+      await shot(s.cdp, `${browser.name}-wb-edge-only`);
+      await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=edge-form] button')].find((b) => b.textContent === '취소').click()");
+      await sleep(150);
     } else {
       check('W5 월말 정산(U-A1) 열기', false, 'U-A1이 열리지 않음');
     }
@@ -3593,6 +3629,119 @@ async function checkBrowser(browser, port) {
       await w7Restore();
     }
     await gotoU('U-A1'); // 뒤 단계(편집 되감기)는 월말 정산에서 시작한다
+  }
+
+  // ── 처음 사용 W-A(2026-10-24, CR-18-1·5·6): 묶은 지도 첫 배율(이름 11px 이상)·펼침 안내(expand-note), 양식으로 추가 뒤 접힘·「하나 더」, 확정 때 「담당도 넘기기」(draft-transfer).
+  //    데이터를 바꾸므로 시작 때 저장소를 찍어 두었다가 끝에서 되돌린다 ──
+  {
+    const waSnap = await evaluate(s.cdp, 'JSON.stringify(Object.entries(localStorage))');
+    const waRestore = async (id = 'U-A1') => {
+      await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(waSnap)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); location.hash = ${JSON.stringify(id)}; location.reload(); })()`).catch(() => {});
+      await sleep(500);
+      return waitFor(s.cdp, `window.__wu && window.__wu.doc && window.__wu.doc.universe.id === ${JSON.stringify(id)} && window.__wu.cy.nodes().length > 0`, 8000);
+    };
+    const waBox = (sel) => evaluate(s.cdp, `(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect(); return { w: r.width, h: r.height, text: e.textContent, hidden: e.hidden }; })()`);
+    const waToday = () => evaluate(s.cdp, "(() => { const d = new Date(); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; })()");
+
+    // ── CR-18-1 부서(가상 운영부): 첫 화면에서 이름이 읽히는 크기, 지도 중심이 가운데, 「전체 보기」는 전체 ──
+    if (await waRestore('U-D1')) {
+      await evaluate(s.cdp, 'window.confirm = () => true');
+      const waFirst = await evaluate(s.cdp, `(() => { const cy = window.__wu.cy; const root = cy.getElementById(window.__wu.display.rootGid); const c = document.getElementById('graph').getBoundingClientRect(); const p = root.renderedPosition(); const name = cy.nodes().filter((n) => n.data('core_type') !== 'root' && n.visible()).first(); return { zoom: cy.zoom(), namePx: name.empty() ? 0 : name.pstyle('font-size').pfValue * cy.zoom(), tiny: cy.nodes('.tiny-label').length, dx: Math.abs(p.x - c.width / 2), dy: Math.abs(p.y - c.height / 2), nodes: cy.nodes().length }; })()`);
+      check('W-A CR-18-1 부서 지도(가상 운영부)를 처음 열면 노드 이름이 화면에서 11px 이상으로 읽히고(작은 이름 숨김 0개) 지도 중심이 그래프 가운데', waFirst.nodes > 12 && waFirst.namePx >= 10.9 && waFirst.tiny === 0 && waFirst.dx < 60 && waFirst.dy < 60, JSON.stringify(waFirst));
+      await shot(s.cdp, `${browser.name}-wa-first-scale`);
+      await evaluate(s.cdp, "document.getElementById('fit').click()");
+      await sleep(250);
+      const waFit = await evaluate(s.cdp, '({ zoom: window.__wu.cy.zoom() })');
+      check('W-A CR-18-1 「전체 보기」를 누르면 전체가 보이는 배율로 돌아감(첫 배율보다 작음)', waFit.zoom < waFirst.zoom - 0.02, JSON.stringify([waFirst.zoom, waFit.zoom]));
+      // 접힌 팀(가상정산팀)을 펼치면 안쪽에 접힌 묶음 2개가 더 있다는 한 줄
+      await evaluate(s.cdp, "window.__wu.toggle('U-T1')");
+      await sleep(400);
+      const waNote = await waBox('[data-testid=expand-note]');
+      check('W-A CR-18-1 접힌 팀을 펼치면 그래프 위 상태 줄에 「가상정산팀을 펼쳤습니다. 안에 접힌 묶음 2개가 더 있습니다(＋숫자 — 두 번 누르면 한 겹씩 펼침)」(크기 있음)', !!waNote && waNote.w > 0 && waNote.h > 0 && waNote.text === '「가상정산팀」을 펼쳤습니다. 안에 접힌 묶음 2개가 더 있습니다(＋숫자 — 두 번 누르면 한 겹씩 펼침)', JSON.stringify(waNote));
+      await shot(s.cdp, `${browser.name}-wa-expand-note`);
+      await evaluate(s.cdp, "window.__wu.select(window.__wu.display.rootGid)");
+      await sleep(250);
+      check('W-A CR-18-1 다음 조작(노드 고르기)에서 펼침 안내가 사라짐', (await waBox('[data-testid=expand-note]')) === null);
+      // 안쪽까지 펼친 뒤에는 안내가 없다
+      await evaluate(s.cdp, "window.__wu.toggle('U-A1'); window.__wu.toggle('U-K1'); window.__wu.toggle('U-T1'); window.__wu.toggle('U-T1')");
+      await sleep(400);
+      check('W-A CR-18-1 안에 접힌 묶음이 없으면(안쪽까지 펼친 팀을 다시 펼침) 펼침 안내가 없음', (await waBox('[data-testid=expand-note]')) === null);
+    }
+
+    // ── 업무 하나짜리(월말 정산 점검)는 지금 그대로: 처음 배율 = 전체 보기 배율 ──
+    if (await waRestore('U-A1')) {
+      await evaluate(s.cdp, 'window.confirm = () => true');
+      const waZ0 = await evaluate(s.cdp, 'window.__wu.cy.zoom()');
+      const waInfo = await evaluate(s.cdp, 'window.__wu.firstViewInfo ? window.__wu.firstViewInfo() : null');
+      await evaluate(s.cdp, "document.getElementById('fit').click()");
+      await sleep(250);
+      const waZ1 = await evaluate(s.cdp, 'window.__wu.cy.zoom()');
+      // 처음 배치(여백 30)와 「전체 보기」(여백 40)는 원래 여백이 달라 배율이 몇 % 다르다: 올리지 않았는지는 첫 배율 판정으로 본다
+      check('W-A CR-18-1 업무 하나짜리 지도는 첫 배율을 올리지 않음(처음 맞춤 그대로, 「전체 보기」와 여백 차이만)', !!waInfo && waInfo.raised === false && Math.abs(waInfo.zoom - waZ0) < 0.001 && waZ1 <= waZ0 + 0.001 && waZ0 / waZ1 < 1.15, JSON.stringify([waInfo, waZ0, waZ1]));
+
+      // ── CR-18-5 추가 양식: 저장하면 접히고 「하나 더」로 유형·이을 항목을 유지한 채 다시 펼침 ──
+      await evaluate(s.cdp, "window.__wu.select(null); document.querySelector('details.add').open = true");
+      await sleep(200);
+      const waAdd = (type, label, link) => evaluate(s.cdp, `(() => { const slot = document.getElementById('add-slot'); const t = slot.querySelector('[data-testid=node-type]'); t.value = ${JSON.stringify(type)}; t.dispatchEvent(new Event('change')); slot.querySelector('[data-testid=node-label]').value = ${JSON.stringify(label)}; ${link ? "const o = slot.querySelector('[data-testid=node-link-other]'); const w = [...o.options].find((x) => x.textContent.includes('(업무)')); o.value = w.value; o.dispatchEvent(new Event('change')); const r = slot.querySelector('[data-testid=node-link-type]'); if ([...r.options].some((x) => x.value === 'performs' && !x.disabled)) { r.value = 'performs'; r.dispatchEvent(new Event('change')); } window.__waOther = o.value;" : ''} slot.querySelector('button[type=submit]').click(); })()`);
+      const waN0 = await evaluate(s.cdp, 'window.__wu.doc.nodes.length');
+      await waAdd('person', 'W-A 시험 사람', true);
+      await sleep(500);
+      const waFold = await evaluate(s.cdp, `(() => { const n = document.querySelector('[data-testid=add-folded]'); const r = n ? n.getBoundingClientRect() : { width: 0, height: 0 }; const d = document.querySelector('details.add'); return { open: d.open, text: n ? n.textContent : '', w: r.width, h: r.height, nodes: window.__wu.doc.nodes.length, btn: !!document.querySelector('[data-testid=add-another]') }; })()`);
+      check('W-A CR-18-5 양식으로 저장하면 「사람·업무·문서 추가」가 접히고 「「W-A 시험 사람」을 넣었습니다 · 하나 더」 한 줄(크기 있음)', waFold.nodes === waN0 + 1 && !waFold.open && waFold.w > 0 && waFold.h > 0 && waFold.text === '「W-A 시험 사람」을 넣었습니다 · 하나 더' && waFold.btn, JSON.stringify(waFold));
+      await shot(s.cdp, `${browser.name}-wa-add-folded`);
+      await clickTestId(s.cdp, 'add-another');
+      await sleep(250);
+      const waAnother = await evaluate(s.cdp, `(() => { const slot = document.getElementById('add-slot'); const g = (id) => slot.querySelector('[data-testid=' + id + ']'); const a = document.activeElement; const n = document.querySelector('[data-testid=add-folded]'); return { open: document.querySelector('details.add').open, type: g('node-type').value, other: g('node-link-other').value, expectOther: window.__waOther, rel: g('node-link-type').value, label: g('node-label').value, focus: a && a.dataset ? a.dataset.testid : '', noteHidden: !n || n.hidden }; })()`);
+      check('W-A CR-18-5 「하나 더」: 양식이 다시 펼쳐지고 유형(사람)·이을 항목·관계는 방금 값 그대로, 이름 칸은 비어 있고 초점, 접힘 안내는 사라짐', waAnother.open && waAnother.type === 'person' && waAnother.other === waAnother.expectOther && waAnother.other !== '' && waAnother.rel === 'performs' && waAnother.label === '' && waAnother.focus === 'node-label' && waAnother.noteHidden, JSON.stringify(waAnother));
+      // 실패(이름 비움)는 접지 않고 오류를 그대로 보인다
+      await evaluate(s.cdp, "document.getElementById('add-slot').querySelector('button[type=submit]').click()");
+      await sleep(250);
+      const waFail = await evaluate(s.cdp, `({ open: document.querySelector('details.add').open, code: ((document.querySelector('#add-slot [data-testid=form-message]') || {}).dataset || {}).code || '', nodes: window.__wu.doc.nodes.length })`);
+      check('W-A CR-18-5 저장에 실패하면(이름 없음) 접지 않고 오류 문구가 그대로 보임', waFail.open && waFail.code !== '' && waFail.nodes === waN0 + 1, JSON.stringify(waFail));
+      // 초안 창이 열려 있으면 추가 뒤에도 초안이 맨 위에 그대로 보임
+      await evaluate(s.cdp, "window.__wu.select(null)");
+      await clickTestId(s.cdp, 'btn-draft-universe');
+      await sleep(200);
+      await evaluate(s.cdp, "document.querySelector('details.add').open = true");
+      await waAdd('topic', 'W-A 시험 주제', false);
+      await sleep(500);
+      const waDraft = await evaluate(s.cdp, `(() => { const a = document.querySelector('aside'); const f = document.querySelector('[data-testid=draft-form]'); const r = f ? f.getBoundingClientRect() : null; const ar = a.getBoundingClientRect(); return { draft: !!f, scroll: a.scrollTop, inView: !!r && r.top >= ar.top - 1 && r.top < ar.bottom, open: document.querySelector('details.add').open }; })()`);
+      check('W-A CR-18-5 초안 창이 열린 채 추가해도 초안 창이 닫히지 않고 패널 맨 위에 그대로 보이며 양식은 접힘', waDraft.draft && waDraft.scroll === 0 && waDraft.inView && !waDraft.open, JSON.stringify(waDraft));
+    }
+
+    // ── CR-18-6 확정 때 「담당도 넘기기」: 기본 꺼짐 → 켜고 확정 → 수행 연결 기간·새 연결·안내 문구 ──
+    if (await waRestore('U-A1')) {
+      await evaluate(s.cdp, 'window.confirm = (m) => { window.__cm = m; return true; }; window.__wu.select(null)');
+      await clickTestId(s.cdp, 'btn-draft-universe');
+      await sleep(200);
+      await makeDraft('U-A1/N-001', 'U-A1/N-012', 'U-A1/N-010');
+      await sleep(300);
+      const waTr = await evaluate(s.cdp, `(() => { const c = document.querySelector('[data-testid=draft-transfer]'); const l = document.querySelector('[data-testid=draft-transfer-list]'); const b = document.querySelector('[data-testid=draft-transfer-box]'); const r = b ? b.getBoundingClientRect() : { width: 0, height: 0 }; const conf = document.querySelector('[data-testid=draft-confirm]').getBoundingClientRect(); return { has: !!c, checked: c && c.checked, disabled: c && c.disabled, w: r.width, h: r.height, above: r.bottom <= conf.top + 1, text: b ? b.textContent : '', list: l ? l.textContent : '' }; })()`);
+      check('W-A CR-18-6 확정 단추 위에 「담당도 넘기기 — 보내는 사람의 수행을 오늘로 끝내고 받는 사람이 오늘부터 맡습니다」 칸(크기 있음, 기본 꺼짐)과 넘길 업무 「대사 확인」 목록', waTr.has && waTr.checked === false && waTr.disabled === false && waTr.w > 0 && waTr.h > 0 && waTr.above && waTr.text.includes('담당도 넘기기 — 보내는 사람의 수행을 오늘로 끝내고 받는 사람이 오늘부터 맡습니다') && waTr.list.includes('「대사 확인」'), JSON.stringify(waTr));
+      await shot(s.cdp, `${browser.name}-wa-transfer-box`);
+      const waToday0 = await waToday();
+      const waEdges0 = await evaluate(s.cdp, "JSON.stringify(window.__wu.doc.edges.filter((e) => e.core_type === 'performs').map((e) => [e.source, e.target, e.period, e.hidden]))");
+      await evaluate(s.cdp, "document.querySelector('[data-testid=draft-transfer]').click()"); // 켬
+      await clickTestId(s.cdp, 'draft-confirm');
+      await sleep(500);
+      const waDone = await evaluate(s.cdp, `(() => { const d = window.__wu.doc; const old = d.edges.find((e) => e.core_type === 'performs' && e.source === 'N-012' && e.target === 'N-001' && !e.hidden); const nu = d.edges.filter((e) => e.core_type === 'performs' && e.source === 'N-010' && e.target === 'N-001' && !e.hidden && e.period && e.period.start && !e.period.end); const evs = d.events.slice(-14).map((e) => e.type); const n = document.querySelector('[data-testid=confirm-done]'); return { oldEnd: old && old.period && old.period.end, nu: nu.map((e) => e.period.start), evs, note: n ? n.textContent : '', confirmText: window.__cm }; })()`);
+      check('W-A CR-18-6 켜고 확정하면 서하늘의 수행 연결 끝 = 오늘, 한가람의 새 수행 연결 시작 = 오늘, 이력에 담당 종료·시작이 함께 남음', waDone.oldEnd === waToday0 && JSON.stringify(waDone.nu) === JSON.stringify([waToday0]) && waDone.evs.includes('assign_end') && waDone.evs.includes('assign_start') && waDone.evs.includes('handover'), JSON.stringify({ waToday0, ...waDone, note: '' }));
+      check('W-A CR-18-6 결과 안내에 「담당도 넘겼습니다: 「대사 확인」 서하늘 → 한가람(오늘부터)」, 확인 창에도 넘김 문구', waDone.note.includes('인수인계서로 저장했습니다') && waDone.note.includes('담당도 넘겼습니다: 「대사 확인」 서하늘 → 한가람(오늘부터)') && !waDone.note.includes('현재 담당은 그대로입니다') && String(waDone.confirmText).includes('담당도 넘깁니다'), waDone.note + ' / ' + waDone.confirmText);
+      void waEdges0;
+      await shot(s.cdp, `${browser.name}-wa-transfer-done`);
+      // 꺼진 채 확정(다른 날 같은 사람 사이는 막히므로 다른 사람 쌍)하면 수행 연결은 그대로, 안내는 예전 문구
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await clickTestId(s.cdp, 'btn-draft-universe');
+      await sleep(200);
+      await makeDraft('U-A1/N-001', 'U-A1/N-010', 'U-A1/N-011');
+      await sleep(300);
+      const waEdgesBefore = await evaluate(s.cdp, "JSON.stringify(window.__wu.doc.edges.filter((e) => e.core_type === 'performs').map((e) => [e.id, e.period, e.hidden]))");
+      await clickTestId(s.cdp, 'draft-confirm');
+      await sleep(500);
+      const waOff = await evaluate(s.cdp, "({ edges: JSON.stringify(window.__wu.doc.edges.filter((e) => e.core_type === 'performs').map((e) => [e.id, e.period, e.hidden])), note: (document.querySelector('[data-testid=confirm-done]') || {}).textContent || '' })");
+      check('W-A CR-18-6 끄고 확정하면 수행 연결은 그대로이고 안내는 「현재 담당은 그대로입니다 — …」(직접 넘기는 방법)', waOff.edges === waEdgesBefore && waOff.note.includes('현재 담당은 그대로입니다') && !waOff.note.includes('담당도 넘겼습니다'), waOff.note.slice(0, 160));
+      await waRestore('U-A1');
+    }
   }
 
   // ── CR-14 A 편집 되감기(R-25, D-30): 이름 수정 → 개요 「편집 되감기」 → 이전 시점 → 읽기 전용 확인 → 지금으로 → 다시 → 되돌리기. 데이터를 바꾸므로 끝부분 ──

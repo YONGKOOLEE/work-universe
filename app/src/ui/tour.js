@@ -8,6 +8,9 @@ import { advance, scenarioFor, scenarioOf } from '../rules/tour-steps.js';
 
 const BLINK_MS = 650;
 
+// 끝 카드의 안내 한 줄(CR-18-3)
+export const END_GUIDE = '예시를 봤으면, 내 업무 이름 하나로 작은 지도를 만들어 보세요.';
+
 /**
  * @param {{
  *   slot: HTMLElement,
@@ -16,7 +19,7 @@ const BLINK_MS = 650;
  *   universeId: () => string,             // 지금 연 유니버스 ID
  *   onOpenUniverse: (universeId:string, tourId:string) => void, // 다른 유니버스에서 시작해야 할 때(「?」로 고른 경우)
  *   onStart?: () => void,                 // 시작할 때 앱 쪽 표시(초안·근거·찾기)를 지운다
- *   onMake: () => void,                   // 끝 카드의 「내 업무 지도 만들기」(새 유니버스 대화상자)
+ *   onMake: () => void,                   // 끝 카드의 「이제 내 업무로 해 보기」·「내 업무 지도 만들기」(둘 다 「내 업무 지도 만들기」 창을 연다)
  *   canMake?: boolean,
  *   toolsHint?: () => boolean,            // 끝 카드에 「도구 더 보기」 안내 한 줄을 띄울지
  * }} o
@@ -148,9 +151,12 @@ export function createTour(o) {
       o.slot.replaceChildren(card(
         el('div', { class: 'tour-head' }, el('span', { class: 'tour-count' }, `따라 하기 ${sc.steps.length}/${sc.steps.length} 끝`)),
         el('p', { class: 'tour-task', 'data-testid': 'tour-end' }, '끝! 이제 내 업무로 해 볼까요?'),
+        el('p', { class: 'muted small', 'data-testid': 'tour-end-guide' }, END_GUIDE),
         o.toolsHint && o.toolsHint() ? el('p', { class: 'tour-hint', 'data-testid': 'tour-tools-hint' }, '이제 「도구 더 보기」에서 흐름 정렬·거르기도 써 보세요.') : null,
         el('div', { class: 'row' },
-          el('button', { type: 'button', class: 'primary small-btn', 'data-testid': 'tour-make', disabled: o.canMake === false, onclick: () => { stop(); o.onMake(); } }, '내 업무 지도 만들기'),
+          // CR-18-3: 따라 하기를 닫고 「내 업무 지도 만들기」 창을 연다(시작 화면 「내 업무를 정리해 두고 싶어요」와 같은 창). 「내 업무 지도 만들기」 단추도 같은 창을 연다
+          el('button', { type: 'button', class: 'primary small-btn', 'data-testid': 'tour-mine', disabled: o.canMake === false, onclick: () => { stop(); o.onMake(); } }, '이제 내 업무로 해 보기'),
+          el('button', { type: 'button', class: 'small-btn', 'data-testid': 'tour-make', disabled: o.canMake === false, onclick: () => { stop(); o.onMake(); } }, '내 업무 지도 만들기'),
           skipBtn('닫기')),
       ));
       return paint();

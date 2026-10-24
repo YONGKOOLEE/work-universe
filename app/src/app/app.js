@@ -9,6 +9,7 @@ import { validateDocument } from '../model/validate.js';
 import { applyStarter } from '../model/starter.js';
 import { subtypeRegistered } from '../model/checks.js';
 import { buildView, refGid, toGid } from '../view/view.js';
+import { transferPlan } from '../view/transfer.js';
 
 // 확정한 인수인계서에 남기는 초안 생성 방식의 표시 이름(llm/connector.js METHOD_LABELS의 짧은 꼴)
 const DEFAULT_AUTHOR = '사용자(이 브라우저)'; // 작성자 이름이 비었을 때의 기록 주체(R-22)
@@ -445,7 +446,7 @@ export function createApp({ store, samples, currentId, now, authorName, locked =
      * @param {{draft:{target:string, from:string, to:string, title:string, method?:string}, text:string, date:string}} input
      * @returns {{ok:true, doc:object, artifact:string, works:string[]} | {ok:false, error:object}}
      */
-    confirmHandover({ draft, text, date }) {
+    confirmHandover({ draft, text, date, transfer: wantTransfer = false }) {
       if (guard()) return guard();
       const v = buildView(doc, resolve);
       const target = draft && v.getNode(draft.target);
@@ -469,6 +470,10 @@ export function createApp({ store, samples, currentId, now, authorName, locked =
       const dup = handovers.some((ev) => ev.occurred_at === date && works.includes(canon(ev, ev.payload.work_id)) &&
         canon(ev, ev.payload.from_person_id) === draft.from && canon(ev, ev.payload.to_person_id) === draft.to);
       if (dup) return { ok: false, error: { code: CODES.CONFIRM, reason: 'duplicate' } };
+
+      // 「담당도 넘기기」(CR-18-6): 보내는·받는 사람이 대상 유니버스 안에 있어야 수행 연결을 끝내고 만들 수 있다. 아니면 아무것도 바꾸지 않고 거부한다
+      const plan = wantTransfer ? transferPlan(v, draft, uid) : null;
+      if (plan && !plan.persons_ok) return { ok: false, error: { code: CODES.CONFIRM, reason: 'transfer_scope' } };
 
       const ctx = { now: now() };
       const step = (r) => {
@@ -514,10 +519,19 @@ export function createApp({ store, samples, currentId, now, authorName, locked =
           }, ctx));
         }
         if (!linked) step(addEdge(d, { source: d.universe.root_node_id, target: art.id, core_type: 'contains' }, ctx));
+        // 담당 넘기기: 확정과 같은 한 번의 기록(같은 시각·한 번의 저장)으로 보내는 사람의 수행을 끝내고(기존 연결 수정) 받는 사람의 수행을 새로 시작한다(시작일 = 오늘)
+        const note = '인수인계 확정과 함께 담당을 넘김';
+        if (plan) {
+          for (const m of plan.moves) {
+            const e = d.edges.find((x) => x.id === m.edge_id);
+            step(addAssignment(d, { type: 'assign_end', occurred_at: date, payload: { person_id: e.source, work_id: e.target }, note }, ctx));
+            step(addAssignment(d, { type: 'assign_start', occurred_at: date, payload: { person_id: plan.to_local, work_id: e.target }, note }, ctx));
+          }
+        }
         const failed = save(d);
         if (failed) return failed;
         if (uid === doc.universe.id) doc = d;
-        return { ok: true, doc: d, artifact: toGid(uid, art.id), works };
+        return { ok: true, doc: d, artifact: toGid(uid, art.id), works, ...(plan ? { transfer: { moved: plan.moves.map((m) => m.work), already: plan.already, elsewhere: plan.elsewhere } } : {}) };
       } catch (err) {
         if (err.result) return err.result;
         throw err;

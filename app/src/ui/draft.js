@@ -2,6 +2,7 @@
 // 결과: 11개 항목(CR-6, CR-17 E), 항목별 근거 링크, 생성 방식 표시, "초안" 상태. 확정은 사람이 한다.
 
 import { buildHandoverDraft, scopeWorks } from '../rules/handover.js';
+import { transferPlan } from '../view/transfer.js';
 import { similarExperts, similarSentences, workLoad } from '../rules/insight.js';
 import { todayLocal } from './time.js';
 import { METHOD_LABELS, isLive, refineDraft, refineDraftAsync, syncProvider } from '../llm/connector.js';
@@ -273,7 +274,19 @@ export function draftPanel(o) {
     form, rerunNote, liveNote, result);
 }
 
+/** 확정 확인의 「담당도 넘기기」 칸 문구(CR-18-6). 칸 아래 작은 글은 넘길 업무 목록과 건너뛰는 사유 */
+export const TRANSFER_LABEL = '담당도 넘기기 — 보내는 사람의 수행을 오늘로 끝내고 받는 사람이 오늘부터 맡습니다';
+export function transferListText(plan, names, where) {
+  if (!plan.persons_ok) return `보내는 사람과 받는 사람이 모두 「${where}」 안에 있어야 담당을 넘길 수 있습니다. 이 확정에서는 담당을 넘기지 않습니다.`;
+  const parts = [];
+  parts.push(plan.moves.length ? `넘길 업무(보내는 사람이 지금 수행 중): ${names(plan.moves.map((m) => m.work))}` : '넘길 업무가 없습니다(보내는 사람이 지금 수행 중인 업무가 이 범위에 없음).');
+  if (plan.already.length) parts.push(`받는 사람이 이미 맡고 있어 건너뜀: ${names(plan.already)}`);
+  if (plan.elsewhere.length) parts.push(`다른 업무 지도의 연결이라 이 화면에서는 못 넘김: ${names(plan.elsewhere)}`);
+  return parts.join(' · ');
+}
+
 function confirmError(err) {
+  if (err.reason === 'transfer_scope') return '담당을 넘기려면 보내는 사람과 받는 사람이 이 화면의 업무 지도 안에 있어야 합니다. 아무것도 저장하지 않았습니다.';
   if (err.reason === 'no_work') return '보내는 사람이 맡았던(수행 연결) 업무가 이 범위에 없어 인수인계 이력을 남길 수 없습니다. 업무 하나를 대상으로 초안을 만들어 확정하세요.';
   if (err.reason === 'duplicate') return '같은 날 같은 사람 사이의 인수인계를 이미 확정했습니다. 다시 확정하지 않았습니다.';
   return messageFor(err);
@@ -291,9 +304,21 @@ function confirmBox(d, view, o) {
     : [];
   const msg = el('p', { class: 'form-message', 'data-testid': 'confirm-message', 'aria-live': 'polite' });
   const btn = el('button', { type: 'button', class: 'primary', 'data-testid': 'draft-confirm', disabled: !!o.readOnly }, '확정해 인수인계서로 저장');
+  // 「담당도 넘기기」(CR-18-6): 기본 꺼짐. 켜고 확정하면 확정과 같은 한 번의 기록으로 보내는 사람의 수행을 오늘로 끝내고 받는 사람이 오늘부터 맡는다. 읽기 전용이면 칸이 없다
+  const plan = o.readOnly || !t ? null : transferPlan(view, d, t.universe_id);
+  const label = (g) => (view.getNode(g) || { label: g }).label;
+  const names = (list) => list.map((g) => `「${label(g)}」`).join('·');
+  const transfer = plan ? el('input', { type: 'checkbox', 'data-testid': 'draft-transfer', disabled: !plan.persons_ok || !plan.moves.length }) : null;
+  const transferBox = plan
+    ? el('div', { class: 'transfer-box', 'data-testid': 'draft-transfer-box' },
+      el('label', { class: 'check' }, transfer, ` ${TRANSFER_LABEL}`),
+      el('p', { class: 'muted small', 'data-testid': 'draft-transfer-list' }, transferListText(plan, names, where)))
+    : null;
   btn.addEventListener('click', () => {
-    if (!window.confirm(`이 초안을 확정합니다.\n「${where}」에 인수인계서(산출물)와 ${date} 인수인계 이력이 저장됩니다. 저장한 뒤에는 이력으로 남습니다(숨기기만 가능).`)) return;
-    const r = o.onConfirm({ draft: d, text: draftText(d, true), date });
+    const moving = !!(transfer && transfer.checked);
+    const extra = moving ? `\n담당도 넘깁니다(${date}부터 ${label(d.to)}): ${names(plan.moves.map((m) => m.work))}에서 ${label(d.from)}의 수행이 ${date}로 끝납니다.` : '';
+    if (!window.confirm(`이 초안을 확정합니다.\n「${where}」에 인수인계서(산출물)와 ${date} 인수인계 이력이 저장됩니다. 저장한 뒤에는 이력으로 남습니다(숨기기만 가능).${extra}`)) return;
+    const r = o.onConfirm({ draft: d, text: draftText(d, true), date, transfer: moving });
     if (r && !r.ok) {
       msg.className = 'form-message error';
       msg.dataset.code = r.error.code;
@@ -304,7 +329,7 @@ function confirmBox(d, view, o) {
     el('p', { class: 'muted small' }, `내용을 확인했으면 확정하세요. 「${where}」에 인수인계서와 인수인계 이력(${date})이 남고, 다음 인수인계 초안의 「이전 인수인계」 근거가 됩니다.`),
     elsewhere.length ? el('p', { class: 'muted small', 'data-testid': 'confirm-elsewhere' }, `이 화면(「${where}」)에만 저장됩니다. 업무 지도(「${elsewhere.join('」·「')}」)를 단독으로 열면 이 인수인계는 보이지 않습니다. 그 업무 지도에서도 보이게 하려면 그 업무 지도를 열어 업무를 대상으로 확정하세요.`) : null,
     o.readOnly ? el('p', { class: 'muted small' }, '읽기 전용이라 확정할 수 없습니다.') : null,
-    btn, msg);
+    transferBox, btn, msg);
 }
 
 // 「관계자」「유사 경험자」 문장의 근거에 역할 이름으로 만든 노드(실제 사람이 아님)가 있으면 밝힌다 — 인사이트 화면과 같은 표시(검토9 P-2)

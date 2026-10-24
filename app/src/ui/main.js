@@ -43,7 +43,7 @@ import { tableDialog } from './table.js';
 import { convertDocument } from '../rules/doc-convert.js';
 import { convertDocumentWith } from '../llm/connector.js';
 import { DOC_EXAMPLE } from '../../data/doc-example.js';
-import { filterDisplay, neighborhoodDisplay, personsIn, searchNodes } from '../view/explore.js';
+import { filterDisplay, foldedInside, neighborhoodDisplay, personsIn, searchNodes } from '../view/explore.js';
 import { EXPLORE, exploreBar } from './explore.js';
 import { createTour } from './tour.js';
 import { helpPanel } from './help.js';
@@ -1070,7 +1070,20 @@ function start() {
           const node = view.getNode(r.artifact);
           const wlabel = r.works.map((w) => (view.getNode(w) || { label: w }).label).join('·');
           const alabel = node ? node.label : '인수인계서';
-          $('detail').prepend(el('p', { class: 'ok-notice', role: 'status', 'data-testid': 'confirm-done' }, `인수인계서로 저장했습니다 — 「${alabel}」${josa(alabel, '이/가')} 「${wlabel}」의 산출물과 이력에 남았습니다. 현재 담당은 그대로입니다 — 담당을 넘기려면 업무를 누르고 「연결된 노드」에서 보내는 사람의 「수행」 줄 옆 「연결 수정」으로 끝 날짜를 넣고, 받는 사람은 「연결 추가」에서 「수행」으로 이으세요.`));
+          // 담당 넘김 여부(CR-18-6): 켜고 확정했으면 무엇을 넘겼는지, 껐으면 예전처럼 직접 넘기는 방법
+          const nameOf = (g) => (view.getNode(g) || { label: g }).label;
+          const listOf = (ws) => ws.map((w) => `「${nameOf(w)}」`).join('·');
+          const tr = r.transfer;
+          const handoverTail = !tr
+            ? '현재 담당은 그대로입니다 — 담당을 넘기려면 업무를 누르고 「연결된 노드」에서 보내는 사람의 「수행」 줄 옆 「연결 수정」으로 끝 날짜를 넣고, 받는 사람은 「연결 추가」에서 「수행」으로 이으세요.'
+            : [
+              tr.moved.length
+                ? `담당도 넘겼습니다: ${tr.moved.map((w) => `「${nameOf(w)}」 ${nameOf(input.draft.from)} → ${nameOf(input.draft.to)}(오늘부터)`).join(' · ')}`
+                : '담당은 넘기지 않았습니다(넘길 업무가 없었습니다).',
+              tr.already.length ? `받는 사람이 이미 맡고 있어 건너뜀: ${listOf(tr.already)}` : '',
+              tr.elsewhere.length ? `다른 업무 지도의 연결이라 넘기지 못함: ${listOf(tr.elsewhere)}` : '',
+            ].filter(Boolean).join(' · ');
+          $('detail').prepend(el('p', { class: 'ok-notice', role: 'status', 'data-testid': 'confirm-done' }, `인수인계서로 저장했습니다 — 「${alabel}」${josa(alabel, '이/가')} 「${wlabel}」의 산출물과 이력에 남았습니다. ${handoverTail}`));
           $('detail').parentElement.scrollTop = 0;
           graph.zoomTo(view.canonical(r.artifact));
           return saved;
@@ -1311,7 +1324,7 @@ function start() {
         el('button', { type: 'button', class: 'small-btn', 'data-testid': 'nbhd-depth', onclick: () => enterNbhd(nbhd.center, nbhd.depth === 1 ? 2 : 1) }, nbhd.depth === 1 ? '2단계로' : '1단계로'),
         el('button', { type: 'button', class: 'small-btn', 'data-testid': 'nbhd-exit', onclick: leaveNbhd }, '전체 보기로')));
     }
-    if (exploreNote) parts.push(el('span', { class: exploreNote.warn ? 'on' : 'ok', 'data-testid': 'explore-note' }, exploreNote.text));
+    if (exploreNote) parts.push(el('span', { class: exploreNote.warn ? 'on' : 'ok', 'data-testid': exploreNote.testid || 'explore-note', role: 'status' }, exploreNote.text));
     bar.setStatus(...parts);
     graph.cy.resize(); // 상태 줄이 두 줄이 되면 그래프 영역 높이가 바뀐다
   }
@@ -1440,8 +1453,24 @@ function start() {
   function toggle(universeId) {
     if (universeId === app.doc.universe.id) return;
     nbhd = null; // 주변만 보기 중 펼치기·접기(더블클릭 포함)는 전체 그래프에서 한다
-    if (expanded.has(universeId)) expanded.delete(universeId);
-    else expanded.add(universeId);
+    const opening = !expanded.has(universeId);
+    if (opening) expanded.add(universeId);
+    else expanded.delete(universeId);
+    exploreNote = null; // 앞선 안내(펼침·찾음)는 다음 조작 때 사라진다
+    if (opening) {
+      // CR-18-1: 펼친 묶음 안에 접힌 묶음이 또 있으면 한 겹씩 펼쳐진다고 알린다
+      const inner = foldedInside(view, projectView(view, { expanded }), universeId);
+      if (inner.length) {
+        const name = (view.universes.get(universeId) || { name: universeId }).name;
+        const note = { text: `「${name}」${josa(name, '을/를')} 펼쳤습니다. 안에 접힌 묶음 ${inner.length}개가 더 있습니다(＋숫자 — 두 번 누르면 한 겹씩 펼침)`, testid: 'expand-note' };
+        exploreNote = note;
+        setTimeout(() => {
+          if (exploreNote !== note) return;
+          exploreNote = null;
+          renderExploreStatus();
+        }, EXPLORE.EXPAND_NOTE_MS);
+      }
+    }
     refresh();
     graph.relayout();
   }
@@ -1636,8 +1665,55 @@ function start() {
   });
 
   // 노드 추가(R-02 ①): 저장하면 바로 그래프에 나타나고 선택된다
+  // CR-18-5: 양식으로 저장에 성공하면 「사람·업무·문서 추가」를 접고 이 한 줄만 남긴다(양식 위쪽에서 패널이 길어지지 않게). 펼치면 사라진다
+  function addFoldNote() {
+    let p = document.querySelector('[data-testid=add-folded]');
+    if (!p) {
+      const details = document.querySelector('details.add');
+      p = el('p', { class: 'ok-text add-folded', role: 'status', hidden: true, 'data-testid': 'add-folded' });
+      details.before(p);
+      details.addEventListener('toggle', () => { if (details.open) p.hidden = true; });
+    }
+    return p;
+  }
+  // 「하나 더」: 양식을 다시 펼치고 유형·이을 항목(관계·방향)은 방금 값으로 두며 이름 칸에 초점
+  function addAnother(keep) {
+    renderAddForm();
+    const slot = $('add-slot');
+    const details = document.querySelector('details.add');
+    details.open = true;
+    const typeSelect = slot.querySelector('[data-testid=node-type]');
+    if (typeSelect && [...typeSelect.options].some((o) => o.value === keep.type)) {
+      typeSelect.value = keep.type;
+      typeSelect.dispatchEvent(new Event('change'));
+    }
+    const other = slot.querySelector('[data-testid=node-link-other]');
+    if (keep.link && other && [...other.options].some((o) => o.value === keep.link.other_id)) {
+      other.value = keep.link.other_id;
+      other.dispatchEvent(new Event('change'));
+      const rel = slot.querySelector('[data-testid=node-link-type]');
+      const dir = slot.querySelector('[data-testid=node-link-direction]');
+      if (rel && [...rel.options].some((o) => o.value === keep.link.core_type && !o.disabled)) rel.value = keep.link.core_type;
+      if (dir) dir.value = keep.link.out ? 'out' : 'in';
+    }
+    const label = slot.querySelector('[data-testid=node-label]');
+    if (label) {
+      label.focus();
+      if (typeof label.scrollIntoView === 'function') label.scrollIntoView({ block: 'nearest' });
+    }
+  }
+  function foldAddForm(node, keep) {
+    const note = addFoldNote();
+    note.replaceChildren(
+      `「${node.label}」${josa(node.label, '을/를')} 넣었습니다 · `,
+      el('button', { type: 'button', class: 'link', 'data-testid': 'add-another', onclick: () => addAnother(keep) }, '하나 더'),
+    );
+    note.hidden = false;
+    document.querySelector('details.add').open = false;
+  }
   function renderAddForm(doneText) {
     const slot = $('add-slot');
+    addFoldNote().hidden = true;
     if (app.readOnly) {
       slot.replaceChildren(el('p', { class: 'muted small' }, '읽기 전용이라 추가할 수 없습니다.'));
       return;
@@ -1670,7 +1746,8 @@ function start() {
           const r = { ...b, node };
           afterSave(r, toGid(currentId(), node.id));
           renderAddForm(`추가했습니다: ${node.label}${b.warnings.map((w) => ` ${messageFor(w)}`).join('')}`);
-          if (addReturnToTop && drafting) $('detail').parentElement.scrollTop = 0; // 초안 창에서 사람을 추가했으면 초안 창 맨 위로 돌아간다(FU-7)
+          foldAddForm(node, { type: input.core_type, link: link || null });
+          if (drafting) $('detail').parentElement.scrollTop = 0; // 초안 창이 열려 있으면 추가 뒤 양식이 접히므로 초안 창 맨 위가 그대로 보이게 한다(FU-7 「＋ 사람 추가」 복귀, CR-18-5)
           addReturnToTop = false;
           return r;
         },
@@ -1802,6 +1879,7 @@ function start() {
   // 개발 점검 도구(tools/browser-check.mjs)가 그래프 좌표와 상태를 읽기 위한 연결점(?check일 때만)
   if (CHECK_MODE) window.__wu = {
     cy: graph.cy,
+    firstViewInfo: () => graph.firstViewInfo(),
     select,
     toggle,
     get doc() {

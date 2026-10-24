@@ -2,6 +2,7 @@
 // 지원: createElement, setAttribute/getAttribute, className/classList.add, dataset, append/prepend/replaceChildren/childNodes,
 //   isConnected(문서 body까지 이어져 있는가), addEventListener + fire(type), textContent, querySelector(All)(`tag`, `[data-testid=x]`, `[data-testid^=x]`, 공백으로 이은 자손)
 //   disabled·hidden·value·selected·checked는 속성을 주면 같은 이름의 프로퍼티가 됨.
+//   select.options(optgroup 안의 option 포함, CR-18-4), optgroup의 label은 getAttribute('label')로 읽음.
 
 const PROPS = new Set(['disabled', 'hidden', 'selected', 'checked', 'value']);
 
@@ -54,6 +55,9 @@ export class FakeEl {
 
   get children() { return this.childNodes.filter((c) => c.nodeType === 1); }
 
+  /** select의 보기 목록(optgroup 안의 보기도 문서 순서대로, 실제 select.options와 같음) */
+  get options() { return this.children.flatMap((c) => (c.tagName === 'OPTGROUP' ? c.children : c.tagName === 'OPTION' ? [c] : [])); }
+
   get textContent() { return this.childNodes.map((c) => c.textContent).join(''); }
 
   set textContent(v) {
@@ -73,6 +77,7 @@ export class FakeEl {
       this.childNodes.push(node);
       // select에 selected 보기를 붙이면 select의 값이 그 보기가 된다(실제 브라우저와 같음)
       if (this.tagName === 'SELECT' && node.tagName === 'OPTION' && node.selected) this.value = node.value;
+      if (this.tagName === 'SELECT' && node.tagName === 'OPTGROUP') { const sel = node.children.find((o) => o.selected); if (sel) this.value = sel.value; }
     }
   }
 

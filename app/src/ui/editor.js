@@ -76,22 +76,51 @@ function suggestRelation(aType, bType) {
   return null;
 }
 
-// 관계 고르기 칸(FU-35): 고른 두 노드 유형으로 어느 방향으로도 쓸 수 없는 관계는 disabled + 보기 글 뒤에 「(이 조합에는 못 씀)」.
-// 방향은 따로 고르므로(allowedRelations의 forward||backward) 한쪽 방향이라도 되면 켜 둔다. 연결 대상이 아직 없으면(유형을 모르면) 전부 켜 둔다.
-// 이미 고른 값은 바꾸지 않는다(막힌 조합은 저장할 때 E-PAIR 안내가 그대로 나간다)
-export const PAIR_BLOCKED_NOTE = ' (이 조합에는 못 씀)';
-export function markRelationOptions(relationSelect, aType, bType) {
+// 관계 고르기 칸(FU-35, CR-18-4): 고른 두 노드 유형으로 쓸 수 있는 관계를 목록 위에, 어느 방향으로도 쓸 수 없는 관계는
+// 아래 <optgroup label="이 조합에는 못 씀"> 안에 disabled로 둔다. 방향은 따로 고르므로(allowedRelations의 forward||backward) 한쪽 방향이라도 되면 쓸 수 있다.
+// 연결 대상이 아직 없으면(유형을 모르면) 전부 쓸 수 있는 원래 순서로 되돌린다.
+// 고른 값: 쓸 수 있으면 그대로. 못 쓰는 값이면 쓸 수 있는 관계가 하나뿐일 때 그것으로 자동 선택하고, 둘 이상이면 사용자가 직접 고른 값(opts.touched)은 두어
+// E-PAIR 안내가 나가게 하고 손대지 않은 기본값만 쓸 수 있는 첫 관계로 바꾼다. opts.keep이면 값을 바꾸지 않는다(연결 수정 양식을 처음 열 때).
+// hint(요소)가 있으면 쓸 수 있는 관계가 하나뿐일 때 「(이 조합은 「참조」만 됩니다)」 한 줄을 보인다. 돌려줌: {only: 하나뿐인 관계 | null, changed: 값을 바꿨는가}
+export const PAIR_BLOCKED_GROUP = '이 조합에는 못 씀';
+export function markRelationOptions(relationSelect, aType, bType, hint = null, opts = {}) {
   const ok = aType && bType ? new Set(allowedRelations(aType, bType).map((x) => x.relation)) : null;
-  for (const opt of relationSelect.options) {
-    const base = EDGE_TYPES[opt.value] || opt.value;
-    opt.disabled = !!ok && !ok.has(opt.value);
-    opt.textContent = opt.disabled ? base + PAIR_BLOCKED_NOTE : base;
+  const keep = relationSelect.value;
+  const keys = Object.keys(EDGE_TYPES);
+  const usable = ok ? keys.filter((k) => ok.has(k)) : keys;
+  const blocked = ok ? keys.filter((k) => !ok.has(k)) : [];
+  let value = keep;
+  if (ok && !opts.keep && usable.length && !ok.has(keep) && (usable.length === 1 || !opts.touched)) value = usable[0];
+  const mk = (v, disabled) => el('option', { value: v, disabled, selected: v === value }, EDGE_TYPES[v]);
+  const children = usable.map((v) => mk(v, false));
+  if (blocked.length) children.push(el('optgroup', { label: PAIR_BLOCKED_GROUP, 'data-testid': 'relation-blocked' }, ...blocked.map((v) => mk(v, true))));
+  relationSelect.replaceChildren(...children);
+  relationSelect.value = value;
+  const only = ok && usable.length === 1 ? usable[0] : null;
+  if (hint) {
+    hint.hidden = !only;
+    hint.textContent = only ? `(이 조합은 「${EDGE_TYPES[only]}」만 됩니다)` : '';
   }
+  return { only, changed: value !== keep };
+}
+
+// 관계 칸 바로 아래의 「이 조합은 ○○만 됩니다」 한 줄(처음엔 숨김)
+function onlyHint(testid) {
+  return el('p', { class: 'muted small relation-only', hidden: true, 'data-testid': testid, 'aria-live': 'polite' });
 }
 
 // E-PAIR 안내에 쓸 문맥: 고른 두 노드와 그 사이에 쓸 수 있는 관계
 function pairContext(relation, s, t) {
   return { kind: 'edge', relation, source: s, target: t, suggestions: allowedRelations(s.core_type, t.core_type) };
+}
+
+// 관계가 자동으로 바뀐 뒤: 지금 방향으로는 안 되고 반대 방향으로만 되는 관계면 방향을 뒤집는다(out = 이 노드 → 상대)
+function alignDirection(directionSelect, relation, nodeType, otherType) {
+  const a = allowedRelations(nodeType, otherType).find((x) => x.relation === relation);
+  if (!a) return;
+  const out = directionSelect.value === 'out';
+  if ((out && a.forward) || (!out && a.backward)) return;
+  directionSelect.value = a.forward ? 'out' : 'in';
 }
 
 // 오류·성공 메시지 영역. 중복이면 기존 노드로 가는 링크를 붙인다
@@ -209,7 +238,8 @@ export function nodeForm(o) {
     const other = select([['', '(연결하지 않음)']], '', { 'data-testid': 'node-link-other' });
     const relation = select(Object.entries(EDGE_TYPES), 'relates_to', { 'data-testid': 'node-link-type' });
     const direction = select([['out', '새 노드 → 상대'], ['in', '상대 → 새 노드']], 'out', { 'data-testid': 'node-link-direction' });
-    const detail = el('div', { class: 'link-detail', hidden: true }, field('관계', relation), field('방향', direction));
+    const onlyNote = onlyHint('node-link-only');
+    const detail = el('div', { class: 'link-detail', hidden: true }, field('관계', relation), onlyNote, field('방향', direction));
     const candidates = () => o.getCandidates();
     const fill = () => {
       const keep = other.value;
@@ -220,7 +250,7 @@ export function nodeForm(o) {
     const sync = () => {
       detail.hidden = !other.value;
       const picked = other.value ? candidates().find((n) => n.id === other.value) : null;
-      markRelationOptions(relation, picked ? type.value : null, picked ? picked.core_type : null); // 고를 수 없는 관계 표시(FU-35)
+      markRelationOptions(relation, picked ? type.value : null, picked ? picked.core_type : null, onlyNote); // 쓸 수 있는 관계를 위로·못 쓰는 관계는 아래 묶음(FU-35, CR-18-4)
       if (!other.value) return; // 상대나 새 노드 유형이 바뀔 때마다 알맞은 관계·방향을 다시 추천한다(직접 고르는 것은 그 뒤에)
       const t = candidates().find((n) => n.id === other.value);
       const sug = t && suggestRelation(type.value, t.core_type);
@@ -316,10 +346,15 @@ export function edgeForm(o) {
   const relation = select(Object.entries(EDGE_TYPES), 'relates_to', { 'data-testid': 'edge-type' });
   const direction = select([['out', `${o.node.label} → 상대`], ['in', `상대 → ${o.node.label}`]], 'out', { 'data-testid': 'edge-direction' });
   const other = select(nodeOptions(o.candidates, { empty: '상대 노드를 고르세요' }), '', { 'data-testid': 'edge-other' });
-  // 상대를 고르면 이 노드와 상대의 유형으로 쓸 수 없는 관계를 흐리게 한다(FU-35). 상대를 아직 안 골랐으면 전부 켜 둔다
+  const onlyNote = onlyHint('edge-only');
+  let touched = false; // 사용자가 관계 칸을 직접 고른 뒤인가(손대지 않은 기본값만 자동으로 바꾼다)
+  relation.addEventListener('change', () => { touched = true; });
+  // 상대를 고르면 이 노드와 상대의 유형으로 쓸 수 있는 관계를 위로, 못 쓰는 관계는 아래 묶음으로 보낸다(FU-35, CR-18-4). 상대를 아직 안 골랐으면 전부 켜 둔다.
+  // 관계를 자동으로 바꿨으면(못 쓰던 값이었거나 하나뿐) 방향도 그 관계가 되는 쪽으로 맞춘다
   other.addEventListener('change', () => {
     const t = o.candidates.find((n) => n.id === other.value);
-    markRelationOptions(relation, t ? o.node.core_type : null, t ? t.core_type : null);
+    const r = markRelationOptions(relation, t ? o.node.core_type : null, t ? t.core_type : null, onlyNote, { touched });
+    if (t && r.changed) alignDirection(direction, relation.value, o.node.core_type, t.core_type);
   });
   const period = periodEditor();
   const note = el('input', { autocomplete: 'off', maxlength: 2000, placeholder: '예: 인수 후 담당' });
@@ -331,6 +366,7 @@ export function edgeForm(o) {
     { class: 'editor', novalidate: true, 'data-testid': 'edge-form' },
     el('h3', {}, '연결 추가'),
     field('관계', relation),
+    onlyNote,
     field('하위 유형(선택, 예: 참조 > 검토함)', sub.el),
     field('방향', direction),
     field('상대 노드', other),
@@ -382,6 +418,17 @@ export function edgeEditForm(o) {
   // 지금 상대가 목록에 없으면(숨긴 노드 등) 그대로 둘 수 있게 항목을 하나 보태 둔다
   if (!list.some((n) => n.id === otherId)) opts.unshift([otherId, '(현재 상대)']);
   const other = select(opts, otherId, { 'data-testid': 'edge-edit-other' });
+  const onlyNote = onlyHint('edge-edit-only');
+  let touched = false;
+  relation.addEventListener('change', () => { touched = true; });
+  // 연결 수정에도 같은 처리(CR-18-4). 처음 열 때는 지금 값을 그대로 둔다. 상대를 바꿀 때 지금 관계가 새 조합에 못 쓰이면 쓸 수 있는 첫 관계로 바꾼다
+  const remark = (keep) => {
+    const t = list.find((n) => n.id === other.value);
+    const r = markRelationOptions(relation, t ? o.node.core_type : null, t ? t.core_type : null, onlyNote, { keep, touched });
+    if (!keep && t && r.changed) alignDirection(direction, relation.value, o.node.core_type, t.core_type);
+  };
+  other.addEventListener('change', () => remark(false));
+  remark(true);
   const msg = messageBox();
   const form = el(
     'form',
@@ -389,6 +436,7 @@ export function edgeEditForm(o) {
     el('h3', {}, `연결 수정: ${o.title}`),
     el('p', { class: 'muted small', 'data-testid': 'edge-edit-hint' }, '관계나 상대를 바꾸면 옛 연결은 숨기고(기록은 남음) 새 연결을 만듭니다.'),
     field('관계', relation),
+    onlyNote,
     field('방향', direction),
     field('상대 노드', other),
     field('기간', period.el),

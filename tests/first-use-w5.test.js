@@ -11,7 +11,7 @@ import { buildHandoverDraft } from '../app/src/rules/handover.js';
 import { renderUniverseSummary } from '../app/src/ui/detail.js';
 import { describeUniverse } from '../app/src/view/describe.js';
 import { insightPanel } from '../app/src/ui/insight.js';
-import { PAIR_BLOCKED_NOTE, eventForm, markRelationOptions } from '../app/src/ui/editor.js';
+import { PAIR_BLOCKED_GROUP, eventForm, markRelationOptions } from '../app/src/ui/editor.js';
 
 const ASOF = '2026-10-02';
 const withDom = (fn) => () => {
@@ -19,37 +19,47 @@ const withDom = (fn) => () => {
   try { fn(body); } finally { uninstallDom(); }
 };
 
-// ── FU-35: 관계 고르기 칸 ──
-const fakeRelationSelect = () => ({ options: Object.keys(EDGE_TYPES).map((v) => ({ value: v, disabled: false, textContent: EDGE_TYPES[v] })) });
+// ── FU-35: 관계 고르기 칸 (CR-18-4에서 「못 쓰는 관계는 아래 묶음」으로 바뀜: disabled + 보기 글 꼬리표 방식 → optgroup 방식) ──
+// 실제 select처럼 보기 목록을 다시 만드는 함수이므로 DOM 흉내의 select에서 돌린다
+const relationSelect = (value = 'relates_to') => {
+  const sel = document.createElement('select');
+  for (const v of Object.keys(EDGE_TYPES)) { const o = document.createElement('option'); o.setAttribute('value', v); o.textContent = EDGE_TYPES[v]; if (v === value) o.setAttribute('selected', ''); sel.append(o); }
+  sel.value = value;
+  return sel;
+};
 
-test('FU-35 markRelationOptions: 사람↔업무는 수행만 켜지고 나머지는 disabled + 「(이 조합에는 못 씀)」, schema 허용 표와 같다', () => {
-  const sel = fakeRelationSelect();
+test('FU-35 markRelationOptions: 사람↔업무는 쓸 수 있는 관계(수행·참조)가 위, 나머지는 disabled로 「이 조합에는 못 씀」 묶음 안에, schema 허용 표와 같다', withDom(() => {
+  const sel = relationSelect();
   markRelationOptions(sel, 'person', 'work');
   const ok = new Set(allowedRelations('person', 'work').map((x) => x.relation));
   assert.ok(ok.has('performs') && ok.has('references'));
-  for (const o of sel.options) {
+  const opts = sel.options;
+  assert.equal(opts.length, Object.keys(EDGE_TYPES).length);
+  for (const o of opts) {
     assert.equal(o.disabled, !ok.has(o.value), o.value);
-    assert.equal(o.textContent, ok.has(o.value) ? EDGE_TYPES[o.value] : `${EDGE_TYPES[o.value]}${PAIR_BLOCKED_NOTE}`);
+    assert.equal(o.textContent, EDGE_TYPES[o.value], '보기 글은 그대로(묶음 이름이 못 씀을 알린다)');
   }
   assert.equal(sel.options.find((o) => o.value === 'relates_to').disabled, true, '관련은 사람↔업무에 못 씀(주제 쪽만)');
-  assert.equal(PAIR_BLOCKED_NOTE, ' (이 조합에는 못 씀)');
-});
+  assert.equal(PAIR_BLOCKED_GROUP, '이 조합에는 못 씀');
+}));
 
-test('FU-35 markRelationOptions: 방향은 따로 고르므로 반대 방향만 되는 관계도 켜 둔다(업무→사람의 수행은 사람→업무로 가능)', () => {
-  const sel = fakeRelationSelect();
+test('FU-35 markRelationOptions: 방향은 따로 고르므로 반대 방향만 되는 관계도 쓸 수 있다(업무→사람의 수행은 사람→업무로 가능)', withDom(() => {
+  const sel = relationSelect();
   markRelationOptions(sel, 'work', 'person');
   assert.equal(sel.options.find((o) => o.value === 'performs').disabled, false);
-});
+}));
 
-test('FU-35 markRelationOptions: 연결 대상이 아직 없으면(유형 모름) 전부 켜고 글을 원래대로 되돌린다', () => {
-  const sel = fakeRelationSelect();
+test('FU-35 markRelationOptions: 연결 대상이 아직 없으면(유형 모름) 전부 켜고 묶음 없이 원래 순서로 되돌린다', withDom(() => {
+  const sel = relationSelect();
   markRelationOptions(sel, 'person', 'work');
   markRelationOptions(sel, null, null);
+  assert.deepEqual(sel.options.map((o) => o.value), Object.keys(EDGE_TYPES));
+  assert.equal(sel.querySelectorAll('optgroup').length, 0);
   for (const o of sel.options) {
     assert.equal(o.disabled, false);
     assert.equal(o.textContent, EDGE_TYPES[o.value]);
   }
-});
+}));
 
 // ── FU-37: 이력 분류 안내 ──
 test('FU-37 이력 추가: 분류 아래에 초안 칸 안내 한 줄, 분류 보기 이름과 맞고 규칙(handover)의 실제 매핑과 같다', withDom(() => {

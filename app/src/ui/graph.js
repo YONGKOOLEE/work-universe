@@ -7,6 +7,7 @@ import { hasLongWord } from '../view/describe.js';
 import { labelBox, placeNewNodes } from '../view/place.js';
 import { flowLayout } from '../view/lanes.js';
 import { EXPLORE } from './explore.js';
+import { firstViewZoom } from '../view/explore.js';
 
 // 노드 유형별 색(어두운 배경용 파스텔). 범례도 이 표를 쓴다
 export const TYPE_COLORS = {
@@ -423,9 +424,28 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
     }
   }
 
+  // 묶은 지도(CR-18-1): 처음 그릴 때 fit 결과에서 이름이 EXPLORE.FIRST_READ_PX보다 작게 보이면, 지도 중심을 가운데 두고 배율을 올려 시작한다.
+  // 노드가 일반 이름 글자 크기(14px)를 기준으로 판단한다. 전체가 다 안 보여도 되며 「전체 보기」(fit)가 전체를 다시 맞춘다
+  const NAME_FONT_PX = 14;
+  let firstViewInfo = { raised: false, fitZoom: 0, zoom: 0 };
+  function firstView(display) {
+    const fitZoom = cy.zoom();
+    const grouped = display.nodes.filter((n) => n.core_type === 'root').length > 1;
+    const r = firstViewZoom({ fitZoom, fontPx: NAME_FONT_PX, readPx: EXPLORE.FIRST_READ_PX, grouped, minZoom: cy.minZoom(), maxZoom: cy.maxZoom() });
+    firstViewInfo = { raised: r.raised, fitZoom, zoom: r.zoom };
+    if (!r.raised) return;
+    const root = cy.getElementById(display.rootGid);
+    cy.zoom(r.zoom);
+    if (root.nonempty()) cy.center(root);
+    else cy.center();
+    applyTinyLabels();
+  }
+
   return {
     cy,
     highlight,
+    /** 점검용: 마지막 첫 배율 판정 {raised, fitZoom, zoom} */
+    firstViewInfo: () => firstViewInfo,
 
     // 처음에는 전체 배치를 계산한다. 이후(노드 추가 등)에는 기존 노드 자리를 그대로 두고
     // 새 노드만 이웃 옆이나 그래프 바깥쪽에 놓아, 보던 모양이 흐트러지지 않게 한다
@@ -460,6 +480,7 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
         fresh.forEach(({ n }) => n.position(spots.get(n.id())));
         if (fresh.length > 0) fitTo(undefined, 40);
       }
+      if (before.size === 0) firstView(display);
       applyTimeOff();
       lastDisplay = display;
       nbhdCenter = display.center || null;

@@ -120,3 +120,27 @@ export function neighborhoodDisplay(view, gid, depth = 1) {
     neighbor_count: dist.size - 1,
   };
 }
+
+/**
+ * 묶은 지도(CR-18-1) 첫 배율 고르기. 순수 계산이다.
+ * fitZoom: 전체가 한 화면에 들어오는 배율(cy.fit 결과), fontPx: 노드 이름의 글자 크기(배율 1일 때), readPx: 화면에서 읽히는 최소 크기.
+ * 묶은 지도(grouped)가 아니거나 fit 결과에서도 이름이 readPx 이상이면 fitZoom 그대로(raised=false).
+ * 아니면 이름이 readPx로 보이는 배율(readPx/fontPx)로 올린다. 라이브러리의 [minZoom, maxZoom] 안으로 자르고, fitZoom보다 낮추지는 않는다.
+ * @returns {{zoom:number, raised:boolean}}
+ */
+export function firstViewZoom({ fitZoom, fontPx, readPx, grouped, minZoom = 0, maxZoom = Infinity }) {
+  if (!grouped || !(fitZoom > 0) || !(fontPx > 0) || !(readPx > 0)) return { zoom: fitZoom, raised: false };
+  if (fontPx * fitZoom >= readPx) return { zoom: fitZoom, raised: false };
+  const target = Math.min(maxZoom, Math.max(minZoom, readPx / fontPx));
+  if (target <= fitZoom) return { zoom: fitZoom, raised: false };
+  return { zoom: target, raised: true };
+}
+
+/**
+ * 방금 펼친 묶음(universeId) 안에 아직 접혀 있는 묶음(CR-18-1). display.collapsed에 있는 하위 지도 중 universeId의 직계 자식만 센다.
+ * @returns {string[]} 접힌 자식 유니버스 ID
+ */
+export function foldedInside(view, display, universeId) {
+  const kids = (view.ref_links || []).filter((l) => l.parent === universeId).map((l) => l.child);
+  return [...new Set(kids)].filter((c) => display.collapsed && display.collapsed.has(c));
+}
