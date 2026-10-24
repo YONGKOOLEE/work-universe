@@ -15,16 +15,16 @@ import {
 
 // ── 상수 ────────────────────────────────────────────────────────────────────
 
-/** 글·항목 상한(넘으면 notes로 알린다). 항목·연결 상한은 applyBatch의 행 상한(BATCH_MAX_ROWS)과 맞춘다 */
 /**
  * R19: 처음 체크하는 범위의 기본은 'none'(아무것도 체크하지 않음 — 사용자가 「지도에 있는 것만 체크」「모두 체크」나 하나씩 체크). 규칙 읽기는 문장 안팎의 맥락을 다 알 수 없어서다.
  * R17: 'existing-only' = 지도에 이미 있는 항목(match)과 두 끝이 모두 지도에 있는 연결만(읽지 못한 문장이 같은 글에 있으면 연결은 체크하지 않음). 'all' = hold·같은 이름 둘·이미 있음·일부만 읽은 문장·뒤집는 문장이 있는 글 말고는 모두.
  * 규칙 읽기는 구멍을 다 막을 수 없어, 새로 만드는 항목은 사람이 이름이 맞는지 보고 체크하게 해 피해를 묶는다.
  */
 export const TEXT_DEFAULT_CHECK = 'none';
-/** 처음 체크 모드 값: 'existing-only'(기본) · 'all' · 'none'(아무것도 처음 체크하지 않음 — 사용자가 「모두 체크」나 하나씩 체크) */
+/** 처음 체크 모드 값: 'none'(기본, 아무것도 처음 체크하지 않음) · 'existing-only'(「지도에 있는 것만 체크」 단추) · 'all'(「모두 체크」 단추) */
 export const TEXT_CHECK_MODES = Object.freeze(['existing-only', 'all', 'none']);
 
+/** 글·항목 상한(넘으면 notes로 알린다). 항목·연결 상한은 applyBatch의 행 상한(BATCH_MAX_ROWS)과 맞춘다 */
 export const TEXT_LIMITS = Object.freeze({
   maxChars: 4000, // 붙여 넣을 수 있는 글자 수. 넘으면 읽지 않고 안내(일부만 읽어 오해하지 않게)
   maxSentences: 60, // 읽는 문장 수. 넘는 문장은 읽지 않았다고 알린다
@@ -99,7 +99,7 @@ export const TEXT_GUARDS = Object.freeze({
     // R16-9 나열(쉼표·빗금·가운뎃점)
     { id: 'list', why: '나열', known: true, re: /[,，、/／·ㆍ&+]/ },
     // R18: 확인 표시·취소 표시([ ] [x] ❌ ✔ …)가 있으면 사실 문장이 아니다
-    { id: 'mark', why: '표시', re: /\[\s*[xX✓✔]?\s*\]|[❌✔✅✓✗✘☐☑☒]/ },
+    { id: 'mark', why: '표시', re: /\[\s*[xX✓✔]?\s*\]|[❌✔✅✓✗✘✖☐☑☒🚫⛔👎🙅]/u },
   ]),
   token: Object.freeze([
     { id: 'neg', why: '부정', re: /않|못|아니|아님|아닌|없|말고|말아|^안$/ },
@@ -141,9 +141,9 @@ export const TEXT_PATTERN_DOC = Object.freeze([
   { id: 'precedes_a', relation: 'precedes', shape: 'Y(이/가) 끝나면·끝난 뒤·다음에·뒤에·후에 Z', example: '대사 확인이 끝나면 보고를 한다' },
   { id: 'precedes_b', relation: 'precedes', shape: 'Y(을/를) 마치면·마친 뒤·하고 나서 Z', example: '대사 확인을 마치면 보고를 한다' },
   { id: 'belongs_a', relation: 'belongs_to', shape: 'X(은/는) T 소속 · T 소속 X(T가 팀·실·부·과·센터·본부로 끝날 때)', example: '도하람은 감사팀 소속이다' },
-  { id: 'belongs_b', relation: 'belongs_to', shape: 'T의 X(T가 팀·실·부·과·센터·본부로 끝날 때)', example: '감사팀의 도하람이 확인한다' },
-  { id: 'reference', relation: 'references', shape: 'X에게 공유·문의·협업·보고·전달 (그 문장의 업무가 하나일 때, 없으면 바로 앞 문장이 읽혔고 업무가 하나일 때)', example: '도하람에게 결과를 공유한다' },
-  { id: 'emp_no', relation: null, shape: '이름(V-1234) → 사번이 있는 사람', example: '서하늘(V-1003)' },
+  { id: 'belongs_b', relation: 'belongs_to', shape: 'T의 X(T가 팀·실·부·과·센터·본부로 끝날 때) — 같은 문장에 다른 모양(맡는다 등)이 함께 있어야 한다', example: '감사팀의 도하람이 보고를 맡는다' },
+  { id: 'reference', relation: 'references', shape: 'X에게 공유·문의·협업·보고·전달 (그 문장의 업무가 하나일 때, 없으면 바로 앞 문장이 읽혔고 업무가 하나일 때)', example: '서하늘이 보고를 맡는다. 도하람에게 결과를 공유한다' },
+  { id: 'emp_no', relation: null, shape: '이름(V-1234) → 사번이 있는 사람', example: '서하늘(V-1003)이 대사 확인을 맡는다' },
 ]);
 
 /** 읽지 못한 문장이 있는데 읽은 연결이 있을 때의 안내(notes와 화면 맨 위) */
@@ -273,7 +273,7 @@ function backStart(T, end, max) {
  */
 function phraseOf(T, a, b, opt = {}) {
   let s = a;
-  while (s < b && TEXT_WORDS.leading.includes(T[s].core)) s += 1;
+  while (s < b && (TEXT_WORDS.leading.includes(T[s].core) || TEXT_WORDS.allowedWords.includes(T[s].core))) s += 1; // R19-5: 이름 앞의 이음말·현재·요즘 …도 이름이 아니다
   const strip = opt.strip === undefined ? !bare(T[b]) : opt.strip;
   const head = [];
   for (let i = s; i < b; i += 1) head.push(T[i].core);
@@ -447,32 +447,55 @@ export function createBuilder(limits = TEXT_LIMITS) {
 
 // ── 문장 나누기 ─────────────────────────────────────────────────────────────
 
-/** 마침표·물음표·느낌표(뒤가 공백이거나 끝일 때)·줄바꿈·「;」로 나눈다. 목록 머리(「- 」「1. 」)는 뗀다. 모든 문장은 글의 부분 문자열이다 */
-export const splitSentences = (text) => splitSentencesEnd(text).map((x) => x.text);
+/** 글자가 없는 조각 중 구분선(---, ===, ***, |---| …)·공백·점뿐인 것은 버린다. 이 밖의 기호(❌ ? ✗ ↑ × …)는 버리지 않고 「읽지 못한 조각」으로 돌려준다(R19-1) */
+const SEPARATOR_RE = /^[\s\-–—_=*~#•·▪‣◦─━═│|+.:：;；。]+$/;
 
-/** splitSentences와 같되 각 문장을 끝낸 부호(마침표·물음표 …, 없으면 '')를 함께 돌려준다 — 물음표로 끝난 문장은 질문이라 읽지 않는다 */
+/**
+ * splitSentences와 같되 각 문장을 끝낸 부호(마침표·물음표 …, 없으면 '')를 함께 돌려준다 — 물음표로 끝난 문장은 질문이라 읽지 않는다.
+ * R19-1: 글자가 없고 기호만 있는 조각(「❌」「?」「(?)」「↑ ×」, 같은 줄 「…맡는다. ❌」)은 {symbol: true}로 돌려준다 — 앞 문장을 취소·의문하는 표시일 수 있어 조용히 버리지 않는다.
+ * 같은 줄에서 이어진 기호 조각은 하나로 합친다(「(?)」). 구분선·공백뿐인 조각은 버린다
+ */
 export function splitSentencesEnd(text) {
   const out = [];
-  const push = (s, end = '') => {
-    const t = s.trim();
-    if (t && LETTER_RE.test(t)) out.push({ text: t, end });
-  };
   for (const rawLine of String(text).split(/\r\n?|\n/)) {
     const line = rawLine.replace(/^\s*(?:[-*•·▪‣◦]|\d{1,2}[.)])\s+/, '');
     let start = 0;
+    let symStart = -1;
+    let symEnd = -1;
+    const flushSym = () => {
+      if (symStart >= 0) {
+        const t = line.slice(symStart, symEnd).trim();
+        if (t && !SEPARATOR_RE.test(t)) out.push({ text: t, end: '', symbol: true });
+      }
+      symStart = -1;
+    };
+    const piece = (a, b, end) => {
+      const t = line.slice(a, b).trim();
+      if (t && LETTER_RE.test(t)) {
+        flushSym();
+        out.push({ text: t, end });
+      } else if (symStart < 0) {
+        symStart = a;
+        symEnd = b + (end ? 1 : 0);
+      } else symEnd = b + (end ? 1 : 0);
+    };
     for (let i = 0; i < line.length; i += 1) {
       const ch = line[i];
       const stop = ch === ';' || ch === '；' || ch === '。'
         || ('.!?！？'.includes(ch) && (i + 1 === line.length || /[\s"')\]」』”’]/.test(line[i + 1])));
       if (stop) {
-        push(line.slice(start, i), ch);
+        piece(start, i, ch);
         start = i + 1;
       }
     }
-    push(line.slice(start));
+    piece(start, line.length, '');
+    flushSym();
   }
   return out;
 }
+
+/** 마침표·물음표·느낌표(뒤가 공백이거나 끝일 때)·줄바꿈·「;」로 나눈다. 목록 머리(「- 」「1. 」)는 뗀다. 모든 문장은 글의 부분 문자열이다. 기호뿐인 조각은 뺀다(그것까지 보려면 splitSentencesEnd) */
+export const splitSentences = (text) => splitSentencesEnd(text).filter((x) => !x.symbol).map((x) => x.text);
 
 // ── 문장 단위 보호(R16): 이런 문장은 모양을 보기 전에 읽지 않는다 ─────────────
 
@@ -497,6 +520,44 @@ function sentenceVeto(s, T, known) {
     if (t.core === '그리고' && i > 0) return '나열';
   }
   return '';
+}
+
+/** R19-1: 앞 문장을 취소하거나 되묻는 기호(❌ ✗ 🚫 ? ×…)만 있는 조각이면 글 전체의 맥락을 뒤집을 수 있다 */
+const CANCEL_SYMBOL_RE = /[❌✗✘✖×🚫⛔👎🙅❓❔⁉‽?？]/u;
+
+/**
+ * 문장 하나를 모양을 보기 전에 거르는 판정(규칙 읽기와 Claude 읽기가 같이 쓴다).
+ *  skip: 읽지 않는다 / why: 이유 / ctx: 앞 내용을 뒤집을 수 있는 문장이라 글 전체의 처음 체크를 풀어야 한다 / T: 낱말 목록(읽을 때 쓴다)
+ * afterShort: 바로 앞 문장이 「Q.」「A.」 같은 한두 글자 머리 문장이었는가
+ */
+function sentenceVerdict(entry, afterShort, known, limits) {
+  const { text: s, end } = entry;
+  if (entry.symbol) return { skip: true, why: '기호', ctx: CANCEL_SYMBOL_RE.test(s), T: [] };
+  if (s.length > limits.sentenceMax) return { skip: true, why: '너무 긴 문장', ctx: false, T: [] };
+  if (end === '?' || end === '？' || /[?？‽⁈⁉]/.test(s)) return { skip: true, why: '물음', ctx: false, T: [] }; // 물음표로 끝난 문장은 질문이다
+  if (afterShort) return { skip: true, why: '머리 문장 뒤', ctx: false, T: [] };
+  const T = parseTokens(s);
+  if (/^(?:농담|거짓|취소|철회|정정|사실이 아니)/.test(s)) return { skip: true, why: '앞 내용을 뒤집는 문장', ctx: true, T }; // 앞 내용을 뒤집는 문장
+  const why = sentenceVeto(s, T, known);
+  if (why) {
+    // R18 D: 지도 이름이 없는 문장이 부정·시제·전언으로 걸리면 앞 내용을 뒤집는 문장일 수 있다 — 이 글의 연결은 처음에 하나도 체크하지 않는다
+    const ctx = ['부정', '시제', '전해 들음·추측'].includes(why) && !known.labels.some((l) => nameInText(s, l));
+    return { skip: true, why, ctx, T };
+  }
+  return { skip: false, why: '', ctx: false, T };
+}
+
+/**
+ * 문장 목록(splitSentencesEnd 결과)을 차례로 판정한다 → 문장마다 {text, end, symbol?, skip, why, ctx, T}.
+ * 「Q.」 같은 짧은 머리 문장 바로 뒤 문장은 읽지 않으므로 순서가 중요하다. 기호뿐인 조각은 그 흐름을 끊지 않는다
+ */
+export function classifySentences(sentences, known, limits = TEXT_LIMITS) {
+  let shortHead = false;
+  return sentences.map((entry) => {
+    const afterShort = shortHead; // 「Q.」「A.」 같은 한두 글자 머리 문장 바로 뒤 문장은 읽지 않는다
+    if (!entry.symbol) shortHead = entry.text.replace(/[:：]/g, '').length <= 2;
+    return { ...entry, ...sentenceVerdict(entry, afterShort, known, limits) };
+  });
 }
 
 /** 절을 끝내는 서술어(주어·이름 훑기를 여기서 멈춘다): 한다류·「이고/이며/으며/면서」·소속 꼬리·끝나/마치 */
@@ -911,7 +972,7 @@ export function finalizeProposal(proposal, view) {
       if (m.empMismatch) hold = `사번은 「${m.empMismatch.label}」과 같고 이름이 다릅니다`;
       else if (n.type === 'person' && n.emp_no) {
         const clash = cands.find((c) => c.core_type === 'person' && normalizeLabel(c.label) === key && c.emp_no && normalizeEmpNo(c.emp_no) !== normalizeEmpNo(n.emp_no));
-        if (clash) hold = `지도에 같은 이름의 사람(사번 ${clash.emp_no})이 있습니다 — 다른 사람이면 체크하세요`;
+        if (clash) hold = `지도에 같은 이름의 사람(사번 ${clash.emp_no})이 있습니다 — 다른 사람인지 확인`;
       }
       // R18 F: 지도에 공백·괄호 차이만 다른 이름(대사확인↔대사 확인, 보고(report)↔보고)이 있으면 새로 만들지 않고 그 항목에 잇되 같은 항목인지 확인(hold)
       if (!hold && !m.ambiguous) {
@@ -954,7 +1015,9 @@ export function finalizeProposal(proposal, view) {
     }
     const [from, to] = dir === 'forward' ? [a, b] : [b, a];
     const out = { key: e.key, from: from.key, to: to.key, type: e.type, quote: e.quote };
-    if (a.hold || b.hold) out.hold = true;
+    // 연결 자체의 확인 사유(문자열, 예: Claude 읽기에서 인용이 든 원문 문장에 부정·조건이 있음)가 먼저, 없으면 끝 항목의 hold(true)
+    if (typeof e.hold === 'string' && e.hold) out.hold = e.hold;
+    else if (a.hold || b.hold) out.hold = true;
     if (from.match && to.match) {
       const c = (g) => (view && view.canonical ? view.canonical(g) : g);
       if (edgeIn(viewEdges, c(from.match), c(to.match), e.type)) out.exists = true;
@@ -1023,7 +1086,7 @@ export function textSizeNote(text, limits = TEXT_LIMITS) {
 }
 
 /** 지도에 있는 사람 이름(공백·대소문자 무시): 한글 세 글자가 아니어도 이 이름이면 사람으로 받는다 */
-const knownNames = (view) => {
+export const knownNames = (view) => {
   const c = ownCandidates(view);
   return {
     person: new Set(c.filter((x) => x.core_type === 'person').map((x) => normalizeLabel(x.label))),
@@ -1048,31 +1111,23 @@ export function extractFromText(text, view = null, opt = {}) {
   if (isGroupedView(view)) return emptyProposal([TEXT_GROUPED_NOTE]);
   const notes = [];
   let sentences = splitSentencesEnd(text);
+  let truncated = false;
   if (sentences.length > limits.maxSentences) {
     notes.push(`문장이 ${sentences.length}개라 앞의 ${limits.maxSentences}개만 읽었습니다`);
     sentences = sentences.slice(0, limits.maxSentences);
+    truncated = true; // R19-2: 잘린 뒤쪽에 앞 내용을 뒤집는 문장이 있을 수 있다
   }
   const b = createBuilder(limits);
   const known = knownNames(view);
   const unread = [];
   const partial = [];
   let ctxVeto = false;
-  let shortHead = false;
   let prev = null; // 바로 앞 문장이 온전히 읽혔을 때만 {works}
-  for (const { text: s, end } of sentences) {
+  for (const v of classifySentences(sentences, known, limits)) {
+    const { text: s, T } = v;
     const skip = () => { unread.push(s); prev = null; };
-    const afterShort = shortHead; // 「Q.」「A.」 같은 한두 글자 머리 문장 바로 뒤 문장은 읽지 않는다
-    shortHead = s.replace(/[:：]/g, '').length <= 2;
-    if (s.length > limits.sentenceMax || end === '?' || end === '？' || /[?？‽⁈⁉]/.test(s) || afterShort) { skip(); continue; } // 물음표로 끝난 문장은 질문이다
-    const T = parseTokens(s);
-    if (/^(?:농담|거짓|취소|철회|정정|사실이 아니)/.test(s)) { ctxVeto = true; skip(); continue; } // 앞 내용을 뒤집는 문장
-    const why = sentenceVeto(s, T, known);
-    if (why) {
-      // R18 D: 지도 이름이 없는 문장이 부정·시제·전언으로 걸리면 앞 내용을 뒤집는 문장일 수 있다 — 이 글의 연결은 처음에 하나도 체크하지 않는다
-      if (['부정', '시제', '전해 들음·추측'].includes(why) && !known.labels.some((l) => nameInText(s, l))) ctxVeto = true;
-      skip();
-      continue;
-    }
+    if (v.ctx) ctxVeto = true;
+    if (v.skip) { skip(); continue; }
     const sc = makeScope(s, T, prev, known);
     for (const p of TEXT_PATTERNS) {
       p.run(sc);
@@ -1089,8 +1144,8 @@ export function extractFromText(text, view = null, opt = {}) {
   }
   notes.push(...capNotes(b.flags, limits));
   if (ctxVeto && b.edges.length) notes.push('글에 앞 내용을 뒤집는 문장이 있어 처음 체크를 모두 풀었습니다');
-  // R19 ①: 읽지 못한 문장이 있는 글에서는 앞뒤 문장이 읽은 문장의 뜻을 바꿀 수 있다 — 'existing-only'에서도 연결을 처음 체크하지 않는다
-  const unreadContext = unread.length > 0 && b.edges.length > 0;
+  // R19 ①: 읽지 못한 문장(기호뿐인 줄, 문장 수 상한으로 잘린 뒷부분 포함)이 있는 글에서는 앞뒤 문장이 읽은 문장의 뜻을 바꿀 수 있다 — 'existing-only'에서도 연결을 처음 체크하지 않는다
+  const unreadContext = (unread.length > 0 || truncated) && b.edges.length > 0;
   if (unreadContext) notes.push(TEXT_UNREAD_CONTEXT_NOTE);
   const proposal = { method: 'rule', nodes: b.nodes, edges: b.edges, unread, partial, notes, ctxVeto, unreadContext };
   return finalizeProposal(proposal, view);
@@ -1099,7 +1154,7 @@ export function extractFromText(text, view = null, opt = {}) {
 // ── 사용자가 고른 것 → 명령 ─────────────────────────────────────────────────
 
 /**
- * 처음 선택(R17): 기본('existing-only')은 지도에 이미 있는 항목(match)과, 두 끝이 모두 지도에 있는 연결만 체크한다. 새로 만드는 항목(사번이 글에 있는 사람 포함)과
+ * 처음 선택(R17, R19): 기본 mode는 TEXT_DEFAULT_CHECK('none' — 아무것도 체크하지 않음). 'existing-only'(「지도에 있는 것만 체크」)는 지도에 이미 있는 항목(match)과, 두 끝이 모두 지도에 있는 연결만 체크한다. 새로 만드는 항목(사번이 글에 있는 사람 포함)과
  * 새 항목이 한쪽 끝인 연결은 사람이 이름이 맞는지 보고 체크한다. 어느 모드에서나 같은 이름이 둘 이상인 항목·확인할 것이 있는 항목(hold)·이미 있는 연결·hold 항목에 걸린 연결은 체크하지 않는다.
  * mode 'all'은 위 예외만 빼고 모두 체크한다(화면의 「모두 체크」).
  */

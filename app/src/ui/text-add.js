@@ -10,7 +10,6 @@ import { TEXT_DEFAULT_CHECK, TEXT_LIMITS, TEXT_UNREAD_CONTEXT_NOTE, TEXT_NODE_TY
 /** 화면 문구(한 곳). 용어: 「항목」「지도 중심」 */
 export const TEXT_ADD = Object.freeze({
   title: '글로 추가',
-  intro: '몇 문장짜리 글(회의 메모·인수인계 메모)을 붙여 넣으면 사람·업무·산출물·조직을 찾아 미리 보여 줍니다. 지도에 이미 있는 항목만 처음에 체크되어 있고, 새로 만드는 항목은 이름이 맞는지 보고 직접 체크해야 합니다(「모두 체크」도 있습니다). 고친 뒤 「저장」을 눌러야 들어갑니다.',
   placeholder: '예) 서하늘(V-1003)이 대사 확인을 맡는다. 대사 확인이 끝나면 보고를 한다. 보고에서 월말 정산 보고서를 만든다.',
   inputLabel: '붙여 넣을 글',
   read: '규칙으로 읽기',
@@ -25,7 +24,7 @@ export const TEXT_ADD = Object.freeze({
   noNodes: '읽을 수 있는 문장이 없었습니다. 아래 「규칙으로 읽는 모양」에 맞게 써 보세요.',
   unreadTitle: (n) => `읽지 못한 문장 ${n}개`,
   unreadNote: '모양에 맞지 않거나 뜻이 애매해(부정·지난 일·예정·날짜·나열 등) 지어내지 않고 건너뛴 문장입니다.',
-  introNone: '몇 문장짜리 글(회의 메모·인수인계 메모)을 붙여 넣으면 사람·업무·산출물·조직을 찾아 미리 보여 줍니다. 처음에는 아무것도 체크되어 있지 않습니다 — 맞는 것을 체크하거나 「모두 체크」를 누르세요. 고친 뒤 「저장」을 눌러야 들어갑니다.',
+  introNone: '몇 문장짜리 글(회의 메모·인수인계 메모)을 붙여 넣으면 사람·업무·산출물·조직을 찾아 미리 보여 줍니다. 처음에는 아무것도 체크되어 있지 않습니다 — 맞는 것을 체크하거나 「지도에 있는 것만 체크」「모두 체크」를 누르세요. 고친 뒤 「저장」을 눌러야 들어갑니다.',
   checkExisting: '지도에 있는 것만 체크',
   onMap: (label) => `지도에 있음 — 「${label}」에 연결(체크하면 넣습니다)`,
   onMapEdge: '지도에 있는 두 항목 사이 — 체크하면 넣습니다',
@@ -41,7 +40,7 @@ export const TEXT_ADD = Object.freeze({
   close: '닫기',
   nothingToSave: '넣을 항목이 없습니다. 항목을 체크하세요.',
   emptyText: '글을 붙여 넣으세요.',
-  count: (nNew, nOld, nEdge) => `넣을 항목 ${nNew + nOld}개(새로 만듦 ${nNew}, 있는 항목에 연결 ${nOld})·연결 ${nEdge}개`,
+  count: (nNew, nOld, nEdge, nIdle = 0) => `넣을 항목 ${nNew + nOld}개(새로 만듦 ${nNew}, 있는 항목에 연결 ${nOld})·연결 ${nEdge}개${nIdle ? ` (연결이 없는 지도의 항목 ${nIdle}개는 바뀌는 것이 없습니다)` : ''}`,
   done: (n, m, skipped) => `항목 ${n}개·연결 ${m}개를 넣었습니다${skipped ? `(이미 있어 건너뛴 연결 ${skipped}개)` : ''}`,
 });
 
@@ -55,7 +54,7 @@ function errorText(error, kind, relation) {
 }
 
 /**
- * defaultCheck: 처음 체크 모드('existing-only' 기본 · 'none' · 'all', rules/text-extract.js TEXT_DEFAULT_CHECK)를 바꿔 쓸 때만 준다
+ * defaultCheck: 처음 체크 모드('none' 기본 · 'existing-only' · 'all', rules/text-extract.js TEXT_DEFAULT_CHECK)를 바꿔 쓸 때만 준다(시험용)
  * @param {{dialog:HTMLDialogElement, app:object, getView:()=>object, aiReady:()=>boolean, readAi:(text:string)=>(Promise<object|null>|null), onSaved:(result:object)=>void}} o
  *   readAi: Claude로 읽기(connector.extractTextAsync를 감싼 것). null을 돌려주면 키가 없는 것
  * @returns {()=>void} 대화상자를 여는 함수
@@ -182,30 +181,34 @@ export function textAddDialog(o) {
   }
 
   // ── 그리기 ───────────────────────────────────────────────────────────────
+  // 확인할 이유(hold) 뒤에 「확인한 뒤 체크하세요」를 붙이되, 이유가 이미 「확인」으로 끝나면 겹치지 않게 한다(R19-6)
+  const holdText = (h) => (/확인(?: 필요)?(?:\([^)]*\))?$/.test(h) ? h : `${h} — 확인한 뒤 체크하세요`);
+
   const nodeStatus = (n, f) => {
     if (f.problem) return { state: 'problem', text: f.problem === 'empty' ? '이름을 넣으세요' : '이름이 너무 깁니다(최대 100자)' };
     if (!f.include) {
       if (f.ambiguous) return { state: 'off', text: '같은 이름이 둘 이상 있습니다 — 체크하면 새 항목으로 만듭니다' };
-      if (n.hold && !f.match) return { state: 'hold', text: `넣지 않음 · ${n.hold} — 확인한 뒤 체크하세요` };
+      if (n.hold) return { state: 'hold', text: `넣지 않음 · ${holdText(n.hold)}` }; // R19-6: 지도에 있는 항목이어도 확인 이유를 먼저 보인다
       if (f.match) return { state: 'off-map', text: TEXT_ADD.onMap(f.match.label) }; // R19: 처음에는 아무것도 체크하지 않지만 지도에 있는 항목은 표시해 고르기 쉽게
       // R17: 새로 만드는 항목은 처음에 체크하지 않는다 — 이름이 맞는지 사람이 보고 체크
       return { state: 'new-off', text: f.type === 'person' ? TEXT_ADD.newPerson : TEXT_ADD.newItem };
     }
-    if (f.match) return { state: 'match', text: `있는 항목 「${f.match.label}」에 연결` };
+    if (f.match) return { state: 'match', text: `있는 항목 「${f.match.label}」에 연결${n.hold ? ` · ${n.hold}` : ''}` };
     if (f.ambiguous) return { state: 'new', text: '새로 만듦 · 같은 이름이 지도에 둘 이상 있습니다' };
     return { state: 'new', text: `새로 만듦${n.unsure && f.type === 'person' ? ' · 확인 필요(사람인지 확실하지 않음)' : ''}${n.hold ? ` · ${n.hold}` : ''}` };
   };
 
-  const edgeStatus = (f, a, b) => {
+  const edgeStatus = (f, a, b, e) => {
     if (f.reason === 'pair') return { state: 'pair', text: '이 두 항목의 유형에는 이 관계를 쓸 수 없습니다 — 관계를 다시 고르세요' };
-    if (f.exists && f.reason !== 'pair') return { state: 'exists', text: '이미 있음' }; // 이미 지도에 같은 연결이 있으면 끝 항목 체크와 관계없이 그 사실을 먼저 보인다
+    if (f.exists) return { state: 'exists', text: '이미 있음' }; // 이미 지도에 같은 연결이 있으면 끝 항목 체크와 관계없이 그 사실을 먼저 보인다
     if (f.reason === 'end_missing') {
       // R19: 두 끝이 모두 지도에 있으면 「지도에 있음」 표시 — 끝 항목을 체크하면 넣을 수 있다
-      if (a && b && a.match && b.match && !f.exists) return { state: 'end', text: '지도에 있는 두 항목 사이 — 끝 항목을 체크하면 넣을 수 있습니다' };
+      if (a && b && a.match && b.match) return { state: 'end', text: '지도에 있는 두 항목 사이 — 끝 항목을 체크하면 넣을 수 있습니다' };
       return { state: 'end', text: '끝 항목을 넣지 않아 넣을 수 없습니다' };
     }
     if (f.reason === 'same') return { state: 'same', text: '두 끝이 같은 항목이라 넣을 수 없습니다' };
-    if (f.exists) return { state: 'exists', text: '이미 있음' };
+    // R19-3: 연결 자체에 확인 사유가 있으면(예: Claude가 인용한 원문 문장에 부정·조건이 있음) 그 이유를 보인다
+    if (!f.wanted && e && typeof e.hold === 'string') return { state: 'hold', text: `넣지 않음 · ${holdText(e.hold)}` };
     if (!f.wanted) return a && b && a.match && b.match ? { state: 'off-map', text: TEXT_ADD.onMapEdge } : { state: 'off', text: '넣지 않음' };
     return { state: 'new', text: '새 연결' };
   };
@@ -245,7 +248,7 @@ export function textAddDialog(o) {
     const err = st.errors.get(e.key);
     const a = r.nodes[f.source];
     const b = r.nodes[f.target];
-    const status = edgeStatus(f, a, b);
+    const status = edgeStatus(f, a, b, e);
     const rels = allowedRelations(a.type, b.type);
     const known = rels.some((x) => x.relation === f.type);
     const locked = !!f.reason;
@@ -311,9 +314,12 @@ export function textAddDialog(o) {
     if (p && !busy) {
       const r = resolved();
       const inc = p.nodes.filter((n) => r.nodes[n.key].include && !r.nodes[n.key].problem);
-      const nOld = inc.filter((n) => r.nodes[n.key].match).length;
-      const nEdge = p.edges.filter((e) => r.edges[e.key].include).length;
-      countLine.textContent = TEXT_ADD.count(inc.length - nOld, nOld, nEdge);
+      const inEdges = p.edges.map((e) => r.edges[e.key]).filter((x) => x.include);
+      const linked = (n) => inEdges.some((x) => x.source === n.key || x.target === n.key);
+      const olds = inc.filter((n) => r.nodes[n.key].match);
+      // R19-7: 지도에 있는 항목은 체크한 연결이 닿을 때만 바뀌는 것이 있다(저장 명령이 없다) — 연결이 없는 것은 세지 않고 알린다
+      const nOld = olds.filter(linked).length;
+      countLine.textContent = TEXT_ADD.count(inc.length - olds.length, nOld, inEdges.length, olds.length - nOld);
     } else countLine.textContent = '';
     saveBtn.disabled = !p || busy || o.app.readOnly || st.stale;
     staleLine.textContent = p && !busy && st.stale ? TEXT_ADD.stale : '';
@@ -358,7 +364,7 @@ export function textAddDialog(o) {
       el('div', { class: 'import-head' },
         el('h2', { id: 'text-add-title' }, TEXT_ADD.title),
         el('button', { type: 'button', 'data-testid': 'text-add-close', onclick: () => { st.open = false; st.run += 1; o.dialog.close(); } }, TEXT_ADD.close)),
-      el('p', { class: 'muted small', 'data-testid': 'text-add-intro' }, (o.defaultCheck || TEXT_DEFAULT_CHECK) === 'none' ? TEXT_ADD.introNone : TEXT_ADD.intro),
+      el('p', { class: 'muted small', 'data-testid': 'text-add-intro' }, TEXT_ADD.introNone),
       el('label', { class: 'field' }, el('span', {}, TEXT_ADD.inputLabel), input),
       el('div', { class: 'row' }, readBtn, aiBtn, ai ? null : el('span', { class: 'muted small', 'data-testid': 'text-add-ai-note' }, TEXT_ADD.noKey)),
       busyLine,

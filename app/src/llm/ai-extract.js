@@ -12,7 +12,7 @@
 
 import { LABEL_MAX, normalizeEmpNo, normalizeLabel } from '../model/schema.js';
 import {
-  TEXT_LIMITS, TEXT_NODE_TYPES, TEXT_UNREAD_CONTEXT_NOTE, capNotes, createBuilder, empNoAfterName, finalizeProposal, nameInText, orientRelation, ownCandidates, splitSentences,
+  TEXT_LIMITS, TEXT_NODE_TYPES, TEXT_UNREAD_CONTEXT_NOTE, TEXT_WORDS, capNotes, classifySentences, createBuilder, empNoAfterName, finalizeProposal, knownNames, nameInText, orientRelation, ownCandidates, splitSentencesEnd,
 } from '../rules/text-extract.js';
 import { QUOTE_MAX, normalizeQuote } from './evidence-text.js';
 import { textFingerprint } from './ai-convert.js';
@@ -88,6 +88,28 @@ const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const oneLine = (s) => String(s).replace(/\s+/g, ' ').trim();
 const clip = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
+/** 인용 앞뒤에서 떼어도 되는 말(이음말·현재·요즘 …)을 떼고 남은 글자 */
+const trimAllowed = (str, words, atStart) => {
+  let r = str;
+  for (let again = true; again && r;) {
+    again = false;
+    for (const w of words) {
+      if (atStart ? r.startsWith(w) : r.endsWith(w)) { r = atStart ? r.slice(w.length) : r.slice(0, r.length - w.length); again = true; break; }
+    }
+  }
+  return r;
+};
+
+/** 인용(q, 공백을 뺀 정규형)이 문장(sn)의 전부가 아니고 앞뒤에 허용된 말 밖의 낱말이 남는가 */
+function quoteLeavesWords(sn, q) {
+  const i = sn.indexOf(q);
+  if (i < 0) return false; // 문장이 인용 안에 있는 경우(여러 문장에 걸친 인용)
+  const lead = [...TEXT_WORDS.leading.filter((w) => !TEXT_WORDS.contextWords.includes(w)), ...TEXT_WORDS.allowedWords].map(normalizeQuote).sort((x, y) => y.length - x.length);
+  const before = trimAllowed(sn.slice(0, i), lead, true);
+  const after = sn.slice(i + q.length).replace(/[^\p{L}\p{N}]/gu, '');
+  return /[\p{L}\p{N}]/u.test(before) || (after !== '' && !TEXT_WORDS.trailOk.test(after));
+}
+
 /**
  * 모델 응답에서 원문 인용이 확인된 행만 남겨 규칙 읽기와 같은 제안 모양으로 만든다.
  * 버림 단위는 행 하나. 같은 이름의 항목·같은 연결은 먼저 나온 것 하나로 합친다.
@@ -159,18 +181,37 @@ export function verifyAiExtract(text, parsed, view = null, opt = {}) {
   const counts = { nodes: b.nodes.length, edges: b.edges.length, dropped: dropped.length, merged };
   if (!b.nodes.length) return { ok: false, reason: 'empty', dropped, counts };
 
-  // 읽지 못한 문장: 남은 인용과 겹치지 않는 문장(인용이 문장 안에 있거나 문장이 인용 안에 있으면 읽은 것으로 본다)
+  // 읽지 못한 문장: 남은 인용과 겹치지 않는 문장(인용이 문장 안에 있거나 문장이 인용 안에 있으면 읽은 것으로 본다). 기호뿐인 줄(❌ ?)도 문장으로 센다(R19-1)
   const qn = quotes.map(normalizeQuote);
-  const unread = splitSentences(text).filter((s) => {
-    const sn = normalizeQuote(s);
-    return !qn.some((q) => q.includes(sn) || sn.includes(q));
-  });
+  const verdicts = classifySentences(splitSentencesEnd(text), knownNames(view)); // 규칙 읽기와 같은 문장 나누기·같은 문장 가드(R19-3)
+  const overlap = (v, q) => { const sn = normalizeQuote(v.text); return q.includes(sn) || sn.includes(q); };
+  const unreadV = verdicts.filter((v) => !qn.some((q) => overlap(v, q)));
+  const unread = unreadV.map((v) => v.text);
+  // R19-3: 연결의 인용이 든 문장 전체에 규칙과 같은 문장 가드(부정·시제·조건·전언·물음·표시 …)를 적용한다 — 걸리면 그 연결은 hold(처음 체크하지 않음).
+  // 인용이 문장의 일부일 뿐이고 나머지에 다른 낱말이 남으면(「…맡는다」 뒤의 「는 것은 사실이 아니다」) 읽지 못한 부분이 있는 것으로 친다(unreadContext)
+  let partialQuote = false;
+  let holdEdges = 0;
+  let ctxVeto = unreadV.some((v) => v.ctx);
+  for (const e of b.edges) {
+    const q = normalizeQuote(e.quote);
+    const hit = verdicts.filter((v) => overlap(v, q));
+    const bad = hit.find((v) => v.skip);
+    if (!hit.length) {
+      e.hold = '원문 문장을 찾지 못해 확인 필요'; // 인용이 문장 경계에 걸쳐 있다
+      partialQuote = true;
+    } else if (bad) e.hold = `원문 문장에 부정·조건 등이 있어 확인 필요(${bad.why})`;
+    if (hit.some((v) => v.ctx)) ctxVeto = true;
+    if (e.hold) holdEdges += 1;
+    else if (hit.length === 1 && quoteLeavesWords(normalizeQuote(hit[0].text), q)) partialQuote = true;
+  }
   const notes = [];
   if (dropped.length) notes.push(`Claude 응답 중 ${dropped.length}개 행은 원문 인용이 확인되지 않거나 규칙에 맞지 않아 뺐습니다`);
   notes.push(...capNotes(b.flags));
+  if (holdEdges) notes.push(`Claude가 읽은 연결 ${holdEdges}개는 인용이 든 원문 문장에 부정·조건 등이 있어 확인이 필요합니다(처음에는 체크하지 않음)`);
+  if (ctxVeto && b.edges.length) notes.push('글에 앞 내용을 뒤집는 문장이 있어 처음 체크를 모두 풀었습니다');
   // R19 ①: 읽지 못한 문장이 있는 글에서는 앞뒤 문장이 읽은 문장의 뜻을 바꿀 수 있다 — 안내하고 'existing-only'에서도 연결을 처음 체크하지 않는다
-  const unreadContext = unread.length > 0 && b.edges.length > 0;
+  const unreadContext = (unread.length > 0 || partialQuote) && b.edges.length > 0;
   if (unreadContext) notes.push(TEXT_UNREAD_CONTEXT_NOTE);
-  const proposal = finalizeProposal({ method: 'claude_api', ...(opt.model ? { model: opt.model } : {}), nodes: b.nodes, edges: b.edges, unread, partial: [], notes, unreadContext }, view);
+  const proposal = finalizeProposal({ method: 'claude_api', ...(opt.model ? { model: opt.model } : {}), nodes: b.nodes, edges: b.edges, unread, partial: [], notes, unreadContext, ctxVeto }, view);
   return { ok: true, proposal, dropped, counts };
 }

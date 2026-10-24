@@ -132,7 +132,7 @@ test("R18 'none' 모드 화면: intro 글이 바뀌고, 처음에는 아무것�
   const open = textAddDialog({ dialog, app, getView: () => app.view, aiReady: () => false, readAi: () => null, onSaved: () => {}, defaultCheck: 'none' });
   open();
   const q = (id) => dialog.querySelector(`[data-testid=${id}]`);
-  assert.equal(q('text-add-intro').textContent.includes('처음에는 아무것도 체크되어 있지 않습니다 — 맞는 것을 체크하거나 「모두 체크」'), true);
+  assert.equal(q('text-add-intro').textContent.includes('처음에는 아무것도 체크되어 있지 않습니다 — 맞는 것을 체크하거나 「지도에 있는 것만 체크」「모두 체크」'), true); // R20-8: introNone이 「지도에 있는 것만 체크」도 말한다
   q('text-add-input').value = '서하늘이 자료 수집을 맡는다. 한가람이 점검을 맡는다';
   q('text-add-read').click();
   const nodes = dialog.querySelectorAll('[data-testid^=text-add-node-check-]');
@@ -146,10 +146,10 @@ test("R18 'none' 모드 화면: intro 글이 바뀌고, 처음에는 아무것�
   q('text-add-save').click();
   assert.ok(app.doc.edges.length > before, '모두 체크 뒤 저장하면 들어간다');
   assert.ok(app.doc.nodes.some((n) => n.label === '점검'));
-  // 기본 모드의 intro는 기존 글
+  // R20-8: 쓰지 않던 intro(기존 글)를 없애, 시험용 모드를 줘도 안내 글은 하나(introNone)다
   const open2 = textAddDialog({ dialog, app, getView: () => app.view, aiReady: () => false, readAi: () => null, onSaved: () => {}, defaultCheck: 'existing-only' });
   open2();
-  assert.ok(q('text-add-intro').textContent.includes('지도에 이미 있는 항목만 처음에 체크되어 있고'));
+  assert.ok(q('text-add-intro').textContent.includes('「지도에 있는 것만 체크」'));
   // 모드를 주지 않으면 기본(none)
   const open3 = textAddDialog({ dialog, app, getView: () => app.view, aiReady: () => false, readAi: () => null, onSaved: () => {} });
   open3();

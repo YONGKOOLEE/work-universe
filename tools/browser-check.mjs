@@ -4231,7 +4231,7 @@ async function checkBrowser(browser, port) {
       await sleep(150);
       const crEx = await crPreview();
       const crExCount = await crBox('[data-testid=text-add-count]');
-      check('CR-19 R19 「지도에 있는 것만 체크」: 있는 항목 3개만 체크(새 항목 2개는 해제), 요약 「넣을 항목 3개(새로 만듦 0, 있는 항목에 연결 3)·연결 0개」', !!crExCount && crExCount.text === '넣을 항목 3개(새로 만듦 0, 있는 항목에 연결 3)·연결 0개' && crEx.nodeStatus[3] === '새로 만듦 — 이름이 맞으면 체크', JSON.stringify([crEx, crExCount]));
+      check('CR-19 R19 「지도에 있는 것만 체크」: 있는 항목 3개만 체크(새 항목 2개는 해제), 요약 「넣을 항목 0개(새로 만듦 0, 있는 항목에 연결 0)·연결 0개 (연결이 없는 지도의 항목 3개는 바뀌는 것이 없습니다)」(R20-7: 연결이 닿지 않는 지도의 항목은 세지 않고 알림)', !!crExCount && crExCount.text === '넣을 항목 0개(새로 만듦 0, 있는 항목에 연결 0)·연결 0개 (연결이 없는 지도의 항목 3개는 바뀌는 것이 없습니다)' && crEx.nodeStatus[3] === '새로 만듦 — 이름이 맞으면 체크', JSON.stringify([crEx, crExCount]));
       await clickTestId(s.cdp, 'text-add-check-all'); // 예전 흐름: 모두 체크 뒤에 아래 검사를 이어 간다
       await sleep(150);
       const crP = await crPreview();
@@ -4239,7 +4239,7 @@ async function checkBrowser(browser, port) {
         && crP.nodeStatus[0] === '있는 항목 「서하늘」에 연결' && crP.nodeStatus[1] === '있는 항목 「대사 확인」에 연결' && crP.nodeStatus[2] === '있는 항목 「보고」에 연결' && crP.nodeStatus[3] === '새로 만듦' && crP.nodeStatus[4].startsWith('새로 만듦 · 확인 필요')
         && crP.edgeStatus.join('|') === '이미 있음|이미 있음|새 연결|새 연결', JSON.stringify(crP));
       const crCount = await crBox('[data-testid=text-add-count]');
-      check('CR-19 미리 보기 아래 요약 한 줄 「넣을 항목 5개(새로 만듦 2, 있는 항목에 연결 3)·연결 2개」, 읽은 방식 「규칙으로 읽었습니다.」, 읽지 못한 문장 없음', !!crCount && crCount.text === '넣을 항목 5개(새로 만듦 2, 있는 항목에 연결 3)·연결 2개' && ((await crBox('[data-testid=text-add-method]')) || {}).text === '규칙으로 읽었습니다.' && (await crBox('[data-testid=text-add-unread]')) === null, JSON.stringify(crCount));
+      check('CR-19 미리 보기 아래 요약 한 줄 「넣을 항목 3개(새로 만듦 2, 있는 항목에 연결 1)·연결 2개 (연결이 없는 지도의 항목 2개는 바뀌는 것이 없습니다)」(R20-7), 읽은 방식 「규칙으로 읽었습니다.」, 읽지 못한 문장 없음', !!crCount && crCount.text === '넣을 항목 3개(새로 만듦 2, 있는 항목에 연결 1)·연결 2개 (연결이 없는 지도의 항목 2개는 바뀌는 것이 없습니다)' && ((await crBox('[data-testid=text-add-method]')) || {}).text === '규칙으로 읽었습니다.' && (await crBox('[data-testid=text-add-unread]')) === null, JSON.stringify(crCount));
       await shot(s.cdp, `${browser.name}-cr19-text-preview`);
       // 3) 관계 고르기는 두 항목 유형에 쓸 수 있는 것만
       const crRel = await evaluate(s.cdp, "[...document.querySelector('[data-testid=text-add-edge-type-2]').options].map((o) => o.value)");
@@ -4248,7 +4248,7 @@ async function checkBrowser(browser, port) {
       await clickTestId(s.cdp, 'text-add-node-check-4');
       await sleep(150);
       const crOff = await evaluate(s.cdp, "({ status: document.querySelector('[data-testid=text-add-node-status-4]').textContent, edge: document.querySelector('[data-testid=text-add-edge-status-3]').textContent, edgeDisabled: document.querySelector('[data-testid=text-add-edge-check-3]').disabled, count: document.querySelector('[data-testid=text-add-count]').textContent })");
-      check('CR-19 도하람 체크를 풀면 「새 사람 — 이름이 맞으면 체크」, 그 항목의 연결은 「끝 항목을 넣지 않아 넣을 수 없습니다」(체크 불가), 요약이 항목 4·연결 1로', crOff.status === '새 사람 — 이름이 맞으면 체크' && crOff.edge === '끝 항목을 넣지 않아 넣을 수 없습니다' && crOff.edgeDisabled && crOff.count === '넣을 항목 4개(새로 만듦 1, 있는 항목에 연결 3)·연결 1개', JSON.stringify(crOff));
+      check('CR-19 도하람 체크를 풀면 「새 사람 — 이름이 맞으면 체크」, 그 항목의 연결은 「끝 항목을 넣지 않아 넣을 수 없습니다」(체크 불가), 요약이 항목 2·연결 1로(연결이 없는 지도의 항목 2개는 따로 알림, R20-7)', crOff.status === '새 사람 — 이름이 맞으면 체크' && crOff.edge === '끝 항목을 넣지 않아 넣을 수 없습니다' && crOff.edgeDisabled && crOff.count === '넣을 항목 2개(새로 만듦 1, 있는 항목에 연결 1)·연결 1개 (연결이 없는 지도의 항목 2개는 바뀌는 것이 없습니다)' /* R20-7 */, JSON.stringify(crOff));
       // 5) 이름을 비운 행은 저장이 막힌다(아무것도 저장하지 않고 그 행에 이유)
       await crSet('text-add-node-label-3', '');
       await clickTestId(s.cdp, 'text-add-save');

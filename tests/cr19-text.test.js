@@ -637,7 +637,8 @@ test('CR-19 화면: 키가 없으면 「Claude로 읽기」 단추 대신 안내
     '있는 항목 「서하늘」에 연결', '있는 항목 「대사 확인」에 연결', '있는 항목 「보고」에 연결', '새로 만듦 — 이름이 맞으면 체크', '새 사람 — 이름이 맞으면 체크',
   ]);
   assert.deepEqual([0, 1, 2, 3].map((j) => d.q(`text-add-edge-status-${j}`).textContent), ['이미 있음', '이미 있음', '끝 항목을 넣지 않아 넣을 수 없습니다', '끝 항목을 넣지 않아 넣을 수 없습니다']);
-  assert.equal(d.q('text-add-count').textContent, '넣을 항목 3개(새로 만듦 0, 있는 항목에 연결 3)·연결 0개');
+  // R20-7: 연결이 닿지 않는 지도의 항목은 저장해도 바뀌는 것이 없으니 세지 않고 알린다(예전: 넣을 항목 3개(…있는 항목에 연결 3)·연결 0개)
+  assert.equal(d.q('text-add-count').textContent, '넣을 항목 0개(새로 만듦 0, 있는 항목에 연결 0)·연결 0개 (연결이 없는 지도의 항목 3개는 바뀌는 것이 없습니다)');
   // 「모두 해제」→「모두 체크」: 모두 체크는 예전 기본 선택(이미 있는 연결은 제외)으로 돌아간다
   d.q('text-add-uncheck-all').click();
   assert.equal(d.q('text-add-count').textContent, '넣을 항목 0개(새로 만듦 0, 있는 항목에 연결 0)·연결 0개');
@@ -648,7 +649,8 @@ test('CR-19 화면: 키가 없으면 「Claude로 읽기」 단추 대신 안내
   assert.deepEqual([0, 1, 2, 3].map((j) => d.q(`text-add-edge-status-${j}`).textContent), ['이미 있음', '이미 있음', '새 연결', '새 연결']);
   assert.ok(!d.q('text-add-edge-check-0').checked, '이미 있는 연결은 체크하지 않는다');
   assert.equal(d.q('text-add-edge-check-2').checked, true);
-  assert.equal(d.q('text-add-count').textContent, '넣을 항목 5개(새로 만듦 2, 있는 항목에 연결 3)·연결 2개');
+  // R20-7: 서하늘·대사 확인은 이미 있는 연결뿐이라 저장해도 바뀌는 것이 없다 — 세지 않고 알린다(예전: 넣을 항목 5개(새로 만듦 2, 있는 항목에 연결 3)·연결 2개)
+  assert.equal(d.q('text-add-count').textContent, '넣을 항목 3개(새로 만듦 2, 있는 항목에 연결 1)·연결 2개 (연결이 없는 지도의 항목 2개는 바뀌는 것이 없습니다)');
   assert.equal(d.q('text-add-method').textContent, '규칙으로 읽었습니다.');
   assert.ok(d.q('text-add-node-quote-0').textContent.includes('서하늘(V-1003)이 대사 확인을 맡는다'));
   assert.equal(d.q('text-add-unread'), null, '읽지 못한 문장이 없으면 목록을 그리지 않는다');
