@@ -330,7 +330,7 @@ test('CR-17 E: 받는 사람이 맡을 업무도 담당 공백도 없으면 이�
     [mkEdge('N-000', 'W1', 'contains'), mkEdge('P1', 'W1', 'performs', { period: { start: '2026-01-01' } })]));
   const input = { target: 'U-E2/W1', from: 'U-E2/P2', to: 'U-E2/P3' };
   const none = rangeItem(buildHandoverDraft(covered, { ...input, asOf: ASOF_E }).draft);
-  assert.deepEqual([none.insufficient, none.sentences.length, none.empty_reason], [true, 0, '받는 사람이 맡을 업무와 담당 공백이 없습니다']);
+  assert.deepEqual([none.insufficient, none.sentences.length, none.empty_reason], [true, 0, '받는 사람이 이 범위에서 지금 맡은 업무는 아직 없고, 범위 안 업무는 모두 지금 담당이 있습니다']);
   // 기준일 없음 → 「지금」을 정할 수 없어 판정하지 않는다
   const noAsOf = rangeItem(buildHandoverDraft(covered, input).draft);
   assert.deepEqual([noAsOf.insufficient, noAsOf.sentences.length, noAsOf.empty_reason], [true, 0, undefined]);

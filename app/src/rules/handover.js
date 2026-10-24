@@ -142,7 +142,7 @@ function flowOrder(view, works, workIds) {
 }
 
 /** 받는 범위 항목이 비었을 때(판정은 했는데 해당 업무·공백이 없음) 보이는 이유 */
-export const RANGE_NONE_REASON = '받는 사람이 맡을 업무와 담당 공백이 없습니다';
+export const RANGE_NONE_REASON = '받는 사람이 이 범위에서 지금 맡은 업무는 아직 없고, 범위 안 업무는 모두 지금 담당이 있습니다'; // 재검증 R14-1: 넘겨받기 전의 흔한 경우를 사실대로
 
 const sentence = (text, evidence) => ({ text, evidence_ids: [...new Set(evidence)] });
 const name = (view, gid) => {

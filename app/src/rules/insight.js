@@ -152,7 +152,8 @@ export function similarExperts(view, { works, asOf, exclude = [] }) {
     const sharedTypes = [...cp.artifactTypes.keys()].filter((k) => basisTypes.has(k));
     const sharedTokens = [...cp.tokens].filter((t) => basisTokens.has(t));
     const nameOnly = sharedTopics.length === 0 && sharedTypes.length === 0;
-    if (nameOnly && sharedTokens.length === 0) continue;
+    // 재검증 R14-3: 이름 낱말만 같은 후보는 숫자·날짜 꼴 낱말(「2025」「1월」「3분기」)만 같으면 넣지 않는다(merge의 tokensOf는 그대로)
+    if (nameOnly && !sharedTokens.some((t) => !/^\d+(년|월|일|분기|차|회|주)?$/.test(t))) continue;
     const score = WEIGHTS.topic * sharedTopics.length + WEIGHTS.artifactType * sharedTypes.length + WEIGHTS.token * sharedTokens.length;
 
     // 공유한 이유와 근거 ID. 이름만 같은 주제(유니버스가 달라 연결 확인 전)는 그렇다고 밝힌다

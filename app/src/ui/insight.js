@@ -93,6 +93,13 @@ export function insightPanel(o) {
     if (keylessNote) keylessNote.textContent = [...body.querySelectorAll('[data-testid=insight-explain]')].some((b) => b.dataset.method === 'pregen') ? KEYLESS_PREGEN_REASON : KEYLESS_REASON;
   }
   draw();
+  // 재검증 R14-2: 탭 안에서(예: 유사 경험자의 업무 고르기) 설명 상자가 다시 그려질 때도 안내를 실제 방식에 맞춘다
+  if (keylessNote && typeof MutationObserver === 'function') {
+    new MutationObserver(() => {
+      const t = [...body.querySelectorAll('[data-testid=insight-explain]')].some((b) => b.dataset.method === 'pregen') ? KEYLESS_PREGEN_REASON : KEYLESS_REASON;
+      if (keylessNote.textContent !== t) keylessNote.textContent = t;
+    }).observe(body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-method'] });
+  }
 
   return el('div', { class: 'insight' },
     el('h2', {}, '인사이트'),

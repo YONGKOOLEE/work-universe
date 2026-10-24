@@ -85,3 +85,22 @@ test('E 항목 표: 「받는 범위와 담당 공백」은 「업무 개요」 
   assert.equal(HANDOVER_ITEMS.length, 11);
   assert.match(FILL_HINTS.받는_범위, /수행/);
 });
+
+// 재검증 R14-3: 이름 낱말만 같은 후보에서 숫자·날짜 꼴 낱말(「2025」「1월」)은 세지 않는다
+test('R14-3: 「2025 결산」과 「2025 행사」처럼 숫자 낱말만 같으면 유사 경험자 후보가 아니다, 「연말 정산」↔「월말 정산」은 「정산」으로 후보', async () => {
+  const { mkNode, mkEdge, mkDoc } = await import('./helpers.js');
+  const { buildView } = await import('../app/src/view/view.js');
+  const doc = mkDoc('U-X', [
+    mkNode('N-000', 'root', '가상 시험'),
+    mkNode('N-001', 'work', '2025 결산'), mkNode('N-002', 'work', '2025 행사'), mkNode('N-003', 'work', '연말 정산'), mkNode('N-004', 'work', '월말 정산'),
+    mkNode('N-011', 'person', '가상갑'), mkNode('N-012', 'person', '가상을'),
+  ], [
+    mkEdge('N-011', 'N-002', 'performs', { period: { start: '2025-01-01', end: '2025-12-31' } }),
+    mkEdge('N-012', 'N-004', 'performs', { period: { start: '2025-01-01', end: '2025-12-31' } }),
+  ]);
+  const v = buildView(doc, () => null);
+  const a = similarExperts(v, { works: ['U-X/N-001'], asOf: '2026-10-24' });
+  assert.ok(!a.people.some((p) => p.label === '가상갑'), JSON.stringify(a.people.map((p) => p.label)));
+  const b = similarExperts(v, { works: ['U-X/N-003'], asOf: '2026-10-24' });
+  assert.ok(b.people.some((p) => p.label === '가상을' && p.works.some((w) => w.name_only)), JSON.stringify(b.people));
+});
