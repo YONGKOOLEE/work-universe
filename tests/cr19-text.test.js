@@ -37,6 +37,12 @@ const byLabel = (p, label) => p.nodes.find((n) => n.label === label);
 const edgeOf = (p, type) => p.edges.filter((e) => e.type === type);
 const pair = (p, e) => [p.nodes.find((n) => n.key === e.from).label, p.nodes.find((n) => n.key === e.to).label];
 const emptyDoc = () => mkDoc('U-NEW', [], []);
+// R17: 「모두 체크」(defaultSelection(p, 'all')) 위에 사용자가 고친 값을 얹은 선택 — 예전 기본 선택과 같다
+const withAll = (p, patch = {}) => {
+  const d = defaultSelection(p, 'all');
+  for (const k of ['nodes', 'edges']) for (const [key, v] of Object.entries(patch[k] || {})) d[k][key] = { ...d[k][key], ...v };
+  return d;
+};
 
 // ── 규칙 읽기: 읽는 모양 ──
 
@@ -270,7 +276,7 @@ test('CR-19 같은 이름이 둘 이상이면 match 없이 notes로 안내하고
   assert.equal(byLabel(p, '도하람').ambiguous, true);
   assert.equal(byLabel(p, '점검').match, 'U-DUP/N-003');
   assert.match(p.notes[0], /도하람.*같은 이름의 항목이 둘 이상/);
-  const sel = defaultSelection(p);
+  const sel = defaultSelection(p, 'all');
   assert.equal(sel.nodes.n1.include, false);
   // 그 항목을 쓰는 연결은 끝 항목이 빠져 넣을 수 없다
   const r = resolveSelection(p, sel, [{ id: 'N-001', core_type: 'person', label: '도하람', emp_no: '' }, { id: 'N-002', core_type: 'person', label: '도하람', emp_no: '' }, { id: 'N-003', core_type: 'work', label: '점검', emp_no: '' }]);
@@ -304,11 +310,34 @@ test('CR-19 PAIR_RULES: 방향이 반대로만 맞으면 뒤집고, 안 맞으�
 });
 
 // ── 선택 → 명령 → 저장 ──
+// R17: 처음 체크는 「지도에 이미 있는 항목과 두 끝이 모두 지도에 있는 연결」뿐(TEXT_DEFAULT_CHECK 'existing-only')으로 바뀌었다.
+// 아래 저장 시험들은 예전 흐름(사람이 「모두 체크」를 누른 뒤 저장 = defaultSelection(p, 'all'))을 그대로 확인하고, 기본 선택은 바로 다음 시험이 따로 확인한다.
+
+test('R17 기본 선택: 새로 만드는 항목과 새 항목이 한쪽 끝인 연결은 처음에 체크하지 않는다(지도에 이미 있는 것만) — 그대로 저장하면 아무것도 새로 만들지 않는다', () => {
+  const doc = clone(SAMPLES.find((d) => d.universe.id === 'U-A1'));
+  const p = extractFromText(EXAMPLE, buildView(doc));
+  const sel = defaultSelection(p);
+  assert.deepEqual(p.nodes.map((n) => [n.label, sel.nodes[n.key].include]), [['서하늘', true], ['대사 확인', true], ['보고', true], ['월말 정산 보고서', false], ['도하람', false]]);
+  // 수행·선후행은 이미 있어 체크 안 함, 산출·참조는 새 항목이 끝이라 체크 안 함
+  assert.deepEqual(p.edges.map((e) => [e.type, sel.edges[e.key].include]), [['performs', false], ['precedes', false], ['produces', false], ['references', false]]);
+  assert.deepEqual(proposalToOps(p, sel, doc), []);
+  // 모두 체크 = 예전 기본(이미 있는 연결은 제외)
+  const all = defaultSelection(p, 'all');
+  assert.deepEqual(p.nodes.map((n) => all.nodes[n.key].include), [true, true, true, true, true]);
+  assert.deepEqual(p.edges.map((e) => all.edges[e.key].include), [false, false, true, true]);
+  // 새 항목 하나만 체크하면 그 항목과 (끝이 모두 들어가는) 연결을 쓸 수 있다
+  const one = proposalToOps(p, { nodes: { n4: { include: true } }, edges: { e3: { include: true } } }, doc);
+  assert.deepEqual(one.map((o) => [o.op, o.key]), [['addNode', 'n4'], ['addEdge', 'e3']]);
+  // AI 읽기 제안도 같은 규칙: match 없는 항목은 체크 해제
+  const ai = verifyAiExtract(EXAMPLE, { nodes: [{ type: 'person', label: '서하늘', emp_no: 'V-1003', quote: '서하늘(V-1003)이 대사 확인을 맡는다' }, { type: 'person', label: '도하람', emp_no: '', quote: '감사팀 도하람에게 결과를 공유한다' }], edges: [] }, buildView(doc));
+  const aiSel = defaultSelection(ai.proposal);
+  assert.deepEqual(ai.proposal.nodes.map((n) => aiSel.nodes[n.key].include), [true, false]);
+});
 
 test('CR-19 proposalToOps: 예시 글을 월말 정산 점검(U-A1)에 넣으면 새 항목 2개·연결 2개만 늘고, 기록 시각이 하나이며 문서가 검증을 통과한다', () => {
   const doc = clone(SAMPLES.find((d) => d.universe.id === 'U-A1'));
   const p = extractFromText(EXAMPLE, buildView(doc));
-  const ops = proposalToOps(p, defaultSelection(p), doc);
+  const ops = proposalToOps(p, defaultSelection(p, 'all'), doc);
   assert.deepEqual(ops.map((o) => [o.op, o.key]), [['addNode', 'n4'], ['addNode', 'n5'], ['addEdge', 'e3'], ['addEdge', 'e4']]);
   assert.deepEqual(ops[2].input, { source: 'N-003', target: '@1', core_type: 'produces' });
   assert.deepEqual(ops[3].input, { source: 'N-003', target: '@2', core_type: 'references' });
@@ -327,7 +356,7 @@ test('CR-19 proposalToOps: 예시 글을 월말 정산 점검(U-A1)에 넣으면
 test('CR-19 이미 있는 연결을 체크해도 오류 없이 건너뛴다(수행은 담당 중이면 건너뜀, 나머지는 skipDup)', () => {
   const doc = clone(SAMPLES.find((d) => d.universe.id === 'U-A1'));
   const p = extractFromText(EXAMPLE, buildView(doc));
-  const sel = defaultSelection(p);
+  const sel = defaultSelection(p, 'all');
   sel.edges.e1.include = true;
   sel.edges.e2.include = true;
   const ops = proposalToOps(p, sel, doc);
@@ -342,7 +371,7 @@ test('CR-19 이미 있는 연결을 체크해도 오류 없이 건너뛴다(수�
 test('CR-19 빈 지도에 넣으면 항목 5개 + 새 업무는 지도 중심에 포함 연결 + 수행은 담당 시작 이력, 문서가 검증을 통과한다', () => {
   const doc = emptyDoc();
   const p = extractFromText(EXAMPLE, buildView(doc));
-  const ops = proposalToOps(p, defaultSelection(p), doc);
+  const ops = proposalToOps(p, defaultSelection(p, 'all'), doc);
   assert.equal(ops.filter((o) => o.op === 'addNode').length, 5);
   assert.equal(ops.find((o) => o.key === 'e1').op, 'assign');
   assert.deepEqual(ops.filter((o) => o.attachRoot).map((o) => o.input.label), ['대사 확인', '보고']);
@@ -355,14 +384,14 @@ test('CR-19 빈 지도에 넣으면 항목 5개 + 새 업무는 지도 중심에
   assert.equal(r.doc.events.filter((e) => e.type === 'assign_start').length, 1);
   assert.deepEqual(validateDocument(r.doc).errors.filter((e) => e.path !== 'universe.owner'), []);
   // 지도 중심에 잇지 않으면 포함 연결이 없다
-  const none = proposalToOps(p, defaultSelection(p), doc, { attachRoot: false });
+  const none = proposalToOps(p, defaultSelection(p, 'all'), doc, { attachRoot: false });
   assert.equal(none.filter((o) => o.attachRoot).length, 0);
 });
 
 test('CR-19 일부만 체크하면 그만큼만: 항목을 빼면 그 항목을 쓰는 연결도 들어가지 않는다', () => {
   const doc = emptyDoc();
   const p = extractFromText(EXAMPLE, buildView(doc));
-  const sel = defaultSelection(p);
+  const sel = defaultSelection(p, 'all');
   sel.nodes.n5.include = false; // 도하람
   sel.edges.e2.include = false; // 선후행
   const ops = proposalToOps(p, sel, doc);
@@ -378,15 +407,15 @@ test('CR-19 유형·이름을 고치면 다시 계산한다: 유형을 바꾸면
   const doc = clone(SAMPLES.find((d) => d.universe.id === 'U-A1'));
   const p = extractFromText(EXAMPLE, buildView(doc));
   // 월말 정산 보고서를 사람으로 → 산출 연결(업무 → 산출물)은 유형 조합이 안 맞는다
-  const asPerson = resolveSelection(p, { nodes: { n4: { type: 'person' } } }, doc.nodes.map((n) => ({ id: n.id, core_type: n.core_type, label: n.label, emp_no: n.emp_no || '' })), doc.edges);
+  const asPerson = resolveSelection(p, withAll(p, { nodes: { n4: { type: 'person' } } }), doc.nodes.map((n) => ({ id: n.id, core_type: n.core_type, label: n.label, emp_no: n.emp_no || '' })), doc.edges);
   assert.equal(asPerson.edges.e3.reason, 'pair');
   assert.equal(asPerson.edges.e3.include, false);
   assert.ok(allowedRelations('work', 'person').some((x) => x.relation === 'references'), '참조는 업무와 사람 사이에 쓸 수 있다');
   // 관계를 참조로 고르면 들어간다
-  const asRef = proposalToOps(p, { nodes: { n4: { type: 'person' } }, edges: { e3: { type: 'references', include: true } } }, doc);
+  const asRef = proposalToOps(p, withAll(p, { nodes: { n4: { type: 'person' } }, edges: { e3: { type: 'references', include: true } } }), doc);
   assert.ok(asRef.some((o) => o.key === 'e3' && o.input.core_type === 'references'));
   // 이름을 지도의 「점검표 양식」으로 고치면 새로 만들지 않고 그 항목(N-021)에 잇는다
-  const renamed = proposalToOps(p, { nodes: { n4: { label: '점검표 양식' } } }, doc);
+  const renamed = proposalToOps(p, withAll(p, { nodes: { n4: { label: '점검표 양식' } } }), doc);
   assert.equal(renamed.filter((o) => o.op === 'addNode').length, 1, '도하람만 새로 만든다');
   assert.deepEqual(renamed.find((o) => o.key === 'e3').input, { source: 'N-003', target: 'N-021', core_type: 'produces' });
   const r = applyBatch(doc, renamed, { now: NOW });
@@ -397,7 +426,7 @@ test('CR-19 유형·이름을 고치면 다시 계산한다: 유형을 바꾸면
 test('CR-19 이름이 빈 항목은 저장이 막힌다: 그 행 오류만 보고하고 아무것도 저장하지 않는다', () => {
   const doc = emptyDoc();
   const p = extractFromText(EXAMPLE, buildView(doc));
-  const ops = proposalToOps(p, { nodes: { n3: { label: '   ' } }, edges: {} }, doc);
+  const ops = proposalToOps(p, withAll(p, { nodes: { n3: { label: '   ' } } }), doc);
   assert.equal(ops.find((o) => o.key === 'n3').op, 'invalid');
   const r = applyBatch(doc, ops, { now: NOW });
   assert.equal(r.ok, false);
@@ -408,7 +437,7 @@ test('CR-19 이름이 빈 항목은 저장이 막힌다: 그 행 오류만 보�
 test('CR-19 같은 이름을 둘 다 새로 만들려 하면 두 번째 행이 E-DUP(전부 아니면 전무)', () => {
   const doc = emptyDoc();
   const p = extractFromText('윤바다가 자료 수집을 맡는다. 한가람이 대사 확인을 맡는다', buildView(doc));
-  const ops = proposalToOps(p, { nodes: { n4: { label: '자료 수집' } }, edges: {} }, doc);
+  const ops = proposalToOps(p, withAll(p, { nodes: { n4: { label: '자료 수집' } } }), doc);
   const r = applyBatch(doc, ops, { now: NOW });
   assert.equal(r.ok, false);
   assert.equal(r.errors[0].error.code, 'E-DUP');
@@ -417,7 +446,7 @@ test('CR-19 같은 이름을 둘 다 새로 만들려 하면 두 번째 행이 E
 test('CR-19 저장 형식은 바뀌지 않는다: 새 이벤트 종류·필드가 없다', () => {
   const doc = emptyDoc();
   const p = extractFromText(EXAMPLE, buildView(doc));
-  const r = applyBatch(doc, proposalToOps(p, defaultSelection(p), doc), { now: NOW });
+  const r = applyBatch(doc, proposalToOps(p, defaultSelection(p, 'all'), doc), { now: NOW });
   assert.ok(r.doc.events.every((e) => ['created', 'assign_start'].includes(e.type)));
   const allowed = new Set(['id', 'core_type', 'label', 'emp_no', 'hidden', 'created_at', 'updated_at']);
   assert.ok(r.doc.nodes.slice(1).every((n) => Object.keys(n).every((k) => allowed.has(k))), JSON.stringify(r.doc.nodes[1]));
@@ -589,6 +618,17 @@ test('CR-19 화면: 키가 없으면 「Claude로 읽기」 단추 대신 안내
   d.q('text-add-read').click();
   assert.equal(rows(d, 'text-add-node').length, 5);
   assert.equal(rows(d, 'text-add-edge').length, 4);
+  // R17: 처음에는 지도에 이미 있는 항목만 체크 — 새로 만드는 항목은 「이름이 맞으면 체크」, 새 항목이 끝인 연결은 넣을 수 없음으로 보인다
+  assert.deepEqual([0, 1, 2, 3, 4].map((i) => !!d.q(`text-add-node-check-${i}`).checked), [true, true, true, false, false]);
+  assert.deepEqual([0, 1, 2, 3, 4].map((i) => d.q(`text-add-node-status-${i}`).textContent), [
+    '있는 항목 「서하늘」에 연결', '있는 항목 「대사 확인」에 연결', '있는 항목 「보고」에 연결', '새로 만듦 — 이름이 맞으면 체크', '새 사람 — 이름이 맞으면 체크',
+  ]);
+  assert.deepEqual([0, 1, 2, 3].map((j) => d.q(`text-add-edge-status-${j}`).textContent), ['이미 있음', '이미 있음', '끝 항목을 넣지 않아 넣을 수 없습니다', '끝 항목을 넣지 않아 넣을 수 없습니다']);
+  assert.equal(d.q('text-add-count').textContent, '넣을 항목 3개(새로 만듦 0, 있는 항목에 연결 3)·연결 0개');
+  // 「모두 해제」→「모두 체크」: 모두 체크는 예전 기본 선택(이미 있는 연결은 제외)으로 돌아간다
+  d.q('text-add-uncheck-all').click();
+  assert.equal(d.q('text-add-count').textContent, '넣을 항목 0개(새로 만듦 0, 있는 항목에 연결 0)·연결 0개');
+  d.q('text-add-check-all').click();
   assert.deepEqual([0, 1, 2, 3, 4].map((i) => d.q(`text-add-node-status-${i}`).textContent), [
     '있는 항목 「서하늘」에 연결', '있는 항목 「대사 확인」에 연결', '있는 항목 「보고」에 연결', '새로 만듦', '새로 만듦 · 확인 필요(사람인지 확실하지 않음)',
   ]);
@@ -608,8 +648,9 @@ test('CR-19 화면: 읽기 → 항목 하나 체크 풀기 → 저장 → 그만
   const d = openDialog({ app });
   d.q('text-add-input').value = EXAMPLE;
   d.q('text-add-read').click();
+  d.q('text-add-check-all').click(); // R17: 처음에는 지도에 있는 항목만 체크 — 예전 흐름은 「모두 체크」 뒤에 한다
   d.check('text-add-node-check-4', false); // 도하람
-  assert.equal(d.q('text-add-node-status-4').textContent, '넣지 않음');
+  assert.equal(d.q('text-add-node-status-4').textContent, '새 사람 — 이름이 맞으면 체크', 'R17: 체크를 푼 새 사람은 「넣지 않음」 대신 이름을 확인하라는 글');
   assert.equal(d.q('text-add-edge-status-3').textContent, '끝 항목을 넣지 않아 넣을 수 없습니다');
   assert.equal(d.q('text-add-edge-check-3').disabled, true);
   d.q('text-add-save').click();
@@ -633,6 +674,7 @@ test('CR-19 화면: 이름을 비우고 저장하면 막히고(아무것도 저�
   const d = openDialog({ app });
   d.q('text-add-input').value = EXAMPLE;
   d.q('text-add-read').click();
+  d.q('text-add-check-all').click(); // R17
   d.type('text-add-node-label-3', '');
   assert.equal(d.q('text-add-node-status-3').textContent, '이름을 넣으세요');
   d.q('text-add-save').click();
@@ -650,6 +692,7 @@ test('CR-19 화면: 유형을 바꾸면 그 행의 연결 관계 목록을 다�
   const d = openDialog();
   d.q('text-add-input').value = EXAMPLE;
   d.q('text-add-read').click();
+  d.q('text-add-check-all').click(); // R17
   const optionsOf = (id) => d.q(id).options.map((o) => o.value);
   assert.deepEqual(optionsOf('text-add-edge-type-2'), ['contains', 'produces', 'relates_to', 'references'].filter((r) => allowedRelations('work', 'artifact').some((x) => x.relation === r)));
   assert.equal(d.q('text-add-edge-type-2').value, 'produces');
@@ -708,6 +751,23 @@ test('CR-19 화면(R16): 이름만 읽은 문장은 「(일부만 읽음)」, �
   d.q('text-add-read').click(); // 다시 읽으면 풀린다
   assert.equal(d.q('text-add-save').disabled, false);
   assert.equal(d.q('text-add-stale').hidden, true);
+}));
+
+test('R17 화면: 「모두 체크」·「모두 해제」 단추 — 모두 체크해도 확인할 것(hold) 항목은 체크하지 않고, 읽기 전에는 단추가 없다', withDom(() => {
+  const d = openDialog();
+  assert.equal(d.q('text-add-check-all'), null);
+  d.q('text-add-input').value = '가람솔(V-1003)이 월말 점검을 맡는다. 하늬별이 연말 점검을 맡는다';
+  d.q('text-add-read').click();
+  const idx = (label) => [0, 1, 2, 3].find((i) => d.q(`text-add-node-label-${i}`) && d.q(`text-add-node-label-${i}`).value === label);
+  const checked = () => [0, 1, 2, 3].map((i) => !!d.q(`text-add-node-check-${i}`).checked);
+  assert.deepEqual(checked(), [false, false, false, false], '지도에 없는 이름은 모두 처음에 체크하지 않는다(사번이 글에 있는 사람도)');
+  d.q('text-add-check-all').click();
+  assert.ok(!d.q(`text-add-node-check-${idx('가람솔')}`).checked, '사번 충돌 항목은 모두 체크해도 체크하지 않는다');
+  assert.equal(d.q(`text-add-node-check-${idx('하늬별')}`).checked, true);
+  assert.equal(d.q(`text-add-node-status-${idx('하늬별')}`).textContent, '새로 만듦 · 확인 필요(사람인지 확실하지 않음)');
+  d.q('text-add-uncheck-all').click();
+  assert.deepEqual(checked(), [false, false, false, false]);
+  assert.equal(d.q(`text-add-node-status-${idx('월말 점검')}`).textContent, '새로 만듦 — 이름이 맞으면 체크');
 }));
 
 test('CR-19 화면: 읽기 전용이면 열리지 않고, 저장도 하지 않는다', withDom(() => {
@@ -770,6 +830,9 @@ test('CR-19 화면: 저장된 Claude 읽기 결과도 같은 묶음 저장을 �
   await new Promise((r) => setTimeout(r, 20));
   assert.equal(rows(d, 'text-add-node').length, 5);
   assert.equal(d.q('text-add-note'), null, 'ok 응답은 뺀 행이 없다');
+  d.q('text-add-save').click();
+  assert.equal(d.q('text-add-message').textContent, '넣을 항목이 없습니다. 항목을 체크하세요.', 'R17: Claude 읽기도 처음에는 지도에 이미 있는 항목만 체크 — 새로 만드는 항목이 없으면 저장할 것이 없다');
+  d.q('text-add-check-all').click();
   d.q('text-add-save').click();
   assert.equal(d.q('text-add-done').textContent, '항목 2개·연결 2개를 넣었습니다');
   assert.ok(app.doc.nodes.some((n) => n.label === '도하람'));

@@ -4212,8 +4212,20 @@ async function checkBrowser(browser, port) {
       await crSet('text-add-input', CR_TEXT);
       await clickTestId(s.cdp, 'text-add-read');
       await sleep(200);
+      // R17: 처음에는 지도에 이미 있는 항목만 체크 — 새로 만드는 항목(도하람 포함)은 체크 해제 + 「이름이 맞으면 체크」, 새 항목이 끝인 연결은 넣을 수 없음, 개수는 3개·연결 0개
+      const crD0 = await crPreview();
+      const crD0Count = await crBox('[data-testid=text-add-count]');
+      const crD0Checks = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid^=text-add-node-check-]')].map((e) => e.checked)");
+      check('CR-19 R17 처음 선택: 있는 항목 3개만 체크, 새 항목은 「새로 만듦 — 이름이 맞으면 체크」·「새 사람 — 이름이 맞으면 체크」, 새 항목이 끝인 연결 2개는 넣을 수 없음, 요약 「넣을 항목 3개(새로 만듦 0, 있는 항목에 연결 3)·연결 0개」', crD0.nodes === 5 && crD0.edges === 4 && JSON.stringify(crD0Checks) === '[true,true,true,false,false]'
+        && crD0.nodeStatus[3] === '새로 만듦 — 이름이 맞으면 체크' && crD0.nodeStatus[4] === '새 사람 — 이름이 맞으면 체크'
+        && crD0.edgeStatus.join('|') === '이미 있음|이미 있음|끝 항목을 넣지 않아 넣을 수 없습니다|끝 항목을 넣지 않아 넣을 수 없습니다'
+        && !!crD0Count && crD0Count.text === '넣을 항목 3개(새로 만듦 0, 있는 항목에 연결 3)·연결 0개', JSON.stringify([crD0, crD0Checks, crD0Count]));
+      const crAllBtns = await evaluate(s.cdp, "({ all: !!document.querySelector('[data-testid=text-add-check-all]'), none: !!document.querySelector('[data-testid=text-add-uncheck-all]') })");
+      check('CR-19 R17 미리 보기 위에 「모두 체크」·「모두 해제」 단추', crAllBtns.all && crAllBtns.none && ((await crBox('[data-testid=text-add-check-all]')) || {}).text === '모두 체크' && ((await crBox('[data-testid=text-add-uncheck-all]')) || {}).text === '모두 해제', JSON.stringify(crAllBtns));
+      await clickTestId(s.cdp, 'text-add-check-all'); // 예전 흐름: 모두 체크 뒤에 아래 검사를 이어 간다
+      await sleep(150);
       const crP = await crPreview();
-      check('CR-19 규칙으로 읽기 → 미리 보기: 항목 5개·연결 4개, 기존 이름·사번은 「있는 항목 「…」에 연결」(서하늘·대사 확인·보고), 새 항목 2개(도하람은 확인 필요), 이미 있는 연결 2개는 「이미 있음」', crP.nodes === 5 && crP.edges === 4
+      check('CR-19 규칙으로 읽기 → 모두 체크 → 미리 보기: 항목 5개·연결 4개, 기존 이름·사번은 「있는 항목 「…」에 연결」(서하늘·대사 확인·보고), 새 항목 2개(도하람은 확인 필요), 이미 있는 연결 2개는 「이미 있음」', crP.nodes === 5 && crP.edges === 4
         && crP.nodeStatus[0] === '있는 항목 「서하늘」에 연결' && crP.nodeStatus[1] === '있는 항목 「대사 확인」에 연결' && crP.nodeStatus[2] === '있는 항목 「보고」에 연결' && crP.nodeStatus[3] === '새로 만듦' && crP.nodeStatus[4].startsWith('새로 만듦 · 확인 필요')
         && crP.edgeStatus.join('|') === '이미 있음|이미 있음|새 연결|새 연결', JSON.stringify(crP));
       const crCount = await crBox('[data-testid=text-add-count]');
@@ -4226,7 +4238,7 @@ async function checkBrowser(browser, port) {
       await clickTestId(s.cdp, 'text-add-node-check-4');
       await sleep(150);
       const crOff = await evaluate(s.cdp, "({ status: document.querySelector('[data-testid=text-add-node-status-4]').textContent, edge: document.querySelector('[data-testid=text-add-edge-status-3]').textContent, edgeDisabled: document.querySelector('[data-testid=text-add-edge-check-3]').disabled, count: document.querySelector('[data-testid=text-add-count]').textContent })");
-      check('CR-19 도하람 체크를 풀면 「넣지 않음」, 그 항목의 연결은 「끝 항목을 넣지 않아 넣을 수 없습니다」(체크 불가), 요약이 항목 4·연결 1로', crOff.status === '넣지 않음' && crOff.edge === '끝 항목을 넣지 않아 넣을 수 없습니다' && crOff.edgeDisabled && crOff.count === '넣을 항목 4개(새로 만듦 1, 있는 항목에 연결 3)·연결 1개', JSON.stringify(crOff));
+      check('CR-19 도하람 체크를 풀면 「새 사람 — 이름이 맞으면 체크」, 그 항목의 연결은 「끝 항목을 넣지 않아 넣을 수 없습니다」(체크 불가), 요약이 항목 4·연결 1로', crOff.status === '새 사람 — 이름이 맞으면 체크' && crOff.edge === '끝 항목을 넣지 않아 넣을 수 없습니다' && crOff.edgeDisabled && crOff.count === '넣을 항목 4개(새로 만듦 1, 있는 항목에 연결 3)·연결 1개', JSON.stringify(crOff));
       // 5) 이름을 비운 행은 저장이 막힌다(아무것도 저장하지 않고 그 행에 이유)
       await crSet('text-add-node-label-3', '');
       await clickTestId(s.cdp, 'text-add-save');

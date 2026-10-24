@@ -16,6 +16,12 @@ import {
 // ── 상수 ────────────────────────────────────────────────────────────────────
 
 /** 글·항목 상한(넘으면 notes로 알린다). 항목·연결 상한은 applyBatch의 행 상한(BATCH_MAX_ROWS)과 맞춘다 */
+/**
+ * R17: 처음 체크하는 범위. 'existing-only' = 지도에 이미 있는 항목(match)과 두 끝이 모두 지도에 있는 연결만. 'all' = 예전처럼 hold·이미 있음 말고는 모두.
+ * 규칙 읽기는 구멍을 다 막을 수 없어, 새로 만드는 항목은 사람이 이름이 맞는지 보고 체크하게 해 피해를 묶는다.
+ */
+export const TEXT_DEFAULT_CHECK = 'existing-only';
+
 export const TEXT_LIMITS = Object.freeze({
   maxChars: 4000, // 붙여 넣을 수 있는 글자 수. 넘으면 읽지 않고 안내(일부만 읽어 오해하지 않게)
   maxSentences: 60, // 읽는 문장 수. 넘는 문장은 읽지 않았다고 알린다
@@ -32,24 +38,28 @@ export const TEXT_WORDS = Object.freeze({
   artifactSuffixes: ['보고서', '계획서', '자료', '문서', '양식', '파일', '대장', '결과', '표', '서'],
   orgSuffixes: ['본부', '센터', '팀', '실', '부', '과'],
   titles: ['님', '씨', '팀장', '실장', '부장', '차장', '과장', '대리', '사원', '주임', '책임', '매니저', '선임', '본부장', '센터장', '팀원'],
+  /** 직함 앞의 일반 낱말(신입 사원·담당 대리·협력 직원 …)이 붙으면 사람 이름이 아니다 */
   stopNames: ['담당자', '이것', '그것', '저것', '우리', '저희', '본인', '해당', '다음', '이후', '모두', '각자', '여기', '거기', '그분', '이분'],
   /** R16-8: 사람 이름으로 만들지 않는 낱말(대명사·불특정·역할·직함 단독·미정 표시). 이런 낱말이 이름 자리에 있으면 그 모양으로 읽지 않는다 */
   stopPersons: ['그녀', '그', '그분', '이분', '이', '저', '사람', '누군가', '누구', '인원', '담당자', '시스템', '팀원', '직원', '다들', '모두', '각자', '본인', '우리', '저희', '해당',
     '관리자', '책임자', '운영자', '작성자', '검토자', '승인자', '확인자', '사용자', '신청자', '참석자', '수신자', '발신자', '요청자', '접수자', '작업자', '이용자', '참가자', '대표자', '전임자', '후임자',
     '고객', '고객사', '거래처', '협력사', '외주사', '공급사', '본사', '지사', '부서', '파트', '외부', '내부', '신규', '기존', '아무', '아무도',
     '미정', '미지정', '미배정', '미확정', '공석', '없음', 'tbd', 'n/a', '아직',
-    '팀장', '부장', '과장', '대리', '사원', '실장', '차장', '주임', '매니저', '선임', '책임', '본부장', '센터장', '님', '씨'],
+    '팀장', '부장', '과장', '대리', '사원', '실장', '차장', '주임', '매니저', '선임', '책임', '본부장', '센터장', '님', '씨',
+    // R17 A·B: 직함 낱말 더(대표·사장·이사 …)와 직함 앞에 붙는 일반 낱말(신입·담당·외부·협력 …), 사람이 아닌 출처(본사·감사 …)
+    '대표', '사장', '부사장', '회장', '이사', '상무', '전무', '임원', '파트장', '그룹장', '조직장', '팀리더', '리더',
+    '신입', '경력', '담당', '협력', '외주', '파견', '현장', '계약직', '정규직', '인턴', '감사', '감사인', '세무사', '회계사'],
   /** 이름 첫머리에 오면 읽지 않는 지시어 */
   demonstratives: ['이', '그', '저', '해당', '본', '위', '아래', '각'],
   leading: ['그리고', '그러면', '그다음', '다음으로', '이어서', '먼저', '우선', '또', '또한', '바로', '곧', '즉시', '다시', '이때', '그때', '이후'],
   performVerb: /^(맡|담당|처리|진행)/,
   produceVerb: /^(만들|만든|만듭|작성|산출|낸다|내고|내며|냅니다|낸|내는)/,
   referenceVerb: /^(공유|문의|협업|보고|전달)/,
-  verbLike: /(니다|한다|했다|된다|있다|없다|이다|하고|하며|하면|해서)$/, // 「바다」처럼 이름이 「다」로 끝날 수 있어 서술어 끝은 두 글자 이상으로만 본다
+  verbLike: /(?:니다|한다|했다|된다|있다|없다|이다|하고|하며|하면|해서|[해려어아]요|드려요|세요|예요|에요|올림|드림)$/, // 「바다」처럼 이름이 「다」로 끝날 수 있어 서술어 끝은 두 글자 이상으로만 본다
   /** R16-1: 현재형 동사 꼬리만 받는다. 여기에 없는 꼬리(맡았다·맡지 않는다·맡을 예정·맡게 되면·맡나요 …)는 그 문장 전체를 읽지 않는다 */
   performOk: /^(?:맡는다|맡습니다|맡아요|맡아서?|맡고|맡으며|담당(?:한다|합니다|함|해요|하고|하며)|처리(?:한다|합니다|해요|하고|하며)|진행(?:한다|합니다|해요|하고|하며))$/,
   performProgress: /^(?:담당|처리|진행)$/, // 뒤에 「중이다」류가 올 때만(진행 중이다)
-  progressTail: /^(?:중이다|중입니다|중임|중이에요|중이며)$/,
+  progressTail: /^(?:중이다|중입니다|중임|중이에요|중이며)$/, // 「진행 중이다」「맡는 중이다」
   produceOk: /^(?:만든다|만듭니다|만들어요?|만들고|만들며|작성(?:한다|합니다|해요|하고|하며)|산출(?:한다|합니다|해요|하고|하며)|낸다|냅니다|내고|내며|내요)$/,
   referenceOk: /^(?:공유|문의|협업|보고|전달)(?:한다|합니다|해요|하고|하며|드립니다|드린다|드려요)$/,
   referenceNoun: /^(?:공유|문의|협업|보고|전달)$/, // 문장 끝에 놓인 명사형(메모체)
@@ -60,8 +70,13 @@ export const TEXT_WORDS = Object.freeze({
   genericObject: /^(?:결과|내용|현황|상황|진행 상황|진행상황|이 건|해당 건|건)(?:을|를)?$/,
   referenceAdverbs: ['따로', '별도로', '바로', '먼저', '꼭', '반드시', '직접', '함께'],
   /** 서술 꼬리(함·됨·임 …)는 이름이 아니다 */
-  nominalTail: /(?:했음|됐음|됨|함|임|있음|없음)$/,
+  nominalTail: /(?:했음|됐음|됨|함|임|있음|없음|올림|드림)$/,
+  /** R17 D: 「Y 끝나면 Z」 뒤에 Z를 받는 서술어 하나(그 뒤에 이어지는 말은 없어야 한다). 「하고/하며」는 절이 이어지므로 읽은 절 뒤가 남으면 일부만 읽음 */
+  laterTail: /^(?:한다|합니다|해요|진행한다|진행합니다|진행해요|올린다|올립니다|올림|시작한다|시작합니다)$/,
+  laterTailConnect: /^(?:하고|하며|진행하고|진행하며|올리고|올리며)$/,
   copula: /(?:입니다|이다|이에요|예요|이며)$/,
+  /** R17: 읽은 절 뒤에 남아도 되는 꼬리(맡고 있다·맡아 왔다·진행 중이다). 이 밖의 말(하더라·단 …·(확정 전)·→ 취소)이 뒤따르면 뜻이 달라질 수 있어 그 문장을 읽지 않는다 */
+  trailOk: /^(?:있다|있습니다|있어요|계십니다|계신다|계세요|왔다|왔습니다|중이다|중입니다|이다|입니다|임)$/,
 });
 
 /**
@@ -71,16 +86,20 @@ export const TEXT_WORDS = Object.freeze({
 export const TEXT_GUARDS = Object.freeze({
   sentence: Object.freeze([
     // R16-4 날짜·기간(숫자+월/일/년, 숫자/숫자, 지난·다음·이번 달·주, 올해·내년·예전 …)
-    { id: 'date', why: '날짜·기간', re: /\d\s*(?:월|일|년|주차|분기)|\d{1,2}\s*[/.]\s*\d{1,2}|\d{4}\s*-\s*\d{1,2}|예전|작년|올\s?해|내년|지난\s?(?:달|주|해|분기)|다음\s?(?:달|주|해|분기)|이번\s?(?:달|주|분기)|금주|차주|전월|익월|당월|내일|어제|그저께|모레|상반기|하반기|[월화수목금토일]요일/ },
+    { id: 'date', why: '날짜·기간', known: true, re: /\d\s*(?:월|일|년|주차|분기)|\d{1,2}\s*[/.]\s*\d{1,2}|\d{4}\s*-\s*\d{1,2}|예전|작년|올\s?해|내년|지난\s?(?:달|주|해|분기)|다음\s?(?:달|주|해|분기)|이번\s?(?:달|주|분기)|금주|차주|전월|익월|당월|내일|어제|그저께|모레|상반기|하반기|[월화수목금토일]요일/ },
     // R16-9 나열(쉼표·빗금·가운뎃점)
-    { id: 'list', why: '나열', re: /[,，、/／·ㆍ&+]/ },
+    { id: 'list', why: '나열', known: true, re: /[,，、/／·ㆍ&+]/ },
   ]),
   token: Object.freeze([
     { id: 'neg', why: '부정', re: /않|못|아니|아님|없|말고|말아|^안$/ },
     { id: 'tense', why: '시제', re: /[았었였겼했랐렸쳤됐냈썼섰봤줬]|던|예정/ },
     { id: 'modal', why: '양태·의문', re: /^수(?:도|가|는)?$|^것|싶|어렵|어려|(?:을지|는지|인지|할지|될지|갈지|볼지|줄지|올지|말지|길지)$|까요?$|나요$|가요$|냐$|^되(?:면|어|었|는|고|지|어서)/ },
     { id: 'question', why: '의문', re: /^(?:누구|무엇|뭐|어디|언제|어떻|어떤|어느|왜|얼마|몇)/ },
-    { id: 'adverb', why: '시점·가정', re: /^(?:대신|위해|위한|때문|경우|만약|혹시|아직|아마|추후|향후|나중|앞으로|이제|일단|임시|잠시|한때|당시|과거|이전|넘기|넘겨|넘긴|넘김|바뀌|바뀐|바꿔|바꾼|퇴사|휴직)/ },
+    { id: 'adverb', why: '시점·가정', re: /^(?:대신|위해|위한|때문|경우|만약|혹시|아직|아마|추후|향후|나중|앞으로|이제|일단|임시|잠시|한때|당시|과거|이전|넘기|넘겨|넘긴|넘김|바뀌|바뀐|바꿔|바꾼|퇴사|휴직|이번|당분간|원래|평소|가끔|주로|보통|기간|동안|말씀)|동안$|^(?:월말|월초|연말|연초)(?:에는|에도|엔|에)$|^(?:휴가|부재|출장)(?:중|기간|시|때|에는|엔)$/ },
+    // R17 C: 조건 어미 「~면」(세 글자 이상이거나 오면·하면·되면). 선후행 표지(끝나면·마치면)는 예외
+    // R17: 전해 들은 말·추측·초안 표시
+    { id: 'hearsay', why: '전해 들음·추측', re: /(?:더라|네요|죠|지요|군요|래요|대요|라는|이래|한대|듯하다|같다|같아요|모양이다)$|^듯|^\[?(?:초안|가안|예시|참고|가정|TODO|WIP)\]?$/i },
+    { id: 'cond', why: '조건', re: /^(?!(?:끝나면|끝나면은|마치면|마치면은)$)(?:[가-힣A-Za-z0-9]{2,}면(?:은)?|오면|하면|되면)$/ },
     { id: 'range', why: '날짜·기간', re: /(?:까지|부터)(?:는|도|만|의)?$/ },
     // R16-9 나열(및·또는·「서하늘하고」「서하늘이랑」). 동사 「담당하고」 같은 것은 제외
     { id: 'list', why: '나열', re: /^(?:및|또는|혹은|겸)$|^(?!맡|담당|처리|진행|만들|작성|산출|공유|문의|협업|전달|보고).{2,}(?:하고|이랑|랑)$/ },
@@ -88,14 +107,14 @@ export const TEXT_GUARDS = Object.freeze({
 });
 
 /** 이름 끝의 조사(긴 것부터). 이름 자체가 이 글자로 끝날 수 있어, 떼고 남은 이름이 한 글자면 떼지 않고, 앞 글자의 받침과 맞지 않는 조사(「인사평가」의 가)도 떼지 않는다 */
-const JOSA = ['에게서', '에게는', '에게', '에서는', '에서도', '에서', '으로는', '으로', '로는', '에는', '에도', '은', '는', '이', '가', '을', '를', '로', '의', '와', '과', '도'];
+const JOSA = ['께서', '에게서', '에게는', '에게', '에서는', '에서도', '에서', '으로는', '으로', '로는', '에는', '에도', '은', '는', '이', '가', '을', '를', '로', '의', '와', '과', '도'];
 const JOSA_EXTRA = ['에', '께서', '께', '보다', '처럼', '만', '까지', '부터'];
-const SUBJ = new Set(['은', '는', '이', '가']);
+const SUBJ = new Set(['은', '는', '이', '가', '께서']);
 const OBJ = new Set(['을', '를']);
 const DIR = new Set(['에서', '에서는', '에서도', '으로', '으로는', '로', '로는']);
 const Z_JOSA = new Set(['을', '를', '은', '는', '이', '가', '도']);
 const TO_PERSON = new Set(['에게', '에게는']);
-const TITLE_RE = new RegExp(`^(${TEXT_WORDS.titles.join('|')})(은|는|이|가|을|를|에게|에서|의|와|과|도)?(?:입니다|이다|이에요|예요)?$`);
+const TITLE_RE = new RegExp(`^(${TEXT_WORDS.titles.join('|')})(?:님)?(은|는|이|가|을|를|에게|에서|의|와|과|도|께서)?(?:입니다|이다|이에요|예요)?$`);
 const EMP_RE = /\(([A-Za-z0-9]+-\d+)\)/;
 const COPULA_RE = TEXT_WORDS.copula;
 const STOP_PERSON = new Set(TEXT_WORDS.stopPersons.map((x) => x.toLowerCase()));
@@ -132,7 +151,11 @@ export const looksOrg = (name) => name.length >= 3 && endsWithAny(name, TEXT_WOR
 
 /** 이름으로 쓸 수 있는 글로 다듬는다. 쓸 수 없으면 '' (2~20자, 글자·숫자 포함, 지시어 제외) */
 export function cleanName(raw) {
-  const s = oneLine(String(raw ?? '').replace(/^["'“‘「『(\[<]+|["'”’」』)\]>,，、]+$/g, ''));
+  let s = oneLine(String(raw ?? '').replace(/^["'“‘「『(\[<]+|["'”’」』\]>,，、]+$/g, ''));
+  // R17 G: 이름 속에 「(」가 있으면 끝의 「)」는 떼지 않는다(짝 없는 「)」만 뗀다). 낱말 끝 부호 떼기로 사라진 「)」는 되돌린다 — 「매입 대사(카드사 건)」
+  const count = (ch) => s.split(ch).length - 1;
+  while (s.endsWith(')') && count(')') > count('(')) s = s.slice(0, -1);
+  if (count('(') > count(')')) s += ')';
   if (s.length < TEXT_LIMITS.nameMin || s.length > TEXT_LIMITS.nameMax) return '';
   if (!LETTER_RE.test(s) || /^[\d\s.\-]+$/.test(s)) return '';
   if (TEXT_WORDS.stopNames.includes(s)) return '';
@@ -226,7 +249,7 @@ const bare = (t) => t.josa === '' || t.weak === true;
 /** 앞쪽으로 조사 없는 낱말을 이어 붙여 이름이 시작하는 자리를 찾는다(끝 낱말 포함 최대 max개) */
 function backStart(T, end, max) {
   let a = end;
-  while (a - 1 >= 0 && end - (a - 1) + 1 <= max && bare(T[a - 1]) && !T[a - 1].colon && !T[a - 1].title) a -= 1;
+  while (a - 1 >= 0 && end - (a - 1) + 1 <= max && bare(T[a - 1]) && !T[a - 1].colon && !T[a - 1].title && !isClauseVerb(T[a - 1])) a -= 1;
   return a;
 }
 
@@ -265,7 +288,7 @@ const stripWorkTail = (label) => {
 function workSpec(p) {
   if (!p) return null;
   const label = stripWorkTail(p.label);
-  if (!isWorkName(label)) return null;
+  if (!isWorkName(label) || STOP_PERSON.has(label.toLowerCase())) return null; // R17 D: 정지어(감사·본사 …)는 업무 이름이 아니다
   const alts = [...p.alts.map(stripWorkTail).filter((x) => x !== label)];
   if (label !== p.label) alts.push(p.label);
   return { type: 'work', label, ...(alts.length ? { alts } : {}) };
@@ -283,7 +306,7 @@ function personSpec(t, sc, name = t.name) {
   const alt = name === t.name && t.name !== t.core ? cleanName(stripCopula(t.core)) : '';
   const alts = alt && alt !== base ? [alt] : [];
   if (certain) return { type: 'person', label: base, emp_no: t.emp_no, ...(alts.length ? { alts } : {}) };
-  const known = sc && sc.known;
+  const known = sc && sc.known && sc.known.person;
   const pick = [base, ...alts].find((c) => known && known.has(normalizeLabel(c))) || (PLAIN_PERSON_RE.test(base) ? base : '');
   if (!pick) return null;
   const rest = [base, ...alts].filter((c) => c !== pick);
@@ -319,12 +342,16 @@ function laterWork(T, s) {
   if (end < start) return { work: null };
   // R16-13: 서술 꼬리(함·됨·임 …)가 이름에 섞이면 읽지 않는다
   if (endJosa === '' && end === T.length - 1 && T[end].core.length >= 3 && TEXT_WORDS.nominalTail.test(T[end].core)) return { work: null };
+  const rest = T.slice(end + 1).map((t) => t.core);
   // R16-3: Z가 주어(이/가/은/는)이면 다른 모양이 이어지는 문장이라 선후행으로 읽지 않는다(문장 전체)
   if (SUBJ.has(endJosa)) {
-    const rest = T.slice(end + 1).map((t) => t.core);
     if (!(rest.length === 1 && TEXT_WORDS.startVerb.test(rest[0]))) return { work: null, veto: '선후행 뒤 주어' };
+  } else if (!(rest.length === 0 || (rest.length === 1 && TEXT_WORDS.laterTail.test(rest[0])) || (rest.length >= 1 && TEXT_WORDS.laterTailConnect.test(rest[0])))) {
+    // R17 D: Z 뒤는 문장 끝이거나 「한다·합니다·해요·진행한다·진행합니다·올린다 …」 하나뿐이어야 한다(「정리 부탁드려요」「잠깐 쉬어요」「해야 한다」는 읽지 않는다)
+    return { work: null };
   }
-  return { work: workSpec(phraseOf(T, start, end, { strip: endJosa !== '' })) };
+  const tail = rest.length >= 1 ? end + 1 : -1;
+  return { work: workSpec(phraseOf(T, start, end, { strip: endJosa !== '' })), start, end, tail, connect: tail >= 0 && TEXT_WORDS.laterTailConnect.test(T[tail].core) ? tail : -1 };
 }
 
 // ── 제안을 쌓는 도구(규칙 읽기와 AI 읽기가 함께 쓴다) ─────────────────────
@@ -435,9 +462,17 @@ export function splitSentencesEnd(text) {
 
 // ── 문장 단위 보호(R16): 이런 문장은 모양을 보기 전에 읽지 않는다 ─────────────
 
-/** 읽지 않을 이유(없으면 ''). 날짜·기간, 나열, 부정·시제·양태·의문, 시점·가정 낱말, 나열 조사(와/과) */
-function sentenceVeto(s, T) {
-  for (const g of TEXT_GUARDS.sentence) if (g.re.test(s)) return g.why;
+/** 가드가 찾은 낱말이 모두 지도에 있는 이름의 일부(「2분기 보고」「강의실·강사 섭외」)이면 날짜·나열이 아니다(R17) */
+function guardHit(g, s, known) {
+  const ms = [...s.matchAll(new RegExp(g.re.source, g.re.flags.includes('g') ? g.re.flags : `${g.re.flags}g`))].map((m) => m[0]);
+  if (!ms.length) return false;
+  if (!g.known || !known) return true;
+  return !ms.every((m) => known.labels.some((l) => l.includes(m) && s.includes(l)));
+}
+
+/** 읽지 않을 이유(없으면 ''). 날짜·기간, 나열, 부정·시제·양태·의문·조건, 시점·가정 낱말, 나열 조사(와/과) */
+function sentenceVeto(s, T, known) {
+  for (const g of TEXT_GUARDS.sentence) if (guardHit(g, s, known)) return g.why;
   for (let i = 0; i < T.length; i += 1) {
     const t = T[i];
     for (const g of TEXT_GUARDS.token) {
@@ -450,6 +485,9 @@ function sentenceVeto(s, T) {
   return '';
 }
 
+/** 절을 끝내는 서술어(주어·이름 훑기를 여기서 멈춘다): 한다류·「이고/이며/으며/면서」·소속 꼬리·끝나/마치 */
+const isClauseVerb = (t) => TEXT_WORDS.verbLike.test(t.core) || /(?:이고|이며|으며|면서)$/.test(t.core) || /^소속/.test(t.core) || /^(?:끝나|끝난|마치|마친)/.test(t.core) || /^(?:나서|난|뒤에?|후에?|다음에|이후에?)$/.test(t.core);
+
 // ── 읽는 모양 표 ────────────────────────────────────────────────────────────
 // 각 항목 run(sc)은 문장 한 개(sc.T = 낱말 목록)를 읽어 sc.node/sc.edge로 「쌓아 둔다」(문장을 다 읽은 뒤 한꺼번에 제안에 더한다).
 // 모양에 안 맞으면 아무것도 쌓지 않고(sc.miss), 애매한 문장이면 sc.veto로 그 문장 전체를 버린다.
@@ -459,6 +497,7 @@ function sentenceVeto(s, T) {
 function performOk(T, i) {
   const c = T[i].core;
   if (TEXT_WORDS.performOk.test(c)) return true;
+  if (c === '맡는' && T[i + 1] && TEXT_WORDS.progressTail.test(T[i + 1].core)) return true; // 「맡는 중이다」
   return TEXT_WORDS.performProgress.test(c) && !!T[i + 1] && TEXT_WORDS.progressTail.test(T[i + 1].core);
 }
 
@@ -478,15 +517,17 @@ function runPerformSV(sc) {
     if (!performOk(T, i)) return sc.veto('동사 꼬리');
     const oe = i - 1;
     let k = oe - 1;
-    while (k >= 0 && bare(T[k]) && !T[k].title && oe - k <= TEXT_LIMITS.nameTokens) k -= 1;
+    // 주어를 찾아 거슬러 가다가 서술어(「끝나면」「마치고」「소속이고」 …)를 만나면 같은 절이 아니다 — 다른 모양(선후행·소속)이 읽는다
+    while (k >= 0 && bare(T[k]) && !T[k].title && !isClauseVerb(T[k]) && oe - k <= TEXT_LIMITS.nameTokens) k -= 1;
+    if (k >= 0 && isClauseVerb(T[k])) continue;
     if (k < 0 || !SUBJ.has(T[k].josa) || oe - k > TEXT_LIMITS.nameTokens) { sc.miss(); continue; }
-    // 주어와 목적어 사이에 서술어(「끝나면」「마치고」 …)가 있으면 같은 절이 아니다 — 다른 모양(선후행 등)이 읽는다
-    if (T.slice(k + 1, oe).some((t) => TEXT_WORDS.verbLike.test(t.core) || /^(?:끝나|끝난|마치|마친)/.test(t.core))) continue;
     if (looksLikeList(T, k)) return sc.veto('나열');
     const who = personSpec(T[k], sc);
     const what = workSpec(phraseOf(T, k + 1, oe));
     if (!who || !what) { sc.miss(); continue; }
     sc.edge(sc.node(who), sc.node(what), 'performs');
+    sc.use(k, i);
+    sc.connectAt(i);
   }
   return undefined;
 }
@@ -502,9 +543,11 @@ function runPerformVS(sc) {
     if (!['', ...SUBJ].includes(x.josa) || (TEXT_WORDS.verbLike.test(stripCopula(x.core)) && !x.emp_no)) { sc.miss(); continue; }
     if (!bare(T[i - 1])) { sc.miss(); continue; }
     const who = personSpec(x, sc);
-    const what = workSpec(phraseOf(T, backStart(T, i - 1, TEXT_LIMITS.nameTokens), i - 1, { strip: false }));
+    const ys = backStart(T, i - 1, TEXT_LIMITS.nameTokens);
+    const what = workSpec(phraseOf(T, ys, i - 1, { strip: false }));
     if (!who || !what) { sc.miss(); continue; }
     sc.edge(sc.node(who), sc.node(what), 'performs');
+    sc.use(ys, T.length - 1);
   }
 }
 
@@ -515,12 +558,18 @@ function runProduce(sc) {
     if (!TEXT_WORDS.produceOk.test(T[i].core)) return sc.veto('동사 꼬리');
     const oe = i - 1;
     let k = oe - 1;
-    while (k >= 0 && bare(T[k]) && oe - k <= TEXT_LIMITS.nameTokens) k -= 1;
+    while (k >= 0 && bare(T[k]) && !isClauseVerb(T[k]) && oe - k <= TEXT_LIMITS.nameTokens) k -= 1;
+    if (k >= 0 && isClauseVerb(T[k])) continue;
     if (k < 0 || !DIR.has(T[k].josa) || oe - k > TEXT_LIMITS.nameTokens) { sc.miss(); continue; }
-    const from = workSpec(phraseOf(T, backStart(T, k, TEXT_LIMITS.nameTokens), k));
+    const fs = backStart(T, k, TEXT_LIMITS.nameTokens);
+    const from = workSpec(phraseOf(T, fs, k));
     const wp = phraseOf(T, k + 1, oe);
     if (!from || !wp || hasDemonstrative(wp.label)) { sc.miss(); continue; }
+    // R17 E: 영문자뿐인 출처(ERP·SAP)는 지도에 같은 업무가 있을 때만 업무로 받는다(시스템 이름일 수 있다)
+    if (/^[A-Za-z0-9 ._-]+$/.test(from.label) && !(sc.known && sc.known.work.has(normalizeLabel(from.label)))) { sc.miss(); continue; }
     sc.edge(sc.node(from), sc.node({ type: 'artifact', label: wp.label, ...(wp.alts.length ? { alts: wp.alts } : {}) }), 'produces');
+    sc.use(fs, T[i + 1] && T[i + 1].core === '낸다' ? i + 1 : i); // 「만들어 낸다」
+    sc.connectAt(i);
   }
   return undefined;
 }
@@ -528,12 +577,16 @@ function runProduce(sc) {
 /** 「앞 일 → 뒤 일」 두 업무를 잇는다. 앞 일 끝 낱말 yEnd, 뒤 일은 laterWork(T, zStart) */
 function precede(sc, yEnd, zStart) {
   const { T } = sc;
-  const y = workSpec(phraseOf(T, backStart(T, yEnd, TEXT_LIMITS.nameTokens), yEnd));
+  if (isClauseVerb(T[yEnd])) return sc.miss(); // 앞 일의 끝이 서술어(「하고」)이면 일 이름이 아니다
+  const ys = backStart(T, yEnd, TEXT_LIMITS.nameTokens);
+  const y = workSpec(phraseOf(T, ys, yEnd));
   const zr = laterWork(T, zStart);
   if (zr.veto) return sc.veto(zr.veto);
   const z = zr.work;
   if (!y || !z || normalizeLabel(y.label) === normalizeLabel(z.label)) return sc.miss();
   sc.edge(sc.node(y), sc.node(z), 'precedes');
+  sc.use(ys, zr.tail >= 0 ? zr.tail : zr.end);
+  if (zr.connect >= 0) sc.connectAt(zr.connect);
   return undefined;
 }
 
@@ -589,9 +642,12 @@ function runBelongsA(sc) {
     const k = ta - 1;
     if (k >= 0 && SUBJ.has(T[k].josa)) {
       belong(sc, T[k], org);
+      sc.use(k, i);
     } else if (T[i + 1] && (SUBJ.has(T[i + 1].josa) || T[i + 1].emp_no || T[i + 1].titled) && !TEXT_WORDS.verbLike.test(T[i + 1].core)) {
       belong(sc, T[i + 1], org);
+      sc.use(ta, T.length - 1); // 「T 소속 X 님이 …」 뒤의 서술은 소속 읽기에 영향이 없다
     } else sc.miss();
+    if (/(?:이고|이며)$/.test(T[i].core)) sc.connectAt(i);
   }
   return undefined;
 }
@@ -605,6 +661,7 @@ function runBelongsB(sc) {
     const org = (phraseOf(T, backStart(T, i, 2), i) || {}).label;
     if (!org) { sc.miss(); continue; }
     belong(sc, x, org);
+    sc.use(i, T.length - 1); // 「T의 X가 …」 뒤의 서술은 모양으로 읽지 않지만 소속 읽기에는 영향이 없다
   }
 }
 
@@ -636,16 +693,20 @@ function onlyGenericAround(T, i, vi) {
 
 function runReference(sc) {
   const { T } = sc;
+  let found = false;
   for (let i = 0; i < T.length; i += 1) {
-    if (!TO_PERSON.has(T[i].josa)) continue;
+    // 「X에게」, 또는 대상이 조직 끝말이면 「감사팀에」도 받는다
+    const orgEe = T[i].josa === '' && /에$/.test(T[i].core) && looksOrg(T[i].core.slice(0, -1));
+    if (!TO_PERSON.has(T[i].josa) && !orgEe) continue;
     const vi = referenceVerbAt(T, i);
     if (vi === -2) return sc.veto('동사 꼬리');
     if (vi < 0) continue;
-    const label = cleanName(T[i].name);
+    found = true;
+    const label = cleanName(orgEe ? T[i].core.slice(0, -1) : T[i].name);
     if (!label || looksArtifact(label)) { sc.miss(); continue; }
     let spec;
     if (looksOrg(label)) {
-      const org = (phraseOf(T, backStart(T, i, 2), i) || {}).label;
+      const org = orgEe ? label : (phraseOf(T, backStart(T, i, 2), i) || {}).label;
       spec = { type: 'org', label: org || label };
     } else spec = personSpec(T[i], sc);
     if (!spec) { sc.miss(); continue; }
@@ -656,16 +717,26 @@ function runReference(sc) {
     else if (works.length === 0 && sc.prev && sc.prev.works.length === 1 && onlyGenericAround(T, i, vi)) work = sc.node({ type: 'work', label: sc.prev.works[0].label, carried: true });
     else { sc.miss(); continue; }
     sc.edge(work, sc.node(spec), 'references');
+    sc.use(i > 0 && bare(T[i - 1]) && looksOrg(T[i - 1].core) ? i - 1 : i, vi);
+    if (/(?:고|며)$/.test(T[vi].core)) sc.connectAt(vi);
+  }
+  // R17 S1: 현재형 참조 동사(공유한다·문의합니다 …)가 있는데 대상(X에게)을 찾지 못했다 → 일부만 읽음
+  if (!found) {
+    const vj = referenceVerbAt(T, -1);
+    if (vj >= 0 && !sc.used.has(vj)) sc.miss();
   }
   return undefined;
 }
 
 function runEmpNo(sc) {
-  for (const t of sc.T) {
-    if (!t.emp_no) continue;
+  sc.T.forEach((t, i) => {
+    if (!t.emp_no) return;
     const spec = personSpec(t, sc);
-    if (spec) sc.node(spec);
-  }
+    if (spec) {
+      sc.node(spec);
+      sc.use(i);
+    }
+  });
 }
 
 /** 읽는 모양 표. 순서가 곧 읽는 순서다(참조는 같은 문장의 업무를 먼저 알아야 하므로 맨 뒤쪽) */
@@ -684,7 +755,7 @@ export const TEXT_PATTERNS = Object.freeze([
 /** 문장 하나를 읽는 작업대: 항목·연결을 쌓아 두었다가 문장을 다 읽고 버리지 않을 때만 제안에 더한다 */
 function makeScope(s, T, prev, known) {
   const sc = {
-    s, T, prev, known, nodes: [], edges: [], vetoed: '', missed: false,
+    s, T, prev, known, nodes: [], edges: [], vetoed: '', missed: false, used: new Set(), conn: [],
     node(spec) {
       let n = sc.nodes.find((x) => x.type === spec.type && normalizeLabel(x.label) === normalizeLabel(spec.label));
       if (!n) {
@@ -701,6 +772,19 @@ function makeScope(s, T, prev, known) {
     },
     veto(why) { if (!sc.vetoed) sc.vetoed = why; },
     miss() { sc.missed = true; },
+    /** 읽는 데 쓴 낱말 번호(a..b) */
+    use(a, b = a) { for (let j = Math.max(0, a); j <= b; j += 1) sc.used.add(j); },
+    /** 「~고/~며」로 이어지는 서술어 번호: 그 뒤에 쓰이지 않은 명사구가 남으면 일부만 읽은 것이다 */
+    connectAt(i) { if (/(?:고|며)$/.test(T[i].core)) sc.conn.push(i); },
+    /** R17 S2~S5: 이어진 절이 어떤 모양에도 쓰이지 않고 남았으면 true */
+    /** R17: 읽은 절 뒤에 뜻을 바꿀 수 있는 말이 남지 않았는가(이어지는 「~고/~며」 절이 마지막이면 leftover가 본다) */
+    trailingOk() {
+      if (!sc.used.size) return true;
+      const last = Math.max(...sc.used);
+      if (sc.conn.includes(last)) return true;
+      return T.slice(last + 1).every((t) => TEXT_WORDS.trailOk.test(t.core));
+    },
+    leftover() { return sc.conn.some((c) => T.some((t, j) => j > c && !sc.used.has(j) && t.josa !== '' && !t.weak && !t.title)); },
     commit(b) {
       const real = new Map();
       for (const n of sc.nodes) {
@@ -914,7 +998,14 @@ export function textSizeNote(text, limits = TEXT_LIMITS) {
 }
 
 /** 지도에 있는 사람 이름(공백·대소문자 무시): 한글 세 글자가 아니어도 이 이름이면 사람으로 받는다 */
-const knownPersons = (view) => new Set(ownCandidates(view).filter((c) => c.core_type === 'person').map((c) => normalizeLabel(c.label)));
+const knownNames = (view) => {
+  const c = ownCandidates(view);
+  return {
+    person: new Set(c.filter((x) => x.core_type === 'person').map((x) => normalizeLabel(x.label))),
+    work: new Set(c.filter((x) => x.core_type === 'work').map((x) => normalizeLabel(x.label))),
+    labels: c.map((x) => x.label),
+  };
+};
 
 /**
  * 줄글을 읽어 항목·연결 제안을 만든다. 모양(TEXT_PATTERNS)에 안 맞거나 애매한 문장은 unread에 둔다(지어내지 않는다).
@@ -937,7 +1028,7 @@ export function extractFromText(text, view = null, opt = {}) {
     sentences = sentences.slice(0, limits.maxSentences);
   }
   const b = createBuilder(limits);
-  const known = knownPersons(view);
+  const known = knownNames(view);
   const unread = [];
   const partial = [];
   let prev = null; // 바로 앞 문장이 온전히 읽혔을 때만 {works}
@@ -945,15 +1036,16 @@ export function extractFromText(text, view = null, opt = {}) {
     const skip = () => { unread.push(s); prev = null; };
     if (s.length > limits.sentenceMax || end === '?' || end === '？') { skip(); continue; } // 물음표로 끝난 문장은 질문이다
     const T = parseTokens(s);
-    if (sentenceVeto(s, T)) { skip(); continue; }
+    if (sentenceVeto(s, T, known)) { skip(); continue; }
     const sc = makeScope(s, T, prev, known);
     for (const p of TEXT_PATTERNS) {
       p.run(sc);
       if (sc.vetoed) break;
     }
+    if (!sc.vetoed && sc.edges.length && !sc.trailingOk()) sc.veto('뒤따르는 말');
     if (sc.vetoed || !sc.nodes.length) { skip(); continue; }
     const real = sc.commit(b);
-    if (!sc.edges.length || sc.missed) {
+    if (!sc.edges.length || sc.missed || sc.leftover()) {
       unread.push(s);
       partial.push(s);
       prev = null;
@@ -966,12 +1058,18 @@ export function extractFromText(text, view = null, opt = {}) {
 
 // ── 사용자가 고른 것 → 명령 ─────────────────────────────────────────────────
 
-/** 처음 선택: 같은 이름이 둘 이상인 항목·확인할 것이 있는 항목(hold)은 체크하지 않고, 이미 있는 연결·hold 항목에 걸린 연결도 체크하지 않는다 */
-export function defaultSelection(proposal) {
+/**
+ * 처음 선택(R17): 기본('existing-only')은 지도에 이미 있는 항목(match)과, 두 끝이 모두 지도에 있는 연결만 체크한다. 새로 만드는 항목(사번이 글에 있는 사람 포함)과
+ * 새 항목이 한쪽 끝인 연결은 사람이 이름이 맞는지 보고 체크한다. 어느 모드에서나 같은 이름이 둘 이상인 항목·확인할 것이 있는 항목(hold)·이미 있는 연결·hold 항목에 걸린 연결은 체크하지 않는다.
+ * mode 'all'은 위 예외만 빼고 모두 체크한다(화면의 「모두 체크」).
+ */
+export function defaultSelection(proposal, mode = TEXT_DEFAULT_CHECK) {
   const nodes = {};
   const edges = {};
-  for (const n of proposal.nodes) nodes[n.key] = { include: !n.ambiguous && !n.hold, type: n.type, label: n.label, emp_no: n.emp_no || '' };
-  for (const e of proposal.edges) edges[e.key] = { include: !e.exists && !e.hold, type: e.type };
+  const matched = new Map(proposal.nodes.map((n) => [n.key, !!n.match]));
+  const all = mode === 'all';
+  for (const n of proposal.nodes) nodes[n.key] = { include: !n.ambiguous && !n.hold && (all || !!n.match), type: n.type, label: n.label, emp_no: n.emp_no || '' };
+  for (const e of proposal.edges) edges[e.key] = { include: !e.exists && !e.hold && (all || (matched.get(e.from) && matched.get(e.to))), type: e.type };
   return { nodes, edges };
 }
 

@@ -123,10 +123,14 @@ for (const [n, map, text, why, nodes, edges, hold, unread] of CORPUS) {
     assert.deepEqual(p.partial, [], '부분 표시');
     // 잘못 읽기 0: 모든 quote는 읽은 문장이고, 읽지 못한 문장은 어떤 항목·연결의 quote도 아니다
     for (const x of [...p.nodes, ...p.edges]) assert.ok(text.includes(x.quote) && !unread.includes(x.quote), x.quote);
-    // hold 항목과 그 항목에 걸린 연결은 처음에 체크하지 않는다
+    // R17: 처음 체크는 지도에 이미 있는 항목(hold·같은 이름이 둘 이상은 제외)과, 두 끝이 모두 지도에 있는 연결(이미 있는 연결·hold에 걸린 연결은 제외)뿐이다
     const sel = defaultSelection(p);
-    for (const x of p.nodes) assert.equal(sel.nodes[x.key].include, !x.hold && !x.ambiguous, x.label);
-    for (const e of p.edges) assert.equal(sel.edges[e.key].include, !e.exists && !e.hold, e.key);
+    for (const x of p.nodes) assert.equal(sel.nodes[x.key].include, !!x.match && !x.hold && !x.ambiguous, x.label);
+    const matched = new Set(p.nodes.filter((x) => x.match).map((x) => x.key));
+    for (const e of p.edges) assert.equal(sel.edges[e.key].include, !e.exists && !e.hold && matched.has(e.from) && matched.has(e.to), e.key);
+    // 처음 체크된 채 잘못 읽은 연결 = 0: 체크된 연결(두 끝도 체크)은 모두 기대 연결 안에 있다
+    const checked = p.edges.filter((e) => sel.edges[e.key].include && sel.nodes[e.from].include && sel.nodes[e.to].include).map((e) => `${e.type}:${labelOf(p, e.from)}>${labelOf(p, e.to)}`);
+    for (const c of checked) assert.ok(edges.includes(c), c);
   });
 }
 
@@ -178,7 +182,9 @@ test('R16-3 「Y이 끝나면 Z」: Z가 주어(이/가/은/는)이고 다른 �
   assert.match(p.nodes[0].hold, /서로 다른 유형\(업무·사람\)/);
   assert.match(p.notes.join('|'), /「보고」: 글에서 서로 다른 유형/);
   assert.equal(p.edges[0].hold, true);
-  const sel = defaultSelection(p);
+  // R17: 지도가 없으면 matched 항목이 없어 기본(existing-only)은 모두 체크 해제 — 충돌(hold) 때문에 해제되는 것은 모두 체크('all')에서 드러난다
+  assert.deepEqual([defaultSelection(p).nodes.n1.include, defaultSelection(p).nodes.n2.include, defaultSelection(p).edges.e1.include], [false, false, false]);
+  const sel = defaultSelection(p, 'all');
   assert.deepEqual([sel.nodes.n1.include, sel.nodes.n2.include, sel.edges.e1.include], [false, true, false]);
   // 확실하지 않던 사람이 다른 문장에서 업무로 확실해지면 그 유형을 따라간다(충돌 아님)
   const c = createBuilder();
@@ -223,7 +229,7 @@ test('R16-6 사번은 같은데 이름이 다르면 잇지 않고 체크 해제 
   assert.equal(p.nodes[0].hold, '사번은 「서하늘」과 같고 이름이 다릅니다');
   assert.ok(p.notes.includes('「가람솔」: 사번은 「서하늘」과 같고 이름이 다릅니다'));
   const doc = JSON.parse(JSON.stringify(SAMPLES.find((d) => d.universe.id === 'U-A1')));
-  const ops = proposalToOps(p, defaultSelection(p), doc);
+  const ops = proposalToOps(p, defaultSelection(p, 'all'), doc); // R17: 모두 체크해도 hold 항목은 체크되지 않는다
   assert.equal(ops.filter((o) => o.op === 'addNode' && o.input.label === '가람솔').length, 0, '체크를 풀어 두었으므로 저장해도 가람솔은 생기지 않는다');
   const q = extractFromText('서하늘(V-1009)이 보고를 맡는다', view);
   assert.match(q.nodes[0].hold, /같은 이름의 사람\(사번 V-1003\)이 있습니다/);
@@ -378,7 +384,7 @@ test('R16 저장 경로: 사번 충돌 항목은 체크를 풀어 두면 저장�
   const app = createApp({ store: createStore(mem()), samples: SAMPLES, currentId: 'U-A1', now: () => NOW });
   const before = { nodes: app.doc.nodes.length, edges: app.doc.edges.length };
   const p = extractFromText('가람솔(V-1003)이 월말 점검을 맡는다. 하늬별이 연말 점검을 맡는다', app.view);
-  const r = app.applyBatch(proposalToOps(p, defaultSelection(p), app.doc));
+  const r = app.applyBatch(proposalToOps(p, defaultSelection(p, 'all'), app.doc)); // R17: 새 항목(하늬별)을 넣으려면 모두 체크
   assert.equal(r.ok, true, JSON.stringify(r.errors));
   assert.ok(!app.doc.nodes.some((n) => n.label === '가람솔'), '사번 충돌 항목은 넣지 않았다');
   assert.ok(app.doc.nodes.some((n) => n.label === '하늬별'));

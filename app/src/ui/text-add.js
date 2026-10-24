@@ -10,7 +10,7 @@ import { TEXT_LIMITS, TEXT_NODE_TYPES, TEXT_PATTERN_DOC, defaultSelection, docCa
 /** 화면 문구(한 곳). 용어: 「항목」「지도 중심」 */
 export const TEXT_ADD = Object.freeze({
   title: '글로 추가',
-  intro: '몇 문장짜리 글(회의 메모·인수인계 메모)을 붙여 넣으면 사람·업무·산출물·조직을 찾아 미리 보여 줍니다. 체크하고 고친 뒤 「저장」을 눌러야 들어갑니다.',
+  intro: '몇 문장짜리 글(회의 메모·인수인계 메모)을 붙여 넣으면 사람·업무·산출물·조직을 찾아 미리 보여 줍니다. 지도에 이미 있는 항목만 처음에 체크되어 있고, 새로 만드는 항목은 이름이 맞는지 보고 직접 체크해야 합니다(「모두 체크」도 있습니다). 고친 뒤 「저장」을 눌러야 들어갑니다.',
   placeholder: '예) 서하늘(V-1003)이 대사 확인을 맡는다. 대사 확인이 끝나면 보고를 한다. 보고에서 월말 정산 보고서를 만든다.',
   inputLabel: '붙여 넣을 글',
   read: '규칙으로 읽기',
@@ -25,6 +25,10 @@ export const TEXT_ADD = Object.freeze({
   noNodes: '읽을 수 있는 문장이 없었습니다. 아래 「규칙으로 읽는 모양」에 맞게 써 보세요.',
   unreadTitle: (n) => `읽지 못한 문장 ${n}개`,
   unreadNote: '모양에 맞지 않거나 뜻이 애매해(부정·지난 일·예정·날짜·나열 등) 지어내지 않고 건너뛴 문장입니다.',
+  checkAll: '모두 체크',
+  uncheckAll: '모두 해제',
+  newItem: '새로 만듦 — 이름이 맞으면 체크',
+  newPerson: '새 사람 — 이름이 맞으면 체크',
   partialTag: ' (일부만 읽음)', // 이름은 읽었지만 모양을 다 읽지 못한 문장
   stale: '글이 바뀌었습니다 — 다시 읽으세요',
   shapesTitle: '규칙으로 읽는 모양',
@@ -178,7 +182,9 @@ export function textAddDialog(o) {
     if (!f.include) {
       if (f.ambiguous) return { state: 'off', text: '같은 이름이 둘 이상 있습니다 — 체크하면 새 항목으로 만듭니다' };
       if (n.hold && !f.match) return { state: 'hold', text: `넣지 않음 · ${n.hold} — 확인한 뒤 체크하세요` };
-      return { state: 'off', text: '넣지 않음' };
+      if (f.match) return { state: 'off', text: '넣지 않음' };
+      // R17: 새로 만드는 항목은 처음에 체크하지 않는다 — 이름이 맞는지 사람이 보고 체크
+      return { state: 'new-off', text: f.type === 'person' ? TEXT_ADD.newPerson : TEXT_ADD.newItem };
     }
     if (f.match) return { state: 'match', text: `있는 항목 「${f.match.label}」에 연결` };
     if (f.ambiguous) return { state: 'new', text: '새로 만듦 · 같은 이름이 지도에 둘 이상 있습니다' };
@@ -257,6 +263,9 @@ export function textAddDialog(o) {
       if (st.fallback) parts.push(el('p', { class: 'notice', role: 'status', 'data-testid': 'text-add-fallback' }, st.fallback));
       for (const n of p.notes || []) parts.push(el('p', { class: 'notice', 'data-testid': 'text-add-note' }, n));
       if (p.nodes.length) {
+        parts.push(el('div', { class: 'row' },
+          el('button', { type: 'button', 'data-testid': 'text-add-check-all', onclick: () => setAll(true) }, TEXT_ADD.checkAll),
+          el('button', { type: 'button', 'data-testid': 'text-add-uncheck-all', onclick: () => setAll(false) }, TEXT_ADD.uncheckAll)));
         parts.push(el('h3', {}, TEXT_ADD.nodesTitle(p.nodes.length)));
         parts.push(el('div', { class: 'batch-wrap' }, el('table', { class: 'dg-table batch-grid', 'data-testid': 'text-add-nodes' },
           head(['넣기', '유형', '이름', '사번', '상태', '원문 구절']), el('tbody', {}, ...p.nodes.flatMap((n, i) => nodeRow(n, i, r))))));
@@ -300,6 +309,15 @@ export function textAddDialog(o) {
     messageLine.textContent = st.message;
     doneLine.textContent = st.done;
     doneLine.hidden = !st.done;
+  }
+
+  // 모두 체크 / 모두 해제(R17): 모두 체크해도 확인할 것(hold)·같은 이름이 둘 이상인 항목·이미 있는 연결은 체크하지 않는다
+  function setAll(on) {
+    if (!st.proposal || st.busy) return;
+    const d = defaultSelection(st.proposal, 'all');
+    for (const n of st.proposal.nodes) nodeSel(n.key).include = on ? d.nodes[n.key].include : false;
+    for (const e of st.proposal.edges) edgeSel(e.key).include = on ? d.edges[e.key].include : false;
+    render();
   }
 
   // 읽은 뒤 글 상자가 바뀌면(R16-16) 저장을 막고 「다시 읽으세요」. 원래 글로 되돌리면 풀린다
