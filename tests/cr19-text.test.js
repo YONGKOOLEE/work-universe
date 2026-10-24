@@ -156,8 +156,8 @@ test('CR-19 선후행: 끝나면·끝난 뒤·다음에·뒤에·후에, 마치�
 test('CR-19 소속: X는 T 소속, T 소속 X, T의 X — T가 팀·실·부·과·센터·본부로 끝날 때만 조직', () => {
   for (const [s, x] of [
     ['도하람은 감사팀 소속이다', '도하람'],
-    ['감사팀 소속 도하람 님이 확인한다', '도하람'],
-    ['감사팀의 도하람이 확인한다', '도하람'],
+    ['감사팀 소속 도하람 님', '도하람'], // R19 ③: 소속 모양이 쓴 낱말 뒤에 서술(「님이 확인한다」)이 남으면 쓰이지 않은 낱말이라 문장을 읽지 않는다 — 서술을 뺀 꼴로 확인한다
+    ['감사팀의 도하람이', '도하람'],
     ['도하람(V-2001)은 감사팀 소속입니다', '도하람'],
   ]) {
     const p = extractFromText(s, null);
@@ -166,6 +166,10 @@ test('CR-19 소속: X는 T 소속, T 소속 X, T의 X — T가 팀·실·부·�
     assert.deepEqual(pair(p, e[0]), [x, '감사팀'], s);
     assert.equal(byLabel(p, '감사팀').type, 'org');
     assert.equal(byLabel(p, x).type, 'person');
+  }
+  for (const s of ['감사팀 소속 도하람 님이 확인한다', '감사팀의 도하람이 확인한다']) {
+    const q = extractFromText(s, null);
+    assert.deepEqual([q.nodes, q.edges, q.unread], [[], [], [s]], `R19 ③ ${s}`);
   }
   // 조직 끝말이 아니면 소속으로 읽지 않는다(지어내지 않음)
   const none = extractFromText('도하람은 감사 소속이다. 감사의 도하람이 확인한다', null);
@@ -267,8 +271,8 @@ test('CR-19 지금 지도에 같은 이름·사번의 항목이 하나면 새로
   assert.equal(q.nodes[0].match, null);
   assert.equal(q.nodes[0].hold, '사번은 「서하늘」과 같고 이름이 다릅니다');
   assert.match(q.notes.join('|'), /사번은 「서하늘」과 같고 이름이 다릅니다/);
-  assert.equal(defaultSelection(q).nodes.n1.include, false);
-  assert.equal(defaultSelection(q).edges.e1.include, false, 'hold 항목에 걸린 연결도 처음에는 체크하지 않는다');
+  assert.equal(defaultSelection(q, 'existing-only').nodes.n1.include, false);
+  assert.equal(defaultSelection(q, 'existing-only').edges.e1.include, false, 'hold 항목에 걸린 연결도 처음에는 체크하지 않는다');
   // 같은 이름이라도 사번이 다르면 다른 사람
   const r = extractFromText('서하늘(V-9999)이 점검을 맡는다', view);
   assert.equal(r.nodes[0].match, null);
@@ -321,7 +325,7 @@ test('CR-19 PAIR_RULES: 방향이 반대로만 맞으면 뒤집고, 안 맞으�
 test('R17 기본 선택: 새로 만드는 항목과 새 항목이 한쪽 끝인 연결은 처음에 체크하지 않는다(지도에 이미 있는 것만) — 그대로 저장하면 아무것도 새로 만들지 않는다', () => {
   const doc = clone(SAMPLES.find((d) => d.universe.id === 'U-A1'));
   const p = extractFromText(EXAMPLE, buildView(doc));
-  const sel = defaultSelection(p);
+  const sel = defaultSelection(p, 'existing-only');
   assert.deepEqual(p.nodes.map((n) => [n.label, sel.nodes[n.key].include]), [['서하늘', true], ['대사 확인', true], ['보고', true], ['월말 정산 보고서', false], ['도하람', false]]);
   // 수행·선후행은 이미 있어 체크 안 함, 산출·참조는 새 항목이 끝이라 체크 안 함
   assert.deepEqual(p.edges.map((e) => [e.type, sel.edges[e.key].include]), [['performs', false], ['precedes', false], ['produces', false], ['references', false]]);
@@ -331,11 +335,14 @@ test('R17 기본 선택: 새로 만드는 항목과 새 항목이 한쪽 끝인 
   assert.deepEqual(p.nodes.map((n) => all.nodes[n.key].include), [true, true, true, true, true]);
   assert.deepEqual(p.edges.map((e) => all.edges[e.key].include), [false, false, true, true]);
   // 새 항목 하나만 체크하면 그 항목과 (끝이 모두 들어가는) 연결을 쓸 수 있다
-  const one = proposalToOps(p, { nodes: { n4: { include: true } }, edges: { e3: { include: true } } }, doc);
+  const pick = defaultSelection(p, 'existing-only');
+  pick.nodes.n4.include = true;
+  pick.edges.e3.include = true;
+  const one = proposalToOps(p, pick, doc);
   assert.deepEqual(one.map((o) => [o.op, o.key]), [['addNode', 'n4'], ['addEdge', 'e3']]);
   // AI 읽기 제안도 같은 규칙: match 없는 항목은 체크 해제
   const ai = verifyAiExtract(EXAMPLE, { nodes: [{ type: 'person', label: '서하늘', emp_no: 'V-1003', quote: '서하늘(V-1003)이 대사 확인을 맡는다' }, { type: 'person', label: '도하람', emp_no: '', quote: '감사팀 도하람에게 결과를 공유한다' }], edges: [] }, buildView(doc));
-  const aiSel = defaultSelection(ai.proposal);
+  const aiSel = defaultSelection(ai.proposal, 'existing-only');
   assert.deepEqual(ai.proposal.nodes.map((n) => aiSel.nodes[n.key].include), [true, false]);
 });
 
@@ -586,7 +593,7 @@ const withDom = (fn) => async () => {
   try { await fn(body); } finally { uninstallDom(); }
 };
 
-function openDialog({ aiReady = false, mode = 'extract', app = openApp() } = {}) {
+function openDialog({ aiReady = false, mode = 'extract', app = openApp(), defaultCheck = 'existing-only' } = {}) { // R19: 기본 모드가 'none'이라 예전 흐름(existing-only)을 보는 시험은 모드를 명시한다
   const dialog = new FakeEl('dialog');
   dialog.open = false;
   dialog.showModal = () => { dialog.open = true; };
@@ -601,6 +608,7 @@ function openDialog({ aiReady = false, mode = 'extract', app = openApp() } = {})
     aiReady: () => aiReady,
     readAi: (text) => extractTextAsync(text, { provider, view: app.view }),
     onSaved: (r) => saved.push(r),
+    defaultCheck,
   });
   open();
   const q = (id) => dialog.querySelector(`[data-testid=${id}]`);

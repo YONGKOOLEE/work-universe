@@ -33,7 +33,7 @@ const CORPUS = [
   ["A15", "U-A1", "자료 수집이 끝나면 보고 진행함.", "~함 선후행", [], [], [], ["자료 수집이 끝나면 보고 진행함"]],
   ["A16", "U-A1", "보고에서 월말 정산 보고서를 만든다.", "산출", ["work:보고","artifact:월말 정산 보고서"], ["produces:보고>월말 정산 보고서"], [], []],
   ["A17", "U-A1", "도하람은 감사팀 소속이다.", "소속", ["person:도하람","org:감사팀"], ["belongs_to:도하람>감사팀"], [], []],
-  ["A18", "U-A1", "감사팀의 도하람이 결과를 확인한다.", "소속 b", ["person:도하람","org:감사팀"], ["belongs_to:도하람>감사팀"], [], []],
+  ["A18", "U-A1", "감사팀의 도하람이 결과를 확인한다.", "소속 b(R19 ③: 소속 모양 뒤 서술은 쓰이지 않은 낱말 → 읽지 않음)", [], [], [], ["감사팀의 도하람이 결과를 확인한다"]],
   ["A19", "U-A1", "서하늘이 대사 확인을 맡는다. 회의 일정은 도하람에게 따로 문의한다.", "참조 앞문장 업무", ["person:서하늘","work:대사 확인"], ["performs:서하늘>대사 확인"], [], ["회의 일정은 도하람에게 따로 문의한다"]],
   ["A20", "U-A1", "서하늘이 대사 확인을 맡는다. 이 건은 도하람에게 공유하지 않는다.", "참조 부정", ["person:서하늘","work:대사 확인"], ["performs:서하늘>대사 확인"], [], ["이 건은 도하람에게 공유하지 않는다"]],
   ["A21", "U-A1", "한가람 팀장이 보고를 맡는다.", "직함", ["person:한가람","work:보고"], ["performs:한가람>보고"], [], []],
@@ -106,10 +106,10 @@ const CORPUS = [
 
 const labelOf = (p, key) => p.nodes.find((n) => n.key === key).label;
 
-test('R16 말뭉치: 86문장 — 읽는 것 27문장(연결이 있는 문장), 나머지 59문장은 항목·연결 없이 모두 읽지 못한 문장', () => {
+test('R16 말뭉치: 86문장 — 읽는 것 26문장(연결이 있는 문장), 나머지 60문장은 항목·연결 없이 모두 읽지 못한 문장', () => {
   assert.equal(CORPUS.length, 86);
-  assert.equal(CORPUS.filter((c) => c[5].length > 0).length, 27);
-  assert.equal(CORPUS.filter((c) => c[5].length === 0 && c[4].length === 0).length, 59);
+  assert.equal(CORPUS.filter((c) => c[5].length > 0).length, 26);
+  assert.equal(CORPUS.filter((c) => c[5].length === 0 && c[4].length === 0).length, 60);
   assert.equal(CORPUS.filter((c) => c[5].length === 0 && c[4].length > 0).length, 0, '이름만 읽고 연결이 없는 채로 남는 문장은 없다');
 });
 
@@ -124,10 +124,13 @@ for (const [n, map, text, why, nodes, edges, hold, unread] of CORPUS) {
     // 잘못 읽기 0: 모든 quote는 읽은 문장이고, 읽지 못한 문장은 어떤 항목·연결의 quote도 아니다
     for (const x of [...p.nodes, ...p.edges]) assert.ok(text.includes(x.quote) && !unread.includes(x.quote), x.quote);
     // R17: 처음 체크는 지도에 이미 있는 항목(hold·같은 이름이 둘 이상은 제외)과, 두 끝이 모두 지도에 있는 연결(이미 있는 연결·hold에 걸린 연결은 제외)뿐이다
-    const sel = defaultSelection(p);
+    const sel = defaultSelection(p, 'existing-only');
     for (const x of p.nodes) assert.equal(sel.nodes[x.key].include, !!x.match && !x.hold && !x.ambiguous, x.label);
     const matched = new Set(p.nodes.filter((x) => x.match).map((x) => x.key));
-    for (const e of p.edges) assert.equal(sel.edges[e.key].include, !e.exists && !e.hold && matched.has(e.from) && matched.has(e.to), e.key);
+    for (const e of p.edges) assert.equal(sel.edges[e.key].include, !e.exists && !e.hold && matched.has(e.from) && matched.has(e.to) && !p.unreadContext && !p.ctxVeto, e.key);
+    // 기본 모드는 'none'(아무것도 체크하지 않음)
+    const none = defaultSelection(p);
+    assert.ok(Object.values(none.nodes).every((x) => !x.include) && Object.values(none.edges).every((x) => !x.include));
     // 처음 체크된 채 잘못 읽은 연결 = 0: 체크된 연결(두 끝도 체크)은 모두 기대 연결 안에 있다
     const checked = p.edges.filter((e) => sel.edges[e.key].include && sel.nodes[e.from].include && sel.nodes[e.to].include).map((e) => `${e.type}:${labelOf(p, e.from)}>${labelOf(p, e.to)}`);
     for (const c of checked) assert.ok(edges.includes(c), c);
@@ -183,7 +186,7 @@ test('R16-3 「Y이 끝나면 Z」: Z가 주어(이/가/은/는)이고 다른 �
   assert.match(p.notes.join('|'), /「보고」: 글에서 서로 다른 유형/);
   assert.equal(p.edges[0].hold, true);
   // R17: 지도가 없으면 matched 항목이 없어 기본(existing-only)은 모두 체크 해제 — 충돌(hold) 때문에 해제되는 것은 모두 체크('all')에서 드러난다
-  assert.deepEqual([defaultSelection(p).nodes.n1.include, defaultSelection(p).nodes.n2.include, defaultSelection(p).edges.e1.include], [false, false, false]);
+  assert.deepEqual([defaultSelection(p, 'existing-only').nodes.n1.include, defaultSelection(p, 'existing-only').nodes.n2.include, defaultSelection(p, 'existing-only').edges.e1.include], [false, false, false]);
   const sel = defaultSelection(p, 'all');
   assert.deepEqual([sel.nodes.n1.include, sel.nodes.n2.include, sel.edges.e1.include], [false, true, false]);
   // 확실하지 않던 사람이 다른 문장에서 업무로 확실해지면 그 유형을 따라간다(충돌 아님)
@@ -285,7 +288,7 @@ test('R16-12 지도에 같은 이름이 다른 유형으로 있으면(유형이 
   assert.equal(hold['대사 확인'], '지도에는 사람으로 있음');
   assert.equal(hold['도하람'], '지도에는 업무로 있음');
   assert.ok(q.notes.includes('「대사 확인」: 지도에는 사람으로 있음'));
-  const sel = defaultSelection(q);
+  const sel = defaultSelection(q, 'existing-only');
   assert.equal(sel.nodes[q.nodes.find((n) => n.label === '대사 확인').key].include, false);
   assert.equal(sel.edges[q.edges.find((e) => labelOf(q, e.to) === '대사 확인').key].include, false);
 });
@@ -365,7 +368,7 @@ test('R16 AI-5 사람을 업무로: 지도에 사람으로 있는 「서하늘�
   assert.equal(p.nodes[0].hold, '지도에는 사람으로 있음');
   assert.ok(p.notes.includes('「서하늘」: 지도에는 사람으로 있음'));
   assert.equal(p.edges[0].hold, true);
-  const sel = defaultSelection(p);
+  const sel = defaultSelection(p, 'existing-only');
   assert.deepEqual([sel.nodes.n1.include, sel.nodes.n2.include, sel.edges.e1.include], [false, true, false]);
 });
 

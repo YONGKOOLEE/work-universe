@@ -12,7 +12,7 @@
 
 import { LABEL_MAX, normalizeEmpNo, normalizeLabel } from '../model/schema.js';
 import {
-  TEXT_LIMITS, TEXT_NODE_TYPES, capNotes, createBuilder, empNoAfterName, finalizeProposal, nameInText, orientRelation, ownCandidates, splitSentences,
+  TEXT_LIMITS, TEXT_NODE_TYPES, TEXT_UNREAD_CONTEXT_NOTE, capNotes, createBuilder, empNoAfterName, finalizeProposal, nameInText, orientRelation, ownCandidates, splitSentences,
 } from '../rules/text-extract.js';
 import { QUOTE_MAX, normalizeQuote } from './evidence-text.js';
 import { textFingerprint } from './ai-convert.js';
@@ -168,6 +168,9 @@ export function verifyAiExtract(text, parsed, view = null, opt = {}) {
   const notes = [];
   if (dropped.length) notes.push(`Claude 응답 중 ${dropped.length}개 행은 원문 인용이 확인되지 않거나 규칙에 맞지 않아 뺐습니다`);
   notes.push(...capNotes(b.flags));
-  const proposal = finalizeProposal({ method: 'claude_api', ...(opt.model ? { model: opt.model } : {}), nodes: b.nodes, edges: b.edges, unread, partial: [], notes }, view);
+  // R19 ①: 읽지 못한 문장이 있는 글에서는 앞뒤 문장이 읽은 문장의 뜻을 바꿀 수 있다 — 안내하고 'existing-only'에서도 연결을 처음 체크하지 않는다
+  const unreadContext = unread.length > 0 && b.edges.length > 0;
+  if (unreadContext) notes.push(TEXT_UNREAD_CONTEXT_NOTE);
+  const proposal = finalizeProposal({ method: 'claude_api', ...(opt.model ? { model: opt.model } : {}), nodes: b.nodes, edges: b.edges, unread, partial: [], notes, unreadContext }, view);
   return { ok: true, proposal, dropped, counts };
 }

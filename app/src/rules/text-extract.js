@@ -17,10 +17,11 @@ import {
 
 /** 글·항목 상한(넘으면 notes로 알린다). 항목·연결 상한은 applyBatch의 행 상한(BATCH_MAX_ROWS)과 맞춘다 */
 /**
- * R17: 처음 체크하는 범위. 'existing-only' = 지도에 이미 있는 항목(match)과 두 끝이 모두 지도에 있는 연결만. 'all' = 예전처럼 hold·이미 있음 말고는 모두.
+ * R19: 처음 체크하는 범위의 기본은 'none'(아무것도 체크하지 않음 — 사용자가 「지도에 있는 것만 체크」「모두 체크」나 하나씩 체크). 규칙 읽기는 문장 안팎의 맥락을 다 알 수 없어서다.
+ * R17: 'existing-only' = 지도에 이미 있는 항목(match)과 두 끝이 모두 지도에 있는 연결만(읽지 못한 문장이 같은 글에 있으면 연결은 체크하지 않음). 'all' = hold·같은 이름 둘·이미 있음·일부만 읽은 문장·뒤집는 문장이 있는 글 말고는 모두.
  * 규칙 읽기는 구멍을 다 막을 수 없어, 새로 만드는 항목은 사람이 이름이 맞는지 보고 체크하게 해 피해를 묶는다.
  */
-export const TEXT_DEFAULT_CHECK = 'existing-only';
+export const TEXT_DEFAULT_CHECK = 'none';
 /** 처음 체크 모드 값: 'existing-only'(기본) · 'all' · 'none'(아무것도 처음 체크하지 않음 — 사용자가 「모두 체크」나 하나씩 체크) */
 export const TEXT_CHECK_MODES = Object.freeze(['existing-only', 'all', 'none']);
 
@@ -52,6 +53,8 @@ export const TEXT_WORDS = Object.freeze({
     '대표', '사장', '부사장', '회장', '이사', '상무', '전무', '임원', '파트장', '그룹장', '조직장', '팀리더', '리더',
     '신입', '경력', '담당', '협력', '외주', '파견', '현장', '계약직', '정규직', '인턴', '감사', '감사인', '세무사', '회계사'],
   /** R18 허용 목록: 읽은 모양에 쓰이지 않은 낱말은 이음말(leading)과 이 낱말뿐이다. 이 밖의 낱말이 문장에 하나라도 남으면 그 문장 전체를 읽지 않는다 */
+  /** 이름 떼기에는 쓰지만(leading) 허용 판정에서는 뺀다: 앞 문장 맥락에 기대어 뜻이 바뀌는 이음말 */
+  contextWords: ['그때', '이때', '이후', '우선'],
   allowedWords: ['지금은', '요즘', '요즘은', '현재', '현재는'],
   /** 개조식 머리(「- 」「· 」「• 」「1)」「1.」) */
   listHead: /^(?:[-·•▪‣◦*]|\d{1,2}[.)])$/,
@@ -100,14 +103,14 @@ export const TEXT_GUARDS = Object.freeze({
   ]),
   token: Object.freeze([
     { id: 'neg', why: '부정', re: /않|못|아니|아님|아닌|없|말고|말아|^안$/ },
-    { id: 'tense', why: '시제', re: /[았었였겼했랐렸쳤됐냈썼섰봤줬]|던|예정/ },
+    { id: 'tense', why: '시제', re: /[았었였겼했랐렸쳤됐냈썼섰봤줬갔났뗐뒀졌]|던|예정/ },
     { id: 'modal', why: '양태·의문', re: /^수(?:도|가|는)?$|^것|싶|어렵|어려|(?:을지|는지|인지|할지|될지|갈지|볼지|줄지|올지|말지|길지)$|까요?$|나요$|가요$|냐$|^되(?:면|어|었|는|고|지|어서)/ },
     { id: 'question', why: '의문', re: /^(?:누구|무엇|뭐|어디|언제|어떻|어떤|어느|왜|얼마|몇)/ },
     { id: 'adverb', why: '시점·가정', re: /^(?:대신|위해|위한|때문|경우|만약|혹시|아직|아마|추후|향후|나중|앞으로|이제|일단|임시|잠시|한때|당시|과거|이전|넘기|넘겨|넘긴|넘김|바뀌|바뀐|바꿔|바꾼|퇴사|휴직|이번|당분간|원래|평소|가끔|주로|보통|기간|동안|말씀|곧|조만간|퍽이나|설마|어쩌면|가령|예컨대|잘도|담주|낼$|대행|부재)|동안$|^(?:월말|월초|연말|연초)(?:에는|에도|엔|에)$|^(?:휴가|부재|출장)(?:중|기간|시|때|에는|엔)$/ },
     // R17 C: 조건 어미 「~면」(세 글자 이상이거나 오면·하면·되면). 선후행 표지(끝나면·마치면)는 예외
     // R17: 전해 들은 말·추측·초안 표시
     { id: 'hearsay', why: '전해 들음·추측', re: /(?:더라|네요|죠|지요|군요|래요|대요|라는|이래|한대|듯하다|같다|같아요|모양이다)$|^듯|^\[?(?:초안|가안|예시|참고|가정|TODO|WIP)\]?$/i },
-    { id: 'cond', why: '조건', re: /^(?!(?:끝나면|끝나면은|마치면|마치면은)$)(?:[가-힣A-Za-z0-9]{2,}면(?:은)?|오면|하면|되면)$/ },
+    { id: 'cond', why: '조건', re: /^(?!(?:끝나면|끝나면은|마치면|마치면은)$)(?:[가-힣A-Za-z0-9]{2,}면(?:은)?|오면|하면|되면)$|^(?!(?:화면|지면|단면|표면|평면|측면|장면|국면|이면|전면|후면|외면|내면|사면|방면|수면|분면)$)[가-힣]면(?:은)?$/ },
     { id: 'range', why: '날짜·기간', re: /(?:까지|부터)(?:는|도|만|의)?$/ },
     // R16-9 나열(및·또는·「서하늘하고」「서하늘이랑」). 동사 「담당하고」 같은 것은 제외
     { id: 'list', why: '나열', re: /^(?:및|또는|혹은|겸|vs|VS|or|OR|아니면)$|^(?!맡|담당|처리|진행|만들|작성|산출|공유|문의|협업|전달|보고).{2,}(?:하고|이랑|랑)$/ },
@@ -142,6 +145,9 @@ export const TEXT_PATTERN_DOC = Object.freeze([
   { id: 'reference', relation: 'references', shape: 'X에게 공유·문의·협업·보고·전달 (그 문장의 업무가 하나일 때, 없으면 바로 앞 문장이 읽혔고 업무가 하나일 때)', example: '도하람에게 결과를 공유한다' },
   { id: 'emp_no', relation: null, shape: '이름(V-1234) → 사번이 있는 사람', example: '서하늘(V-1003)' },
 ]);
+
+/** 읽지 못한 문장이 있는데 읽은 연결이 있을 때의 안내(notes와 화면 맨 위) */
+export const TEXT_UNREAD_CONTEXT_NOTE = '읽지 못한 문장이 있습니다 — 앞뒤 문장이 뜻을 바꾸지 않는지 확인한 뒤 체크하세요';
 
 /** 묶은 지도에서 글로 추가를 쓰지 못한다는 안내(화면 단추 자리의 한 줄과 같은 뜻) */
 export const TEXT_GROUPED_NOTE = '묶은 지도에서는 글로 추가를 쓸 수 없습니다 — 팀·업무 지도를 열어 넣으세요';
@@ -650,7 +656,7 @@ function runBelongsA(sc) {
       sc.use(k, i);
     } else if (T[i + 1] && (SUBJ.has(T[i + 1].josa) || T[i + 1].emp_no || T[i + 1].titled) && !TEXT_WORDS.verbLike.test(T[i + 1].core)) {
       belong(sc, T[i + 1], org);
-      sc.use(ta, T.length - 1); // 「T 소속 X 님이 …」 뒤의 서술은 소속 읽기에 영향이 없다
+      sc.use(ta, i + 1); // 소속 모양이 실제로 쓴 낱말만(뒤의 서술은 쓰이지 않은 낱말이라 문장을 읽지 않는다)
     } else sc.miss();
   }
   return undefined;
@@ -665,7 +671,7 @@ function runBelongsB(sc) {
     const org = (phraseOf(T, backStart(T, i, 2), i) || {}).label;
     if (!org) { sc.miss(); continue; }
     belong(sc, x, org);
-    sc.use(i, T.length - 1); // 「T의 X가 …」 뒤의 서술은 모양으로 읽지 않지만 소속 읽기에는 영향이 없다
+    sc.use(i, i + 1);
   }
 }
 
@@ -721,7 +727,10 @@ function runReference(sc) {
     else if (works.length === 0 && sc.prev && sc.prev.works.length === 1 && onlyGenericAround(T, i, vi)) work = sc.node({ type: 'work', label: sc.prev.works[0].label, carried: true });
     else { sc.miss(); continue; }
     sc.edge(work, sc.node(spec), 'references');
-    sc.use(i > 0 && bare(T[i - 1]) && looksOrg(T[i - 1].core) ? i - 1 : i, vi);
+    // 쓴 낱말: 대상(과 앞의 조직 이름)·동사, 그 사이의 일반 목적어·부사뿐(대상~동사 사이 전체를 쓴 것으로 치지 않는다)
+    sc.use(i > 0 && bare(T[i - 1]) && looksOrg(T[i - 1].core) ? i - 1 : i, i);
+    sc.use(vi);
+    for (let q = i + 1; q < vi; q += 1) if (TEXT_WORDS.referenceAdverbs.includes(T[q].core) || TEXT_WORDS.genericObject.test(T[q].core)) sc.use(q);
     if (work.carried) sc.use(0, vi); // 앞 문장의 업무를 이어받은 문장은 (결과·내용 같은) 일반 목적어와 부사뿐이므로 앞쪽 낱말도 모두 쓴 것이다
   }
   // R17 S1: 현재형 참조 동사(공유한다·문의합니다 …)가 있는데 대상(X에게)을 찾지 못했다 → 일부만 읽음
@@ -784,7 +793,7 @@ function makeScope(s, T, prev, known) {
       for (let j = 0; j < T.length; j += 1) {
         if (sc.used.has(j)) continue;
         const t = T[j];
-        if (TEXT_WORDS.leading.includes(t.core) || TEXT_WORDS.allowedWords.includes(t.core) || TEXT_WORDS.listHead.test(t.raw)) continue;
+        if ((TEXT_WORDS.leading.includes(t.core) && !TEXT_WORDS.contextWords.includes(t.core)) || TEXT_WORDS.allowedWords.includes(t.core) || TEXT_WORDS.listHead.test(t.raw)) continue;
         if (j > last && TEXT_WORDS.trailOk.test(t.core)) continue;
         return t.core;
       }
@@ -1053,14 +1062,14 @@ export function extractFromText(text, view = null, opt = {}) {
   for (const { text: s, end } of sentences) {
     const skip = () => { unread.push(s); prev = null; };
     const afterShort = shortHead; // 「Q.」「A.」 같은 한두 글자 머리 문장 바로 뒤 문장은 읽지 않는다
-    shortHead = s.length <= 2;
-    if (s.length > limits.sentenceMax || end === '?' || end === '？' || afterShort) { skip(); continue; } // 물음표로 끝난 문장은 질문이다
+    shortHead = s.replace(/[:：]/g, '').length <= 2;
+    if (s.length > limits.sentenceMax || end === '?' || end === '？' || /[?？‽⁈⁉]/.test(s) || afterShort) { skip(); continue; } // 물음표로 끝난 문장은 질문이다
     const T = parseTokens(s);
     if (/^(?:농담|거짓|취소|철회|정정|사실이 아니)/.test(s)) { ctxVeto = true; skip(); continue; } // 앞 내용을 뒤집는 문장
     const why = sentenceVeto(s, T, known);
     if (why) {
       // R18 D: 지도 이름이 없는 문장이 부정·시제·전언으로 걸리면 앞 내용을 뒤집는 문장일 수 있다 — 이 글의 연결은 처음에 하나도 체크하지 않는다
-      if (['부정', '시제', '전해 들음·추측'].includes(why) && !known.labels.some((l) => s.includes(l))) ctxVeto = true;
+      if (['부정', '시제', '전해 들음·추측'].includes(why) && !known.labels.some((l) => nameInText(s, l))) ctxVeto = true;
       skip();
       continue;
     }
@@ -1080,7 +1089,10 @@ export function extractFromText(text, view = null, opt = {}) {
   }
   notes.push(...capNotes(b.flags, limits));
   if (ctxVeto && b.edges.length) notes.push('글에 앞 내용을 뒤집는 문장이 있어 처음 체크를 모두 풀었습니다');
-  const proposal = { method: 'rule', nodes: b.nodes, edges: b.edges, unread, partial, notes, ctxVeto };
+  // R19 ①: 읽지 못한 문장이 있는 글에서는 앞뒤 문장이 읽은 문장의 뜻을 바꿀 수 있다 — 'existing-only'에서도 연결을 처음 체크하지 않는다
+  const unreadContext = unread.length > 0 && b.edges.length > 0;
+  if (unreadContext) notes.push(TEXT_UNREAD_CONTEXT_NOTE);
+  const proposal = { method: 'rule', nodes: b.nodes, edges: b.edges, unread, partial, notes, ctxVeto, unreadContext };
   return finalizeProposal(proposal, view);
 }
 
@@ -1095,12 +1107,13 @@ export function defaultSelection(proposal, mode = TEXT_DEFAULT_CHECK) {
   const nodes = {};
   const edges = {};
   const matched = new Map(proposal.nodes.map((n) => [n.key, !!n.match]));
-  const all = mode === 'all';
   const none = mode === 'none';
-  const part = new Set(proposal.partial || []); // R18 C: 일부만 읽은 문장의 항목·연결은 처음에 체크하지 않는다
-  for (const n of proposal.nodes) nodes[n.key] = { include: !none && !n.ambiguous && !n.hold && (all || (!!n.match && !part.has(n.quote))), type: n.type, label: n.label, emp_no: n.emp_no || '' };
+  const existing = mode === 'existing-only';
+  const part = new Set(proposal.partial || []); // R18 C: 일부만 읽은 문장의 항목·연결은 체크하지 않는다
+  // 'all'도 hold·같은 이름 둘·이미 있는 연결·일부만 읽은 문장·뒤집는 문장이 있는 글(ctxVeto)은 체크하지 않는다. 'existing-only'는 거기에 더해 지도에 있는 것만, 읽지 못한 문장이 있는 글(unreadContext)은 연결을 체크하지 않는다
+  for (const n of proposal.nodes) nodes[n.key] = { include: !none && !n.ambiguous && !n.hold && !part.has(n.quote) && (!existing || !!n.match), type: n.type, label: n.label, emp_no: n.emp_no || '' };
   for (const e of proposal.edges) {
-    edges[e.key] = { include: !none && !e.exists && !e.hold && (all || (matched.get(e.from) && matched.get(e.to) && !part.has(e.quote) && !proposal.ctxVeto)), type: e.type };
+    edges[e.key] = { include: !none && !e.exists && !e.hold && !part.has(e.quote) && !proposal.ctxVeto && (!existing || (matched.get(e.from) && matched.get(e.to) && !proposal.unreadContext)), type: e.type };
   }
   return { nodes, edges };
 }

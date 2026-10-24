@@ -5,7 +5,7 @@
 import { el } from './dom.js';
 import { messageFor } from './messages.js';
 import { EDGE_TYPES, NODE_TYPES, allowedRelations } from '../model/schema.js';
-import { TEXT_DEFAULT_CHECK, TEXT_LIMITS, TEXT_NODE_TYPES, TEXT_PATTERN_DOC, defaultSelection, docCandidates, extractFromText, proposalToOps, resolveSelection } from '../rules/text-extract.js';
+import { TEXT_DEFAULT_CHECK, TEXT_LIMITS, TEXT_UNREAD_CONTEXT_NOTE, TEXT_NODE_TYPES, TEXT_PATTERN_DOC, defaultSelection, docCandidates, extractFromText, proposalToOps, resolveSelection } from '../rules/text-extract.js';
 
 /** 화면 문구(한 곳). 용어: 「항목」「지도 중심」 */
 export const TEXT_ADD = Object.freeze({
@@ -26,6 +26,9 @@ export const TEXT_ADD = Object.freeze({
   unreadTitle: (n) => `읽지 못한 문장 ${n}개`,
   unreadNote: '모양에 맞지 않거나 뜻이 애매해(부정·지난 일·예정·날짜·나열 등) 지어내지 않고 건너뛴 문장입니다.',
   introNone: '몇 문장짜리 글(회의 메모·인수인계 메모)을 붙여 넣으면 사람·업무·산출물·조직을 찾아 미리 보여 줍니다. 처음에는 아무것도 체크되어 있지 않습니다 — 맞는 것을 체크하거나 「모두 체크」를 누르세요. 고친 뒤 「저장」을 눌러야 들어갑니다.',
+  checkExisting: '지도에 있는 것만 체크',
+  onMap: (label) => `지도에 있음 — 「${label}」에 연결(체크하면 넣습니다)`,
+  onMapEdge: '지도에 있는 두 항목 사이 — 체크하면 넣습니다',
   checkAll: '모두 체크',
   uncheckAll: '모두 해제',
   newItem: '새로 만듦 — 이름이 맞으면 체크',
@@ -184,7 +187,7 @@ export function textAddDialog(o) {
     if (!f.include) {
       if (f.ambiguous) return { state: 'off', text: '같은 이름이 둘 이상 있습니다 — 체크하면 새 항목으로 만듭니다' };
       if (n.hold && !f.match) return { state: 'hold', text: `넣지 않음 · ${n.hold} — 확인한 뒤 체크하세요` };
-      if (f.match) return { state: 'off', text: '넣지 않음' };
+      if (f.match) return { state: 'off-map', text: TEXT_ADD.onMap(f.match.label) }; // R19: 처음에는 아무것도 체크하지 않지만 지도에 있는 항목은 표시해 고르기 쉽게
       // R17: 새로 만드는 항목은 처음에 체크하지 않는다 — 이름이 맞는지 사람이 보고 체크
       return { state: 'new-off', text: f.type === 'person' ? TEXT_ADD.newPerson : TEXT_ADD.newItem };
     }
@@ -193,12 +196,17 @@ export function textAddDialog(o) {
     return { state: 'new', text: `새로 만듦${n.unsure && f.type === 'person' ? ' · 확인 필요(사람인지 확실하지 않음)' : ''}${n.hold ? ` · ${n.hold}` : ''}` };
   };
 
-  const edgeStatus = (f) => {
+  const edgeStatus = (f, a, b) => {
     if (f.reason === 'pair') return { state: 'pair', text: '이 두 항목의 유형에는 이 관계를 쓸 수 없습니다 — 관계를 다시 고르세요' };
-    if (f.reason === 'end_missing') return { state: 'end', text: '끝 항목을 넣지 않아 넣을 수 없습니다' };
+    if (f.exists && f.reason !== 'pair') return { state: 'exists', text: '이미 있음' }; // 이미 지도에 같은 연결이 있으면 끝 항목 체크와 관계없이 그 사실을 먼저 보인다
+    if (f.reason === 'end_missing') {
+      // R19: 두 끝이 모두 지도에 있으면 「지도에 있음」 표시 — 끝 항목을 체크하면 넣을 수 있다
+      if (a && b && a.match && b.match && !f.exists) return { state: 'end', text: '지도에 있는 두 항목 사이 — 끝 항목을 체크하면 넣을 수 있습니다' };
+      return { state: 'end', text: '끝 항목을 넣지 않아 넣을 수 없습니다' };
+    }
     if (f.reason === 'same') return { state: 'same', text: '두 끝이 같은 항목이라 넣을 수 없습니다' };
     if (f.exists) return { state: 'exists', text: '이미 있음' };
-    if (!f.wanted) return { state: 'off', text: '넣지 않음' };
+    if (!f.wanted) return a && b && a.match && b.match ? { state: 'off-map', text: TEXT_ADD.onMapEdge } : { state: 'off', text: '넣지 않음' };
     return { state: 'new', text: '새 연결' };
   };
 
@@ -234,10 +242,10 @@ export function textAddDialog(o) {
 
   function edgeRow(e, j, r) {
     const f = r.edges[e.key];
-    const status = edgeStatus(f);
     const err = st.errors.get(e.key);
     const a = r.nodes[f.source];
     const b = r.nodes[f.target];
+    const status = edgeStatus(f, a, b);
     const rels = allowedRelations(a.type, b.type);
     const known = rels.some((x) => x.relation === f.type);
     const locked = !!f.reason;
@@ -261,11 +269,13 @@ export function textAddDialog(o) {
     const parts = [];
     if (p) {
       const r = resolved();
+      if (p.unreadContext && p.edges.length) parts.push(el('p', { class: 'notice', role: 'status', 'data-testid': 'text-add-context-note' }, TEXT_UNREAD_CONTEXT_NOTE));
       parts.push(el('p', { class: 'muted small', 'data-testid': 'text-add-method' }, st.method === 'claude_api' ? TEXT_ADD.methodAi(st.model) : TEXT_ADD.methodRule));
       if (st.fallback) parts.push(el('p', { class: 'notice', role: 'status', 'data-testid': 'text-add-fallback' }, st.fallback));
-      for (const n of p.notes || []) parts.push(el('p', { class: 'notice', 'data-testid': 'text-add-note' }, n));
+      for (const n of (p.notes || []).filter((x) => !(p.unreadContext && x === TEXT_UNREAD_CONTEXT_NOTE))) parts.push(el('p', { class: 'notice', 'data-testid': 'text-add-note' }, n));
       if (p.nodes.length) {
         parts.push(el('div', { class: 'row' },
+          el('button', { type: 'button', 'data-testid': 'text-add-check-existing', onclick: () => setAll(true, 'existing-only') }, TEXT_ADD.checkExisting),
           el('button', { type: 'button', 'data-testid': 'text-add-check-all', onclick: () => setAll(true) }, TEXT_ADD.checkAll),
           el('button', { type: 'button', 'data-testid': 'text-add-uncheck-all', onclick: () => setAll(false) }, TEXT_ADD.uncheckAll)));
         parts.push(el('h3', {}, TEXT_ADD.nodesTitle(p.nodes.length)));
@@ -314,9 +324,9 @@ export function textAddDialog(o) {
   }
 
   // 모두 체크 / 모두 해제(R17): 모두 체크해도 확인할 것(hold)·같은 이름이 둘 이상인 항목·이미 있는 연결은 체크하지 않는다
-  function setAll(on) {
+  function setAll(on, mode = 'all') {
     if (!st.proposal || st.busy) return;
-    const d = defaultSelection(st.proposal, 'all');
+    const d = defaultSelection(st.proposal, mode);
     for (const n of st.proposal.nodes) nodeSel(n.key).include = on ? d.nodes[n.key].include : false;
     for (const e of st.proposal.edges) edgeSel(e.key).include = on ? d.edges[e.key].include : false;
     render();

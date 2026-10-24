@@ -190,7 +190,7 @@ const view = viewOf('U-A1');
 
 function judge(text) {
   const p = extractFromText(text, view);
-  const sel = defaultSelection(p);
+  const sel = defaultSelection(p, 'existing-only');
   const lab = (key) => { const n = p.nodes.find((x) => x.key === key); return n.match_label || n.label; };
   const fmt = (e) => `${e.type} ${lab(e.from)}>${lab(e.to)}`;
   return { p, checked: p.edges.filter((e) => sel.edges[e.key].include && sel.nodes[e.from].include && sel.nodes[e.to].include).map(fmt), all: p.edges.map(fmt) };

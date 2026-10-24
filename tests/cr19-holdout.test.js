@@ -182,7 +182,7 @@ const L = { performs: 'P', precedes: 'Q', produces: 'O', belongs_to: 'B', refere
 
 function judge(text, universe) {
   const p = extractFromText(text, viewOf(universe));
-  const sel = defaultSelection(p);
+  const sel = defaultSelection(p, 'existing-only');
   const lab = (key) => p.nodes.find((x) => x.key === key).label;
   const fmt = (e) => `${L[e.type]}:${lab(e.from)}>${lab(e.to)}`;
   const checked = p.edges.filter((e) => sel.edges[e.key].include && sel.nodes[e.from].include && sel.nodes[e.to].include).map(fmt);
@@ -201,7 +201,7 @@ CASES.forEach(([k, universe, text, exp], i) => {
     const used = new Set([...p.nodes, ...p.edges].map((x) => x.quote));
     for (const s of splitSentences(text)) assert.ok(used.has(s) || p.unread.includes(s), `말없이 놓침: ${s}`);
     // 새로 만드는 항목은 하나도 처음 체크되지 않는다
-    const sel = defaultSelection(p);
+    const sel = defaultSelection(p, 'existing-only');
     for (const n of p.nodes) if (!n.match) assert.equal(sel.nodes[n.key].include, false, n.label);
   });
 });
@@ -240,7 +240,7 @@ test('R17 A·B 직함 앞 일반 낱말(신입 사원·담당 대리·협력업�
   }
   const p = extractFromText('강여름이 ERP 마감을 맡는다', viewOf('U-A1'));
   assert.equal(p.nodes[0].unsure, true, '확인 필요 표시');
-  const sel = defaultSelection(p);
+  const sel = defaultSelection(p, 'existing-only');
   assert.deepEqual([sel.nodes.n1.include, sel.nodes.n2.include, sel.edges.e1.include], [false, false, false], '새 사람·새 업무·그 연결은 처음에 체크하지 않는다');
 });
 

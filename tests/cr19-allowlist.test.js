@@ -18,7 +18,7 @@ const unreadOnly = (text, v = view) => {
   const p = extractFromText(text, v);
   return p.nodes.length === 0 && p.edges.length === 0 && p.unread.length > 0;
 };
-const checkedEdges = (p, sel = defaultSelection(p)) => p.edges.filter((e) => sel.edges[e.key].include && sel.nodes[e.from].include && sel.nodes[e.to].include).map((e) => `${e.type} ${labelOf(p, e.from)}>${labelOf(p, e.to)}`);
+const checkedEdges = (p, sel = defaultSelection(p, 'existing-only')) => p.edges.filter((e) => sel.edges[e.key].include && sel.nodes[e.from].include && sel.nodes[e.to].include).map((e) => `${e.type} ${labelOf(p, e.from)}>${labelOf(p, e.to)}`);
 
 test('R18 A 허용 목록: 읽은 모양에 쓰이지 않은 낱말이 앞·사이·뒤 어디에 남아도 문장 전체를 읽지 않는다. 이음말·지금은/요즘/현재·개조식 머리·이다류 꼬리는 허용', () => {
   // 앞(첫 사용 낱말 앞)
@@ -55,9 +55,9 @@ test('R18 C 일부만 읽은 문장(partial)의 항목·연결은 처음 체크�
   assert.deepEqual(checkedEdges(p), ['performs 서하늘>자료 수집']);
   const quote = p.edges[0].quote;
   const partial = { ...p, partial: [quote] };
-  const sel = defaultSelection(partial);
+  const sel = defaultSelection(partial, 'existing-only');
   assert.deepEqual([sel.nodes.n1.include, sel.nodes.n2.include, sel.edges.e1.include], [false, false, false]);
-  assert.deepEqual(checkedEdges(partial, defaultSelection(partial, 'all')), ['performs 서하늘>자료 수집'], '모두 체크는 사용자가 하는 것이라 그대로');
+  assert.deepEqual(checkedEdges(partial, defaultSelection(partial, 'all')), [], 'R19: 모두 체크도 일부만 읽은 문장은 체크하지 않는다');
 });
 
 test('R18 D 글 안에 지도 이름이 없는 문장이 부정·시제·전언이거나 농담·취소·철회·정정·거짓·사실이 아니로 시작하면 그 글의 연결은 하나도 처음 체크하지 않고 notes에 알린다', () => {
@@ -73,9 +73,11 @@ test('R18 D 글 안에 지도 이름이 없는 문장이 부정·시제·전언�
   const ok = extractFromText('서하늘이 자료 수집을 맡는다. 한가람에게 결과를 공유한다.', view);
   assert.deepEqual(checkedEdges(ok), ['performs 서하늘>자료 수집', 'references 자료 수집>한가람']);
   assert.ok(!ok.notes.includes(NOTE));
-  // 지도 이름이 든 문장의 부정은 그 문장만 읽지 않는다(글 전체를 풀지 않는다)
+  // 지도 이름이 든 문장의 부정은 ctxVeto를 켜지 않는다(그 문장만 읽지 않음). 다만 읽지 못한 문장이 있는 글이라 R19 ①로 처음 체크는 하지 않는다
   const named = extractFromText('서하늘이 자료 수집을 맡는다. 윤바다는 보고를 맡지 않는다.', view);
-  assert.deepEqual(checkedEdges(named), ['performs 서하늘>자료 수집']);
+  assert.equal(named.ctxVeto, false);
+  assert.deepEqual(checkedEdges(named), []);
+  assert.equal(named.unreadContext, true);
 });
 
 test('R18 E 한두 글자 머리 문장(Q.·A.·※) 바로 뒤 문장은 읽지 않음, vs·or·또는·아니면은 나열·선택, 「아닌」은 부정', () => {
@@ -100,16 +102,18 @@ test('R18 F 지도에 공백·괄호 차이만 다른 이름이 있으면 새로
 
 // ── 처음 체크 모드 'none' ──
 
-test("R18 'none' 모드: TEXT_CHECK_MODES에 있고 기본은 existing-only. defaultSelection(p,'none')은 항목·연결 모두 체크하지 않고 저장 명령도 비어 있다", () => {
+test("R18 'none' 모드: TEXT_CHECK_MODES에 있고 기본은 none(R19). defaultSelection(p,'none')은 항목·연결 모두 체크하지 않고 저장 명령도 비어 있다", () => {
   assert.deepEqual([...TEXT_CHECK_MODES], ['existing-only', 'all', 'none']);
-  assert.equal(TEXT_DEFAULT_CHECK, 'existing-only');
+  assert.equal(TEXT_DEFAULT_CHECK, 'none', 'R19: 기본은 none');
   const p = extractFromText('서하늘이 자료 수집을 맡는다. 한가람이 점검을 맡는다', view);
+  const dflt = defaultSelection(p);
+  assert.ok(Object.values(dflt.nodes).every((x) => x.include === false) && Object.values(dflt.edges).every((x) => x.include === false), '기본(none): 처음 체크 0개');
   const none = defaultSelection(p, 'none');
   assert.ok(Object.values(none.nodes).every((x) => x.include === false) && Object.values(none.edges).every((x) => x.include === false));
   assert.deepEqual(proposalToOps(p, none, JSON.parse(JSON.stringify(SAMPLES.find((d) => d.universe.id === 'U-A1')))), []);
   const r = resolveSelection(p, none, []);
   assert.ok(Object.values(r.edges).every((e) => e.include === false));
-  assert.ok(checkedEdges(p).length === 1 && checkedEdges(p, defaultSelection(p, 'all')).length >= 1, '기본·모두 체크는 그대로');
+  assert.ok(checkedEdges(p, defaultSelection(p, 'existing-only')).length === 1 && checkedEdges(p, defaultSelection(p, 'all')).length >= 1, 'existing-only·모두 체크는 그대로');
 });
 
 const withDom = (fn) => async () => {
@@ -143,7 +147,11 @@ test("R18 'none' 모드 화면: intro 글이 바뀌고, 처음에는 아무것�
   assert.ok(app.doc.edges.length > before, '모두 체크 뒤 저장하면 들어간다');
   assert.ok(app.doc.nodes.some((n) => n.label === '점검'));
   // 기본 모드의 intro는 기존 글
-  const open2 = textAddDialog({ dialog, app, getView: () => app.view, aiReady: () => false, readAi: () => null, onSaved: () => {} });
+  const open2 = textAddDialog({ dialog, app, getView: () => app.view, aiReady: () => false, readAi: () => null, onSaved: () => {}, defaultCheck: 'existing-only' });
   open2();
   assert.ok(q('text-add-intro').textContent.includes('지도에 이미 있는 항목만 처음에 체크되어 있고'));
+  // 모드를 주지 않으면 기본(none)
+  const open3 = textAddDialog({ dialog, app, getView: () => app.view, aiReady: () => false, readAi: () => null, onSaved: () => {} });
+  open3();
+  assert.ok(q('text-add-intro').textContent.includes('처음에는 아무것도 체크되어 있지 않습니다'));
 }));
