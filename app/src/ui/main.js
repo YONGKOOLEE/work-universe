@@ -42,8 +42,9 @@ import { createFolderLink } from './folder-link.js';
 import { EMBED_HASH_PREFIX, embedFileName } from '../view/embed.js';
 import { EMBED_WARNINGS, captureAppHtml, createEmbedApp, embedHtmlFor, importEmbedToStorage, readEmbedFromDocument, renderEmbedBanner } from './embed-banner.js';
 import { tableDialog } from './table.js';
+import { textAddDialog } from './text-add.js';
 import { convertDocument } from '../rules/doc-convert.js';
-import { convertDocumentWith } from '../llm/connector.js';
+import { convertDocumentWith, extractTextAsync, isLive } from '../llm/connector.js';
 import { DOC_EXAMPLE } from '../../data/doc-example.js';
 import { filterDisplay, foldedInside, neighborhoodDisplay, personsIn, searchNodes } from '../view/explore.js';
 import { EXPLORE, exploreBar } from './explore.js';
@@ -1817,6 +1818,20 @@ function start() {
     },
   });
 
+  // 글로 추가(CR-19): 줄글 → 미리 보기(항목·연결) → 체크·수정 → 한 번의 묶음 저장. 「Claude로 읽기」는 키가 있어 실시간 공급자가 만들어졌을 때만 있다
+  const openTextAdd = textAddDialog({
+    dialog: $('text-add-dialog'),
+    app,
+    getView: () => view,
+    aiReady: () => isLive(provider) && typeof provider.extract === 'function',
+    readAi: (text) => extractTextAsync(text, { provider, view }),
+    onSaved: (r) => {
+      const last = r.created[r.created.length - 1];
+      afterSave(r, last ? toGid(currentId(), last.id) : selected);
+      renderAddForm(r.summary);
+    },
+  });
+
   // 노드 추가(R-02 ①): 저장하면 바로 그래프에 나타나고 선택된다
   // CR-18-5: 양식으로 저장에 성공하면 「사람·업무·문서 추가」를 접고 이 한 줄만 남긴다(양식 위쪽에서 패널이 길어지지 않게). 펼치면 사라진다
   function addFoldNote() {
@@ -1875,6 +1890,7 @@ function start() {
       ...(doneText ? [el('p', { class: 'ok-text', 'data-testid': 'add-done' }, doneText)] : []),
       el('div', { class: 'row' },
         el('button', { type: 'button', 'data-testid': 'btn-table-add', title: '스프레드시트에서 복사한 표를 붙여 넣거나 칸에 써서 항목 여러 개를 한 번에 추가합니다', onclick: () => openTable('add') }, '표로 추가'),
+        el('button', { type: 'button', 'data-testid': 'btn-text-add', title: '몇 문장짜리 글을 붙여 넣으면 사람·업무·산출물과 연결을 찾아 미리 보여 줍니다. 체크하고 고친 뒤 저장합니다', onclick: () => openTextAdd() }, '글로 추가'),
         el('button', { type: 'button', 'data-testid': 'btn-table-edit', title: '지금 업무 지도의 항목을 표로 펼쳐 한꺼번에 고칩니다', onclick: () => openTable('edit') }, '표로 고치기')),
       nodeForm({
         mode: 'add',

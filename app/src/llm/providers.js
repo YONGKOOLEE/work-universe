@@ -10,6 +10,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { jsonSchemaOutputFormat } from '@anthropic-ai/sdk/helpers/json-schema';
 import { buildConvertPrompt } from './ai-convert.js';
 import { buildCandidatesPrompt } from './ai-candidates.js';
+import { buildExtractPrompt } from './ai-extract.js';
 
 // 실시간 호출 설정(한 곳). 모델은 설정 창에서 바꿀 수 있다
 export const DEFAULT_LLM_MODEL = 'claude-opus-5-5';
@@ -23,6 +24,9 @@ export const LLM_CONVERT_TIMEOUT_MS = 90000;
 // AI 연관 후보(T-38): 업무 글 수백 개를 읽고 쌍 목록을 낸다. 재시도 없이 이 시간 안에 끝나야 한다(화면 문구 「최대 60초」와 같은 값)
 export const LLM_CANDIDATES_MAX_TOKENS = 8000;
 export const LLM_CANDIDATES_TIMEOUT_MS = 60000;
+// 글로 추가의 Claude 읽기(CR-19): 몇 문장짜리 글이라 응답이 짧다. 재시도 없이 이 시간 안에 끝나야 한다(화면 문구 「최대 60초」와 같은 값)
+export const LLM_EXTRACT_MAX_TOKENS = 8000;
+export const LLM_EXTRACT_TIMEOUT_MS = 60000;
 
 export const PROVIDERS = [
   { name: 'pregen', label: '사전 생성(Claude가 기록만 보고 써 둔 문장)', help: '기본값. 개발 중 Claude로 미리 작성한 문장을 씁니다. 결과가 없거나 데이터가 바뀐 항목은 규칙 기반 문장으로 보입니다.' },
@@ -43,6 +47,8 @@ export const DEFAULT_PROVIDER = 'pregen';
 export const KEYLESS_REASON = '키가 없어 기록을 그대로 모은 문장(규칙 기반)으로 보여 줍니다 — 「설정」에서 키를 넣으면 Claude가 실시간으로 다시 씁니다';
 /** 키가 없지만 사전 생성 문장을 쓴 경우(CR-17 H). 문장은 앱이 근거·지문을 검사한 것만 쓴다 */
 export const KEYLESS_PREGEN_REASON = '키가 없어 미리 받아 둔 문장(사전 생성)으로 보여 줍니다 — 「설정」에서 키를 넣으면 Claude가 실시간으로 다시 씁니다';
+/** 키 없이 글로 추가의 「Claude로 읽기」를 쓰려 할 때(단추는 키가 있을 때만 보이므로 안전망) */
+export const KEYLESS_EXTRACT_REASON = '키가 없어 규칙으로 읽은 결과를 보여 줍니다 — 「설정」에서 키를 넣으면 「Claude로 읽기」를 쓸 수 있습니다';
 /** 키 없이 문서 변환을 할 때(문서 변환은 「기록을 모은 문장」이 아니라 규칙 변환 결과를 보여 준다) */
 export const KEYLESS_CONVERT_REASON = '키가 없어 규칙 변환 결과를 보여 줍니다 — 「설정」에서 키를 넣으면 「AI로 변환」을 쓸 수 있습니다';
 /** 진짜 오류(키 거부·한도·시간 초과·형식)의 이유 앞에 붙는 머리말. 원인 글은 그 뒤에 그대로 이어 붙인다 */
@@ -171,6 +177,10 @@ function claudeProvider({ apiKey, model, client = null, base = null, cache = nul
     async candidates(works) {
       return request(buildCandidatesPrompt(works), LLM_CANDIDATES_MAX_TOKENS, { timeout: LLM_CANDIDATES_TIMEOUT_MS, maxRetries: 0 });
     },
+    // 글로 추가(CR-19): text = 붙여 넣은 글, existing = llm/ai-extract.js의 existingItems(지도의 항목 이름·유형). 글이 비었거나 길면 호출하지 않는다(buildExtractPrompt가 던짐). 재시도 0회
+    async extract(text, existing) {
+      return request(buildExtractPrompt(text, existing), LLM_EXTRACT_MAX_TOKENS, { timeout: LLM_EXTRACT_TIMEOUT_MS, maxRetries: 0 });
+    },
   };
 
   async function request({ system, user, schema }, maxTokens, options) {
@@ -211,7 +221,7 @@ function claudeProvider({ apiKey, model, client = null, base = null, cache = nul
  */
 function unavailable(name, reason, kind = 'error') {
   const fail = thrower(reason, kind !== 'error');
-  return { name, method: 'llm', refine: fail, explain: fail, convert: fail, candidates: fail };
+  return { name, method: 'llm', refine: fail, explain: fail, convert: fail, candidates: fail, extract: fail };
 }
 
 /** 호출하면 안내(noPrefix) 또는 오류를 던지는 함수. keyless: 키 없음 표지도 붙인다 */
@@ -230,7 +240,7 @@ function thrower(why, noPrefix, keyless = false) {
  *  - live가 아니므로 비동기 실시간 경로는 아무것도 부르지 않는다
  */
 function keylessProvider(pregen) {
-  return { ...pregenProvider(pregen), name: 'claude_api', keyless: true, convert: thrower(KEYLESS_CONVERT_REASON, true, true), candidates: thrower(KEYLESS_REASON, true, true) };
+  return { ...pregenProvider(pregen), name: 'claude_api', keyless: true, convert: thrower(KEYLESS_CONVERT_REASON, true, true), candidates: thrower(KEYLESS_REASON, true, true), extract: thrower(KEYLESS_EXTRACT_REASON, true, true) };
 }
 
 /**

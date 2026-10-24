@@ -5,7 +5,8 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { evidenceBody } from './evidence-text.js';
-import { parseCandidatesUser, parseConvertUser, parsePrompt } from './prompts.js';
+import { parseCandidatesUser, parseConvertUser, parseExtractUser, parsePrompt } from './prompts.js';
+import { extractFromText } from '../rules/text-extract.js';
 
 /** 근거 글 한 줄에서 머리(「gid [유형]」)를 뗀 본문의 앞부분을 quote로 쓴다(근거 글 본문에 글자 그대로 있는 구절, 8글자 이상) */
 function quoteOf(line, gid) {
@@ -81,11 +82,38 @@ function candidatesAnswer(mode, user) {
   };
 }
 
+const isExtract = (params) => {
+  const p = params.output_config && params.output_config.format && params.output_config.format.schema.properties;
+  return !!(p && p.nodes && p.edges);
+};
+
+// ── 글로 추가 응답 흉내(CR-19): 보낸 글을 규칙 읽기로 읽어 그 항목·연결을 돌려주는 "착실한 모델". 모양은 llm/ai-extract.js의 AI_EXTRACT_SCHEMA ──
+const FAKE_BAD_EXTRACT_QUOTE = '글 어디에도 없는 지어낸 구절입니다';
+function extractAnswer(mode, user) {
+  const sent = parseExtractUser(user) || { text: '', existing: [] };
+  const rule = extractFromText(sent.text, null);
+  const bad = mode === 'badquote' || mode === 'extract-badquote';
+  const q = (quote) => (bad ? FAKE_BAD_EXTRACT_QUOTE : quote);
+  const nodes = rule.nodes.map((n) => ({ type: n.type, label: n.label, emp_no: n.emp_no || '', quote: q(n.quote) }));
+  const label = (key) => (rule.nodes.find((n) => n.key === key) || {}).label || '';
+  const edges = rule.edges.map((e) => ({ from_label: label(e.from), to_label: label(e.to), type: e.type, quote: q(e.quote) }));
+  if (mode === 'extract') {
+    // 걸러져야 하는 행들: 글에 없는 이름, 인용이 틀린 항목, 유형 조합이 틀린 연결, 끝 항목이 없는 연결
+    nodes.push({ type: 'work', label: '지어낸 업무', emp_no: '', quote: FAKE_BAD_EXTRACT_QUOTE });
+    if (nodes[0]) nodes.push({ ...nodes[0], label: nodes[0].label, quote: FAKE_BAD_EXTRACT_QUOTE, emp_no: '' });
+    if (nodes[0] && nodes[1]) edges.push({ from_label: nodes[1].label, to_label: nodes[0].label, type: 'produces', quote: nodes[0].quote });
+    if (nodes[0]) edges.push({ from_label: nodes[0].label, to_label: '없는 항목입니다', type: 'references', quote: nodes[0].quote });
+  }
+  return { nodes, edges };
+}
+
 /** mode: ok(근거와 맞는 응답) · badquote(지어낸 quote) · garbage(JSON이 아님) · auth · rate · timeout · connect · server
  *  AI 연관 후보(T-38) 요청에는: candidates(진짜 쌍 1 + 지어낸 업무 쌍 + 인용이 틀린 쌍 + 같은 유니버스 쌍 + 중복 쌍) · badquote(인용이 틀린 쌍만) · 그 밖(ok 포함)은 진짜 쌍 1. fake.candidatesOut에 객체를 넣으면 그것을 그대로 돌려준다
+ *  글로 추가(CR-19) 요청에는: extract(보낸 글을 규칙으로 읽은 항목·연결 + 걸러져야 하는 행들) · badquote/extract-badquote(모든 행의 인용이 지어낸 것) · 그 밖(ok 포함)은 걸러질 행이 없는 응답. fake.extractOut에 객체를 넣으면 그것을 그대로 돌려준다
  *  문서 변환(T-37) 요청에는: convert(원문에서 따온 항목 + 원문에 없는 업무 하나) · convert-clean(원문에서 따온 항목만, ok도 같음) · convert-badquote(모든 항목이 지어낸 인용). fake.convertOut에 객체를 넣으면 그것을 그대로 돌려준다 */
 function answer(mode, params, fake) {
   const user = params.messages[0].content;
+  if (isExtract(params)) return fake.extractOut || extractAnswer(mode, user);
   if (isCandidates(params)) return fake.candidatesOut || candidatesAnswer(mode, user);
   if (isConvert(params)) return fake.convertOut || convertAnswer(mode, parseConvertUser(user) || '');
   const sections = parsePrompt(user);

@@ -242,6 +242,10 @@
   /* 표로 추가·고치기(T-19): 칸이 많아 가로로 스크롤 */
   .batch-wrap { overflow-x: auto; margin: 6px 0; scrollbar-color: var(--line) var(--panel-2); scrollbar-width: thin; }
   .batch-wrap::-webkit-scrollbar { height: 10px; } .batch-wrap::-webkit-scrollbar-track { background: var(--panel-2); } .batch-wrap::-webkit-scrollbar-thumb { background: var(--line); border-radius: 5px; }
+  #text-add-dialog { width: min(1040px, 96vw); } /* CR-19 글로 추가: 항목·연결 미리 보기 표가 넓다 */
+  #text-add-dialog h3 { margin: 12px 0 4px; font-size: 14px; }
+  #text-add-dialog textarea { width: 100%; box-sizing: border-box; font: inherit; }
+  #text-add-dialog th { white-space: nowrap; } /* 「넣기」 머리글이 좁은 첫 칸에서 꺾이지 않게 */
   #table-dialog { width: min(1240px, 96vw); } /* 검토7 U-4: 표 대화상자는 칸이 많아 넓게 */
   .graph-tools button[aria-pressed=true] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); } /* U-7: 흐름 정렬 눌림 */
   .batch-grid { min-width: 900px; }
@@ -484,6 +488,7 @@
 <dialog id="help-dialog" data-testid="help-box" aria-labelledby="help-title"></dialog>
 <dialog id="import-dialog" class="wide" aria-labelledby="import-title"></dialog>
 <dialog id="table-dialog" class="wide" aria-labelledby="table-title"></dialog>
+<dialog id="text-add-dialog" class="wide" aria-labelledby="text-add-title"></dialog>
 <script src="app.js"></script>
 </body>
 </html>

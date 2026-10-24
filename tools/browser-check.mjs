@@ -4172,6 +4172,140 @@ async function checkBrowser(browser, port) {
     await g3Go('U-A1', '', g3Snap); // 저장소를 블록 시작 때 찍어 둔 상태로 되돌린다
   }
 
+  // ── CR-19 글로 추가(2026-10-24): 월말 정산 점검(U-A1)에서 예시 글 → 「규칙으로 읽기」 → 미리 보기(항목 5·연결 4, 「있는 항목에 연결」·「이미 있음」) → 항목 하나 체크 풀기 → 이름 비운 행은 저장 막힘 → 저장 →
+  //    문서가 정확히 그만큼(항목 1·연결 1·이력 2) 늘고 이력의 기록 시각이 하나. 이어서 가짜 Claude 응답(걸러질 행 포함)·실패(시간 초과) 경로와 키 없음 안내. 데이터·설정을 바꾸므로 시작 때 저장소를 찍어 두었다가 끝에서 되돌린다("처음 사용 W-A" 블록과 같은 방식) ──
+  {
+    const crSnap = await evaluate(s.cdp, 'JSON.stringify(Object.entries(localStorage))');
+    const fakeKey = ['sk', 'ant', 'x'.repeat(8), 'FAKEKEY', 'y'.repeat(12)].join('-');
+    const CR_TEXT = '서하늘(V-1003)이 대사 확인을 맡는다. 대사 확인이 끝나면 보고를 한다. 보고에서 월말 정산 보고서를 만든다. 감사팀 도하람에게 결과를 공유한다.';
+    // 저장소를 시작 때 상태로 되돌리고(clean이면 월말 정산 점검 문서만 깨끗한 샘플로 다시 채움) U-A1을 연다
+    const crOpenMap = async (clean) => {
+      await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(crSnap)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); ${clean ? "localStorage.removeItem('wu:v1:u:U-A1');" : ''} location.hash = 'U-A1'; location.reload(); })()`).catch(() => {});
+      await sleep(500);
+      return waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
+    };
+    const crBox = (sel) => evaluate(s.cdp, `(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect(); return { text: e.textContent, w: r.width, h: r.height, value: e.value, checked: e.checked, disabled: e.disabled, hidden: e.hidden }; })()`);
+    const crSet = (testid, value) => evaluate(s.cdp, `(() => { const e = document.querySelector('[data-testid=${testid}]'); e.value = ${JSON.stringify(value)}; e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    const crCounts = () => evaluate(s.cdp, '({ nodes: window.__wu.doc.nodes.length, edges: window.__wu.doc.edges.length, events: window.__wu.doc.events.length })');
+    const crPreview = () => evaluate(s.cdp, "({ nodes: document.querySelectorAll('[data-testid=text-add-nodes] tbody tr:not(.row-msg-line)').length, edges: document.querySelectorAll('[data-testid=text-add-edges] tbody tr:not(.row-msg-line)').length, nodeStatus: [...document.querySelectorAll('[data-testid^=text-add-node-status-]')].map((e) => e.textContent), edgeStatus: [...document.querySelectorAll('[data-testid^=text-add-edge-status-]')].map((e) => e.textContent) })");
+    const crOpenDialog = async () => {
+      await evaluate(s.cdp, "window.__wu.select(null); document.querySelector('details.add').open = true");
+      await sleep(150);
+      await clickTestId(s.cdp, 'btn-text-add');
+      await sleep(150);
+      return evaluate(s.cdp, "document.getElementById('text-add-dialog').open === true");
+    };
+    const crCloseDialog = async () => { await evaluate(s.cdp, "document.getElementById('text-add-dialog').open && document.querySelector('[data-testid=text-add-close]').click()"); await sleep(100); };
+    const crSettingsOpen = async () => { await evaluate(s.cdp, "document.getElementById('settings-open').click()"); await sleep(150); };
+    const crSettingsClose = async () => { await clickTestId(s.cdp, 'settings-close'); await sleep(100); };
+
+    if (await crOpenMap(true)) {
+      const c0 = await crCounts();
+      // 1) 단추와 대화상자: 「표로 추가」 옆, 크기 있음. 키가 없으니 「Claude로 읽기」 대신 안내 한 줄
+      await evaluate(s.cdp, "window.__wu.select(null); document.querySelector('details.add').open = true");
+      await sleep(150);
+      const crBtn = await crBox('[data-testid=btn-text-add]');
+      const crSibling = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=btn-text-add]'); return !!b && !!b.parentElement.querySelector('[data-testid=btn-table-add]'); })()");
+      check('CR-19 「표로 추가」 옆에 「글로 추가」 단추(크기 있음)', !!crBtn && crBtn.text === '글로 추가' && crBtn.w > 20 && crBtn.h > 10 && crSibling, JSON.stringify(crBtn));
+      check('CR-19 「글로 추가」를 누르면 대화상자가 열리고 글 상자·「규칙으로 읽기」가 있으며 키가 없으면 「Claude로 읽기」 대신 「키를 넣으면 Claude가 읽습니다」', (await crOpenDialog()) && !!(await crBox('[data-testid=text-add-input]')) && !!(await crBox('[data-testid=text-add-read]')) && (await crBox('[data-testid=text-add-ai]')) === null && ((await crBox('[data-testid=text-add-ai-note]')) || {}).text === '키를 넣으면 Claude가 읽습니다');
+      // 2) 예시 글을 규칙으로 읽는다
+      await crSet('text-add-input', CR_TEXT);
+      await clickTestId(s.cdp, 'text-add-read');
+      await sleep(200);
+      const crP = await crPreview();
+      check('CR-19 규칙으로 읽기 → 미리 보기: 항목 5개·연결 4개, 기존 이름·사번은 「있는 항목 「…」에 연결」(서하늘·대사 확인·보고), 새 항목 2개(도하람은 확인 필요), 이미 있는 연결 2개는 「이미 있음」', crP.nodes === 5 && crP.edges === 4
+        && crP.nodeStatus[0] === '있는 항목 「서하늘」에 연결' && crP.nodeStatus[1] === '있는 항목 「대사 확인」에 연결' && crP.nodeStatus[2] === '있는 항목 「보고」에 연결' && crP.nodeStatus[3] === '새로 만듦' && crP.nodeStatus[4].startsWith('새로 만듦 · 확인 필요')
+        && crP.edgeStatus.join('|') === '이미 있음|이미 있음|새 연결|새 연결', JSON.stringify(crP));
+      const crCount = await crBox('[data-testid=text-add-count]');
+      check('CR-19 미리 보기 아래 요약 한 줄 「넣을 항목 5개(새로 만듦 2, 있는 항목에 연결 3)·연결 2개」, 읽은 방식 「규칙으로 읽었습니다.」, 읽지 못한 문장 없음', !!crCount && crCount.text === '넣을 항목 5개(새로 만듦 2, 있는 항목에 연결 3)·연결 2개' && ((await crBox('[data-testid=text-add-method]')) || {}).text === '규칙으로 읽었습니다.' && (await crBox('[data-testid=text-add-unread]')) === null, JSON.stringify(crCount));
+      await shot(s.cdp, `${browser.name}-cr19-text-preview`);
+      // 3) 관계 고르기는 두 항목 유형에 쓸 수 있는 것만
+      const crRel = await evaluate(s.cdp, "[...document.querySelector('[data-testid=text-add-edge-type-2]').options].map((o) => o.value)");
+      check('CR-19 연결 「보고 → 월말 정산 보고서」의 관계 고르기에는 업무 → 산출물에 쓸 수 있는 관계만(산출 포함, 수행·선후행 없음)', crRel.includes('produces') && !crRel.includes('performs') && !crRel.includes('precedes') && (await crBox('[data-testid=text-add-edge-type-2]')).value === 'produces', JSON.stringify(crRel));
+      // 4) 항목 하나(도하람)의 체크를 풀면 그 항목을 쓰는 연결도 넣을 수 없게 된다
+      await clickTestId(s.cdp, 'text-add-node-check-4');
+      await sleep(150);
+      const crOff = await evaluate(s.cdp, "({ status: document.querySelector('[data-testid=text-add-node-status-4]').textContent, edge: document.querySelector('[data-testid=text-add-edge-status-3]').textContent, edgeDisabled: document.querySelector('[data-testid=text-add-edge-check-3]').disabled, count: document.querySelector('[data-testid=text-add-count]').textContent })");
+      check('CR-19 도하람 체크를 풀면 「넣지 않음」, 그 항목의 연결은 「끝 항목을 넣지 않아 넣을 수 없습니다」(체크 불가), 요약이 항목 4·연결 1로', crOff.status === '넣지 않음' && crOff.edge === '끝 항목을 넣지 않아 넣을 수 없습니다' && crOff.edgeDisabled && crOff.count === '넣을 항목 4개(새로 만듦 1, 있는 항목에 연결 3)·연결 1개', JSON.stringify(crOff));
+      // 5) 이름을 비운 행은 저장이 막힌다(아무것도 저장하지 않고 그 행에 이유)
+      await crSet('text-add-node-label-3', '');
+      await clickTestId(s.cdp, 'text-add-save');
+      await sleep(200);
+      const crErr = await evaluate(s.cdp, "({ msg: document.querySelector('[data-testid=text-add-message]').textContent, row: document.querySelector('[data-testid=text-add-node-msg-3]').textContent, rowHidden: document.querySelector('[data-testid=text-add-node-msg-3]').closest('tr').hidden, done: document.querySelector('[data-testid=text-add-done]').hidden })");
+      const crC1 = await crCounts();
+      check('CR-19 이름을 비운 행이 있으면 저장이 막힘: 문서가 그대로(항목·연결·이력 수 같음)이고 「아무것도 저장하지 않았습니다」와 그 행의 이유가 보임', JSON.stringify(crC1) === JSON.stringify(c0) && crErr.msg.includes('아무것도 저장하지 않았습니다') && crErr.row.includes('이름') && !crErr.rowHidden && crErr.done, JSON.stringify([crC1, crErr]));
+      // 6) 이름을 되돌리고 저장 → 정확히 항목 1·연결 1(이력 2)만 늘고 기록 시각이 하나
+      await crSet('text-add-node-label-3', '월말 정산 보고서');
+      await clickTestId(s.cdp, 'text-add-save');
+      await sleep(300);
+      const crC2 = await crCounts();
+      const crSaved = await evaluate(s.cdp, `(() => { const d = window.__wu.doc; const news = d.events.slice(${c0.events}); const art = d.nodes.find((n) => n.label === '월말 정산 보고서'); const bogo = d.nodes.find((n) => n.label === '보고'); return { done: document.querySelector('[data-testid=text-add-done]').textContent, doneHidden: document.querySelector('[data-testid=text-add-done]').hidden, art: art ? art.core_type : null, produces: !!art && d.edges.some((e) => e.core_type === 'produces' && e.source === bogo.id && e.target === art.id), doha: d.nodes.some((n) => n.label === '도하람'), stamps: [...new Set(news.map((e) => e.recorded_at))].length, types: news.map((e) => e.type).join(), save: document.querySelector('[data-testid=text-add-save]').disabled, add: (document.querySelector('[data-testid=add-done]') || {}).textContent || '' }; })()`);
+      check('CR-19 저장 → 문서가 정확히 그만큼만 늘고(항목 +1·연결 +1·이력 +2, 도하람은 없음) 이력 기록 시각이 하나이며 「항목 1개·연결 1개를 넣었습니다」', crC2.nodes === c0.nodes + 1 && crC2.edges === c0.edges + 1 && crC2.events === c0.events + 2 && crSaved.art === 'artifact' && crSaved.produces && !crSaved.doha && crSaved.stamps === 1 && crSaved.types === 'created,created'
+        && crSaved.done === '항목 1개·연결 1개를 넣었습니다' && !crSaved.doneHidden && crSaved.save && crSaved.add === '항목 1개·연결 1개를 넣었습니다', JSON.stringify([c0, crC2, crSaved]));
+      await shot(s.cdp, `${browser.name}-cr19-text-done`);
+      await crCloseDialog();
+      check('CR-19 저장한 새 산출물이 그래프에 바로 나타남', await hasLabel(s.cdp, '월말 정산 보고서'));
+
+      // 7) 키를 넣고 가짜 Claude 응답: 단추가 생기고, 걸러질 행(지어낸 업무·인용이 틀린 항목·유형 조합이 틀린 연결·끝 항목이 없는 연결)은 뺀다
+      await crSettingsOpen();
+      await evaluate(s.cdp, "(() => { const r = document.querySelector('[data-testid=provider-claude_api]'); r.checked = true; r.dispatchEvent(new Event('change')); })()");
+      await sleep(100);
+      await evaluate(s.cdp, `(() => { const e = document.querySelector('[data-testid=settings-apikey]'); e.value = ${JSON.stringify(fakeKey)}; e.dispatchEvent(new Event('input')); e.dispatchEvent(new Event('change')); })()`);
+      await sleep(100);
+      await crSettingsClose();
+      await evaluate(s.cdp, "window.__wu.useFakeLlm('extract')");
+      await crOpenDialog();
+      const crAi = await crBox('[data-testid=text-add-ai]');
+      check('CR-19 키가 있으면 「Claude로 읽기」 단추가 보이고(크기 있음) 안내 한 줄은 없음', !!crAi && crAi.text === 'Claude로 읽기' && crAi.w > 20 && crAi.h > 10 && (await crBox('[data-testid=text-add-ai-note]')) === null, JSON.stringify(crAi));
+      await evaluate(s.cdp, 'window.__wu.fakeLlm.delayMs = 500');
+      await crSet('text-add-input', CR_TEXT);
+      await clickTestId(s.cdp, 'text-add-ai');
+      await sleep(150);
+      const crBusy = await evaluate(s.cdp, "({ text: document.querySelector('[data-testid=text-add-busy]').textContent, disabled: document.querySelector('[data-testid=text-add-ai]').disabled })");
+      check('CR-19 Claude로 읽는 동안 「Claude가 읽는 중… (최대 60초)」가 보이고 단추가 잠김', crBusy.text === 'Claude가 읽는 중… (최대 60초)' && crBusy.disabled, JSON.stringify(crBusy));
+      await waitFor(s.cdp, "!!document.querySelector('[data-testid=text-add-method]')", 5000);
+      const crAiP = await crPreview();
+      const crAiInfo = await evaluate(s.cdp, "({ method: document.querySelector('[data-testid=text-add-method]').textContent, note: (document.querySelector('[data-testid=text-add-note]') || {}).textContent || '', fallback: !!document.querySelector('[data-testid=text-add-fallback]'), calls: window.__wu.fakeLlm.calls.length, sent: window.__wu.fakeLlm.calls[0].messages[0].content })");
+      check('CR-19 Claude 읽기: 방식 「Claude가 읽었습니다(모델)」, 항목 5·연결 4(이미 저장한 월말 정산 보고서는 「있는 항목」), 걸러진 4개 행 안내, 실패 안내 없음', crAiP.nodes === 5 && crAiP.edges === 4 && crAiInfo.method.startsWith('Claude가 읽었습니다(claude-opus-5-5)') && crAiP.nodeStatus[3] === '있는 항목 「월말 정산 보고서」에 연결' && crAiInfo.note.includes('4개 행은 원문 인용이 확인되지 않거나 규칙에 맞지 않아 뺐습니다') && !crAiInfo.fallback && crAiInfo.calls === 1, JSON.stringify([crAiP, crAiInfo.method, crAiInfo.note]));
+      check('CR-19 Claude에 보내는 것은 붙여 넣은 글과 지금 지도의 항목 이름·유형뿐(설명·사번 없음)', crAiInfo.sent.includes(CR_TEXT) && crAiInfo.sent.includes('- 사람: 한가람') && !crAiInfo.sent.includes('원천 자료와 대조해') && !crAiInfo.sent.includes('V-1001') && !crAiInfo.sent.includes('내선'), crAiInfo.sent.slice(0, 200));
+      // 8) 실패(시간 초과): 규칙으로 읽은 결과 + 「AI 읽기 실패: … — 규칙으로 읽은 결과를 보여 줍니다」
+      await evaluate(s.cdp, "window.__wu.fakeLlm.mode = 'timeout'; window.__wu.fakeLlm.delayMs = 100");
+      await crSet('text-add-input', `${CR_TEXT}
+`); // 글을 조금 달리해 같은 글의 메모리 캐시(성공 응답)를 피한다
+      await clickTestId(s.cdp, 'text-add-ai');
+      await waitFor(s.cdp, "!!document.querySelector('[data-testid=text-add-fallback]')", 5000);
+      const crFail = await evaluate(s.cdp, "({ fb: document.querySelector('[data-testid=text-add-fallback]').textContent, method: document.querySelector('[data-testid=text-add-method]').textContent, nodes: document.querySelectorAll('[data-testid=text-add-nodes] tbody tr:not(.row-msg-line)').length })");
+      check('CR-19 Claude 읽기가 실패(시간 초과)하면 「AI 읽기 실패: 연결 실패·시간 초과 — 규칙으로 읽은 결과를 보여 줍니다」 + 규칙으로 읽은 미리 보기(항목 5)', crFail.fb === 'AI 읽기 실패: 연결 실패·시간 초과 — 규칙으로 읽은 결과를 보여 줍니다' && crFail.method === '규칙으로 읽었습니다.' && crFail.nodes === 5, JSON.stringify(crFail));
+      await shot(s.cdp, `${browser.name}-cr19-text-ai-fallback`);
+      // 9) 기다리는 동안 창을 닫으면 응답은 버려진다(오류 없음)
+      await evaluate(s.cdp, "window.__wu.fakeLlm.mode = 'extract'; window.__wu.fakeLlm.delayMs = 500; window.__crErr = []; window.addEventListener('error', (e) => window.__crErr.push(String(e.message))); window.addEventListener('unhandledrejection', (e) => window.__crErr.push(String(e.reason)))");
+      await clickTestId(s.cdp, 'text-add-ai');
+      await sleep(100);
+      await crCloseDialog();
+      await sleep(700);
+      await crOpenDialog();
+      check('CR-19 응답을 기다리다 창을 닫으면 응답이 버려지고 다시 열면 미리 보기가 비어 있음(오류 없음)', (await crBox('[data-testid=text-add-nodes]')) === null && (await crBox('[data-testid=text-add-fallback]')) === null && (await evaluate(s.cdp, 'window.__crErr.length')) === 0);
+      await crCloseDialog();
+      // 10) 키 지우기 → 단추가 사라지고 안내 한 줄
+      await crSettingsOpen();
+      await clickTestId(s.cdp, 'settings-clear-key');
+      await sleep(100);
+      await crSettingsClose();
+      await crOpenDialog();
+      check('CR-19 키를 지우면 「Claude로 읽기」가 사라지고 「키를 넣으면 Claude가 읽습니다」 한 줄', (await crBox('[data-testid=text-add-ai]')) === null && ((await crBox('[data-testid=text-add-ai-note]')) || {}).text === '키를 넣으면 Claude가 읽습니다');
+      await crCloseDialog();
+      // 도움말 「키와 데이터」 한 줄
+      await evaluate(s.cdp, "document.querySelector('[data-testid=tour-open]').click()");
+      await sleep(150);
+      await evaluate(s.cdp, "document.querySelector('[data-testid=help-security]').open = true");
+      const crHelp = await text(s.cdp, '[data-testid=help-security]');
+      check('CR-19 도움말 「키와 데이터」에 「「Claude로 읽기」는 붙여 넣은 글과 지금 지도의 항목 이름 목록만 보냅니다」', crHelp.includes('「Claude로 읽기」는 붙여 넣은 글과 지금 지도의 항목 이름 목록만 보냅니다'));
+      await evaluate(s.cdp, "document.querySelector('[data-testid=help-close]').click()");
+      await sleep(100);
+    } else check('CR-19 월말 정산 점검(U-A1)이 열림', false);
+    await crOpenMap(false); // 저장소를 블록 시작 때 찍어 둔 상태로 되돌린다
+  }
+
   // ── CR-14 A 편집 되감기(R-25, D-30): 이름 수정 → 개요 「편집 되감기」 → 이전 시점 → 읽기 전용 확인 → 지금으로 → 다시 → 되돌리기. 데이터를 바꾸므로 끝부분 ──
   await reloadApp();
   const rwOld = await evaluate(s.cdp, "window.__wu.doc.nodes.find((n) => n.id === 'N-002').label");

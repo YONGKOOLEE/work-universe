@@ -16,6 +16,7 @@ import { describeEvidence, quoteInEvidence } from './evidence-text.js';
 import { buildDraftPrompt, buildExplainPrompt } from './prompts.js';
 import { aiResultToDocument, checkConvertInput, textFingerprint, verifyAiConvert } from './ai-convert.js';
 import { candidatesInputMessage, checkCandidatesInput, verifyAiCandidates, worksFingerprint } from './ai-candidates.js';
+import { checkExtractInput, existingItems, extractFingerprint, extractInputMessage, verifyAiExtract } from './ai-extract.js';
 
 export const METHOD_LABELS = { rule: '규칙 기반', pregen: '사전 생성(Claude가 기록만 보고 써 둔 문장)', llm: 'Claude API(실시간)' };
 const FALLBACK = 'W-LLM-FALLBACK';
@@ -426,4 +427,46 @@ export async function findCandidatesAsync(works, { provider = null, rejected, co
   if (!checked.ok) return fail('응답 형식 오류');
   if (!cached) candidatesMemo.set(provider, { key, parsed });
   return { ok: true, pairs: checked.pairs, dropped: checked.dropped, counts: checked.counts, method: 'llm', model: provider.model || '', fallback: null, cached };
+}
+
+// ── 글로 추가: Claude로 읽기(CR-19, D-37) ──────────────────────────────────────
+// 캐시: 문서 변환과 같은 이유로 메모리에만, 공급자 하나당 마지막 1건(보낸 글 + 항목 이름 목록 지문 + 모델). 붙여 넣은 글이 저장소에 남지 않게 한다.
+// 캐시에 두는 것은 모델의 원 응답이고, 검증(인용·유형·관계)과 지금 지도와의 맞대기(match·exists)는 부를 때마다 다시 한다.
+const extractMemo = new WeakMap();
+
+/**
+ * 줄글 → 항목·연결 제안의 실시간 판. 호출은 공급자의 extract(text, existing) 하나뿐이고, 모델 응답은 앱이 검증해 통과한 행만 제안으로 돌려준다.
+ * 저장은 하지 않는다 — 사용자가 미리 보기에서 체크·수정한 뒤 applyBatch로 저장한다(화면).
+ * @param {string} text 붙여 넣은 글
+ * @param {{provider:object|null, view?:object|null}} opts view: 지금 지도(보낼 항목 이름 목록과 match·exists를 만든다)
+ * @returns {Promise<null | {ok:true, proposal:object, dropped:object[], counts:object, method:'llm', model:string, fallback:null, cached:boolean} | {ok:false, fallback:{code:string, reason:string}}>}
+ *   null: 실시간 공급자가 아님(키 없음). ok:false: 실패 — 화면이 규칙 읽기 결과를 대신 보여 준다(R-04 ③)
+ */
+export async function extractTextAsync(text, { provider = null, view = null } = {}) {
+  if (!isLive(provider) || typeof provider.extract !== 'function') return null;
+  const fail = (reason, code = FALLBACK) => ({ ok: false, fallback: { code, reason } });
+  const input = checkExtractInput(text);
+  if (!input.ok) return fail(extractInputMessage(input));
+
+  const existing = existingItems(view);
+  const key = `${extractFingerprint(text, existing)}|${provider.model || ''}`;
+  const memo = extractMemo.get(provider);
+  let parsed = memo && memo.key === key ? memo.parsed : null;
+  const cached = parsed !== null;
+  if (!cached) {
+    try {
+      parsed = await sharedRequest(provider, `extract|${key}`, () => provider.extract(text, existing));
+    } catch (err) {
+      return fail(err && err.message ? err.message : '알 수 없는 오류');
+    }
+  }
+  const checked = verifyAiExtract(text, parsed, view, { model: provider.model || '' });
+  if (!checked.ok) {
+    if (checked.reason === 'empty' && checked.dropped.length === 0) return fail('응답에 항목이 없음');
+    return fail(checked.reason === 'empty'
+      ? `원문 인용이 확인된 항목이 하나도 없습니다(뺀 행 ${checked.dropped.length}개)`
+      : '응답 형식 오류', checked.reason === 'empty' ? QUOTE_FAIL : FALLBACK);
+  }
+  if (!cached) extractMemo.set(provider, { key, parsed });
+  return { ok: true, proposal: checked.proposal, dropped: checked.dropped, counts: checked.counts, method: 'llm', model: provider.model || '', fallback: null, cached };
 }
