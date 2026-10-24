@@ -21,6 +21,8 @@ import {
  * 규칙 읽기는 구멍을 다 막을 수 없어, 새로 만드는 항목은 사람이 이름이 맞는지 보고 체크하게 해 피해를 묶는다.
  */
 export const TEXT_DEFAULT_CHECK = 'existing-only';
+/** 처음 체크 모드 값: 'existing-only'(기본) · 'all' · 'none'(아무것도 처음 체크하지 않음 — 사용자가 「모두 체크」나 하나씩 체크) */
+export const TEXT_CHECK_MODES = Object.freeze(['existing-only', 'all', 'none']);
 
 export const TEXT_LIMITS = Object.freeze({
   maxChars: 4000, // 붙여 넣을 수 있는 글자 수. 넘으면 읽지 않고 안내(일부만 읽어 오해하지 않게)
@@ -49,9 +51,13 @@ export const TEXT_WORDS = Object.freeze({
     // R17 A·B: 직함 낱말 더(대표·사장·이사 …)와 직함 앞에 붙는 일반 낱말(신입·담당·외부·협력 …), 사람이 아닌 출처(본사·감사 …)
     '대표', '사장', '부사장', '회장', '이사', '상무', '전무', '임원', '파트장', '그룹장', '조직장', '팀리더', '리더',
     '신입', '경력', '담당', '협력', '외주', '파견', '현장', '계약직', '정규직', '인턴', '감사', '감사인', '세무사', '회계사'],
+  /** R18 허용 목록: 읽은 모양에 쓰이지 않은 낱말은 이음말(leading)과 이 낱말뿐이다. 이 밖의 낱말이 문장에 하나라도 남으면 그 문장 전체를 읽지 않는다 */
+  allowedWords: ['지금은', '요즘', '요즘은', '현재', '현재는'],
+  /** 개조식 머리(「- 」「· 」「• 」「1)」「1.」) */
+  listHead: /^(?:[-·•▪‣◦*]|\d{1,2}[.)])$/,
   /** 이름 첫머리에 오면 읽지 않는 지시어 */
-  demonstratives: ['이', '그', '저', '해당', '본', '위', '아래', '각'],
-  leading: ['그리고', '그러면', '그다음', '다음으로', '이어서', '먼저', '우선', '또', '또한', '바로', '곧', '즉시', '다시', '이때', '그때', '이후'],
+  demonstratives: ['이', '그', '저', '해당', '본', '위', '아래', '각', '전', '구', '옛'],
+  leading: ['그리고', '그러면', '그다음', '다음으로', '이어서', '먼저', '우선', '또', '또한', '바로', '즉시', '다시', '이때', '그때', '이후'],
   performVerb: /^(맡|담당|처리|진행)/,
   produceVerb: /^(만들|만든|만듭|작성|산출|낸다|내고|내며|냅니다|낸|내는)/,
   referenceVerb: /^(공유|문의|협업|보고|전달)/,
@@ -67,7 +73,7 @@ export const TEXT_WORDS = Object.freeze({
   /** R16-3: 「Y이 끝나면 Z가 …」에서 Z가 주어일 때, 뒤에 이 서술어 하나만 오면 선후행으로 읽는다 */
   startVerb: /^(?:시작(?:된다|됩니다|한다|합니다)|이어진다|이어집니다)$/,
   /** R16-7: 「X에게 공유」의 업무를 앞 문장에서 가져올 때, 문장에 남아도 되는 말(목적어는 이 낱말들뿐) */
-  genericObject: /^(?:결과|내용|현황|상황|진행 상황|진행상황|이 건|해당 건|건)(?:을|를)?$/,
+  genericObject: /^(?:결과|내용|현황|상황|진행 상황|진행상황|이 건|해당 건|건)(?:을|를|은|는)?$/,
   referenceAdverbs: ['따로', '별도로', '바로', '먼저', '꼭', '반드시', '직접', '함께'],
   /** 서술 꼬리(함·됨·임 …)는 이름이 아니다 */
   nominalTail: /(?:했음|됐음|됨|함|임|있음|없음|올림|드림)$/,
@@ -89,20 +95,22 @@ export const TEXT_GUARDS = Object.freeze({
     { id: 'date', why: '날짜·기간', known: true, re: /\d\s*(?:월|일|년|주차|분기)|\d{1,2}\s*[/.]\s*\d{1,2}|\d{4}\s*-\s*\d{1,2}|예전|작년|올\s?해|내년|지난\s?(?:달|주|해|분기)|다음\s?(?:달|주|해|분기)|이번\s?(?:달|주|분기)|금주|차주|전월|익월|당월|내일|어제|그저께|모레|상반기|하반기|[월화수목금토일]요일/ },
     // R16-9 나열(쉼표·빗금·가운뎃점)
     { id: 'list', why: '나열', known: true, re: /[,，、/／·ㆍ&+]/ },
+    // R18: 확인 표시·취소 표시([ ] [x] ❌ ✔ …)가 있으면 사실 문장이 아니다
+    { id: 'mark', why: '표시', re: /\[\s*[xX✓✔]?\s*\]|[❌✔✅✓✗✘☐☑☒]/ },
   ]),
   token: Object.freeze([
-    { id: 'neg', why: '부정', re: /않|못|아니|아님|없|말고|말아|^안$/ },
+    { id: 'neg', why: '부정', re: /않|못|아니|아님|아닌|없|말고|말아|^안$/ },
     { id: 'tense', why: '시제', re: /[았었였겼했랐렸쳤됐냈썼섰봤줬]|던|예정/ },
     { id: 'modal', why: '양태·의문', re: /^수(?:도|가|는)?$|^것|싶|어렵|어려|(?:을지|는지|인지|할지|될지|갈지|볼지|줄지|올지|말지|길지)$|까요?$|나요$|가요$|냐$|^되(?:면|어|었|는|고|지|어서)/ },
     { id: 'question', why: '의문', re: /^(?:누구|무엇|뭐|어디|언제|어떻|어떤|어느|왜|얼마|몇)/ },
-    { id: 'adverb', why: '시점·가정', re: /^(?:대신|위해|위한|때문|경우|만약|혹시|아직|아마|추후|향후|나중|앞으로|이제|일단|임시|잠시|한때|당시|과거|이전|넘기|넘겨|넘긴|넘김|바뀌|바뀐|바꿔|바꾼|퇴사|휴직|이번|당분간|원래|평소|가끔|주로|보통|기간|동안|말씀)|동안$|^(?:월말|월초|연말|연초)(?:에는|에도|엔|에)$|^(?:휴가|부재|출장)(?:중|기간|시|때|에는|엔)$/ },
+    { id: 'adverb', why: '시점·가정', re: /^(?:대신|위해|위한|때문|경우|만약|혹시|아직|아마|추후|향후|나중|앞으로|이제|일단|임시|잠시|한때|당시|과거|이전|넘기|넘겨|넘긴|넘김|바뀌|바뀐|바꿔|바꾼|퇴사|휴직|이번|당분간|원래|평소|가끔|주로|보통|기간|동안|말씀|곧|조만간|퍽이나|설마|어쩌면|가령|예컨대|잘도|담주|낼$|대행|부재)|동안$|^(?:월말|월초|연말|연초)(?:에는|에도|엔|에)$|^(?:휴가|부재|출장)(?:중|기간|시|때|에는|엔)$/ },
     // R17 C: 조건 어미 「~면」(세 글자 이상이거나 오면·하면·되면). 선후행 표지(끝나면·마치면)는 예외
     // R17: 전해 들은 말·추측·초안 표시
     { id: 'hearsay', why: '전해 들음·추측', re: /(?:더라|네요|죠|지요|군요|래요|대요|라는|이래|한대|듯하다|같다|같아요|모양이다)$|^듯|^\[?(?:초안|가안|예시|참고|가정|TODO|WIP)\]?$/i },
     { id: 'cond', why: '조건', re: /^(?!(?:끝나면|끝나면은|마치면|마치면은)$)(?:[가-힣A-Za-z0-9]{2,}면(?:은)?|오면|하면|되면)$/ },
     { id: 'range', why: '날짜·기간', re: /(?:까지|부터)(?:는|도|만|의)?$/ },
     // R16-9 나열(및·또는·「서하늘하고」「서하늘이랑」). 동사 「담당하고」 같은 것은 제외
-    { id: 'list', why: '나열', re: /^(?:및|또는|혹은|겸)$|^(?!맡|담당|처리|진행|만들|작성|산출|공유|문의|협업|전달|보고).{2,}(?:하고|이랑|랑)$/ },
+    { id: 'list', why: '나열', re: /^(?:및|또는|혹은|겸|vs|VS|or|OR|아니면)$|^(?!맡|담당|처리|진행|만들|작성|산출|공유|문의|협업|전달|보고).{2,}(?:하고|이랑|랑)$/ },
   ]),
 });
 
@@ -527,7 +535,6 @@ function runPerformSV(sc) {
     if (!who || !what) { sc.miss(); continue; }
     sc.edge(sc.node(who), sc.node(what), 'performs');
     sc.use(k, i);
-    sc.connectAt(i);
   }
   return undefined;
 }
@@ -569,7 +576,6 @@ function runProduce(sc) {
     if (/^[A-Za-z0-9 ._-]+$/.test(from.label) && !(sc.known && sc.known.work.has(normalizeLabel(from.label)))) { sc.miss(); continue; }
     sc.edge(sc.node(from), sc.node({ type: 'artifact', label: wp.label, ...(wp.alts.length ? { alts: wp.alts } : {}) }), 'produces');
     sc.use(fs, T[i + 1] && T[i + 1].core === '낸다' ? i + 1 : i); // 「만들어 낸다」
-    sc.connectAt(i);
   }
   return undefined;
 }
@@ -586,7 +592,6 @@ function precede(sc, yEnd, zStart) {
   if (!y || !z || normalizeLabel(y.label) === normalizeLabel(z.label)) return sc.miss();
   sc.edge(sc.node(y), sc.node(z), 'precedes');
   sc.use(ys, zr.tail >= 0 ? zr.tail : zr.end);
-  if (zr.connect >= 0) sc.connectAt(zr.connect);
   return undefined;
 }
 
@@ -647,7 +652,6 @@ function runBelongsA(sc) {
       belong(sc, T[i + 1], org);
       sc.use(ta, T.length - 1); // 「T 소속 X 님이 …」 뒤의 서술은 소속 읽기에 영향이 없다
     } else sc.miss();
-    if (/(?:이고|이며)$/.test(T[i].core)) sc.connectAt(i);
   }
   return undefined;
 }
@@ -718,7 +722,7 @@ function runReference(sc) {
     else { sc.miss(); continue; }
     sc.edge(work, sc.node(spec), 'references');
     sc.use(i > 0 && bare(T[i - 1]) && looksOrg(T[i - 1].core) ? i - 1 : i, vi);
-    if (/(?:고|며)$/.test(T[vi].core)) sc.connectAt(vi);
+    if (work.carried) sc.use(0, vi); // 앞 문장의 업무를 이어받은 문장은 (결과·내용 같은) 일반 목적어와 부사뿐이므로 앞쪽 낱말도 모두 쓴 것이다
   }
   // R17 S1: 현재형 참조 동사(공유한다·문의합니다 …)가 있는데 대상(X에게)을 찾지 못했다 → 일부만 읽음
   if (!found) {
@@ -755,7 +759,7 @@ export const TEXT_PATTERNS = Object.freeze([
 /** 문장 하나를 읽는 작업대: 항목·연결을 쌓아 두었다가 문장을 다 읽고 버리지 않을 때만 제안에 더한다 */
 function makeScope(s, T, prev, known) {
   const sc = {
-    s, T, prev, known, nodes: [], edges: [], vetoed: '', missed: false, used: new Set(), conn: [],
+    s, T, prev, known, nodes: [], edges: [], vetoed: '', missed: false, used: new Set(),
     node(spec) {
       let n = sc.nodes.find((x) => x.type === spec.type && normalizeLabel(x.label) === normalizeLabel(spec.label));
       if (!n) {
@@ -774,17 +778,18 @@ function makeScope(s, T, prev, known) {
     miss() { sc.missed = true; },
     /** 읽는 데 쓴 낱말 번호(a..b) */
     use(a, b = a) { for (let j = Math.max(0, a); j <= b; j += 1) sc.used.add(j); },
-    /** 「~고/~며」로 이어지는 서술어 번호: 그 뒤에 쓰이지 않은 명사구가 남으면 일부만 읽은 것이다 */
-    connectAt(i) { if (/(?:고|며)$/.test(T[i].core)) sc.conn.push(i); },
-    /** R17 S2~S5: 이어진 절이 어떤 모양에도 쓰이지 않고 남았으면 true */
-    /** R17: 읽은 절 뒤에 뜻을 바꿀 수 있는 말이 남지 않았는가(이어지는 「~고/~며」 절이 마지막이면 leftover가 본다) */
-    trailingOk() {
-      if (!sc.used.size) return true;
+    /** R18 허용 목록: 읽은 모양에 쓰이지 않았고 허용된 말도 아닌 첫 낱말(없으면 ''). 허용: 이음말·지금은/요즘/현재·개조식 머리·마지막으로 쓴 낱말 뒤의 이다류/있다류 꼬리 */
+    unusedWord() {
       const last = Math.max(...sc.used);
-      if (sc.conn.includes(last)) return true;
-      return T.slice(last + 1).every((t) => TEXT_WORDS.trailOk.test(t.core));
+      for (let j = 0; j < T.length; j += 1) {
+        if (sc.used.has(j)) continue;
+        const t = T[j];
+        if (TEXT_WORDS.leading.includes(t.core) || TEXT_WORDS.allowedWords.includes(t.core) || TEXT_WORDS.listHead.test(t.raw)) continue;
+        if (j > last && TEXT_WORDS.trailOk.test(t.core)) continue;
+        return t.core;
+      }
+      return '';
     },
-    leftover() { return sc.conn.some((c) => T.some((t, j) => j > c && !sc.used.has(j) && t.josa !== '' && !t.weak && !t.title)); },
     commit(b) {
       const real = new Map();
       for (const n of sc.nodes) {
@@ -898,6 +903,17 @@ export function finalizeProposal(proposal, view) {
       else if (n.type === 'person' && n.emp_no) {
         const clash = cands.find((c) => c.core_type === 'person' && normalizeLabel(c.label) === key && c.emp_no && normalizeEmpNo(c.emp_no) !== normalizeEmpNo(n.emp_no));
         if (clash) hold = `지도에 같은 이름의 사람(사번 ${clash.emp_no})이 있습니다 — 다른 사람이면 체크하세요`;
+      }
+      // R18 F: 지도에 공백·괄호 차이만 다른 이름(대사확인↔대사 확인, 보고(report)↔보고)이 있으면 새로 만들지 않고 그 항목에 잇되 같은 항목인지 확인(hold)
+      if (!hold && !m.ambiguous) {
+        const sq = (x) => normalizeLabel(x).replace(/\([^)]*\)/g, '').replace(/\s+/g, '');
+        const like = cands.filter((c) => c.core_type === n.type && sq(c.label) === sq(out.label) && normalizeLabel(c.label) !== key);
+        if (like.length === 1) {
+          out.match = like[0].gid;
+          out.match_label = like[0].label;
+          out.label = like[0].label;
+          hold = `지도의 「${like[0].label}」과 같은 항목인지 확인`;
+        }
       }
       if (!hold && !n.unsure && !m.ambiguous) {
         const other = cands.find((c) => c.core_type !== n.type && normalizeLabel(c.label) === key);
@@ -1031,28 +1047,40 @@ export function extractFromText(text, view = null, opt = {}) {
   const known = knownNames(view);
   const unread = [];
   const partial = [];
+  let ctxVeto = false;
+  let shortHead = false;
   let prev = null; // 바로 앞 문장이 온전히 읽혔을 때만 {works}
   for (const { text: s, end } of sentences) {
     const skip = () => { unread.push(s); prev = null; };
-    if (s.length > limits.sentenceMax || end === '?' || end === '？') { skip(); continue; } // 물음표로 끝난 문장은 질문이다
+    const afterShort = shortHead; // 「Q.」「A.」 같은 한두 글자 머리 문장 바로 뒤 문장은 읽지 않는다
+    shortHead = s.length <= 2;
+    if (s.length > limits.sentenceMax || end === '?' || end === '？' || afterShort) { skip(); continue; } // 물음표로 끝난 문장은 질문이다
     const T = parseTokens(s);
-    if (sentenceVeto(s, T, known)) { skip(); continue; }
+    if (/^(?:농담|거짓|취소|철회|정정|사실이 아니)/.test(s)) { ctxVeto = true; skip(); continue; } // 앞 내용을 뒤집는 문장
+    const why = sentenceVeto(s, T, known);
+    if (why) {
+      // R18 D: 지도 이름이 없는 문장이 부정·시제·전언으로 걸리면 앞 내용을 뒤집는 문장일 수 있다 — 이 글의 연결은 처음에 하나도 체크하지 않는다
+      if (['부정', '시제', '전해 들음·추측'].includes(why) && !known.labels.some((l) => s.includes(l))) ctxVeto = true;
+      skip();
+      continue;
+    }
     const sc = makeScope(s, T, prev, known);
     for (const p of TEXT_PATTERNS) {
       p.run(sc);
       if (sc.vetoed) break;
     }
-    if (!sc.vetoed && sc.edges.length && !sc.trailingOk()) sc.veto('뒤따르는 말');
+    if (!sc.vetoed && sc.edges.length && sc.unusedWord()) sc.veto('쓰이지 않은 낱말'); // R18 허용 목록(앞·사이·뒤 어디든 남으면 문장 전체)
     if (sc.vetoed || !sc.nodes.length) { skip(); continue; }
     const real = sc.commit(b);
-    if (!sc.edges.length || sc.missed || sc.leftover()) {
+    if (!sc.edges.length || sc.missed) {
       unread.push(s);
       partial.push(s);
       prev = null;
     } else prev = { works: real.works };
   }
   notes.push(...capNotes(b.flags, limits));
-  const proposal = { method: 'rule', nodes: b.nodes, edges: b.edges, unread, partial, notes };
+  if (ctxVeto && b.edges.length) notes.push('글에 앞 내용을 뒤집는 문장이 있어 처음 체크를 모두 풀었습니다');
+  const proposal = { method: 'rule', nodes: b.nodes, edges: b.edges, unread, partial, notes, ctxVeto };
   return finalizeProposal(proposal, view);
 }
 
@@ -1068,8 +1096,12 @@ export function defaultSelection(proposal, mode = TEXT_DEFAULT_CHECK) {
   const edges = {};
   const matched = new Map(proposal.nodes.map((n) => [n.key, !!n.match]));
   const all = mode === 'all';
-  for (const n of proposal.nodes) nodes[n.key] = { include: !n.ambiguous && !n.hold && (all || !!n.match), type: n.type, label: n.label, emp_no: n.emp_no || '' };
-  for (const e of proposal.edges) edges[e.key] = { include: !e.exists && !e.hold && (all || (matched.get(e.from) && matched.get(e.to))), type: e.type };
+  const none = mode === 'none';
+  const part = new Set(proposal.partial || []); // R18 C: 일부만 읽은 문장의 항목·연결은 처음에 체크하지 않는다
+  for (const n of proposal.nodes) nodes[n.key] = { include: !none && !n.ambiguous && !n.hold && (all || (!!n.match && !part.has(n.quote))), type: n.type, label: n.label, emp_no: n.emp_no || '' };
+  for (const e of proposal.edges) {
+    edges[e.key] = { include: !none && !e.exists && !e.hold && (all || (matched.get(e.from) && matched.get(e.to) && !part.has(e.quote) && !proposal.ctxVeto)), type: e.type };
+  }
   return { nodes, edges };
 }
 

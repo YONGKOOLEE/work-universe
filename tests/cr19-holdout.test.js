@@ -110,7 +110,7 @@ const CASES = [
   ["T", "U-A1", "강여름이 ERP 마감을맡는다", ["P:강여름>ERP 마감"]],
   ["T", "U-A1", "강여름이 ERP 마감을 맏는다", ["P:강여름>ERP 마감"]],
   ["T", "U-A1", "윤바다는자료 수집을 맡는다", ["P:윤바다>자료 수집"]],
-  ["T", "U-A1", "대사확인이 끝나면 보고를 한다", ["Q:대사확인>보고"]],
+  ["T", "U-A1", "대사확인이 끝나면 보고를 한다", ["Q:대사 확인>보고"]], // R18 F: 「대사확인」은 지도의 「대사 확인」에 hold로 잇는다(같은 항목인지 확인),
   ["F", "U-A1", "한가람(V-1002)이 보고를 맡는다.", ["P:한가람>보고"]],
   ["F", "U-A1", "대사 불일치가 끝나면 보고를 한다.", ["Q:대사 불일치>보고"]],
   ["N", "U-A1", "세무사가 세금 신고를 처리한다.", []],
@@ -275,11 +275,10 @@ test('R17 E 「X에서 Z를 만든다」의 X가 정지어(본사·고객사·�
   assert.equal(extractFromText('보고에서 요약 자료를 만든다', v).edges.length, 1);
 });
 
-test('R17 F 절 경계: 「소속이고/소속이며」 꼬리와 뒤 절이 이름에 섞이지 않는다. 뒤 절을 읽지 못하면 일부만 읽음(S2~S5)', () => {
+test('R17 F·R18 B 절 경계: 「소속이고/소속이며」 꼬리와 뒤 절이 이름에 섞이지 않는다. 뒤 절을 읽지 못하면(쓰이지 않은 낱말이 남으면) 문장 전체를 읽지 않는다', () => {
+  // R18 B: 예전에는 읽은 앞 절만 남기고 「일부만 읽음」으로 표시했지만, 허용 목록(모든 낱말이 쓰였을 때만 읽음)으로 바뀌어 문장 전체가 「읽지 못한 문장」이다
   const p = extractFromText('표나래는 회계팀 소속이고 전표 검토를 맡는다', null);
-  assert.deepEqual(edgeList(p), ['B:표나래>회계팀']);
-  assert.deepEqual(p.partial, ['표나래는 회계팀 소속이고 전표 검토를 맡는다']);
-  assert.ok(p.nodes.every((n) => !n.label.includes('소속')));
+  assert.deepEqual([edgeList(p), p.nodes, p.unread, p.partial], [[], [], ['표나래는 회계팀 소속이고 전표 검토를 맡는다'], []]);
   for (const [s, e] of [
     ['강여름이 ERP 마감을 맡고 증빙은 백서진이 보관한다', 'P:강여름>ERP 마감'],
     ['진다온이 자금 집행을 담당하며 매일 아침 잔액을 확인한다', 'P:진다온>자금 집행'],
@@ -287,11 +286,9 @@ test('R17 F 절 경계: 「소속이고/소속이며」 꼬리와 뒤 절이 이
     ['자료 수집이 끝나면 대사 확인을 하고 윤바다가 결과를 정리한다', 'Q:자료 수집>대사 확인'],
   ]) {
     const q = extractFromText(s, null);
-    assert.deepEqual(edgeList(q), [e], s);
-    assert.deepEqual(q.partial, [s], `${s}: 이어진 절을 읽지 못해 일부만 읽음`);
-    assert.deepEqual(q.unread, [s]);
+    assert.deepEqual([edgeList(q), q.nodes, q.partial, q.unread], [[], [], [], [s]], `${s} (${e}만 읽고 뒤 절을 버리지 않는다)`);
   }
-  // 이어진 두 절을 모두 읽으면 일부만 읽음이 아니다
+  // 이어진 두 절을 모두 읽으면 그대로 읽는다
   const both = extractFromText('서하늘이 보고를 맡고 한가람은 자료 수집을 담당하며 윤바다가 대사 확인을 처리한다', null);
   assert.deepEqual([both.edges.length, both.partial], [3, []]);
 });
@@ -302,11 +299,11 @@ test('R17 G 이름 속 「(」가 있으면 끝 「)」를 떼지 않는다', ()
   assert.deepEqual(edgeList(p), ['P:백서진>매입 대사(카드사 건)']);
 });
 
-test('R17 S1 현재형 참조 동사가 있는데 대상(에게)을 못 찾으면 일부만 읽음. 대상이 조직 끝말이면 「감사팀에」도 받는다', () => {
+test('R17 S1·R18 현재형 참조 동사가 있는데 대상(에게)을 못 찾으면 읽지 않음(쓰이지 않은 낱말). 대상이 조직 끝말이면 「감사팀에」도 받는다', () => {
   const p = extractFromText('윤바다가 자료 수집을 맡는다. 결과는 서하늘에게 공유해요.', viewOf('U-A1'));
   assert.deepEqual(p.partial, []);
   const q = extractFromText('윤바다가 자료 수집을 맡고 결과를 공유한다', null);
-  assert.deepEqual(q.partial, ['윤바다가 자료 수집을 맡고 결과를 공유한다']);
+  assert.deepEqual([q.nodes, q.unread], [[], ['윤바다가 자료 수집을 맡고 결과를 공유한다']]);
   const org = extractFromText('보고에서 경영 요약 자료를 만들고 감사팀에 전달한다', viewOf('U-A1'));
   assert.deepEqual(edgeList(org), ['O:보고>경영 요약 자료', 'R:보고>감사팀']);
 });

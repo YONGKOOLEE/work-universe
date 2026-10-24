@@ -5,7 +5,7 @@
 import { el } from './dom.js';
 import { messageFor } from './messages.js';
 import { EDGE_TYPES, NODE_TYPES, allowedRelations } from '../model/schema.js';
-import { TEXT_LIMITS, TEXT_NODE_TYPES, TEXT_PATTERN_DOC, defaultSelection, docCandidates, extractFromText, proposalToOps, resolveSelection } from '../rules/text-extract.js';
+import { TEXT_DEFAULT_CHECK, TEXT_LIMITS, TEXT_NODE_TYPES, TEXT_PATTERN_DOC, defaultSelection, docCandidates, extractFromText, proposalToOps, resolveSelection } from '../rules/text-extract.js';
 
 /** 화면 문구(한 곳). 용어: 「항목」「지도 중심」 */
 export const TEXT_ADD = Object.freeze({
@@ -25,6 +25,7 @@ export const TEXT_ADD = Object.freeze({
   noNodes: '읽을 수 있는 문장이 없었습니다. 아래 「규칙으로 읽는 모양」에 맞게 써 보세요.',
   unreadTitle: (n) => `읽지 못한 문장 ${n}개`,
   unreadNote: '모양에 맞지 않거나 뜻이 애매해(부정·지난 일·예정·날짜·나열 등) 지어내지 않고 건너뛴 문장입니다.',
+  introNone: '몇 문장짜리 글(회의 메모·인수인계 메모)을 붙여 넣으면 사람·업무·산출물·조직을 찾아 미리 보여 줍니다. 처음에는 아무것도 체크되어 있지 않습니다 — 맞는 것을 체크하거나 「모두 체크」를 누르세요. 고친 뒤 「저장」을 눌러야 들어갑니다.',
   checkAll: '모두 체크',
   uncheckAll: '모두 해제',
   newItem: '새로 만듦 — 이름이 맞으면 체크',
@@ -51,6 +52,7 @@ function errorText(error, kind, relation) {
 }
 
 /**
+ * defaultCheck: 처음 체크 모드('existing-only' 기본 · 'none' · 'all', rules/text-extract.js TEXT_DEFAULT_CHECK)를 바꿔 쓸 때만 준다
  * @param {{dialog:HTMLDialogElement, app:object, getView:()=>object, aiReady:()=>boolean, readAi:(text:string)=>(Promise<object|null>|null), onSaved:(result:object)=>void}} o
  *   readAi: Claude로 읽기(connector.extractTextAsync를 감싼 것). null을 돌려주면 키가 없는 것
  * @returns {()=>void} 대화상자를 여는 함수
@@ -78,7 +80,7 @@ export function textAddDialog(o) {
     st.proposal = p;
     st.readText = readText; // 이 글을 읽은 결과다. 글 상자가 바뀌면 저장을 막고 다시 읽게 한다(R16-16)
     st.stale = !!input && input.value !== readText;
-    st.sel = defaultSelection(p);
+    st.sel = defaultSelection(p, o.defaultCheck || TEXT_DEFAULT_CHECK);
     st.method = method;
     st.model = model;
     st.errors = new Map();
@@ -346,7 +348,7 @@ export function textAddDialog(o) {
       el('div', { class: 'import-head' },
         el('h2', { id: 'text-add-title' }, TEXT_ADD.title),
         el('button', { type: 'button', 'data-testid': 'text-add-close', onclick: () => { st.open = false; st.run += 1; o.dialog.close(); } }, TEXT_ADD.close)),
-      el('p', { class: 'muted small' }, TEXT_ADD.intro),
+      el('p', { class: 'muted small', 'data-testid': 'text-add-intro' }, (o.defaultCheck || TEXT_DEFAULT_CHECK) === 'none' ? TEXT_ADD.introNone : TEXT_ADD.intro),
       el('label', { class: 'field' }, el('span', {}, TEXT_ADD.inputLabel), input),
       el('div', { class: 'row' }, readBtn, aiBtn, ai ? null : el('span', { class: 'muted small', 'data-testid': 'text-add-ai-note' }, TEXT_ADD.noKey)),
       busyLine,
