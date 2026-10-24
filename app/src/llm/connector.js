@@ -17,6 +17,7 @@ import { buildDraftPrompt, buildExplainPrompt } from './prompts.js';
 import { aiResultToDocument, checkConvertInput, textFingerprint, verifyAiConvert } from './ai-convert.js';
 import { candidatesInputMessage, checkCandidatesInput, verifyAiCandidates, worksFingerprint } from './ai-candidates.js';
 import { checkExtractInput, existingItems, extractFingerprint, extractInputMessage, verifyAiExtract } from './ai-extract.js';
+import { TEXT_GROUPED_NOTE, isGroupedView } from '../rules/text-extract.js';
 
 export const METHOD_LABELS = { rule: '규칙 기반', pregen: '사전 생성(Claude가 기록만 보고 써 둔 문장)', llm: 'Claude API(실시간)' };
 const FALLBACK = 'W-LLM-FALLBACK';
@@ -447,6 +448,7 @@ export async function extractTextAsync(text, { provider = null, view = null } = 
   const fail = (reason, code = FALLBACK) => ({ ok: false, fallback: { code, reason } });
   const input = checkExtractInput(text);
   if (!input.ok) return fail(extractInputMessage(input));
+  if (isGroupedView(view)) return fail(TEXT_GROUPED_NOTE); // 묶은 지도에서는 글로 추가를 쓰지 않는다(R16-11) — 보내지도 않는다
 
   const existing = existingItems(view);
   const key = `${extractFingerprint(text, existing)}|${provider.model || ''}`;

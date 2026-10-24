@@ -6,7 +6,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { evidenceBody } from './evidence-text.js';
 import { parseCandidatesUser, parseConvertUser, parseExtractUser, parsePrompt } from './prompts.js';
-import { extractFromText } from '../rules/text-extract.js';
+import { extractFromText, nameInText, splitSentences } from '../rules/text-extract.js';
 
 /** 근거 글 한 줄에서 머리(「gid [유형]」)를 뗀 본문의 앞부분을 quote로 쓴다(근거 글 본문에 글자 그대로 있는 구절, 8글자 이상) */
 function quoteOf(line, gid) {
@@ -96,7 +96,22 @@ function extractAnswer(mode, user) {
   const q = (quote) => (bad ? FAKE_BAD_EXTRACT_QUOTE : quote);
   const nodes = rule.nodes.map((n) => ({ type: n.type, label: n.label, emp_no: n.emp_no || '', quote: q(n.quote) }));
   const label = (key) => (rule.nodes.find((n) => n.key === key) || {}).label || '';
-  const edges = rule.edges.map((e) => ({ from_label: label(e.from), to_label: label(e.to), type: e.type, quote: q(e.quote) }));
+  // 연결의 인용 안에 두 끝 이름이 모두 있어야 앱이 받는다(R16-10). 앞 문장에서 가져온 업무가 끝이면 앞 문장부터 이 문장까지를 한 구절로 인용하는 "착실한 모델"
+  const sentences = splitSentences(sent.text);
+  const quoteOf = (e) => {
+    const names = [label(e.from), label(e.to)];
+    if (names.every((nm) => nameInText(e.quote, nm))) return e.quote;
+    const at = sentences.indexOf(e.quote);
+    for (let k = at - 1; k >= 0; k -= 1) {
+      const i = sent.text.indexOf(sentences[k]);
+      const j = sent.text.indexOf(e.quote, i);
+      if (i < 0 || j < 0) break;
+      const span = sent.text.slice(i, j + e.quote.length);
+      if (names.every((nm) => nameInText(span, nm))) return span;
+    }
+    return e.quote;
+  };
+  const edges = rule.edges.map((e) => ({ from_label: label(e.from), to_label: label(e.to), type: e.type, quote: q(quoteOf(e)) }));
   if (mode === 'extract') {
     // 걸러져야 하는 행들: 글에 없는 이름, 인용이 틀린 항목, 유형 조합이 틀린 연결, 끝 항목이 없는 연결
     nodes.push({ type: 'work', label: '지어낸 업무', emp_no: '', quote: FAKE_BAD_EXTRACT_QUOTE });

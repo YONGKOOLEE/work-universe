@@ -4245,6 +4245,19 @@ async function checkBrowser(browser, port) {
       await shot(s.cdp, `${browser.name}-cr19-text-done`);
       await crCloseDialog();
       check('CR-19 저장한 새 산출물이 그래프에 바로 나타남', await hasLabel(s.cdp, '월말 정산 보고서'));
+      // R16-17 편집 되감기 중(읽기 전용)에는 「글로 추가」 단추가 없고 읽기 전용 안내만 보인다. 지금으로 돌아오면 다시 생긴다
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await sleep(150);
+      const crRwOn = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=btn-rewind]'); return !!b && !b.disabled; })()");
+      let crRw = null;
+      if (crRwOn) {
+        await clickTestId(s.cdp, 'btn-rewind');
+        await sleep(500);
+        crRw = await evaluate(s.cdp, "({ rw: !!window.__wu.rewind, btn: !!document.querySelector('[data-testid=btn-text-add]'), add: document.getElementById('add-slot').textContent })");
+        await clickTestId(s.cdp, 'btn-rewind-back');
+        await sleep(400);
+      }
+      check('CR-19 R16-17 편집 되감기 중에는 「글로 추가」 단추가 없고(읽기 전용 안내), 지금으로 돌아오면 다시 생김', crRwOn && !!crRw && crRw.rw && !crRw.btn && crRw.add.includes('읽기 전용') && !!(await crBox('[data-testid=btn-text-add]')), JSON.stringify([crRwOn, crRw]));
 
       // 7) 키를 넣고 가짜 Claude 응답: 단추가 생기고, 걸러질 행(지어낸 업무·인용이 틀린 항목·유형 조합이 틀린 연결·끝 항목이 없는 연결)은 뺀다
       await crSettingsOpen();
@@ -4299,9 +4312,17 @@ async function checkBrowser(browser, port) {
       await sleep(150);
       await evaluate(s.cdp, "document.querySelector('[data-testid=help-security]').open = true");
       const crHelp = await text(s.cdp, '[data-testid=help-security]');
-      check('CR-19 도움말 「키와 데이터」에 「「Claude로 읽기」는 붙여 넣은 글과 지금 지도의 항목 이름 목록만 보냅니다」', crHelp.includes('「Claude로 읽기」는 붙여 넣은 글과 지금 지도의 항목 이름 목록만 보냅니다'));
+      check('CR-19 도움말 「키와 데이터」에 「「Claude로 읽기」는 붙여 넣은 글과 지금 지도의 항목 이름·유형 목록만 보냅니다」', crHelp.includes('「Claude로 읽기」는 붙여 넣은 글과 지금 지도의 항목 이름·유형 목록만 보냅니다'));
       await evaluate(s.cdp, "document.querySelector('[data-testid=help-close]').click()");
       await sleep(100);
+      // 11) R16-11·R16-17 묶은 지도(가상 운영부 U-D1)에서는 「글로 추가」 단추 대신 「팀·업무 지도를 열어 넣으세요」 안내 한 줄
+      await evaluate(s.cdp, "location.hash = 'U-D1'; location.reload()").catch(() => {});
+      await sleep(500);
+      const crDept = await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-D1' && window.__wu.cy.nodes().length > 0", 8000);
+      await evaluate(s.cdp, "window.__wu.select(null); document.querySelector('details.add').open = true");
+      await sleep(150);
+      const crGroupNote = await crBox('[data-testid=text-add-grouped-note]');
+      check('CR-19 R16-11 묶은 지도(가상 운영부 U-D1)에서는 「글로 추가」 단추가 없고 「팀·업무 지도를 열어 넣으세요」 안내 한 줄(크기 있음)', crDept && (await crBox('[data-testid=btn-text-add]')) === null && !!crGroupNote && crGroupNote.text.includes('팀·업무 지도를 열어 넣으세요') && crGroupNote.w > 20 && crGroupNote.h > 10, JSON.stringify(crGroupNote));
     } else check('CR-19 월말 정산 점검(U-A1)이 열림', false);
     await crOpenMap(false); // 저장소를 블록 시작 때 찍어 둔 상태로 되돌린다
   }

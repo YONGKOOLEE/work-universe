@@ -43,6 +43,7 @@ import { EMBED_HASH_PREFIX, embedFileName } from '../view/embed.js';
 import { EMBED_WARNINGS, captureAppHtml, createEmbedApp, embedHtmlFor, importEmbedToStorage, readEmbedFromDocument, renderEmbedBanner } from './embed-banner.js';
 import { tableDialog } from './table.js';
 import { textAddDialog } from './text-add.js';
+import { TEXT_GROUPED_NOTE, isGroupedView } from '../rules/text-extract.js';
 import { convertDocument } from '../rules/doc-convert.js';
 import { convertDocumentWith, extractTextAsync, isLive } from '../llm/connector.js';
 import { DOC_EXAMPLE } from '../../data/doc-example.js';
@@ -1886,11 +1887,15 @@ function start() {
       slot.replaceChildren(el('p', { class: 'muted small' }, '읽기 전용이라 추가할 수 없습니다.'));
       return;
     }
+    const grouped = isGroupedView(view);
     slot.replaceChildren(
       ...(doneText ? [el('p', { class: 'ok-text', 'data-testid': 'add-done' }, doneText)] : []),
       el('div', { class: 'row' },
         el('button', { type: 'button', 'data-testid': 'btn-table-add', title: '스프레드시트에서 복사한 표를 붙여 넣거나 칸에 써서 항목 여러 개를 한 번에 추가합니다', onclick: () => openTable('add') }, '표로 추가'),
-        el('button', { type: 'button', 'data-testid': 'btn-text-add', title: '몇 문장짜리 글을 붙여 넣으면 사람·업무·산출물과 연결을 찾아 미리 보여 줍니다. 체크하고 고친 뒤 저장합니다', onclick: () => openTextAdd() }, '글로 추가'),
+        // 묶은 지도(하위 지도를 묶은 지도)에서는 새 항목을 이 문서에만 만들 수 있어 글로 추가 단추 대신 안내 한 줄(R16-11)
+        grouped
+          ? el('span', { class: 'muted small', 'data-testid': 'text-add-grouped-note', title: TEXT_GROUPED_NOTE }, '글로 추가: 팀·업무 지도를 열어 넣으세요')
+          : el('button', { type: 'button', 'data-testid': 'btn-text-add', title: '몇 문장짜리 글을 붙여 넣으면 사람·업무·산출물과 연결을 찾아 미리 보여 줍니다. 체크하고 고친 뒤 저장합니다', onclick: () => openTextAdd() }, '글로 추가'),
         el('button', { type: 'button', 'data-testid': 'btn-table-edit', title: '지금 업무 지도의 항목을 표로 펼쳐 한꺼번에 고칩니다', onclick: () => openTable('edit') }, '표로 고치기')),
       nodeForm({
         mode: 'add',

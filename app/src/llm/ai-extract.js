@@ -4,13 +4,16 @@
 //   buildExtractPrompt  요청 {system, user, schema}
 //   verifyAiExtract     모델 응답 → 원문 인용(quote)이 글에 실제로 있는 행만 남기고, 규칙 읽기와 같은 제안 모양으로(rules/text-extract.js의 finalizeProposal)
 // "지어내지 않기": 앱이 믿는 것은 모델의 말이 아니라 글과 글자가 맞는 인용뿐이다(ai-convert.js와 같은 방식).
-//   - 항목: 유형·이름 길이가 맞고, 이름과 인용이 글에 있어야 한다. 사번은 글에 있을 때만 쓴다
-//   - 연결: 양 끝이 남은 항목이고 관계가 스키마·PAIR_RULES에 맞고(반대 방향만 맞으면 뒤집음), 인용이 글에 있어야 한다
+//   - 항목: 유형·이름 길이가 맞고, 이름이 글에 「낱말」로 있고(서하늘 안의 「하늘」, 보고서 안의 「보고」는 없는 것, R16-10), 인용이 글에 있어야 한다.
+//     사번은 글에서 그 이름 바로 뒤 괄호에 있을 때만 쓴다(R16-6: 다른 사람 사번을 옮겨 붙이지 못하게)
+//   - 연결: 양 끝이 남은 항목이고 관계가 스키마·PAIR_RULES에 맞고(반대 방향만 맞으면 뒤집음), 인용이 글에 있고 그 인용 안에 두 끝 이름이 모두 있어야 한다(R16-10)
 //   - 통과하지 못한 행은 버리고 개수를 notes에 남긴다
 // 응답 스키마의 칸은 모두 필수(선택 칸 없음)이고, 비우려면 빈 글자("")를 쓴다(ai-convert.js와 같은 이유).
 
 import { LABEL_MAX, normalizeEmpNo, normalizeLabel } from '../model/schema.js';
-import { TEXT_LIMITS, TEXT_NODE_TYPES, capNotes, createBuilder, finalizeProposal, orientRelation, ownCandidates, splitSentences } from '../rules/text-extract.js';
+import {
+  TEXT_LIMITS, TEXT_NODE_TYPES, capNotes, createBuilder, empNoAfterName, finalizeProposal, nameInText, orientRelation, ownCandidates, splitSentences,
+} from '../rules/text-extract.js';
 import { QUOTE_MAX, normalizeQuote } from './evidence-text.js';
 import { textFingerprint } from './ai-convert.js';
 import { EXTRACT_SYSTEM_PROMPT, extractUserText } from './prompts.js';
@@ -120,12 +123,12 @@ export function verifyAiExtract(text, parsed, view = null, opt = {}) {
     const label = typeof raw.label === 'string' ? oneLine(raw.label) : '';
     if (!TEXT_NODE_TYPES.includes(raw.type)) { drop('node', label, '항목 유형이 맞지 않음'); continue; }
     if (label.length < TEXT_LIMITS.nameMin || label.length > LABEL_MAX) { drop('node', label, `이름 길이가 맞지 않음(${TEXT_LIMITS.nameMin}~${LABEL_MAX}글자)`); continue; }
-    if (!hay.includes(normalizeQuote(label))) { drop('node', label, '이름이 글에 없음'); continue; }
+    if (!nameInText(text, label)) { drop('node', label, '이름이 글에 없음'); continue; }
     const why = quoteProblem(raw.quote);
     if (why) { drop('node', label, why); continue; }
-    // 사번은 글에 그대로 있을 때만 쓴다(없는 사번을 지어내지 않게). 사람 항목에만 붙는다
+    // 사번은 글에서 그 이름 바로 뒤 괄호에 있을 때만 쓴다(없는 사번을 지어내거나 다른 사람 사번을 옮겨 붙이지 않게). 사람 항목에만 붙는다
     const emp = typeof raw.emp_no === 'string' ? raw.emp_no.trim() : '';
-    const emp_no = raw.type === 'person' && emp && hay.toUpperCase().includes(normalizeEmpNo(emp)) ? emp : '';
+    const emp_no = raw.type === 'person' && emp && empNoAfterName(text, label, normalizeEmpNo(emp)) ? emp : '';
     const before = b.nodes.length;
     const n = b.addNode({ type: raw.type, label, emp_no }, oneLine(raw.quote));
     if (n && b.nodes.length === before) merged += 1;
@@ -145,6 +148,8 @@ export function verifyAiExtract(text, parsed, view = null, opt = {}) {
     if (!dir) { drop('edge', name, '두 항목의 유형에 맞지 않는 연결'); continue; }
     const why = quoteProblem(raw.quote);
     if (why) { drop('edge', name, why); continue; }
+    // 연결의 근거 구절 안에 두 끝 이름이 모두 낱말로 있어야 한다(다른 문장의 인용을 붙여 만든 연결을 걸러낸다)
+    if (!nameInText(raw.quote, a.label) || !nameInText(raw.quote, c.label)) { drop('edge', name, '근거 구절에 두 항목의 이름이 모두 있어야 함'); continue; }
     const before = b.edges.length;
     const e = dir === 'forward' ? b.addEdge(a, c, raw.type, oneLine(raw.quote)) : b.addEdge(c, a, raw.type, oneLine(raw.quote));
     if (e) quotes.push(raw.quote);
@@ -163,6 +168,6 @@ export function verifyAiExtract(text, parsed, view = null, opt = {}) {
   const notes = [];
   if (dropped.length) notes.push(`Claude 응답 중 ${dropped.length}개 행은 원문 인용이 확인되지 않거나 규칙에 맞지 않아 뺐습니다`);
   notes.push(...capNotes(b.flags));
-  const proposal = finalizeProposal({ method: 'claude_api', ...(opt.model ? { model: opt.model } : {}), nodes: b.nodes, edges: b.edges, unread, notes }, view);
+  const proposal = finalizeProposal({ method: 'claude_api', ...(opt.model ? { model: opt.model } : {}), nodes: b.nodes, edges: b.edges, unread, partial: [], notes }, view);
   return { ok: true, proposal, dropped, counts };
 }

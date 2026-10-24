@@ -79,7 +79,8 @@ test('CR-19 수행 ①: X이/가/은/는 Y을/를 맡는다·맡고·담당·처
     ['윤바다는 자료 수집을 담당한다', '윤바다', '자료 수집'],
     ['한가람이 대사 확인을 맡고 있다', '한가람', '대사 확인'],
     ['서하늘이 점검표 정리를 처리한다', '서하늘', '점검표 정리'],
-    ['오늘부터 윤바다가 월 마감을 진행한다', '윤바다', '월 마감'],
+    // R16-4: 「오늘부터」처럼 날짜·기간 낱말이 있는 문장은 읽지 않으므로(L-60) 낱말을 뺀 문장으로 바꿨다. 「오늘부터 …」가 읽히지 않는 것은 tests/cr19-corpus.test.js
+    ['윤바다가 월 마감을 진행한다', '윤바다', '월 마감'],
     ['한가람(V-1001)은 보고를 맡아 왔다', '한가람', '보고'],
   ]) {
     const p = extractFromText(s, null);
@@ -168,7 +169,8 @@ test('CR-19 소속: X는 T 소속, T 소속 X, T의 X — T가 팀·실·부·�
 test('CR-19 참조: X에게 공유·문의·협업·보고·전달 — 같은 문장의 업무, 없으면 앞 문장의 업무, 둘 다 없으면 읽지 않는다', () => {
   const same = extractFromText('서하늘이 대사 확인을 맡고 도하람에게 결과를 공유한다', null);
   assert.deepEqual(edgeOf(same, 'references').map((e) => pair(same, e)), [['대사 확인', '도하람']]);
-  for (const verb of ['공유한다', '문의합니다', '협업한다', '보고한다', '전달했다']) {
+  // R16-1: 「전달했다」처럼 과거 꼬리는 읽지 않으므로 현재형 「전달한다」로 바꿨다(「전달했다」가 읽히지 않는 것은 tests/cr19-corpus.test.js)
+  for (const verb of ['공유한다', '문의합니다', '협업한다', '보고한다', '전달한다']) {
     const p = extractFromText(`윤바다가 대사 확인을 담당한다. 감사팀에게 ${verb}`, null);
     assert.deepEqual(edgeOf(p, 'references').map((e) => pair(p, e)), [['대사 확인', '감사팀']], verb);
     assert.equal(byLabel(p, '감사팀').type, 'org', '팀으로 끝나면 조직');
@@ -181,7 +183,9 @@ test('CR-19 참조: X에게 공유·문의·협업·보고·전달 — 같은 �
 test('CR-19 사번: 이름(V-1234) → 사번, 일반 사번 꼴(영숫자-숫자)도 받는다. 사번만 있는 문장도 사람으로 남긴다', () => {
   const p = extractFromText('서하늘(V-1003)은 신입이다. 도하람 (AB12-345)도 같이 본다', null);
   assert.deepEqual(p.nodes.map((n) => [n.label, n.emp_no, n.type]), [['서하늘', 'V-1003', 'person'], ['도하람', 'AB12-345', 'person']]);
-  assert.deepEqual(p.unread, []);
+  // R16-5: 이름만 읽고 모양은 읽지 못한 문장은 사라지지 않게 「읽지 못한 문장」에도 두고 partial로 표시한다(이전에는 unread가 비어 있었다)
+  assert.deepEqual(p.unread, ['서하늘(V-1003)은 신입이다', '도하람 (AB12-345)도 같이 본다']);
+  assert.deepEqual(p.partial, p.unread);
 });
 
 test('CR-19 이름 끝말이 보고서·자료·문서·양식·파일·대장·표·서·계획서·결과면 산출물, 팀·실·부·과·센터·본부면 조직(짧은 낱말은 제외)', () => {
@@ -223,7 +227,10 @@ test('CR-19 상한: 글 길이·문장 수·항목 수 — 넘으면 notes로 �
   assert.deepEqual(long.nodes, []);
   assert.match(long.notes[0], /글이 너무 깁니다/);
   assert.match(extractFromText('   ', null).notes[0], /비어/);
-  const many = Array.from({ length: TEXT_LIMITS.maxSentences + 5 }, (_, i) => `사람${i}가 일${i} 점검을 맡는다`).join('. ');
+  // R16-8: 이름이 「사람0」처럼 숫자가 섞이면 사람 이름으로 받지 않으므로(조사 없이 사람으로 받는 것은 한글 세 글자) 받침 없는 한글 세 글자 이름을 만든다
+  const syl = '가나다라마바사자차카타파';
+  const nm = (i) => `${syl[i % 12]}${syl[Math.floor(i / 12) % 12]}${syl[(i * 7) % 12]}`;
+  const many = Array.from({ length: TEXT_LIMITS.maxSentences + 5 }, (_, i) => `${nm(i)}가 일${i} 점검을 맡는다`).join('. ');
   const m = extractFromText(many, null);
   assert.match(m.notes.join('|'), new RegExp(`앞의 ${TEXT_LIMITS.maxSentences}개만 읽었습니다`));
   assert.equal(m.nodes.length, TEXT_LIMITS.maxSentences * 2 > TEXT_LIMITS.maxNodes ? TEXT_LIMITS.maxNodes : TEXT_LIMITS.maxSentences * 2);
@@ -244,9 +251,13 @@ test('CR-19 지금 지도에 같은 이름·사번의 항목이 하나면 새로
   assert.equal(p.nodes[0].match_label, '서하늘');
   const state = Object.fromEntries(p.edges.map((e) => [e.type, !!e.exists]));
   assert.deepEqual(state, { performs: true, precedes: true, produces: false, references: false });
-  // 사번만 맞아도(이름이 달라도) 같은 사람
+  // R16-6: 사번만 같고 이름이 다르면 같은 사람으로 잇지 않는다 — 새 항목(match 없음)으로 두고 처음 체크를 풀며 이유를 알린다(이전에는 사번만으로 그 사람에 이었다)
   const q = extractFromText('서하느리(V-1003)가 점검을 맡는다', view);
-  assert.equal(q.nodes[0].match, 'U-A1/N-012');
+  assert.equal(q.nodes[0].match, null);
+  assert.equal(q.nodes[0].hold, '사번은 「서하늘」과 같고 이름이 다릅니다');
+  assert.match(q.notes.join('|'), /사번은 「서하늘」과 같고 이름이 다릅니다/);
+  assert.equal(defaultSelection(q).nodes.n1.include, false);
+  assert.equal(defaultSelection(q).edges.e1.include, false, 'hold 항목에 걸린 연결도 처음에는 체크하지 않는다');
   // 같은 이름이라도 사번이 다르면 다른 사람
   const r = extractFromText('서하늘(V-9999)이 점검을 맡는다', view);
   assert.equal(r.nodes[0].match, null);
@@ -433,7 +444,8 @@ test('CR-19 AI 검증: 글에 없는 인용·이름, 잘못된 유형·관계·�
     ],
     edges: [
       { from_label: '서하늘', to_label: '대사 확인', type: 'performs', quote: '서하늘(V-1003)이 대사 확인을 맡는다' },
-      { from_label: '월말 정산 보고서', to_label: '대사 확인', type: 'produces', quote: '보고에서 월말 정산 보고서를 만든다' }, // 거꾸로 → 뒤집어 둔다
+      { from_label: '월말 정산 보고서', to_label: '대사 확인', type: 'produces', quote: '대사 확인이 끝나면 보고를 한다. 보고에서 월말 정산 보고서를 만든다' }, // 거꾸로 → 뒤집어 둔다(두 문장에 걸친 인용에 두 이름이 모두 있음)
+      { from_label: '월말 정산 보고서', to_label: '대사 확인', type: 'produces', quote: '보고에서 월말 정산 보고서를 만든다' }, // R16-10: 인용 안에 「대사 확인」이 없음 → 버림(이전에는 같은 연결이 통과했다)
       { from_label: '서하늘', to_label: '월말 정산 보고서', type: 'performs', quote: '서하늘(V-1003)이 대사 확인을 맡는다' }, // 유형 조합이 틀림
       { from_label: '서하늘', to_label: '대사 확인', type: 'friends', quote: '서하늘(V-1003)이 대사 확인을 맡는다' }, // 관계가 스키마에 없음
       { from_label: '서하늘', to_label: '보고', type: 'references', quote: '서하늘(V-1003)이 대사 확인을 맡는다' }, // 끝 항목이 버려짐
@@ -448,14 +460,17 @@ test('CR-19 AI 검증: 글에 없는 인용·이름, 잘못된 유형·관계·�
   assert.deepEqual(r.proposal.edges.map((e) => [e.type, ...pair(r.proposal, e)]), [['performs', '서하늘', '대사 확인'], ['produces', '대사 확인', '월말 정산 보고서']]);
   assert.deepEqual(r.proposal.nodes.map((n) => n.match), ['U-A1/N-012', 'U-A1/N-001', null, null], '지금 지도와의 맞대기는 규칙 읽기와 같은 함수');
   assert.equal(r.proposal.edges[0].exists, true);
-  assert.equal(r.dropped.length, 7);
-  assert.match(r.proposal.notes[0], /7개 행은 원문 인용이 확인되지 않거나 규칙에 맞지 않아 뺐습니다/);
+  assert.equal(r.dropped.length, 8);
+  assert.match(r.proposal.notes[0], /8개 행은 원문 인용이 확인되지 않거나 규칙에 맞지 않아 뺐습니다/);
   assert.ok(r.dropped.some((d) => d.reason === '이름이 글에 없음'));
   assert.ok(r.dropped.some((d) => d.reason === '원문에서 인용을 찾지 못함'));
   assert.ok(r.dropped.some((d) => d.reason === '항목 유형이 맞지 않음'));
   assert.ok(r.dropped.some((d) => d.reason === '연결 종류가 맞지 않음'));
-  // 읽지 못한 문장: 남은 인용과 겹치지 않는 문장
-  assert.ok(r.proposal.unread.includes('대사 확인이 끝나면 보고를 한다'));
+  assert.ok(r.dropped.some((d) => d.reason === '근거 구절에 두 항목의 이름이 모두 있어야 함'));
+  // 읽지 못한 문장: 남은 인용과 겹치지 않는 문장(위 연결의 인용이 두 문장에 걸쳐 있어 이 글에는 남는 문장이 없고, 항목 하나만 남긴 응답으로 확인한다)
+  assert.deepEqual(r.proposal.unread, []);
+  const one = verifyAiExtract(text, { nodes: [{ type: 'person', label: '서하늘', emp_no: 'V-1003', quote: '서하늘(V-1003)이 대사 확인을 맡는다' }], edges: [] }, null);
+  assert.ok(one.proposal.unread.includes('대사 확인이 끝나면 보고를 한다'));
 });
 
 test('CR-19 AI 검증: 항목이 하나도 안 남으면 empty, 형식이 깨지면 format', () => {
@@ -665,6 +680,34 @@ test('CR-19 화면: 읽지 못한 문장 목록과 못 읽은 글 안내', withD
   d.q('text-add-input').value = '   ';
   d.q('text-add-read').click();
   assert.equal(d.q('text-add-message').textContent, '글을 붙여 넣으세요.');
+}));
+
+test('CR-19 화면(R16): 이름만 읽은 문장은 「(일부만 읽음)」, 사번 충돌 항목은 체크 해제 + 이유, 읽은 뒤 글이 바뀌면 저장이 막히고 「다시 읽으세요」', withDom(() => {
+  const app = openApp();
+  const d = openDialog({ app });
+  // R16-5 부분 표시, R16-6 사번 충돌(가람솔(V-1003): 지도의 V-1003은 서하늘)
+  d.q('text-add-input').value = '도하람(V-2001)은 신입이다. 가람솔(V-1003)이 월말 점검을 맡는다.';
+  d.q('text-add-read').click();
+  assert.equal(d.q('text-add-unread-0').textContent, '도하람(V-2001)은 신입이다 (일부만 읽음)');
+  const gi = [0, 1, 2].find((i) => d.q(`text-add-node-label-${i}`).value === '가람솔');
+  assert.ok(!d.q(`text-add-node-check-${gi}`).checked, '사번 충돌 항목은 처음에 체크하지 않는다');
+  assert.equal(d.q(`text-add-node-status-${gi}`).textContent, '넣지 않음 · 사번은 「서하늘」과 같고 이름이 다릅니다 — 확인한 뒤 체크하세요');
+  assert.equal(d.q('text-add-stale').hidden, true);
+  // R16-16 글 상자가 바뀌면 저장을 막는다(원래 글로 되돌리면 풀린다)
+  const original = d.q('text-add-input').value;
+  d.type('text-add-input', `${original} 한 문장 더.`);
+  assert.equal(d.q('text-add-save').disabled, true);
+  assert.equal(d.q('text-add-stale').hidden, false);
+  assert.equal(d.q('text-add-stale').textContent, '글이 바뀌었습니다 — 다시 읽으세요');
+  d.q('text-add-save').click();
+  assert.equal(d.saved.length, 0, '바뀐 글의 이전 읽기 결과는 저장되지 않는다');
+  d.type('text-add-input', original);
+  assert.equal(d.q('text-add-save').disabled, false);
+  assert.equal(d.q('text-add-stale').hidden, true);
+  d.type('text-add-input', `${original} 한 문장 더.`);
+  d.q('text-add-read').click(); // 다시 읽으면 풀린다
+  assert.equal(d.q('text-add-save').disabled, false);
+  assert.equal(d.q('text-add-stale').hidden, true);
 }));
 
 test('CR-19 화면: 읽기 전용이면 열리지 않고, 저장도 하지 않는다', withDom(() => {

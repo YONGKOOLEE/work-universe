@@ -24,7 +24,9 @@ export const TEXT_ADD = Object.freeze({
   edgesTitle: (n) => `찾은 연결 ${n}개`,
   noNodes: '읽을 수 있는 문장이 없었습니다. 아래 「규칙으로 읽는 모양」에 맞게 써 보세요.',
   unreadTitle: (n) => `읽지 못한 문장 ${n}개`,
-  unreadNote: '모양에 맞지 않아 지어내지 않고 건너뛴 문장입니다.',
+  unreadNote: '모양에 맞지 않거나 뜻이 애매해(부정·지난 일·예정·날짜·나열 등) 지어내지 않고 건너뛴 문장입니다.',
+  partialTag: ' (일부만 읽음)', // 이름은 읽었지만 모양을 다 읽지 못한 문장
+  stale: '글이 바뀌었습니다 — 다시 읽으세요',
   shapesTitle: '규칙으로 읽는 모양',
   attach: ' 새 업무는 지도 중심(가운데 큰 동그라미)에 바로 연결하기',
   save: '저장',
@@ -50,7 +52,7 @@ function errorText(error, kind, relation) {
  * @returns {()=>void} 대화상자를 여는 함수
  */
 export function textAddDialog(o) {
-  const st = { open: false, proposal: null, sel: defaultSelection({ nodes: [], edges: [] }), method: '', model: '', fallback: '', dropped: 0, busy: false, run: 0, message: '', done: '', errors: new Map(), attach: true };
+  const st = { open: false, proposal: null, sel: defaultSelection({ nodes: [], edges: [] }), method: '', model: '', fallback: '', dropped: 0, busy: false, run: 0, message: '', done: '', errors: new Map(), attach: true, readText: '', stale: false };
   let input;
   let readBtn;
   let aiBtn;
@@ -59,6 +61,7 @@ export function textAddDialog(o) {
   let previewBox;
   let countLine;
   let messageLine;
+  let staleLine;
   let saveBtn;
   let doneLine;
 
@@ -67,8 +70,10 @@ export function textAddDialog(o) {
   const edgeSel = (key) => (st.sel.edges[key] = st.sel.edges[key] || {});
 
   // ── 읽기 ─────────────────────────────────────────────────────────────────
-  function setProposal(p, method, model = '') {
+  function setProposal(p, method, model = '', readText = input ? input.value : '') {
     st.proposal = p;
+    st.readText = readText; // 이 글을 읽은 결과다. 글 상자가 바뀌면 저장을 막고 다시 읽게 한다(R16-16)
+    st.stale = !!input && input.value !== readText;
     st.sel = defaultSelection(p);
     st.method = method;
     st.model = model;
@@ -88,7 +93,7 @@ export function textAddDialog(o) {
       st.message = TEXT_ADD.emptyText;
       return render();
     }
-    setProposal(extractFromText(text, o.getView()), 'rule');
+    setProposal(extractFromText(text, o.getView()), 'rule', '', text);
     render();
   }
 
@@ -113,13 +118,13 @@ export function textAddDialog(o) {
     if (run !== st.run || !st.open) return; // 그 사이 다시 읽었거나 창을 닫았다: 응답을 버린다
     st.busy = false;
     if (r && r.ok) {
-      setProposal(r.proposal, 'claude_api', r.model);
+      setProposal(r.proposal, 'claude_api', r.model, text);
       st.dropped = (r.dropped || []).length;
       st.fallback = '';
     } else {
       // 실패하면 규칙으로 읽은 결과를 대신 보여 준다(R-04 ③)
       const reason = r && r.fallback ? r.fallback.reason : '알 수 없는 오류';
-      setProposal(extractFromText(text, o.getView()), 'rule');
+      setProposal(extractFromText(text, o.getView()), 'rule', '', text);
       st.dropped = 0;
       st.fallback = TEXT_ADD.aiFail(reason);
     }
@@ -129,6 +134,10 @@ export function textAddDialog(o) {
   // ── 저장 ─────────────────────────────────────────────────────────────────
   function save() {
     if (!st.proposal || o.app.readOnly) return;
+    if (st.stale || input.value !== st.readText) {
+      st.stale = true;
+      return render();
+    }
     st.message = '';
     st.errors = new Map();
     const ops = proposalToOps(st.proposal, st.sel, o.app.doc, { attachRoot: st.attach ? 'work' : false });
@@ -154,6 +163,7 @@ export function textAddDialog(o) {
     const skipped = (r.rows || []).filter((x) => x.kind === 'skipped').length;
     st.done = TEXT_ADD.done(r.created.length, links, skipped);
     st.proposal = null;
+    st.stale = false;
     st.fallback = '';
     st.method = '';
     st.message = '';
@@ -165,10 +175,14 @@ export function textAddDialog(o) {
   // ── 그리기 ───────────────────────────────────────────────────────────────
   const nodeStatus = (n, f) => {
     if (f.problem) return { state: 'problem', text: f.problem === 'empty' ? '이름을 넣으세요' : '이름이 너무 깁니다(최대 100자)' };
-    if (!f.include) return { state: 'off', text: f.ambiguous ? '같은 이름이 둘 이상 있습니다 — 체크하면 새 항목으로 만듭니다' : '넣지 않음' };
+    if (!f.include) {
+      if (f.ambiguous) return { state: 'off', text: '같은 이름이 둘 이상 있습니다 — 체크하면 새 항목으로 만듭니다' };
+      if (n.hold && !f.match) return { state: 'hold', text: `넣지 않음 · ${n.hold} — 확인한 뒤 체크하세요` };
+      return { state: 'off', text: '넣지 않음' };
+    }
     if (f.match) return { state: 'match', text: `있는 항목 「${f.match.label}」에 연결` };
     if (f.ambiguous) return { state: 'new', text: '새로 만듦 · 같은 이름이 지도에 둘 이상 있습니다' };
-    return { state: 'new', text: `새로 만듦${n.unsure && f.type === 'person' ? ' · 확인 필요(사람인지 확실하지 않음)' : ''}` };
+    return { state: 'new', text: `새로 만듦${n.unsure && f.type === 'person' ? ' · 확인 필요(사람인지 확실하지 않음)' : ''}${n.hold ? ` · ${n.hold}` : ''}` };
   };
 
   const edgeStatus = (f) => {
@@ -256,7 +270,7 @@ export function textAddDialog(o) {
         parts.push(el('div', { 'data-testid': 'text-add-unread' },
           el('h3', {}, TEXT_ADD.unreadTitle(p.unread.length)),
           el('p', { class: 'muted small' }, TEXT_ADD.unreadNote),
-          el('ul', { class: 'small' }, ...p.unread.map((s, k) => el('li', { 'data-testid': `text-add-unread-${k}` }, s)))));
+          el('ul', { class: 'small' }, ...p.unread.map((s, k) => el('li', { 'data-testid': `text-add-unread-${k}` }, `${s}${(p.partial || []).includes(s) ? TEXT_ADD.partialTag : ''}`)))));
       }
     }
     parts.push(el('details', { class: 'small', 'data-testid': 'text-add-shapes' },
@@ -280,14 +294,26 @@ export function textAddDialog(o) {
       const nEdge = p.edges.filter((e) => r.edges[e.key].include).length;
       countLine.textContent = TEXT_ADD.count(inc.length - nOld, nOld, nEdge);
     } else countLine.textContent = '';
-    saveBtn.disabled = !p || busy || o.app.readOnly;
+    saveBtn.disabled = !p || busy || o.app.readOnly || st.stale;
+    staleLine.textContent = p && !busy && st.stale ? TEXT_ADD.stale : '';
+    staleLine.hidden = !(p && !busy && st.stale);
     messageLine.textContent = st.message;
     doneLine.textContent = st.done;
     doneLine.hidden = !st.done;
   }
 
+  // 읽은 뒤 글 상자가 바뀌면(R16-16) 저장을 막고 「다시 읽으세요」. 원래 글로 되돌리면 풀린다
+  function onInput() {
+    st.message = '';
+    const stale = !!st.proposal && input.value !== st.readText;
+    if (stale !== st.stale) {
+      st.stale = stale;
+      render();
+    }
+  }
+
   function build() {
-    input = el('textarea', { id: 'text-add-input', rows: 5, 'data-testid': 'text-add-input', placeholder: TEXT_ADD.placeholder, oninput: () => { st.message = ''; } });
+    input = el('textarea', { id: 'text-add-input', rows: 5, 'data-testid': 'text-add-input', placeholder: TEXT_ADD.placeholder, oninput: onInput });
     readBtn = el('button', { type: 'button', 'data-testid': 'text-add-read', onclick: readRule }, TEXT_ADD.read);
     const ai = o.aiReady();
     aiBtn = ai ? el('button', { type: 'button', 'data-testid': 'text-add-ai', onclick: readAi }, TEXT_ADD.ai) : null;
@@ -295,6 +321,7 @@ export function textAddDialog(o) {
     previewBox = el('div', { 'data-testid': 'text-add-preview' });
     countLine = el('p', { class: 'small', 'data-testid': 'text-add-count' });
     messageLine = el('p', { class: 'error-text', role: 'alert', 'data-testid': 'text-add-message' });
+    staleLine = el('p', { class: 'notice', role: 'status', 'data-testid': 'text-add-stale', hidden: true });
     saveBtn = el('button', { type: 'button', class: 'primary', 'data-testid': 'text-add-save', onclick: save }, TEXT_ADD.save);
     doneLine = el('p', { class: 'ok-text', role: 'status', 'data-testid': 'text-add-done', hidden: true });
     o.dialog.replaceChildren(
@@ -311,6 +338,7 @@ export function textAddDialog(o) {
         el('input', { type: 'checkbox', 'data-testid': 'text-add-attach', checked: st.attach, onchange: (e) => { st.attach = e.target.checked; } }),
         TEXT_ADD.attach),
       messageLine,
+      staleLine,
       el('div', { class: 'row' }, saveBtn),
       doneLine);
   }
@@ -325,6 +353,8 @@ export function textAddDialog(o) {
     st.fallback = '';
     st.message = '';
     st.done = '';
+    st.readText = '';
+    st.stale = false;
     st.errors = new Map();
     build();
     render();
