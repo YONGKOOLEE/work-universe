@@ -4,6 +4,7 @@
 // 용어(CR-16 ②): 처음 보이는 글에서는 「업무 지도」라고 쓴다. 단추 이름도 「새 업무 지도」처럼 같은 말을 쓴다(CR-17 A). data-testid는 그대로다.
 
 import { el } from './dom.js';
+import { MAP_KIND_LABEL, modifiedLabel, resumeLabel } from '../rules/daily-use.js';
 
 // CR-16 ①: 처음 보는 사람에게 "왜"를 한 줄로. 담당자가 바뀔 때(전) → 기록이 쌓이는 업무 지도 → 근거 달린 초안·경고(후). 글과 CSS 화살표만 쓴다
 // 셋째 칸 본문(FU-4, 처음 사용 점검 2026-10-24): 첫 화면에 AI가 하는 일이 보이게 한다. 키가 없어도 사전 생성 문장(개발 중 Claude가 작성)으로 보이므로 거짓이 아니다
@@ -26,14 +27,17 @@ const STEPS = [
 ];
 
 /**
- * @param {{universes:object[], guide:object, warnings:string[], readOnly:boolean, onOpen:(id)=>void, onCreate:()=>void, onCreateMine?:()=>void, onImport?:()=>void, onTour?:(id:string)=>void}} o
+ * @param {{universes:object[], guide:object, warnings:string[], readOnly:boolean, onOpen:(id)=>void, onCreate:()=>void, onCreateMine?:()=>void, onImport?:()=>void, onTour?:(id:string)=>void,
+ *   maps?:object[], resume?:{id:string,name:string}|null}} o
+ *   maps(CR-18 D-1): 「내 업무 지도」에 보일 목록(rules/daily-use.js startMaps — 내가 만든 지도·고친 샘플·최근 연 지도, 마지막 수정일 포함). 없으면 예전처럼 내가 만든 지도만
+ *   resume(D-1): 「지난번 지도 이어서 보기」 대상. 없으면 단추 없음
  *   onTour(시나리오): 그 시나리오의 예시 유니버스를 열고 따라 하기를 시작한다(세 갈래 카드 a·c)
  */
 export function startScreen(o) {
   const samples = o.universes
     .filter((u) => u.is_sample)
     .sort((a, b) => ((o.guide[a.id] || {}).order || 99) - ((o.guide[b.id] || {}).order || 99));
-  const mine = o.universes.filter((u) => !u.is_sample);
+  const mine = o.maps || o.universes.filter((u) => !u.is_sample);
   const recommended = samples.find((u) => (o.guide[u.id] || {}).recommended) || samples[0];
 
   const card = (u) => {
@@ -44,6 +48,18 @@ export function startScreen(o) {
       el('p', { class: 'muted small' }, u.ref_count ? `하위 업무 지도 ${u.ref_count}개를 묶음` : `노드 ${u.node_count}개`),
       g.try ? el('p', { class: 'try' }, `해 볼 것: ${g.try}`) : null,
       el('button', { type: 'button', class: g.recommended ? 'primary' : '', 'data-testid': `open-${u.id}`, onclick: () => o.onOpen(u.id) }, '열기'),
+    );
+  };
+
+  // 내 업무 지도 목록 카드(D-1): 마지막 수정일을 함께 보인다. 샘플은 샘플 목록의 카드와 testid가 겹치지 않게 mine-* 를 쓴다
+  const mapCard = (u) => {
+    if (!u.kind) return card(u); // maps 없이 불린 예전 모양
+    const sample = u.is_sample;
+    return el('li', { class: 'card', 'data-testid': `${sample ? 'mine-card' : 'card'}-${u.id}`, 'data-kind': u.kind },
+      el('div', { class: 'card-head' }, el('strong', {}, u.name), el('span', { class: 'chip' }, u.level), MAP_KIND_LABEL[u.kind] ? el('span', { class: 'chip', 'data-testid': 'map-kind' }, MAP_KIND_LABEL[u.kind]) : null),
+      el('p', { class: 'muted small', 'data-testid': 'map-modified' }, modifiedLabel(u.modified)),
+      el('p', { class: 'muted small' }, u.ref_count ? `하위 업무 지도 ${u.ref_count}개를 묶음` : `노드 ${u.node_count}개`),
+      el('button', { type: 'button', 'data-testid': `${sample ? 'mine-open' : 'open'}-${u.id}`, onclick: () => o.onOpen(u.id) }, '열기'),
     );
   };
 
@@ -65,6 +81,8 @@ export function startScreen(o) {
         el('p', { class: 'why-title' }, WHY_TITLE),
         el('ol', { class: 'why-steps' }, ...WHY_STEPS.map((s) => el('li', { class: 'why-step', 'data-testid': 'why-step' }, el('strong', {}, s.head), el('span', {}, s.body))))),
       o.warnings.length ? el('p', { class: 'notice', 'data-testid': 'start-warning' }, o.warnings.join(' ')) : null,
+      // 지난번 지도 이어서 보기(D-1): 마지막으로 연 지도가 지금도 있을 때만
+      o.resume ? el('p', { class: 'start-resume' }, el('button', { type: 'button', class: 'link', 'data-testid': 'start-resume', onclick: () => o.onOpen(o.resume.id) }, resumeLabel(o.resume.name))) : null,
       el('h2', {}, '무엇을 하고 싶어요?'),
       el('ul', { class: 'start-ways', 'data-testid': 'start-ways' }, ...ways),
       el('p', { class: 'muted small' }, '아래 단추는 따라 하기 없이 바로 시작합니다.'),
@@ -78,7 +96,7 @@ export function startScreen(o) {
     ),
     el('section', {}, el('h2', {}, '내 업무 지도'),
       mine.length
-        ? el('ul', { class: 'cards', 'data-testid': 'start-mine' }, ...mine.map(card))
+        ? el('ul', { class: 'cards', 'data-testid': 'start-mine' }, ...mine.map(mapCard))
         : el('p', { class: 'muted', 'data-testid': 'start-mine-empty' }, '아직 없습니다. 「새 업무 지도 만들기」로 시작하세요.')),
     // 접어 둔다(기본 접힘): 처음 보는 사람에게 목록 열한 개가 한꺼번에 보이지 않게(CR-13 A). 기능은 그대로 펼치면 있다
     el('details', { class: 'start-more', 'data-testid': 'start-more' }, el('summary', {}, '샘플·처음 순서 더 보기'),

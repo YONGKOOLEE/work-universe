@@ -7,7 +7,7 @@
 // 범주 「이슈」는 초안에서는 「최근 이슈」로 따로 보이고 닫힘 판정을 받지 않지만, 미해결 목록에서는 같은 규칙으로 닫는다(C12-9).
 
 import { refGid, toGid } from '../view/view.js';
-import { memoCategoryOf } from '../model/schema.js';
+import { TEXT_MAX, memoCategoryOf } from '../model/schema.js';
 
 /** 미해결 목록에 오르는 범주(이슈, 진행 중) */
 export const OPEN_CATEGORIES = ['issue', 'in_progress'];
@@ -52,10 +52,12 @@ const localId = (ev) => ev.id || String(ev.gid).split('/').pop();
 /**
  * 「해결로 표시」로 추가할 새 메모의 입력. 같은 대상·같은 주제, 범주 resolved.
  * 날짜는 오늘이되 원래 메모보다 앞서지 않게 한다(앞서면 이력 순서상 닫지 못한다).
+ * memoText(CR-18 D-11, 선택): 사람이 적은 해결 메모. 앞뒤 공백을 뗀 뒤 비어 있지 않으면 그 글이 해결됨 메모의 내용이 된다(TEXT_MAX까지). 비었거나 글이 아니면 기본 내용(「해결: 원래 메모 앞부분」)
  */
-export function resolveMemoInput(ev, today) {
+export function resolveMemoInput(ev, today, memoText = '') {
   const note = String(ev.note || '').trim();
   const head = note.length > SUMMARY_MAX ? `${note.slice(0, SUMMARY_MAX)}…` : note;
+  const written = typeof memoText === 'string' ? memoText.trim() : '';
   const payload = { category: 'resolved', resolves_id: localId(ev) };
   if (ev.payload.target_id) payload.target_id = ev.payload.target_id;
   if (ev.payload.topic_ids && ev.payload.topic_ids.length) payload.topic_ids = [...ev.payload.topic_ids];
@@ -63,7 +65,7 @@ export function resolveMemoInput(ev, today) {
     type: 'memo',
     occurred_at: ev.occurred_at > today ? ev.occurred_at : today,
     payload,
-    note: head ? `해결: ${head}` : '해결',
+    note: written ? written.slice(0, TEXT_MAX) : head ? `해결: ${head}` : '해결',
   };
 }
 

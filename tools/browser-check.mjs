@@ -461,7 +461,8 @@ async function checkBrowser(browser, port) {
   check('C-1: 연도 오타 날짜(0202-06-01) → 날짜 오류, 이력이 늘지 않음', !!badYear && badYear.text.includes('1900~2200') && (await evaluate(s.cdp, 'window.__wu.doc.events.length')) === eventsBefore, badYear && badYear.text);
   await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': '2026-10-02', 'event-note': '점검 기준 변경 논의' });
   await sleep(250);
-  check('이력 추가(메모) → 이력 목록에 날짜와 함께 보임', (await text(s.cdp, '[data-testid=history]')).includes('2026-10-02메모점검 기준 변경 논의'));
+  // CR-18 D-14: 이력 목록은 이슈 메모에도 「[이슈]」 꼬리표가 붙는다(분류 없는 메모는 이슈로 본다)
+  check('이력 추가(메모) → 이력 목록에 날짜·꼬리표와 함께 보임', (await text(s.cdp, '[data-testid=history]')).includes('2026-10-02메모[이슈] 점검 기준 변경 논의'), (await text(s.cdp, '[data-testid=history]')).slice(0, 200));
   // 이력 오류: 인수인계에서 받는 사람을 비우면 거부
   await clickTestId(s.cdp, 'btn-event');
   await fillPanelForm(s.cdp, { 'event-type': 'handover', 'event-date': '2026-10-02' });
@@ -622,6 +623,7 @@ async function checkBrowser(browser, port) {
 
   // ── T-14 시작 화면(R-08) ──
   await evaluate(s.cdp, 'window.confirm = () => true');
+  await evaluate(s.cdp, "(() => { const v = JSON.parse(localStorage.getItem('wu:v1:settings') || '{}'); delete v.lastOpenedId; delete v.tourDone; localStorage.setItem('wu:v1:settings', JSON.stringify(v)); })()"); // CR-18 D-1·D-2: 처음 열었을 때의 시작 화면을 재려고 「이어서 보기」·「따라 하기 했음」 기록을 지운다
   const onStart = await goBare(s.cdp);
   check('R-08 주소에 유니버스가 없으면(처음 더블클릭) 시작 화면이 열림', onStart);
   if (onStart) {
@@ -723,6 +725,7 @@ async function checkBrowser(browser, port) {
     const hasNext = () => evaluate(s.cdp, "!!document.querySelector('[data-testid=tour-next]')");
 
     // 갈래 a: 인수인계 → 월말 정산(U-A1)이 열리고 따라 하기 1/4
+    await evaluate(s.cdp, "(() => { const v = JSON.parse(localStorage.getItem('wu:v1:settings') || '{}'); delete v.tourDone; localStorage.setItem('wu:v1:settings', JSON.stringify(v)); })()"); // CR-18 D-2: 앞 점검에서 끝낸·건너뛴 기록이 있으면 카드로 들어가도 따라 하기가 뜨지 않으므로 지운다
     await evaluate(s.cdp, "document.querySelector('[data-testid=start-way-handover]').click()");
     await sleep(500);
     const opened = await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
@@ -827,9 +830,9 @@ async function checkBrowser(browser, port) {
     check('R9-1 「편집 되감기」를 누르면 띠가 보이고 끝 카드: 「끝! 이제 내 업무로 해 볼까요?」', ti.mode === 'end' && !(await evaluate(s.cdp, "document.querySelector('[data-testid=rewind-band]').hidden")) && (await text(s.cdp, '[data-testid=tour-end]')) === '끝! 이제 내 업무로 해 볼까요?', JSON.stringify(ti));
     await clickTestId(s.cdp, 'btn-rewind-back');
     await sleep(300);
-    check('CR-13 A 근거 칩을 누르면 끝 카드: 「끝! 이제 내 업무로 해 볼까요?」, 「내 업무 지도 만들기」, 「닫기」, 접힌 상태면 「도구 더 보기」 안내 한 줄(강제로 펼치지 않음)', ti.mode === 'end' && (await text(s.cdp, '[data-testid=tour-end]')) === '끝! 이제 내 업무로 해 볼까요?' && (await text(s.cdp, '[data-testid=tour-make]')) === '내 업무 지도 만들기' && (await text(s.cdp, '[data-testid=tour-skip]')) === '닫기' && (await text(s.cdp, '[data-testid=tour-tools-hint]')).includes('「도구 더 보기」에서 흐름 정렬·거르기도 써 보세요') && (await evaluate(s.cdp, 'window.__wu.toolsOpen')) === false, JSON.stringify(ti));
+    check('CR-13 A 근거 칩을 누르면 끝 카드: 「끝! 이제 내 업무로 해 볼까요?」, 「이제 내 업무로 해 보기」, 「닫기」, 접힌 상태면 「도구 더 보기」 안내 한 줄(강제로 펼치지 않음)', ti.mode === 'end' && (await text(s.cdp, '[data-testid=tour-end]')) === '끝! 이제 내 업무로 해 볼까요?' && (await text(s.cdp, '[data-testid=tour-mine]')) === '이제 내 업무로 해 보기' && (await text(s.cdp, '[data-testid=tour-skip]')) === '닫기' && (await text(s.cdp, '[data-testid=tour-tools-hint]')).includes('「도구 더 보기」에서 흐름 정렬·거르기도 써 보세요') && (await evaluate(s.cdp, 'window.__wu.toolsOpen')) === false, JSON.stringify(ti));
     const wbEnd = await evaluate(s.cdp, "(() => { const m = document.querySelector('[data-testid=tour-mine]'); const g = document.querySelector('[data-testid=tour-end-guide]'); const k = document.querySelector('[data-testid=tour-make]'); return { mine: m ? { text: m.textContent, primary: m.classList.contains('primary'), disabled: m.disabled, visible: m.checkVisibility() } : null, guide: g ? g.textContent : '', make: !!k, skip: !!document.querySelector('[data-testid=tour-skip]') }; })()");
-    check('처음 사용 W-B(CR-18-3) 따라 하기 끝 카드: 안내 「예시를 봤으면, 내 업무 이름 하나로 작은 지도를 만들어 보세요.」, 으뜸 단추 「이제 내 업무로 해 보기」(켜짐·보임), 기존 「내 업무 지도 만들기」·「닫기」도 그대로', !!wbEnd.mine && wbEnd.mine.text === '이제 내 업무로 해 보기' && wbEnd.mine.primary && !wbEnd.mine.disabled && wbEnd.mine.visible && wbEnd.guide === '예시를 봤으면, 내 업무 이름 하나로 작은 지도를 만들어 보세요.' && wbEnd.make && wbEnd.skip, JSON.stringify(wbEnd));
+    check('처음 사용 W-B(CR-18-3) 따라 하기 끝 카드: 안내 「예시를 봤으면, 내 업무 이름 하나로 작은 지도를 만들어 보세요.」, 으뜸 단추 「이제 내 업무로 해 보기」(켜짐·보임), 같은 일 하던 「내 업무 지도 만들기」는 없고 「닫기」는 그대로', !!wbEnd.mine && wbEnd.mine.text === '이제 내 업무로 해 보기' && wbEnd.mine.primary && !wbEnd.mine.disabled && wbEnd.mine.visible && wbEnd.guide === '예시를 봤으면, 내 업무 이름 하나로 작은 지도를 만들어 보세요.' && !wbEnd.make && wbEnd.skip, JSON.stringify(wbEnd));
     await shot(s.cdp, `${browser.name}-36e-tour-end`);
     await evaluate(s.cdp, "document.querySelector('[data-testid=tour-mine]').click()");
     await sleep(300);
@@ -929,6 +932,7 @@ async function checkBrowser(browser, port) {
     check('머리글 제목을 누르면 시작 화면으로 돌아옴', await waitFor(s.cdp, 'window.__wu && window.__wu.start === true', 8000));
 
     // 갈래 c: 팀 업무 → 가상 운영부(U-D1), team 시나리오 1~5(위험 요약 먼저 — CR-17 K)
+    await evaluate(s.cdp, "(() => { const v = JSON.parse(localStorage.getItem('wu:v1:settings') || '{}'); delete v.tourDone; localStorage.setItem('wu:v1:settings', JSON.stringify(v)); })()"); // CR-18 D-2: 위와 같은 이유
     await evaluate(s.cdp, "document.querySelector('[data-testid=start-way-team]').click()");
     await sleep(500);
     const openedTeam = await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-D1' && window.__wu.cy.nodes().length > 0", 8000);
@@ -2169,9 +2173,12 @@ async function checkBrowser(browser, port) {
   await sleep(150);
   const r20c1 = await r20Count();
   check('R-20 ① 닫으면 업무 상세로 돌아가 「미해결 n건」이 줄어든 값으로 보임', !!r20c1 && r20c1.n === r20Items1.length, JSON.stringify(r20c1));
-  const r20Draft1 = await r20Draft();
+  // CR-18 D-11: 해결하면 같은 항목에 「최근 해결: …」 줄이 붙는다 — 미해결 진행 중 문장만 비교하고, 최근 해결 줄은 따로 본다
+  const r20All1 = await r20Draft();
+  const r20Draft1 = r20All1.filter((t) => !t.startsWith('최근 해결: '));
   const r20Prog1 = r20Items1.filter((x) => x.chip === '진행 중');
-  check('R-20 ③ 해결 표시 뒤에도 초안의 「진행 중」과 목록의 「진행 중」이 같은 메모(1건 줄어듦)', r20Draft1.length === r20Draft0.length - 1 && r20Draft1.length === r20Prog1.length && r20Draft1.every((d) => r20Prog1.some((x) => d.includes(x.text))), JSON.stringify([r20Draft0.length, r20Draft1.length, r20Prog1.length]));
+  check('CR-18 D-11 해결 표시 뒤 초안 「진행 중」에 방금 해결한 메모의 「최근 해결: …(날짜)」 줄', r20All1.some((t) => t.startsWith('최근 해결: ') && t.includes(r20Target.text.slice(0, 8))), JSON.stringify(r20All1));
+  check('R-20 ③ 해결 표시 뒤에도 초안의 「진행 중」과 목록의 「진행 중」이 같은 메모(1건 줄어듦)', r20Draft1.length === r20Draft0.filter((t) => !t.startsWith('최근 해결: ')).length - 1 && r20Draft1.length === r20Prog1.length && r20Draft1.every((d) => r20Prog1.some((x) => d.includes(x.text))), JSON.stringify([r20Draft0.length, r20Draft1.length, r20Prog1.length]));
   await evaluate(s.cdp, "window.__wu.select(null)");
   await sleep(200);
   const r20Ov = await r20Count();
@@ -3742,6 +3749,427 @@ async function checkBrowser(browser, port) {
       check('W-A CR-18-6 끄고 확정하면 수행 연결은 그대로이고 안내는 「현재 담당은 그대로입니다 — …」(직접 넘기는 방법)', waOff.edges === waEdgesBefore && waOff.note.includes('현재 담당은 그대로입니다') && !waOff.note.includes('담당도 넘겼습니다'), waOff.note.slice(0, 160));
       await waRestore('U-A1');
     }
+  }
+
+  // ── 일상 사용 G1(CR-18-8, 2026-10-24): D-9 초안 협업 줄의 소속·연락처, D-11 「해결 메모(선택)」 칸·초안의 「최근 해결」, D-13 다시 뽑은 초안의 「새로」 표시.
+  //    데이터를 바꾸므로 시작 때 저장소를 찍어 두었다가 끝에서 되돌린다 ──
+  {
+    const g1Snap = await evaluate(s.cdp, 'JSON.stringify(Object.entries(localStorage))');
+    const g1Restore = async (id = 'U-A1') => {
+      await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(g1Snap)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); location.hash = ${JSON.stringify(id)}; location.reload(); })()`).catch(() => {});
+      await sleep(500);
+      return waitFor(s.cdp, `window.__wu && window.__wu.doc && window.__wu.doc.universe.id === ${JSON.stringify(id)} && window.__wu.cy.nodes().length > 0`, 8000);
+    };
+    const g1Today = () => evaluate(s.cdp, "(() => { const d = new Date(); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; })()");
+    const g1Draft = async () => {
+      await evaluate(s.cdp, 'window.confirm = () => true; window.__wu.select(null)');
+      await clickTestId(s.cdp, 'btn-draft-universe');
+      await sleep(200);
+      await makeDraft('U-A1/N-001', 'U-A1/N-011', 'U-A1/N-010');
+      await sleep(300);
+    };
+    const g1Item = (key) => evaluate(s.cdp, `[...document.querySelectorAll('[data-testid=draft-item-${key}] li')].map((li) => ({ text: li.querySelector('span:not(.chip):not(.evidence-row)') ? li.querySelector('span:not(.chip):not(.evidence-row)').textContent : '', marks: li.querySelectorAll('[data-testid=draft-new-mark]').length }))`);
+    const g1Marks = () => evaluate(s.cdp, "(() => { const m = [...document.querySelectorAll('[data-testid=draft-new-mark]')]; return { n: m.length, text: m.map((x) => x.textContent), sized: m.every((x) => { const r = x.getBoundingClientRect(); return r.width > 0 && r.height > 0; }), li: document.querySelectorAll('[data-testid=draft-result] li').length }; })()");
+
+    if (await g1Restore('U-A1')) {
+      // 협업자(가상 사람, 소속·내선 속성)를 대사 확인에 「참조」로 이어 저장소에 넣고 다시 연다
+      await evaluate(s.cdp, `(() => { const k = 'wu:v1:u:U-A1'; const d = JSON.parse(localStorage.getItem(k)); const base = d.nodes.find((n) => n.id === 'N-010'); const nu = JSON.parse(JSON.stringify(base)); nu.id = 'N-901'; nu.label = 'G1 시험 협업자'; delete nu.emp_no; nu.attrs = { 소속: '가상감사실', 내선: '0000' }; d.nodes.push(nu); const e = d.edges.find((x) => x.core_type === 'references') || d.edges[0]; d.edges.push({ ...JSON.parse(JSON.stringify(e)), id: 'L-901', source: 'N-001', target: 'N-901', core_type: 'references', hidden: false }); localStorage.setItem(k, JSON.stringify(d)); localStorage.removeItem('wu:v1:draft-seen'); location.reload(); })()`).catch(() => {});
+      await sleep(500);
+      await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.nodes.some((n) => n.id === 'N-901') && window.__wu.cy.nodes().length > 0", 8000);
+
+      // D-9 + D-13(처음 만들 때는 표시 없음, 이 브라우저 설정에만 남음)
+      await g1Draft();
+      const g1Collab = (await g1Item('관계자_연락처')).map((x) => x.text).find((t) => t.startsWith('협업: G1 시험 협업자')) || '';
+      check('G1 D-9 초안 「관계자·연락처」 협업 줄에 소속(속성)과 연락처(내선 속성)가 붙음', g1Collab === '협업: G1 시험 협업자 — 참조 대사 확인. 소속: 가상감사실. 연락: 0000', g1Collab);
+      const g1First = await g1Marks();
+      const g1Seen = await evaluate(s.cdp, "(() => { const raw = localStorage.getItem('wu:v1:draft-seen'); const v = raw ? JSON.parse(raw) : null; return { has: !!(v && v.at && v.at['U-A1/N-001']), inDoc: JSON.stringify(window.__wu.doc).includes('draft-seen'), inUniverse: Object.keys(localStorage).filter((k) => k.startsWith('wu:v1:u:')).some((k) => localStorage.getItem(k).includes('draft-seen')) }; })()");
+      check('G1 D-13 처음 만든 초안에는 「새로」 표시가 없고, 이번 시각이 이 브라우저 설정(wu:v1:draft-seen)에만 남음(문서·유니버스 저장에는 없음)', g1First.n === 0 && g1Seen.has && !g1Seen.inDoc && !g1Seen.inUniverse, JSON.stringify({ g1First, g1Seen }));
+
+      // D-11 (a) 해결 메모 칸: 적고 해결 / 비우고 해결
+      await sleep(1100); // 해결 메모의 기록 시각이 방금 남긴 초안 시각보다 뒤(초 단위)가 되게
+      await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+      await sleep(200);
+      await clickTestId(s.cdp, 'btn-issues');
+      await sleep(250);
+      await evaluate(s.cdp, "document.querySelectorAll('[data-testid=issue-group]').forEach((d) => { d.open = true; })");
+      const g1Rows = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=issue-item]')].map((li) => { const i = li.querySelector('[data-testid=resolve-note]'); const r = i ? i.getBoundingClientRect() : { width: 0, height: 0 }; return { gid: li.dataset.gid, chip: li.querySelector('.chip').textContent, has: !!i, w: r.width, h: r.height, ph: i ? i.getAttribute('placeholder') : '', max: i ? i.getAttribute('maxlength') : '' }; })");
+      check('G1 D-11 미해결 목록 항목마다 「해결 메모(선택)」 한 줄 칸(크기 있음, 글자 수 상한 있음)', g1Rows.length > 1 && g1Rows.every((x) => x.has && x.w > 0 && x.h > 0 && x.ph === '해결 메모(선택)' && Number(x.max) > 0), JSON.stringify(g1Rows));
+      await shot(s.cdp, `${browser.name}-g1-resolve-note`);
+      const g1Typed = '원천 시스템 회신으로 종결(G1 시험)';
+      const g1Target = g1Rows.find((x) => x.chip === '진행 중') || g1Rows[0];
+      const g1Other = g1Rows.find((x) => x.gid !== g1Target.gid);
+      const g1e0 = await evaluate(s.cdp, 'window.__wu.doc.events.length');
+      await evaluate(s.cdp, `(() => { const li = document.querySelector('[data-gid="${g1Target.gid}"]'); const i = li.querySelector('[data-testid=resolve-note]'); i.value = '  ${g1Typed}  '; li.querySelector('[data-testid=btn-resolve]').click(); })()`);
+      await sleep(300);
+      const g1Added = JSON.parse(await evaluate(s.cdp, 'JSON.stringify(window.__wu.doc.events.at(-1))'));
+      check('G1 D-11 해결 메모를 적고 「해결로 표시」 → 그 글(앞뒤 공백 없이)이 해결됨 메모의 내용, 범주 resolved·resolves_id 그대로, 메모 한 건만 늘어남', g1Added.note === g1Typed && g1Added.payload.category === 'resolved' && g1Added.payload.resolves_id === g1Target.gid.split('/')[1] && (await evaluate(s.cdp, 'window.__wu.doc.events.length')) === g1e0 + 1, JSON.stringify(g1Added));
+      await evaluate(s.cdp, `document.querySelector('[data-gid="${g1Other.gid}"] [data-testid=btn-resolve]').click()`);
+      await sleep(300);
+      const g1Added2 = JSON.parse(await evaluate(s.cdp, 'JSON.stringify(window.__wu.doc.events.at(-1))'));
+      check('G1 D-11 칸을 비우고 「해결로 표시」 → 지금처럼 「해결: 원래 메모 앞부분」', /^해결: /.test(g1Added2.note) && g1Added2.payload.resolves_id === g1Other.gid.split('/')[1], JSON.stringify(g1Added2));
+      await clickTestId(s.cdp, 'issue-close');
+      await sleep(100);
+
+      // D-11 (b) 최근 해결 + D-13 (다시 뽑은 초안: 그 사이 기록된 근거가 붙은 문장만 「새로」)
+      const g1Day = await g1Today();
+      await g1Draft();
+      const g1Prog = await g1Item('진행_중');
+      const g1Recent = g1Prog.filter((x) => x.text.startsWith('최근 해결: '));
+      check('G1 D-11 초안 「진행 중인 일」에 「최근 해결: 적은 글(오늘 날짜)」 한 줄', g1Recent.some((x) => x.text === `최근 해결: ${g1Typed}(${g1Day})`) && g1Recent.length >= 2, JSON.stringify(g1Prog.map((x) => x.text)));
+      const g1Again = await g1Marks();
+      const g1RecentMarked = g1Recent.filter((x) => x.marks === 1).length;
+      check('G1 D-13 지난번 초안 이후 기록된 근거가 붙은 문장(최근 해결 두 줄)에만 작은 「새로」 표시(크기 있음), 나머지 문장에는 없음', g1Again.n === g1RecentMarked && g1RecentMarked === 2 && g1Again.n < g1Again.li && g1Again.sized && g1Again.text.every((t) => t === '새로'), JSON.stringify({ g1Again, g1Recent }));
+      await shot(s.cdp, `${browser.name}-g1-draft-new-mark`);
+      // 그 뒤 새 기록이 없으면 다시 만든 초안에는 표시가 없다
+      await makeDraft('U-A1/N-001', 'U-A1/N-011', 'U-A1/N-010');
+      await sleep(300);
+      check('G1 D-13 그 뒤 새 기록 없이 다시 만들면 「새로」 표시가 사라짐', (await g1Marks()).n === 0, JSON.stringify(await g1Marks()));
+      await g1Restore('U-A1');
+    }
+  }
+
+  // ── 일상 사용 G2(CR-18-8, 2026-10-24): D-5 사람 인수인계 초안의 대상 지도, D-6 「이 사람 일, 누가 대신할 수 있나」, D-8 「협업자 추가」·「참조」 설명, D-10 「이번 주 기록」,
+  //    D-12 「이미 끝난 일(해결됨으로 기록)」, D-14 이력 목록의 [이슈] 꼬리표, D-15 사번 없음 안내.
+  //    데이터를 바꾸므로 시작 때 localStorage를 찍어 두었다가 끝에서 되돌린다 ──
+  {
+    const g2Snap = await evaluate(s.cdp, 'JSON.stringify(Object.entries(localStorage))');
+    const g2Restore = async (id = 'U-A1') => {
+      await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(g2Snap)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); location.hash = ${JSON.stringify(id)}; location.reload(); })()`).catch(() => {});
+      await sleep(500);
+      return waitFor(s.cdp, `window.__wu && window.__wu.doc && window.__wu.doc.universe.id === ${JSON.stringify(id)} && window.__wu.cy.nodes().length > 0`, 8000);
+    };
+    const g2Box = (sel) => evaluate(s.cdp, `(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect(); return { w: r.width, h: r.height, text: e.textContent, open: e.open, hidden: e.hidden }; })()`);
+    const g2Set = (testid, val) => evaluate(s.cdp, `(() => { const e = document.querySelector('[data-testid=${testid}]'); if (!e) return false; e.value = ${JSON.stringify(val)}; e.dispatchEvent(new Event('input')); e.dispatchEvent(new Event('change')); return true; })()`);
+    const g2Select = async (gid) => { await evaluate(s.cdp, `window.__wu.select(${JSON.stringify(gid)})`); await sleep(250); };
+    const g2Last = (n = 1) => evaluate(s.cdp, `JSON.stringify(window.__wu.doc.events.slice(-${n}))`).then((x) => JSON.parse(x));
+
+    // ── D-5·D-6: 부서(가상 운영부)에서 사람 상세 ──
+    if (await g2Restore('U-D1')) {
+      await evaluate(s.cdp, 'window.confirm = () => true');
+      await g2Select('U-A1/N-012'); // 서하늘: 월말 정산 점검(U-A1)에서 대사 확인을 맡음
+      const g2Btn = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=btn-person-draft]'); return b ? { target: b.dataset.target, title: b.title } : null; })()");
+      check('G2 D-5 부서 지도에서 사람 상세의 「이 사람 일 인수인계 초안」 대상은 부서 전체가 아니라 그가 맡은 업무가 있는 지도(월말 정산 점검) 지도 중심', !!g2Btn && g2Btn.target === 'U-A1/N-000' && g2Btn.title.includes('월말 정산 점검'), JSON.stringify(g2Btn));
+      const g2Bk = await g2Box('[data-testid=person-backup]');
+      check('G2 D-6 사람 상세에 접힌 상자 「이 사람 일, 누가 대신할 수 있나」(처음엔 접힘, 크기 있음)', !!g2Bk && g2Bk.w > 0 && g2Bk.h > 0 && g2Bk.open === false && g2Bk.text.includes('이 사람 일, 누가 대신할 수 있나'), JSON.stringify(g2Bk));
+      await evaluate(s.cdp, "document.querySelector('[data-testid=person-backup]').open = true");
+      await sleep(150);
+      const g2Rows = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=person-backup-row]')].map((tr) => ({ work: tr.querySelector('td').textContent, cands: [...tr.querySelectorAll('[data-testid=person-backup-cand]')].map((li) => ({ name: li.querySelector('button').textContent, state: li.dataset.state, text: li.textContent })) }))");
+      // 앞 점검(CR-13)이 서하늘에게 업무를 하나 더 맡겨 둔 상태일 수 있다: 대사 확인 줄을 찾아 본다. 같은 말이 두 번 나오지 않는다
+      const g2Rec = g2Rows.find((r) => r.work === '대사 확인');
+      check('G2 D-6 표: 대사 확인 줄의 후보는 직접 해 본 윤바다·한가람(최대 3명), 「직접 해 봄(기간)」이 한 번만', g2Rows.length >= 1 && !!g2Rec && g2Rec.cands.length >= 1 && g2Rec.cands.length <= 3 && g2Rec.cands.every((c) => c.state === 'direct' && c.text.split('직접 해 봄').length === 2) && g2Rec.cands.map((c) => c.name).join() === '윤바다,한가람', JSON.stringify(g2Rows));
+      await shot(s.cdp, `${browser.name}-g2-person-backup`);
+      await evaluate(s.cdp, "document.querySelector('[data-testid=person-backup-name]').click()");
+      await sleep(250);
+      const g2Picked = await evaluate(s.cdp, "(() => { const n = window.__wu.view.getNode(window.__wu.selected); return n ? n.label : null; })()");
+      check('G2 D-6 후보 이름을 누르면 그 사람이 선택됨', g2Picked === '윤바다', String(g2Picked));
+      // 후보 없음, 맡은 업무 없음
+      await g2Select('U-K1/N-501'); // 업무 하나(승인요청 수신)뿐이고 비슷한 일을 해 본 사람이 없음
+      await evaluate(s.cdp, "(document.querySelector('[data-testid=person-backup]') || {}).open = true");
+      const g2None = await g2Box('[data-testid=person-backup-none]');
+      check('G2 D-6 후보가 없으면 「후보 없음 — 비슷한 일을 해 본 기록이 없습니다」', !!g2None && g2None.text === '후보 없음 — 비슷한 일을 해 본 기록이 없습니다' && g2None.w > 0, JSON.stringify(g2None));
+      await g2Select('U-A1/N-010'); // 한가람: 맡은 업무 없음
+      const g2NoBox = await g2Box('[data-testid=person-backup]');
+      const g2Fall = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=btn-person-draft]'); return b ? b.dataset.target : null; })()");
+      check('G2 D-5·D-6 맡은 업무가 없는 사람: 대사 상자는 없고, 초안 대상은 지금처럼 지도 전체(부서 지도 중심)', g2NoBox === null && g2Fall === 'U-D1/N-000', JSON.stringify([g2NoBox, g2Fall]));
+      await clickTestId(s.cdp, 'btn-person-draft');
+      await sleep(250);
+      const g2Draft = await evaluate(s.cdp, "(() => { const t = document.querySelector('[data-testid=draft-target]'); return t ? t.value : null; })()");
+      check('G2 D-5 그 단추로 열린 초안 창의 대상이 지도 전체(부서 지도 중심)', g2Draft === 'U-D1/N-000', String(g2Draft));
+      await g2Select('U-A1/N-012');
+      await clickTestId(s.cdp, 'btn-person-draft');
+      await sleep(250);
+      const g2Draft2 = await evaluate(s.cdp, "(() => { const t = document.querySelector('[data-testid=draft-target]'); const f = document.querySelector('[data-testid=draft-from]'); return t ? { target: t.value, from: f.selectedOptions[0] ? f.selectedOptions[0].textContent : '' } : null; })()");
+      check('G2 D-5 서하늘의 단추로 열린 초안 창은 대상 = 월말 정산 점검 지도 중심, 보내는 사람 = 서하늘', !!g2Draft2 && g2Draft2.target === 'U-A1/N-000' && g2Draft2.from.includes('서하늘'), JSON.stringify(g2Draft2));
+    } else {
+      check('G2 가상 운영부(U-D1) 열기', false, 'U-D1이 열리지 않음');
+    }
+
+    // ── D-8·D-10·D-12·D-14·D-15: 월말 정산 점검 ──
+    if (await g2Restore('U-A1')) {
+      await evaluate(s.cdp, 'window.confirm = () => true');
+      // D-8 관계 목록의 「참조」 설명
+      await g2Select('U-A1/N-001');
+      await clickTestId(s.cdp, 'btn-edge');
+      await sleep(200);
+      const g2Rel = await evaluate(s.cdp, "(() => { const o = [...document.querySelectorAll('[data-testid=edge-type] option')].find((x) => x.value === 'references'); const p = [...document.querySelectorAll('[data-testid=edge-type] option')].find((x) => x.value === 'performs'); return { ref: o ? o.textContent : null, perf: p ? p.textContent : null }; })()");
+      check('G2 D-8 연결 추가의 관계 목록에서 「참조」에 「(협업·공유·참고)」 설명(값은 그대로), 「수행」은 그대로', g2Rel.ref === '참조 (협업·공유·참고)' && g2Rel.perf === '수행', JSON.stringify(g2Rel));
+      // 같은 노드를 다시 고르면 열린 연결 추가 창이 그대로다(기존 동작): 다른 노드를 거쳐 상세로 돌아온다
+      await g2Select('U-A1/N-000');
+      await g2Select('U-A1/N-001');
+      // D-8 협업자 추가
+      const g2n0 = await evaluate(s.cdp, 'window.__wu.doc.nodes.length');
+      const g2e0 = await evaluate(s.cdp, 'window.__wu.doc.events.length');
+      const g2Cq = await g2Box('[data-testid=collab-quick]');
+      check('G2 D-8 업무 상세에 접힌 「협업자 추가」(처음엔 접힘, 크기 있음)', !!g2Cq && g2Cq.w > 0 && g2Cq.h > 0 && g2Cq.open === false, JSON.stringify(g2Cq));
+      await evaluate(s.cdp, "document.querySelector('[data-testid=collab-quick]').open = true");
+      await sleep(100);
+      await clickTestId(s.cdp, 'collab-add');
+      await sleep(150);
+      const g2Empty = await g2Box('[data-testid=collab-msg]');
+      check('G2 D-8 이름이 비면 「협업자 이름을 넣으세요.」, 저장 안 함', !!g2Empty && g2Empty.text === '협업자 이름을 넣으세요.' && (await evaluate(s.cdp, 'window.__wu.doc.nodes.length')) === g2n0, JSON.stringify(g2Empty));
+      await g2Set('collab-name', 'G2 시험 협업자');
+      await g2Set('collab-affiliation', '가상감사실');
+      await g2Set('collab-contact', '내선 0000');
+      await shot(s.cdp, `${browser.name}-g2-collab-quick`);
+      await clickTestId(s.cdp, 'collab-add');
+      await sleep(350);
+      const g2Added = await evaluate(s.cdp, "(() => { const d = window.__wu.doc; const n = d.nodes.find((x) => x.label === 'G2 시험 협업자'); const e = n ? d.edges.find((x) => x.core_type === 'references' && x.target === n.id) : null; return { n: n ? { type: n.core_type, attrs: n.attrs, emp: n.emp_no || null } : null, e: e ? { source: e.source, hidden: !!e.hidden } : null, nodes: d.nodes.length }; })()");
+      const g2Done = await g2Box('[data-testid=collab-done]');
+      check('G2 D-8 「추가」 → 사람 노드(속성 소속·연락처)와 업무(대사 확인) → 사람 「참조」 연결 한 번에, 노드 +1', !!g2Added.n && g2Added.n.type === 'person' && g2Added.n.attrs && g2Added.n.attrs['소속'] === '가상감사실' && g2Added.n.attrs['연락처'] === '내선 0000' && !!g2Added.e && g2Added.e.source === 'N-001' && g2Added.nodes === g2n0 + 1, JSON.stringify(g2Added));
+      check('G2 D-8·D-15 완료 안내(크기 있음)에 새 사람임과 「다른 팀 사람이면 사번 없이 두어도 됩니다」', !!g2Done && g2Done.w > 0 && g2Done.text.includes('새 사람으로 만들었습니다') && g2Done.text.includes('다른 팀 사람이면 사번 없이 두어도 됩니다'), JSON.stringify(g2Done));
+      const g2Link = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=links] li')].some((li) => li.textContent.includes('G2 시험 협업자') && li.textContent.includes('참조'))");
+      check('G2 D-8 업무 상세의 「연결된 노드」에 협업자가 「참조」로 보임', g2Link === true);
+      // 같은 이름 → 연결만(다른 업무), 같은 업무에 또 → 중복 안내
+      await g2Select('U-A1/N-002');
+      await evaluate(s.cdp, "document.querySelector('[data-testid=collab-quick]').open = true");
+      await g2Set('collab-name', 'G2 시험 협업자');
+      await g2Set('collab-contact', '무시될 값');
+      await clickTestId(s.cdp, 'collab-add');
+      await sleep(350);
+      const g2Again = await g2Box('[data-testid=collab-done]');
+      check('G2 D-8 같은 이름의 사람이 있으면 새로 만들지 않고 연결만(노드 수 그대로, 안내 한 줄)', !!g2Again && g2Again.text.includes('새로 만들지 않고 연결만') && (await evaluate(s.cdp, 'window.__wu.doc.nodes.length')) === g2n0 + 1, JSON.stringify(g2Again));
+      await evaluate(s.cdp, "document.querySelector('[data-testid=collab-quick]').open = true");
+      await g2Set('collab-name', 'G2 시험 협업자');
+      await clickTestId(s.cdp, 'collab-add');
+      await sleep(250);
+      const g2Dup = await g2Box('[data-testid=collab-msg]');
+      check('G2 D-8 이미 이어진 업무에 또 넣으면 「이미 이 업무에 참조로 이어진 사람입니다.」', !!g2Dup && g2Dup.text === '이미 이 업무에 참조로 이어진 사람입니다.', JSON.stringify(g2Dup));
+
+      // D-10 이번 주 기록 (지도 중심 상세)
+      await g2Select('U-A1/N-000');
+      const g2Wq = await g2Box('[data-testid=weekly-quick]');
+      check('G2 D-10 지도 중심 상세에 「이번 주 기록」 한 줄(업무·분류·내용·기록, 크기 있음)', !!g2Wq && g2Wq.w > 0 && g2Wq.h > 0 && !!(await g2Box('[data-testid=weekly-work]')) && !!(await g2Box('[data-testid=weekly-category]')) && !!(await g2Box('[data-testid=weekly-note]')) && !!(await g2Box('[data-testid=weekly-add]')), JSON.stringify(g2Wq));
+      const g2Cat = await evaluate(s.cdp, "(() => { const c = document.querySelector('[data-testid=weekly-category]'); return { value: c.value, options: [...c.options].map((o) => o.textContent).join() }; })()");
+      check('G2 D-10 분류 목록은 이력 추가와 같은 네 가지, 처음 값은 「진행 중」', g2Cat.options === '이슈,주의사항,진행 중,해결됨' && g2Cat.value === 'in_progress', JSON.stringify(g2Cat));
+      const g2eW0 = await evaluate(s.cdp, 'window.__wu.doc.events.length');
+      await clickTestId(s.cdp, 'weekly-add');
+      await sleep(150);
+      const g2Wm1 = await g2Box('[data-testid=weekly-msg]');
+      await g2Set('weekly-work', 'N-001');
+      await clickTestId(s.cdp, 'weekly-add');
+      await sleep(150);
+      const g2Wm2 = await g2Box('[data-testid=weekly-msg]');
+      check('G2 D-10 업무를 안 고르면 「기록할 업무를 고르세요.」, 내용이 비면 「메모 내용을 입력하세요.」, 저장 안 함', !!g2Wm1 && g2Wm1.text === '기록할 업무를 고르세요.' && !!g2Wm2 && g2Wm2.text === '메모 내용을 입력하세요.' && (await evaluate(s.cdp, 'window.__wu.doc.events.length')) === g2eW0, JSON.stringify([g2Wm1, g2Wm2]));
+      const g2eBefore = await evaluate(s.cdp, 'window.__wu.doc.events.length');
+      await g2Set('weekly-work', 'N-001');
+      await g2Set('weekly-note', '  G2 시험 이번 주 기록  ');
+      await shot(s.cdp, `${browser.name}-g2-weekly-quick`);
+      await clickTestId(s.cdp, 'weekly-add');
+      await sleep(350);
+      const g2Memo = (await g2Last(1))[0];
+      const g2Wd = await g2Box('[data-testid=weekly-done]');
+      check('G2 D-10 「기록」 → 이력 메모 한 건(업무 대사 확인, 분류 진행 중, 오늘 날짜, 앞뒤 공백 없는 내용)', (await evaluate(s.cdp, 'window.__wu.doc.events.length')) === g2eBefore + 1 && g2Memo.type === 'memo' && g2Memo.payload.target_id === 'N-001' && g2Memo.payload.category === 'in_progress' && g2Memo.note === 'G2 시험 이번 주 기록' && g2Memo.occurred_at === (await evaluate(s.cdp, "(() => { const d = new Date(); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; })()")) && !!g2Wd && g2Wd.text.includes('대사 확인'), JSON.stringify([g2Memo, g2Wd]));
+      // 개요(아무것도 고르지 않은 화면)에도 같은 입력
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await sleep(250);
+      check('G2 D-10 개요(아무것도 고르지 않은 화면)에도 「이번 주 기록」', !!(await g2Box('[data-testid=weekly-quick]')));
+
+      // D-14 이력 목록의 [이슈] 꼬리표 + D-12 이미 끝난 일
+      await g2Select('U-A1/N-001');
+      const g2Cnt0 = await evaluate(s.cdp, "(() => { const c = document.querySelector('[data-testid=issue-count]'); return c ? c.dataset.count : null; })()");
+      const g2Hist = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=history] li')].filter((li) => li.querySelector('.chip').textContent === '메모').map((li) => li.querySelector('.text').textContent)");
+      check('G2 D-14 업무 이력 목록의 모든 메모 줄이 분류 꼬리표([이슈]·[주의사항]·[진행 중]·[해결됨])로 시작', g2Hist.length > 0 && g2Hist.every((t) => /^\[(이슈|주의사항|진행 중|해결됨)\] /.test(t)) && g2Hist.some((t) => t.startsWith('[이슈] ')), JSON.stringify(g2Hist));
+      await clickTestId(s.cdp, 'btn-event');
+      await sleep(200);
+      const g2Past = await g2Box('[data-testid=event-past-box]');
+      check('G2 D-12 이력 추가(메모·분류 이슈)에 「이미 끝난 일(해결됨으로 기록)」 선택 칸(크기 있음)', !!g2Past && g2Past.w > 0 && g2Past.h > 0 && g2Past.text.includes('이미 끝난 일(해결됨으로 기록)'), JSON.stringify(g2Past));
+      await g2Set('event-category', 'caution');
+      await sleep(100);
+      const g2PastHidden = await g2Box('[data-testid=event-past-box]');
+      check('G2 D-12 분류를 이슈가 아닌 것으로 바꾸면 그 칸이 숨음', !!g2PastHidden && g2PastHidden.hidden === true && g2PastHidden.w === 0, JSON.stringify(g2PastHidden));
+      await g2Set('event-category', 'issue');
+      await g2Set('event-date', '2026-09-15');
+      await g2Set('event-note', 'G2 시험 지난달 끝난 이슈');
+      await evaluate(s.cdp, "document.querySelector('[data-testid=event-past-resolved]').click()");
+      await shot(s.cdp, `${browser.name}-g2-past-resolved`);
+      const g2e1 = await evaluate(s.cdp, 'window.__wu.doc.events.length');
+      await evaluate(s.cdp, "document.querySelector('[data-testid=event-form] button[type=submit]').click()");
+      await sleep(350);
+      const g2Pair = await g2Last(2);
+      const g2Notice = await g2Box('[data-testid=past-resolved-done]');
+      check('G2 D-12 켜고 기록 → 이슈 메모와 해결됨 메모(resolves_id = 방금 이슈)가 같은 날짜·같은 기록 시각으로 두 건 늘어남', (await evaluate(s.cdp, 'window.__wu.doc.events.length')) === g2e1 + 2 && g2Pair[0].payload.category === 'issue' && g2Pair[1].payload.category === 'resolved' && g2Pair[1].payload.resolves_id === g2Pair[0].id && g2Pair[0].occurred_at === '2026-09-15' && g2Pair[1].occurred_at === '2026-09-15' && g2Pair[0].recorded_at === g2Pair[1].recorded_at && !!g2Notice, JSON.stringify([g2Pair, g2Notice]));
+      const g2Cnt1 = await evaluate(s.cdp, "(() => { const c = document.querySelector('[data-testid=issue-count]'); return c ? c.dataset.count : null; })()");
+      // 이력 목록은 최근 것만 보인다: 지난달 날짜 줄은 「모두 보기」를 펼쳐야 보인다
+      await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=history-toggle]'); if (b && b.textContent.startsWith('모두 보기')) b.click(); })()");
+      await sleep(150);
+      const g2Texts = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=history] li .text')].map((t) => t.textContent).filter((t) => t.includes('G2 시험 지난달') || t.startsWith('[해결됨] 해결: G2 시험'))");
+      check('G2 D-12 이력 목록에 [이슈] 줄과 [해결됨] 줄이 보이고, 업무의 미해결 건수는 그대로', g2Texts.length === 2 && g2Texts[0].startsWith('[이슈] ') && g2Texts[1].startsWith('[해결됨] ') && g2Cnt0 !== null && g2Cnt0 === g2Cnt1, JSON.stringify([g2Cnt0, g2Cnt1, g2Texts]));
+      await g2Restore('U-A1');
+    } else {
+      check('G2 월말 정산 점검(U-A1) 열기', false, 'U-A1이 열리지 않음');
+    }
+  }
+
+  // ── 일상 사용 G3(CR-18-8, 2026-10-24): D-1 시작 화면 「지난번 지도 이어서 보기」·고친 샘플과 마지막 수정일, D-2 따라 하기는 한 번만, D-3 지난 점검 대비, D-4 점검 요약(복사·내려받기·인쇄),
+  //    D-6 유사 경험자 미리 고름, D-7 새로 맡음 표시. 데이터·설정을 바꾸므로 시작 때 저장소를 찍어 두었다가 끝에서 되돌린다("처음 사용 W-A" 블록과 같은 방식). 인쇄 단추는 누르지 않는다(인쇄 창이 점검을 멈춘다) ──
+  {
+    const g3Snap = await evaluate(s.cdp, 'JSON.stringify(Object.entries(localStorage))');
+    // 앞 점검들이 월말 정산 점검(U-A1)을 이미 고쳐 두었다(사람이 한 변경·담당 넘기기 등): 저장소에서 지우고 다시 열면 앱이 깨끗한 샘플을 다시 채운다. 그 상태를 이 블록의 기준으로 쓰고, 끝에서는 g3Snap(원래 상태)으로 되돌린다
+    await evaluate(s.cdp, "(() => { localStorage.removeItem('wu:v1:u:U-A1'); location.reload(); })()").catch(() => {});
+    await sleep(500);
+    await waitFor(s.cdp, 'window.__wu && (window.__wu.start === true || !!window.__wu.doc)', 8000);
+    const g3Base = await evaluate(s.cdp, 'JSON.stringify(Object.entries(localStorage))');
+    // 설정에서 이 블록이 보는 세 기록(따라 하기 끝낸 것·마지막 연 지도·점검 기준)을 지우고 patch를 얹는다. extra는 같은 자리에서 더 실행할 글
+    const g3Mut = (patch = {}, extra = '') => `{ const v = JSON.parse(localStorage.getItem('wu:v1:settings') || '{}'); delete v.tourDone; delete v.lastOpenedId; delete v.riskBaseline; Object.assign(v, ${JSON.stringify(patch)}); localStorage.setItem('wu:v1:settings', JSON.stringify(v)); } ${extra}`;
+    // 월말 정산 점검(U-A1)을 「고친 샘플」로 만들고(사람이 한 변경 1건, 기록 시각 2026-10-20), 담당 연결의 시작일을 5일 전으로 바꿔 「새로 맡음」이 되게 한다
+    const G3_EDIT = "{ const k = 'wu:v1:u:U-A1'; const d = JSON.parse(localStorage.getItem(k)); const t = new Date(); t.setDate(t.getDate() - 5); const p = (n) => String(n).padStart(2, '0'); const day = t.getFullYear() + '-' + p(t.getMonth() + 1) + '-' + p(t.getDate()); for (const e of d.edges) if (e.core_type === 'performs') e.period = { start: day }; const u = d.events.find((e) => e.type === 'updated'); d.events.push({ ...u, id: 'E-g3-1', source: 'user', recorded_at: '2026-10-20T09:00:00+09:00' }); localStorage.setItem(k, JSON.stringify(d)); }";
+    const g3Go = async (hash, mutate = g3Mut(), base = g3Base) => {
+      const nav = hash ? `location.hash = ${JSON.stringify(hash)}` : "history.replaceState(null, '', location.pathname + location.search)";
+      await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(base)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); ${mutate}; ${nav}; location.reload(); })()`).catch(() => {});
+      await sleep(500);
+      return hash
+        ? waitFor(s.cdp, `window.__wu && window.__wu.doc && window.__wu.doc.universe.id === ${JSON.stringify(hash)} && window.__wu.cy.nodes().length > 0`, 8000)
+        : waitFor(s.cdp, 'window.__wu && window.__wu.start === true', 8000);
+    };
+    const g3Settings = () => evaluate(s.cdp, "JSON.parse(localStorage.getItem('wu:v1:settings') || '{}')");
+    const g3Q = (sel) => evaluate(s.cdp, `(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect(); return { text: e.textContent, w: r.width, h: r.height, top: r.top, bottom: r.bottom, value: e.value }; })()`);
+    const g3Tour = () => evaluate(s.cdp, 'window.__wu.tour');
+    const MINUS = '−';
+
+    // ── D-1: 이어서 보기 ──
+    if (await g3Go('', g3Mut({ lastOpenedId: 'U-GONE' }))) {
+      check('G3 D-1 마지막으로 연 지도가 없어졌으면(저장된 id가 지도 목록에 없음) 「지난번 지도 이어서 보기」 단추가 없음', (await g3Q('[data-testid=start-resume]')) === null);
+    } else check('G3 D-1 시작 화면', false, '시작 화면이 열리지 않음');
+    if (await g3Go('', g3Mut())) {
+      check('G3 D-1 처음(마지막으로 연 지도 기록 없음)에는 이어서 보기 단추가 없고 안 고친 샘플은 내 업무 지도 목록에 없음', (await g3Q('[data-testid=start-resume]')) === null && (await g3Q('[data-testid=mine-card-U-A1]')) === null);
+      // ── D-2: 갈래 a로 따라 하기를 시작해 「건너뛰기」 → 설정에 한 번 했음이 남는다 ──
+      await evaluate(s.cdp, "document.querySelector('[data-testid=start-way-handover]').click()");
+      await sleep(500);
+      const g3Opened = await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
+      const t1 = g3Opened ? await g3Tour() : null;
+      check('G3 D-2 처음에는 시작 화면 카드(인수인계)로 들어가면 따라 하기 1/5가 자동으로 뜸', !!t1 && t1.mode === 'step' && t1.scenario === 'handover', JSON.stringify(t1));
+      check('G3 D-1 지도를 열면 마지막으로 연 지도 id(U-A1)가 이 브라우저 설정에 남음(지도 문서에는 없음)', (await g3Settings()).lastOpenedId === 'U-A1' && !(await evaluate(s.cdp, "localStorage.getItem('wu:v1:u:U-A1').includes('lastOpenedId')")));
+      await clickTestId(s.cdp, 'tour-skip');
+      await sleep(200);
+      const g3Done = await g3Settings();
+      check('G3 D-2 따라 하기를 건너뛰면 설정에 「했음」(tourDone.handover)이 남고, team은 없음(시나리오별)', typeof (g3Done.tourDone || {}).handover === 'string' && !(g3Done.tourDone || {}).team, JSON.stringify(g3Done.tourDone));
+      // 시작 화면으로
+      await evaluate(s.cdp, "document.getElementById('home').click()").catch(() => {});
+      await sleep(500);
+      await waitFor(s.cdp, 'window.__wu && window.__wu.start === true', 8000);
+      const rs = await g3Q('[data-testid=start-resume]');
+      const h2 = await evaluate(s.cdp, "document.querySelector('.start-hero h2').getBoundingClientRect().top");
+      check('G3 D-1 다시 오면 맨 위(「무엇을 하고 싶어요?」 위)에 「지난번 지도 이어서 보기: 월말 정산 점검」 단추(크기 있음)', !!rs && rs.text === '지난번 지도 이어서 보기: 월말 정산 점검' && rs.w > 0 && rs.h > 0 && rs.bottom <= h2, JSON.stringify([rs, h2]));
+      const mineTxt = await text(s.cdp, '[data-testid=start-mine]');
+      check('G3 D-1 내 업무 지도 목록에 마지막으로 연 샘플이 「최근 연 샘플」·「수정한 적 없음」으로 보임(샘플 목록의 카드와 testid가 겹치지 않음)', mineTxt.includes('월말 정산 점검') && mineTxt.includes('최근 연 샘플') && mineTxt.includes('수정한 적 없음') && !!(await g3Q('[data-testid=mine-open-U-A1]')) && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=open-U-A1]').length")) === 1, mineTxt);
+      // 1366×768: 이어서 보기 줄이 있어도 세 갈래 카드 세 장의 아래가 768px 안(CR-16 whyFold와 같은 측정)
+      await s.cdp.send('Emulation.setDeviceMetricsOverride', { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false });
+      await sleep(300);
+      await evaluate(s.cdp, 'window.scrollTo(0, 0)');
+      const g3Fold = await evaluate(s.cdp, "(() => ['start-way-handover', 'start-way-mine', 'start-way-team'].map((id) => { const r = document.querySelector('[data-testid=' + id + ']').getBoundingClientRect(); return { id, bottom: Math.round(r.bottom), w: Math.round(r.width) }; }))()");
+      check('G3 D-1 1366×768에서 이어서 보기 줄이 있어도 세 갈래 카드 세 장의 아래가 모두 768px 안(스크롤 없이 첫 화면)', g3Fold.every((c) => c.w > 0 && c.bottom <= 768), JSON.stringify(g3Fold));
+      await shot(s.cdp, `${browser.name}-g3-start-resume`);
+      await s.cdp.send('Emulation.clearDeviceMetricsOverride');
+      await sleep(200);
+      // ── D-2: 같은 카드로 다시 들어가면 따라 하기가 자동으로 뜨지 않고 상태 줄에 안내 ──
+      await evaluate(s.cdp, "document.querySelector('[data-testid=start-way-handover]').click()");
+      await sleep(500);
+      await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
+      await sleep(300);
+      const t2 = await g3Tour();
+      const onceNote = await g3Q('[data-testid=tour-once-note]');
+      check('G3 D-2 한 번 건너뛴 시나리오는 같은 카드로 다시 들어가도 따라 하기가 자동으로 뜨지 않고(tour off, 카드 숨김), 주소의 ~tour 표시도 지워짐', !!t2 && t2.mode === 'off' && (await evaluate(s.cdp, "document.querySelector('[data-testid=tour-slot]').hidden")) && !(await evaluate(s.cdp, "location.hash.includes('tour')")), JSON.stringify(t2));
+      check('G3 D-2 상태 줄에 「따라 하기는 머리글 「?」 → 「따라 하기 다시 보기」에서 다시 볼 수 있습니다」(크기 있음)', !!onceNote && onceNote.w > 0 && onceNote.h > 0 && onceNote.text === '따라 하기는 머리글 「?」 → 「따라 하기 다시 보기」에서 다시 볼 수 있습니다', JSON.stringify(onceNote));
+      await shot(s.cdp, `${browser.name}-g3-tour-once-note`);
+      await openTourViaHelp(s.cdp);
+      await sleep(300);
+      const t3 = await g3Tour();
+      check('G3 D-2 머리글 「?」 → 「따라 하기 다시 보기」는 언제든 다시 시작함', !!t3 && t3.mode === 'step' && t3.scenario === 'handover' && t3.index === 0, JSON.stringify(t3));
+      // 「?」의 시나리오 고르기(다른 지도에서)로 연 것은 한 번만에 걸리지 않는다: 주소에 ~again이 붙어 열림
+      await evaluate(s.cdp, "location.hash = 'U-D1~tour=team~again'; location.reload()").catch(() => {});
+      await sleep(600);
+      await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-D1' && window.__wu.cy.nodes().length > 0", 8000);
+      await sleep(300);
+      const t4 = await g3Tour();
+      check('G3 D-2 「?」에서 고른 시나리오(주소 ~again)는 이미 끝낸 기록과 상관없이 시작함 · 주소의 표시는 지워짐', !!t4 && t4.mode === 'step' && t4.scenario === 'team' && !(await evaluate(s.cdp, "location.hash.includes('tour')")), JSON.stringify(t4));
+    } else check('G3 D-1·D-2 시작 화면', false, '시작 화면이 열리지 않음');
+
+    // ── D-1: 고친 샘플과 마지막 수정일, 이어서 보기 단추로 열기 ──
+    if (await g3Go('', g3Mut({ lastOpenedId: 'U-A1' }, G3_EDIT))) {
+      const mineTxt2 = await text(s.cdp, '[data-testid=start-mine]');
+      check('G3 D-1 사람이 고친 샘플(월말 정산 점검)이 내 업무 지도 목록에 「고친 샘플」·「마지막 수정 2026-10-20」으로 보임', mineTxt2.includes('고친 샘플') && mineTxt2.includes('마지막 수정 2026-10-20') && !!(await g3Q('[data-testid=mine-card-U-A1]')), mineTxt2);
+      await shot(s.cdp, `${browser.name}-g3-start-edited`);
+      await clickTestId(s.cdp, 'start-resume');
+      await sleep(500);
+      check('G3 D-1 「지난번 지도 이어서 보기」를 누르면 그 지도(월말 정산 점검)가 열리고 따라 하기는 시작하지 않음', await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.tour && window.__wu.tour.mode === 'off'", 8000));
+    } else check('G3 D-1 고친 샘플', false, '시작 화면이 열리지 않음');
+
+    // ── D-3·D-4: 묶은 지도(가상 운영부) 위험 요약의 지난 점검 대비, 인사이트 점검 요약 ──
+    if (await g3Go('U-D1', g3Mut())) {
+      await sleep(300);
+      const c0 = await g3Q('[data-testid=team-risk-compare]');
+      check('G3 D-3 저장한 점검이 없으면 위험 요약 아래에 「아직 저장한 점검 없음 — 「이번 점검 저장」을 누르면 다음에 비교합니다」와 저장 단추', !!c0 && c0.text.startsWith('아직 저장한 점검 없음 — 「이번 점검 저장」을 누르면 다음에 비교합니다') && !!(await g3Q('[data-testid=btn-risk-baseline-save]')), JSON.stringify(c0));
+      await clickTestId(s.cdp, 'btn-risk-baseline-save');
+      await sleep(300);
+      const c1 = await g3Q('[data-testid=team-risk-compare]');
+      const st1 = await g3Settings();
+      const base1 = (st1.riskBaseline || {})['U-D1'];
+      check('G3 D-3 「이번 점검 저장」 → 「지난 점검(오늘) 대비: 변화 없음」, 기준(숫자·저장 시각)은 설정 riskBaseline[U-D1]에만', !!c1 && /^지난 점검\(\d{4}-\d{2}-\d{2}\) 대비: 변화 없음/.test(c1.text) && !!base1 && typeof base1.at === 'string' && Number.isInteger(base1.solo), JSON.stringify([c1, base1]));
+      check('G3 D-3 점검 기준은 지도 문서·내보내기에 들어가지 않음(문서 저장소 값·내보내기 JSON에 riskBaseline 없음)', !(await evaluate(s.cdp, "Object.entries(localStorage).filter(([k]) => k.startsWith('wu:v1:u:')).some(([, v]) => v.includes('riskBaseline'))")) && !(await evaluate(s.cdp, "JSON.stringify(window.__wu.doc).includes('riskBaseline')")));
+      await shot(s.cdp, `${browser.name}-g3-risk-compare`);
+      // 기준을 「혼자만 아는 일 한 개 적게, 담당 공백 한 개 많게」로 바꿔 다시 열면 +1 / −1
+      await evaluate(s.cdp, "(() => { const v = JSON.parse(localStorage.getItem('wu:v1:settings')); const b = v.riskBaseline['U-D1']; v.riskBaseline['U-D1'] = { ...b, solo: b.solo - 1, gaps: b.gaps + 1 }; localStorage.setItem('wu:v1:settings', JSON.stringify(v)); location.reload(); })()").catch(() => {});
+      await sleep(600);
+      await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-D1' && window.__wu.cy.nodes().length > 0", 8000);
+      await sleep(300);
+      const c2 = await g3Q('[data-testid=team-risk-compare]');
+      check(`G3 D-3 기준과 다르면 「혼자만 아는 일 +1」·「담당 공백 ${MINUS}1」·「일 몰린 사람 변화 없음」`, !!c2 && c2.text.includes('혼자만 아는 일 +1') && c2.text.includes(`담당 공백 ${MINUS}1`) && c2.text.includes('일 몰린 사람 변화 없음'), JSON.stringify(c2));
+      // D-4
+      await clickTestId(s.cdp, 'btn-team-risk-more');
+      await sleep(400);
+      const bar = await g3Q('[data-testid=summary-bar]');
+      const order = await evaluate(s.cdp, "(() => { const bar = document.querySelector('[data-testid=summary-bar]'); const tabs = document.querySelector('.insight .tabs'); return bar && tabs ? bar.getBoundingClientRect().top < tabs.getBoundingClientRect().top : null; })()");
+      check('G3 D-4 인사이트 창 위쪽(탭보다 위)에 「점검 요약」 줄: 복사·내려받기(.txt)·인쇄 단추와 가상 데이터 안내(크기 있음)', !!bar && bar.w > 0 && bar.h > 0 && order === true && bar.text.includes('점검 요약') && bar.text.includes('복사') && bar.text.includes('내려받기(.txt)') && bar.text.includes('인쇄') && bar.text.includes('모두 가상'), JSON.stringify([bar, order]));
+      await shot(s.cdp, `${browser.name}-g3-summary-bar`);
+      // 복사: 클립보드를 가짜로 바꿔 보낸 글을 읽는다
+      await evaluate(s.cdp, "Object.defineProperty(navigator, 'clipboard', { value: { writeText: (t) => { window.__g3Copied = t; return Promise.resolve(); } }, configurable: true })");
+      await clickTestId(s.cdp, 'summary-copy');
+      await sleep(250);
+      const copied = await evaluate(s.cdp, 'window.__g3Copied || ""');
+      const mapName = await evaluate(s.cdp, 'window.__wu.doc.universe.name');
+      check('G3 D-4 「복사」: 지도 이름·기준일·세 숫자·지난 점검 대비(+1)·가상 안내가 한 장 글로 복사되고 단추가 「복사했습니다」로 바뀜', copied.startsWith(`점검 요약 — ${mapName}`) && /기준일: \d{4}-\d{2}-\d{2}/.test(copied) && copied.includes('혼자만 아는 일:') && copied.includes('일 몰린 사람:') && copied.includes('담당 공백:') && copied.includes('혼자만 아는 일 +1') && copied.includes('모두 가상') && (await text(s.cdp, '[data-testid=summary-copy]')) === '복사했습니다', copied.slice(0, 200));
+      // 클립보드가 거절되면 고른 글 상자
+      await evaluate(s.cdp, "Object.defineProperty(navigator, 'clipboard', { value: { writeText: () => Promise.reject(new Error('blocked')) }, configurable: true })");
+      await clickTestId(s.cdp, 'summary-copy');
+      await sleep(250);
+      const box = await g3Q('[data-testid=summary-copy-box]');
+      check('G3 D-4 클립보드가 거절되면 고른 글 상자(summary-copy-box)에 같은 글이 보임', !!box && box.w > 0 && box.h > 0 && box.value === copied, JSON.stringify(box && { w: box.w, h: box.h }));
+      await clickTestId(s.cdp, 'summary-download');
+      await sleep(300);
+      check('G3 D-4 「내려받기(.txt)」: 막힘 안내(summary-download-blocked) 없이 동작', (await g3Q('[data-testid=summary-download-blocked]')) === null);
+    } else check('G3 D-3·D-4 가상 운영부', false, '지도가 열리지 않음');
+
+    // ── D-6: 업무를 고른 채 인사이트 → 유사 경험자 탭 ──
+    if (await g3Go('U-A1', g3Mut())) {
+      await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+      await sleep(300);
+      await clickTestId(s.cdp, 'btn-insight');
+      await sleep(400);
+      await clickTestId(s.cdp, 'tab-similar');
+      await sleep(300);
+      const pickBox = await g3Q('[data-testid=insight-work]');
+      check('G3 D-6 업무(대사 확인)를 고른 채 「인사이트 보기」 → 「유사 경험자」 탭에 그 업무가 미리 골라져 있음', !!pickBox && pickBox.value === 'U-A1/N-001', JSON.stringify(pickBox));
+      // 아무것도 고르지 않고 열면 예전처럼 「업무를 고르세요」
+      await evaluate(s.cdp, "window.__wu.select(null)");
+      await sleep(200);
+      await clickTestId(s.cdp, 'btn-insight-universe');
+      await sleep(400);
+      await clickTestId(s.cdp, 'tab-similar');
+      await sleep(300);
+      check('G3 D-6 업무를 고르지 않고 열면 「유사 경험자」 탭은 비어 있음(업무를 고르세요)', (await g3Q('[data-testid=insight-work]')).value === '');
+    } else check('G3 D-6', false, '지도가 열리지 않음');
+
+    // ── D-7: 새로 맡은 「혼자만 아는 일」 표시(담당 연결 시작일을 5일 전으로 바꾼 월말 정산 점검) ──
+    if (await g3Go('U-A1', g3Mut({}, G3_EDIT))) {
+      await clickTestId(s.cdp, 'btn-insight-universe');
+      await sleep(400);
+      const marks = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=risk-new-owner]')].map((e) => e.textContent)");
+      const counts = await text(s.cdp, '[data-testid=risk-concentration-counts]');
+      check('G3 D-7 담당 시작이 5일 전인 「혼자만 아는 일」에 「새로 맡음(시작 YYYY-MM-DD) — 인수인계 기록을 남기면 줄어듭니다」가 붙고, 위 숫자(혼자 해 본 업무 2개)는 그대로', marks.length >= 1 && marks.every((m) => /^새로 맡음\(시작 \d{4}-\d{2}-\d{2}\) — 인수인계 기록을 남기면 줄어듭니다$/.test(m)) && counts.includes('혼자 해 본 업무 2개'), JSON.stringify([marks, counts]));
+      await shot(s.cdp, `${browser.name}-g3-new-owner`);
+    } else check('G3 D-7', false, '지도가 열리지 않음');
+
+    await g3Go('U-A1', '', g3Snap); // 저장소를 블록 시작 때 찍어 둔 상태로 되돌린다
   }
 
   // ── CR-14 A 편집 되감기(R-25, D-30): 이름 수정 → 개요 「편집 되감기」 → 이전 시점 → 읽기 전용 확인 → 지금으로 → 다시 → 되돌리기. 데이터를 바꾸므로 끝부분 ──

@@ -11,7 +11,7 @@ import { buildHandoverDraft } from '../app/src/rules/handover.js';
 import { renderUniverseSummary } from '../app/src/ui/detail.js';
 import { describeUniverse } from '../app/src/view/describe.js';
 import { insightPanel } from '../app/src/ui/insight.js';
-import { PAIR_BLOCKED_GROUP, eventForm, markRelationOptions } from '../app/src/ui/editor.js';
+import { PAIR_BLOCKED_GROUP, eventForm, markRelationOptions, relationOptionText } from '../app/src/ui/editor.js';
 
 const ASOF = '2026-10-02';
 const withDom = (fn) => () => {
@@ -37,7 +37,7 @@ test('FU-35 markRelationOptions: 사람↔업무는 쓸 수 있는 관계(수행
   assert.equal(opts.length, Object.keys(EDGE_TYPES).length);
   for (const o of opts) {
     assert.equal(o.disabled, !ok.has(o.value), o.value);
-    assert.equal(o.textContent, EDGE_TYPES[o.value], '보기 글은 그대로(묶음 이름이 못 씀을 알린다)');
+    assert.equal(o.textContent, relationOptionText(o.value), '보기 글은 관계 이름 그대로(참조만 CR-18 D-8의 설명 꼬리표가 붙는다. 묶음 이름이 못 씀을 알린다)');
   }
   assert.equal(sel.options.find((o) => o.value === 'relates_to').disabled, true, '관련은 사람↔업무에 못 씀(주제 쪽만)');
   assert.equal(PAIR_BLOCKED_GROUP, '이 조합에는 못 씀');
@@ -57,7 +57,7 @@ test('FU-35 markRelationOptions: 연결 대상이 아직 없으면(유형 모름
   assert.equal(sel.querySelectorAll('optgroup').length, 0);
   for (const o of sel.options) {
     assert.equal(o.disabled, false);
-    assert.equal(o.textContent, EDGE_TYPES[o.value]);
+    assert.equal(o.textContent, relationOptionText(o.value));
   }
 }));
 

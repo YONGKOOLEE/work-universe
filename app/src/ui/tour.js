@@ -22,6 +22,7 @@ export const END_GUIDE = '예시를 봤으면, 내 업무 이름 하나로 작�
  *   onMake: () => void,                   // 끝 카드의 「이제 내 업무로 해 보기」·「내 업무 지도 만들기」(둘 다 「내 업무 지도 만들기」 창을 연다)
  *   canMake?: boolean,
  *   toolsHint?: () => boolean,            // 끝 카드에 「도구 더 보기」 안내 한 줄을 띄울지
+ *   onFinish?: (scenarioId:string) => void, // 끝 카드에 이르렀거나 단계 중 건너뛰었을 때(CR-18 D-2: 앱이 이 브라우저 설정에 「한 번 했음」을 남긴다)
  * }} o
  */
 export function createTour(o) {
@@ -34,6 +35,7 @@ export function createTour(o) {
   let hintEl = null; // 「빈 곳을 누르세요」 표지(그래프 안쪽, 재검증 N-2)
   let subEl = null; // 보조 문구(단계에 sub가 있을 때, 재검증 N-6)
   let reduced = false;
+  let finishedFor = null; // 이번 시작에서 onFinish를 이미 불렀음(같은 시작에서 두 번 부르지 않는다)
   try { reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { /* 모르면 깜빡임 */ }
 
   // 접힌 <details> 안의 단추는 크기를 가져도 보이지 않는다: checkVisibility()로 판정한다(없는 브라우저는 offsetParent)
@@ -131,7 +133,13 @@ export function createTour(o) {
   function card(...children) {
     return el('div', { class: 'tour-card', role: 'region', 'aria-label': '따라 하기', 'data-testid': 'tour-card' }, ...children);
   }
-  const skipBtn = (label = '건너뛰기') => el('button', { type: 'button', class: 'small-btn', 'data-testid': 'tour-skip', onclick: stop }, label);
+  // 끝 카드에 이르거나 단계 중에 건너뛰면 「한 번 했음」(D-2). 시나리오를 고르는 카드(pick)에서 닫는 것은 해당 없음
+  function finish() {
+    if (!sc || finishedFor === sc) return;
+    finishedFor = sc;
+    if (o.onFinish) o.onFinish(sc.id);
+  }
+  const skipBtn = (label = '건너뛰기') => el('button', { type: 'button', class: 'small-btn', 'data-testid': 'tour-skip', onclick: () => { if (mode === 'step' || mode === 'end') finish(); stop(); } }, label);
 
   function render() {
     if (mode === 'off') return stop();
@@ -148,15 +156,15 @@ export function createTour(o) {
       return paint();
     }
     if (mode === 'end') {
+      finish();
       o.slot.replaceChildren(card(
         el('div', { class: 'tour-head' }, el('span', { class: 'tour-count' }, `따라 하기 ${sc.steps.length}/${sc.steps.length} 끝`)),
         el('p', { class: 'tour-task', 'data-testid': 'tour-end' }, '끝! 이제 내 업무로 해 볼까요?'),
         el('p', { class: 'muted small', 'data-testid': 'tour-end-guide' }, END_GUIDE),
         o.toolsHint && o.toolsHint() ? el('p', { class: 'tour-hint', 'data-testid': 'tour-tools-hint' }, '이제 「도구 더 보기」에서 흐름 정렬·거르기도 써 보세요.') : null,
         el('div', { class: 'row' },
-          // CR-18-3: 따라 하기를 닫고 「내 업무 지도 만들기」 창을 연다(시작 화면 「내 업무를 정리해 두고 싶어요」와 같은 창). 「내 업무 지도 만들기」 단추도 같은 창을 연다
+          // CR-18-3: 따라 하기를 닫고 「내 업무 지도 만들기」 창을 연다(시작 화면 「내 업무를 정리해 두고 싶어요」와 같은 창). 같은 일을 하던 예전 「내 업무 지도 만들기」 단추는 뺐다(한 카드에 같은 일 단추 둘)
           el('button', { type: 'button', class: 'primary small-btn', 'data-testid': 'tour-mine', disabled: o.canMake === false, onclick: () => { stop(); o.onMake(); } }, '이제 내 업무로 해 보기'),
-          el('button', { type: 'button', class: 'small-btn', 'data-testid': 'tour-make', disabled: o.canMake === false, onclick: () => { stop(); o.onMake(); } }, '내 업무 지도 만들기'),
           skipBtn('닫기')),
       ));
       return paint();
@@ -190,6 +198,7 @@ export function createTour(o) {
       if (!next) return;
       if (o.onStart) o.onStart();
       sc = next;
+      finishedFor = null;
       mode = 'step';
       index = advance(sc, 0, o.getState());
       if (index >= sc.steps.length) mode = 'end';

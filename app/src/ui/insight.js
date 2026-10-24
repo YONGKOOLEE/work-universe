@@ -3,11 +3,14 @@
 
 import { DENSE_DEFAULT_N, denseLimit, densityGaps, repeatInefficiency, similarExperts } from '../rules/insight.js';
 import { flowChange } from '../rules/flow.js';
-import { RISK, concentrationExplain, handoverReadiness, knowledgeConcentration, readinessExplain, ripple, rippleExplain } from '../rules/insight-risk.js';
+import { RISK, concentrationExplain, handoverReadiness, knowledgeConcentration, newOwnerText, readinessExplain, ripple, rippleExplain } from '../rules/insight-risk.js';
 import { densityExplain, flowExplain, repeatExplain, similarExplain } from '../rules/explain.js';
 import { METHOD_LABELS, afterQuiet, explainInsight, explainInsightAsync, isLive, syncProvider } from '../llm/connector.js';
 import { el } from './dom.js';
 import { evidenceChips } from './evidence.js';
+import { summaryBar } from './check-summary.js';
+import { compareRisk, inspectionSummaryText } from '../rules/daily-use.js';
+import { inspectionInput } from '../view/risk-summary.js';
 import { todayLocal } from './time.js';
 import { SUBTYPE_ROLE } from '../model/schema.js';
 import { KEYLESS_PREGEN_REASON, KEYLESS_REASON } from '../llm/providers.js';
@@ -64,7 +67,8 @@ function fillExplain(box, view, r, o, note, same = null) {
 }
 
 /**
- * @param {{view:object, kind?:'similar'|'repeat'|'density'|'flow'|'risk', today?:string, onTime?:(date)=>void, work?:string, asOf?:string, onFocus:(gid)=>void, onClose:()=>void}} o
+ * @param {{view:object, kind?:'similar'|'repeat'|'density'|'flow'|'risk', today?:string, onTime?:(date)=>void, work?:string, asOf?:string, onFocus:(gid)=>void, onClose:()=>void, mapName?:string, baseline?:object|null}} o
+ *   mapName·baseline: 점검 요약(CR-18 D-4)의 지도 이름과 저장해 둔 지난 점검 기준(이 브라우저 설정, 없으면 null)
  */
 export function insightPanel(o) {
   const { view } = o;
@@ -101,8 +105,15 @@ export function insightPanel(o) {
     }).observe(body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-method'] });
   }
 
+  // 점검 요약(D-4): 누를 때마다 지금 기준일·밀집 기준으로 글을 만든다. 지난 점검 대비(D-3)는 저장해 둔 기준이 있을 때만 들어간다
+  const summaryAsOf = () => o.asOf || todayLocal();
+  const buildSummary = () => {
+    const d = inspectionInput(view, { asOf: summaryAsOf(), n: denseN, mapName: o.mapName || '업무 지도' });
+    return inspectionSummaryText(d, o.baseline ? compareRisk(d, o.baseline) : null);
+  };
   return el('div', { class: 'insight' },
     el('h2', {}, '인사이트'),
+    summaryBar({ build: buildSummary, mapName: o.mapName || '업무 지도', asOf: summaryAsOf() }),
     asofNote,
     keylessNote,
     tabs,
@@ -375,6 +386,8 @@ function riskView(o, view) {
         ...c.items.map((x) => el('li', { 'data-level': x.level },
           el('div', { class: 'who' }, el('strong', {}, `「${x.work.label}」`), el('span', { class: 'chip' }, LEVEL_TEXT[x.level]), el('span', { class: 'muted small' }, ` ${x.work.universe_name}`), noCurrentMark(noCurrent.get(x.work.gid))),
           el('div', { class: 'muted small' }, x.level === 'high' ? `${x.person.label}만 해 봤고 인수인계 기록이 0건입니다.` : `${x.person.label}만 해 봤습니다. 인수인계 이력 ${x.handover_events}건, 인수인계서 ${x.handover_docs}건이 있습니다.`),
+          // D-7: 담당을 새로 맡은 지 얼마 안 된 경우의 표시(세는 숫자는 그대로)
+          newOwnerText(x) ? el('div', { class: 'muted small', 'data-testid': 'risk-new-owner' }, newOwnerText(x)) : null,
           riskChips(view, x.evidence, o.onFocus)))));
     }
     cBody = el('div', {}, ...parts);

@@ -49,3 +49,24 @@ export function soloWorksText(works) {
   const shown = works.slice(0, SOLO_SHOW).map((w) => `「${w.label}」`).join(', ');
   return `이 사람만 아는 일 ${works.length}개: ${shown}${works.length > SOLO_SHOW ? ` 외 ${works.length - SOLO_SHOW}개` : ''}`;
 }
+
+/**
+ * 점검 요약(CR-18 D-4)에 넣을 숫자와 상위 항목. teamRiskSummary와 같은 계산(같은 기준일·같은 밀집 기준)이라 화면의 숫자와 늘 같다.
+ * 숫자를 못 세면 null이고 목록은 비어 있다. 목록은 탭과 같은 순서(혼자만 아는 일은 높음이 먼저)이며 모두 담는다(자르기는 글 만드는 쪽).
+ * @returns {{mapName:string, asOf:string, solo:number|null, dense:number|null, gaps:number|null, soloItems:{work:string,person:string,level:string}[], denseItems:{person:string,count:number}[], gapItems:{work:string}[]}}
+ */
+export function inspectionInput(view, { asOf, n, mapName }) {
+  const s = teamRiskSummary(view, { asOf, n });
+  const c = knowledgeConcentration(view, { asOf });
+  const d = densityGaps(view, { asOf, n });
+  return {
+    mapName,
+    asOf,
+    solo: s.solo,
+    dense: s.dense,
+    gaps: s.gaps,
+    soloItems: c.insufficient ? [] : c.items.map((x) => ({ work: x.work.label, person: x.person.label, level: x.level })),
+    denseItems: d.status === 'insufficient' ? [] : d.dense.map((p) => ({ person: p.label, count: p.count })),
+    gapItems: d.status === 'insufficient' ? [] : d.gaps.map((g) => ({ work: g.label })),
+  };
+}

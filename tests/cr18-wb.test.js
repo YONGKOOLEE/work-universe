@@ -232,9 +232,8 @@ test('CR-18-3 인수인계 따라 하기 끝 카드: 안내 한 줄 + 「이제 
   const mine = q(t.slot, 'tour-mine');
   assert.ok(mine);
   assert.equal(mine.textContent, '이제 내 업무로 해 보기');
-  // 기존 단추는 그대로
-  assert.ok(q(t.slot, 'tour-make'));
-  assert.equal(q(t.slot, 'tour-make').textContent, '내 업무 지도 만들기');
+  // 같은 일을 하던 예전 「내 업무 지도 만들기」(tour-make)는 없다
+  assert.equal(q(t.slot, 'tour-make'), null);
   assert.ok(q(t.slot, 'tour-skip'));
   assert.equal(q(t.slot, 'tour-skip').textContent, '닫기');
   mine.click();
@@ -266,12 +265,11 @@ test('CR-18-3 팀 따라 하기 끝 카드에도 같은 단추·안내가 있다
   assert.equal(t.tour.info().mode, 'off');
 }));
 
-test('CR-18-3 읽기 전용(canMake:false)이면 끝 카드의 두 만들기 단추가 모두 disabled, 눌러도 열리지 않는다. 「닫기」는 그대로', withDom(() => {
+test('CR-18-3 읽기 전용(canMake:false)이면 끝 카드의 만들기 단추가 disabled, 눌러도 열리지 않는다. 「닫기」는 그대로', withDom(() => {
   const t = makeTour({ canMake: false });
   driveHandoverToEnd(t);
   assert.equal(t.tour.info().mode, 'end');
   assert.equal(q(t.slot, 'tour-mine').disabled, true);
-  assert.equal(q(t.slot, 'tour-make').disabled, true);
   q(t.slot, 'tour-mine').click();
   assert.deepEqual(t.calls, []);
   q(t.slot, 'tour-skip').click();

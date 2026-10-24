@@ -1,6 +1,7 @@
 // 브라우저 저장소(12.4 키). DOM에 의존하지 않도록 storage 객체를 주입받는다.
 
 import { DOC_COLLECTIONS, LABEL_MAX } from '../model/schema.js';
+import { cleanLastOpenedId, cleanRiskBaselines, cleanTourDone } from '../rules/daily-use.js';
 
 const INDEX_KEY = 'wu:v1:index';
 const SETTINGS_KEY = 'wu:v1:settings';
@@ -118,6 +119,16 @@ const cleanLimited = (v, max) => {
 export const cleanApiKey = (v) => cleanLimited(v, API_KEY_MAX);
 export const cleanLlmModel = (v) => cleanLimited(v, LLM_MODEL_MAX);
 
+/** 일상 사용 기록(CR-18-8): 마지막으로 연 지도, 따라 하기를 끝낸 시나리오, 지도별 점검 기준. 이 브라우저 설정에만 두며 문서·내보내기·백업에는 들어가지 않는다 */
+function applyDailyUse(out, v) {
+  const last = cleanLastOpenedId(v.lastOpenedId);
+  if (last) out.lastOpenedId = last;
+  const done = cleanTourDone(v.tourDone);
+  if (done) out.tourDone = done;
+  const base = cleanRiskBaselines(v.riskBaseline);
+  if (base) out.riskBaseline = base;
+}
+
 /** 설정(12.4 wu:v1:settings): 공급자 선택·작성자 이름 등. 저장소가 없거나 값이 깨졌으면 기본값. apiKey·llmModel은 실시간 Claude API용(CR-15) */
 export function loadSettings(storage, defaults, allowed = null) {
   if (!storage) return { ...defaults };
@@ -138,6 +149,7 @@ export function loadSettings(storage, defaults, allowed = null) {
     if (validPanelWidth(v.panelWidth)) out.panelWidth = v.panelWidth;
     if (cleanApiKey(v.apiKey)) out.apiKey = cleanApiKey(v.apiKey);
     if (cleanLlmModel(v.llmModel)) out.llmModel = cleanLlmModel(v.llmModel);
+    applyDailyUse(out, v);
     return out;
   } catch {
     return { ...defaults };
@@ -157,6 +169,7 @@ export function saveSettings(storage, settings) {
     if (validPanelWidth(settings.panelWidth)) out.panelWidth = settings.panelWidth;
     if (cleanApiKey(settings.apiKey)) out.apiKey = cleanApiKey(settings.apiKey);
     if (cleanLlmModel(settings.llmModel)) out.llmModel = cleanLlmModel(settings.llmModel);
+    applyDailyUse(out, settings);
     storage.setItem(SETTINGS_KEY, JSON.stringify(out));
     return true;
   } catch {

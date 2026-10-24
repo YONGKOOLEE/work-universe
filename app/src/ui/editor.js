@@ -65,6 +65,11 @@ function nodeOptions(nodes, { empty } = {}) {
   return empty ? [['', empty], ...opts] : opts;
 }
 
+// 관계 고르기 목록의 보기 글(CR-18 D-8): 「참조」는 무엇에 쓰는지 알 수 있게 설명을 붙인다. 값(references)·저장 형식은 그대로
+export const RELATION_HELP = { references: '(협업·공유·참고)' };
+export const relationOptionText = (relation) => `${EDGE_TYPES[relation]}${RELATION_HELP[relation] ? ` ${RELATION_HELP[relation]}` : ''}`;
+const relationChoices = () => Object.keys(EDGE_TYPES).map((k) => [k, relationOptionText(k)]);
+
 // 두 노드 유형 사이에 기본으로 권할 관계와 방향. a → b가 되면 out, b → a면 in. 쓸 수 있는 관계가 없으면 null
 const RELATION_PREFERENCE = ['performs', 'produces', 'belongs_to', 'relates_to', 'references', 'precedes', 'contains'];
 function suggestRelation(aType, bType) {
@@ -91,7 +96,7 @@ export function markRelationOptions(relationSelect, aType, bType, hint = null, o
   const blocked = ok ? keys.filter((k) => !ok.has(k)) : [];
   let value = keep;
   if (ok && !opts.keep && usable.length && !ok.has(keep) && (usable.length === 1 || !opts.touched)) value = usable[0];
-  const mk = (v, disabled) => el('option', { value: v, disabled, selected: v === value }, EDGE_TYPES[v]);
+  const mk = (v, disabled) => el('option', { value: v, disabled, selected: v === value }, relationOptionText(v));
   const children = usable.map((v) => mk(v, false));
   if (blocked.length) children.push(el('optgroup', { label: PAIR_BLOCKED_GROUP, 'data-testid': 'relation-blocked' }, ...blocked.map((v) => mk(v, true))));
   relationSelect.replaceChildren(...children);
@@ -236,7 +241,7 @@ export function nodeForm(o) {
   const link = o.mode === 'add' && o.getCandidates ? linkFields() : null;
   function linkFields() {
     const other = select([['', '(연결하지 않음)']], '', { 'data-testid': 'node-link-other' });
-    const relation = select(Object.entries(EDGE_TYPES), 'relates_to', { 'data-testid': 'node-link-type' });
+    const relation = select(relationChoices(), 'relates_to', { 'data-testid': 'node-link-type' });
     const direction = select([['out', '새 노드 → 상대'], ['in', '상대 → 새 노드']], 'out', { 'data-testid': 'node-link-direction' });
     const onlyNote = onlyHint('node-link-only');
     const detail = el('div', { class: 'link-detail', hidden: true }, field('관계', relation), onlyNote, field('방향', direction));
@@ -343,7 +348,7 @@ export function nodeForm(o) {
  * @param {{node:object, candidates:object[], onSubmit:(values)=>object, onCancel:()=>void}} o
  */
 export function edgeForm(o) {
-  const relation = select(Object.entries(EDGE_TYPES), 'relates_to', { 'data-testid': 'edge-type' });
+  const relation = select(relationChoices(), 'relates_to', { 'data-testid': 'edge-type' });
   const direction = select([['out', `${o.node.label} → 상대`], ['in', `상대 → ${o.node.label}`]], 'out', { 'data-testid': 'edge-direction' });
   const other = select(nodeOptions(o.candidates, { empty: '상대 노드를 고르세요' }), '', { 'data-testid': 'edge-other' });
   const onlyNote = onlyHint('edge-only');
@@ -411,7 +416,7 @@ export function edgeEditForm(o) {
   const otherId = focalIsTarget ? o.edge.source : o.edge.target;
   const period = periodEditor(o.edge.period || {});
   const note = el('input', { value: o.edge.note || '', maxlength: 2000, autocomplete: 'off', 'data-testid': 'edge-edit-note' });
-  const relation = select(Object.entries(EDGE_TYPES), o.edge.core_type, { 'data-testid': 'edge-edit-type' });
+  const relation = select(relationChoices(), o.edge.core_type, { 'data-testid': 'edge-edit-type' });
   const direction = select([['out', `${o.node.label} → 상대`], ['in', `상대 → ${o.node.label}`]], focalIsTarget ? 'in' : 'out', { 'data-testid': 'edge-edit-direction' });
   const list = o.candidates.filter((n) => n.id !== o.node.id);
   const opts = nodeOptions(list);
@@ -503,11 +508,18 @@ export function eventForm(o) {
   const toOrg = select(nodeOptions(byType('org'), { empty: '(미기재)' }), '');
   const category = select(Object.entries(MEMO_CATEGORIES), 'issue', { 'data-testid': 'event-category' });
   const topics = el('div', { class: 'checks' }, ...byType('topic').map((t) => el('label', { class: 'check' }, el('input', { type: 'checkbox', value: t.id, checked: t.id === o.node.id }), ` ${t.label}`)));
+  // 「이미 끝난 일(해결됨으로 기록)」(CR-18 D-12): 분류가 이슈일 때만 보인다. 켜면 이슈 메모와 그것을 닫는 해결됨 메모를 같은 날짜로 한 번에 남긴다(저장은 부르는 쪽: input.also_resolved)
+  const pastDone = el('input', { type: 'checkbox', 'data-testid': 'event-past-resolved' });
+  const pastBox = el('div', { 'data-testid': 'event-past-box', hidden: true },
+    el('label', { class: 'check' }, pastDone, ' 이미 끝난 일(해결됨으로 기록)'),
+    el('p', { class: 'muted small' }, '켜면 이 이슈와 그것을 닫는 「해결됨」 메모를 같은 날짜로 함께 남겨, 지나간 일이 미해결에 쌓이지 않습니다.'));
+  const syncPast = () => { pastBox.hidden = type.value !== 'memo' || category.value !== 'issue'; };
+  category.addEventListener('change', syncPast);
 
   // 같은 입력 칸(업무·사람)을 여러 종류가 함께 쓰므로, 종류를 바꿀 때마다 칸을 새로 감싼다
   // (DOM 요소는 한 곳에만 붙을 수 있다)
   const groups = {
-    memo: () => [field('분류', category), el('p', { class: 'muted small', 'data-testid': 'category-hint' }, CATEGORY_HINT), field('관련 주제(선택)', topics)],
+    memo: () => [field('분류', category), el('p', { class: 'muted small', 'data-testid': 'category-hint' }, CATEGORY_HINT), field('관련 주제(선택)', topics), pastBox],
     handover: () => [field('업무', work), field('보내는 사람', from), field('받는 사람', to), field('인수인계서(선택)', artifact), field('이전 인수인계 참조(선택)', previous)],
     assign_start: () => [
       field('사람', person),
@@ -519,7 +531,7 @@ export function eventForm(o) {
     affiliation_change: () => [field('사람', person), field('이전 소속(선택)', fromOrg), field('새 소속(선택)', toOrg)],
   };
   const slot = el('div', { class: 'event-fields' });
-  const sync = () => slot.replaceChildren(...groups[type.value]());
+  const sync = () => { slot.replaceChildren(...groups[type.value]()); syncPast(); };
   type.addEventListener('change', sync);
   sync();
 
@@ -550,6 +562,7 @@ export function eventForm(o) {
     const payload = Object.fromEntries(Object.entries(payloads[type.value]()).filter(([, x]) => x !== undefined));
     const input = { type: type.value, occurred_at: date.value, payload, note: note.value };
     if (type.value === 'assign_start' && endDate.value) input.end_date = endDate.value;
+    if (type.value === 'memo' && category.value === 'issue' && pastDone.checked) input.also_resolved = true;
     msg.show(o.onSubmit(input), { kind: 'event' });
   });
   return form;

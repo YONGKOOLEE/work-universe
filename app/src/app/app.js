@@ -285,16 +285,48 @@ export function createApp({ store, samples, currentId, now, authorName, locked =
     },
 
     /**
+     * 「이미 끝난 일(해결됨으로 기록)」(CR-18 D-12): 이슈 메모와 그것을 닫는 해결됨 메모(범주 resolved, resolves_id = 방금 이슈)를
+     * 같은 날짜·같은 기록 시각으로 한 번의 저장에 남긴다(되감기 한 점). 저장 형식은 그대로(기존 필드만).
+     * 이슈 메모가 아니거나(범주 issue만) 어느 한쪽이 거부되면 아무것도 저장하지 않는다.
+     * 이력 순서(날짜 → 기록 시각 → ID)에서 해결됨이 이슈 뒤에 오도록, 같은 시각이면 ID가 뒤인 해결됨 메모가 나올 때까지 ID를 다시 뽑는다.
+     * @returns {{ok:true, doc:object, event:object, resolvedEvent:object}|{ok:false, error:object}}
+     */
+    addMemoResolved(input) {
+      if (guard()) return guard();
+      const pl = (input && input.payload) || {};
+      if (!input || input.type !== 'memo' || (pl.category || 'issue') !== 'issue') return { ok: false, error: { code: CODES.SCHEMA, field: 'category' } };
+      const ctx = { now: now() };
+      // 이슈 → 해결됨 순서로 쌓이는지는 이력 정렬(날짜 → 기록 시각 → 전역 ID)이 정한다. 같은 날짜·시각이면 ID 순이므로, 해결됨 ID가 이슈 ID보다 뒤인 짝이 나올 때까지 두 ID를 다시 뽑는다(짝마다 절반의 확률)
+      const gidOf = (e) => toGid(doc.universe.id, e.id);
+      let first = null;
+      let second = null;
+      for (let i = 0; i < 100 && !second; i += 1) {
+        first = addEvent(doc, input, ctx);
+        if (!first.ok) return first;
+        const closing = resolveMemoInput({ id: first.event.id, note: input.note, occurred_at: input.occurred_at, payload: first.event.payload }, input.occurred_at);
+        const r = addEvent(first.doc, closing, ctx);
+        if (!r.ok) return r;
+        if (gidOf(r.event).localeCompare(gidOf(first.event)) > 0) second = r;
+      }
+      if (!second) return { ok: false, error: { code: CODES.SCHEMA, field: 'event', not_closed: true } };
+      // 저장 전에 해결됨 메모로 이슈가 실제로 닫히는지 본다(「해결로 표시」와 같은 확인)
+      const closed = !openMemos(buildView(second.doc, (id) => (id === second.doc.universe.id ? second.doc : resolve(id)))).some((x) => x.gid === toGid(second.doc.universe.id, first.event.id));
+      if (!closed) return { ok: false, error: { code: CODES.SCHEMA, field: 'event', not_closed: true } };
+      const done = commit({ ok: true, doc: second.doc });
+      return done.ok ? { ...done, event: first.event, resolvedEvent: second.event } : done;
+    },
+
+    /**
      * 「해결로 표시」(R-20, D-22): 미해결 메모와 같은 대상·주제로 범주 resolved인 새 메모를 이력에 추가한다. 원래 메모는 그대로.
      * 묶음 화면의 하위 유니버스 메모면 그 메모가 있는 유니버스 문서에 저장한다.
      * 이미 닫힌 메모(또는 없는 메모)면 아무것도 추가하지 않고 {ok:false, error:{code:'E-SCHEMA', field:'event', already_resolved:true}}.
      */
-    resolveMemo(eventGid, today) {
+    resolveMemo(eventGid, today, memoText = '') {
       if (guard()) return guard();
       const v = buildView(doc, resolve);
       const ev = v.events.find((x) => x.gid === eventGid && x.type === 'memo');
       if (!ev || !openMemos(v).includes(ev)) return { ok: false, error: { code: CODES.SCHEMA, field: 'event', already_resolved: true } };
-      const input = resolveMemoInput(ev, today);
+      const input = resolveMemoInput(ev, today, memoText);
       // 해결 메모의 기록 시각은 원래 메모보다 확실히 뒤(최소 1초)로 맞춘다: 같은 초면 ID 순이라 앞설 수 있다(검토7 V-1)
       const stamp = laterThan(now(), ev.recorded_at);
       // 저장 전에 새 해결 메모로 원래 메모가 실제로 닫히는지 본다(시계가 어긋나 이력 순서상 앞서면 닫히지 않는다. 검토7 K-4)

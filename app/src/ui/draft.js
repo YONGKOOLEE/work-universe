@@ -4,7 +4,10 @@
 import { buildHandoverDraft, scopeWorks } from '../rules/handover.js';
 import { transferPlan } from '../view/transfer.js';
 import { similarExperts, similarSentences, workLoad } from '../rules/insight.js';
-import { todayLocal } from './time.js';
+import { nowIso, todayLocal } from './time.js';
+import { isNewSentence } from '../rules/draft-new.js';
+import { readDraftSeen, writeDraftSeen } from '../store/draft-seen.js';
+import { openStorage } from '../store/local.js';
 import { METHOD_LABELS, isLive, refineDraft, refineDraftAsync, syncProvider } from '../llm/connector.js';
 import { el } from './dom.js';
 import { downloadWithNotice, draftDoc, printHtml } from './doc-output.js';
@@ -40,6 +43,10 @@ export const DRAFT_NEXT_OVERVIEW = '← 지도 전체 보기';
 export const RERUN_NOTE = '기록이 바뀌어 초안을 다시 만들었습니다';
 /** 키가 있어도 자동으로 다시 만든 초안은 Claude를 부르지 않는다(과금) — 그때 「생성 중…」 자리에 남기는 안내 */
 export const LIVE_RERUN_NOTE = '자동으로 다시 만든 초안은 Claude를 부르지 않은 문장입니다. 「초안 만들기」를 누르면 Claude가 새로 씁니다';
+
+/** 「새로」 표시(CR-18 D-13)의 글과 설명 */
+export const NEW_MARK_LABEL = '새로';
+export const NEW_MARK_TITLE = '지난번에 이 대상으로 초안을 만든 뒤에 기록된 근거가 붙은 문장입니다';
 
 /** 응답으로 문장이 바뀌었을 때 「생성 중…」 자리에 남기는 안내 */
 export const LIVE_REPLACED_NOTE = '문장이 Claude API 문장으로 바뀌었습니다 — 확인 후 확정하세요';
@@ -103,6 +110,10 @@ export function draftPanel(o) {
   const presetTarget = findPresetTarget(targets, o.preset && o.preset.target);
   if (presetTarget) target.value = presetTarget.gid;
   const universeKey = view.universe_id;
+  // 「새로」 표시(CR-18 D-13): 지난번에 같은 대상으로 초안을 만든 시각은 이 브라우저 설정(localStorage wu:v1:draft-seen)에만 둔다. 저장소를 못 쓰면 표시만 없다. o.seenStorage는 테스트용 주입
+  const seenStorage = o.seenStorage !== undefined ? o.seenStorage : openStorage(() => window.localStorage);
+  let newSince = null; // 이번에 그린 초안이 비교하는 「지난번」 시각. 처음 만들면 null(표시 없음)
+  const shown = () => ({ ...o, newSince });
   // 방금 「＋ 사람 추가」로 넣은 사람이 있으면(FU-36) 앞서 고른 대상을 되살린다
   const pend = pendingPerson && pendingPerson.key === universeKey ? pendingPerson : null;
   if (pendingPerson && !pend) pendingPerson = null;
@@ -200,7 +211,7 @@ export function draftPanel(o) {
         if (stale()) return;
         liveNote.textContent = '';
         if (d) {
-          renderDraft(result, d, view, o.onFocus, o); // 새로 그린 확정 단추는 켜진 상태
+          renderDraft(result, d, view, o.onFocus, shown()); // 새로 그린 확정 단추는 켜진 상태
           if (d.items.some((i) => i.method === 'llm')) liveNote.textContent = LIVE_REPLACED_NOTE;
         } else lockConfirm(false);
       })
@@ -252,9 +263,12 @@ export function draftPanel(o) {
     const labelOf = (gid) => (people.find((p) => p.gid === gid) || {}).label || '';
     remember(lastPeople, universeKey, from.value, to.value, { from: labelOf(from.value), to: labelOf(to.value) }); // 다시 만들 때 같은 두 사람을 미리 골라 준다(FU-17, gid 먼저·이름은 대체)
     if (target.value) lastTarget.set(universeKey, target.value);
+    // 지난번 시각과 비교한 뒤 이번 시각을 남긴다(자동으로 다시 만든 초안도 같다: 「그 사이 새로 기록된 것」을 보인다)
+    newSince = readDraftSeen(seenStorage, target.value);
+    writeDraftSeen(seenStorage, target.value, nowIso());
     // 실시간 공급자면 먼저 사전 생성(없으면 규칙 기반) 결과를 그리고, 응답이 오면 교체한다(R-04 ③)
     const first = refineDraft(r.draft, { provider: syncProvider(o.provider), exists: view.exists });
-    renderDraft(result, first, view, o.onFocus, o);
+    renderDraft(result, first, view, o.onFocus, shown());
     if (o.onDraft) o.onDraft(); // 따라 하기: 결과가 그려졌음을 알린다
     if (live && !auto) runLive(r.draft, first);
     else if (live) { liveSeq += 1; liveNote.textContent = LIVE_RERUN_NOTE; } // 자동으로 다시 만든 초안은 사전 생성·규칙 문장까지만. Claude 호출은 「초안 만들기」를 눌렀을 때만
@@ -394,7 +408,7 @@ function renderDraft(box, d, view, onFocus, o = {}) {
           : i.insufficient
           ? el('div', {}, el('p', { class: 'muted', 'data-testid': 'insufficient' }, '이력 부족 — 근거가 되는 기록이 없어 내용을 만들지 않았습니다.'),
             fillHintOf(i.key) ? el('p', { class: 'muted small', 'data-testid': 'draft-fill-hint' }, fillHintOf(i.key)) : null)
-          : el('ul', {}, ...i.sentences.map((s) => el('li', {}, el('span', {}, s.text), roleChip(view, i.key, s), el('span', { class: 'evidence-row' }, el('span', { class: 'evidence-label' }, '근거:'), evidenceChips(view, s.evidence_ids, onFocus, { dedupe: false, unknown: true, showText: true }))))),
+          : el('ul', {}, ...i.sentences.map((s) => el('li', {}, el('span', {}, s.text), isNewSentence(view, s, o.newSince) ? el('span', { class: 'chip new-mark', 'data-testid': 'draft-new-mark', title: NEW_MARK_TITLE }, NEW_MARK_LABEL) : null, roleChip(view, i.key, s), el('span', { class: 'evidence-row' }, el('span', { class: 'evidence-label' }, '근거:'), evidenceChips(view, s.evidence_ids, onFocus, { dedupe: false, unknown: true, showText: true }))))),
       ),
     ),
     el('p', { class: 'muted small' }, '축적된 이력으로 만든 초안입니다. 근거를 눌러 확인하고, 담당자가 검토해 확정하세요.'),

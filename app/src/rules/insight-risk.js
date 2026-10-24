@@ -13,7 +13,7 @@ import { workFormMissing } from './form.js';
 import { openMemos, memoTarget } from './issues.js';
 
 /** 바꾸기 쉬운 상수 한 곳(CR-14 8절 C14-4·C14-5) */
-export const RISK = { RECENT_DAYS: 180, TOP_WORKS: 5, TOP_PEOPLE: 5 };
+export const RISK = { RECENT_DAYS: 180, TOP_WORKS: 5, TOP_PEOPLE: 5, NEW_OWNER_DAYS: 30 }; // NEW_OWNER_DAYS: 담당 시작이 기준일에서 이 일수 안이면 「새로 맡음」 표시(CR-18 D-7, 표시만 — 세는 규칙은 그대로)
 
 /** 준비도 항목 키와 화면 이름(이 순서로 보인다) */
 export const READINESS_ITEMS = [
@@ -50,11 +50,28 @@ function performers(view, workGid, asOf) {
     any = true;
     const st = periodStatus(e.period, asOf);
     if (st === 'scheduled') continue;
-    const cur = people.get(p.gid) || { node: p, current: false };
+    const cur = people.get(p.gid) || { node: p, current: false, start: undefined };
     if (st === 'current') cur.current = true;
+    // 가장 이른 담당 시작일(시작일이 없는 연결이 하나라도 있으면 null = 언제부터인지 모름). D-7 「새로 맡음」 표시에만 쓴다
+    const start = e.period && e.period.start ? e.period.start : null;
+    cur.start = cur.start === undefined ? start : (cur.start === null || start === null ? null : (start < cur.start ? start : cur.start));
     people.set(p.gid, cur);
   }
   return { any, people };
+}
+
+// D-7: 지금 담당 중이고 가장 이른 담당 시작일이 기준일에서 NEW_OWNER_DAYS일 안이면 그 날짜, 아니면 null
+export function newOwnerStart(entry, asOf) {
+  if (!entry || !entry.current || !entry.start || !/^\d{4}-\d{2}-\d{2}/.test(entry.start)) return null;
+  const start = entry.start.slice(0, 10);
+  const age = dayNum(asOf) - dayNum(start);
+  return age >= 0 && age <= RISK.NEW_OWNER_DAYS ? start : null;
+}
+
+/** D-7 표시 글: 「혼자만 아는 일」 항목에 붙인다. 높음(인수인계 기록 없음)이면 줄이는 방법까지, 주의(이미 기록 있음)이면 사실만. 해당 없으면 '' */
+export function newOwnerText(item) {
+  if (!item || !item.new_owner) return '';
+  return item.level === 'high' ? `새로 맡음(시작 ${item.new_owner}) — 인수인계 기록을 남기면 줄어듭니다` : `새로 맡음(시작 ${item.new_owner})`;
 }
 
 // 업무의 인수인계 근거: 기준일까지의 handover 이력, 업무가 산출한 인수인계서
@@ -109,6 +126,7 @@ export function knowledgeConcentration(view, { asOf }) {
       work: { gid: w.gid, label: w.label, universe_name: w.universe_name },
       person: { gid: person.gid, label: person.label },
       level,
+      new_owner: newOwnerStart(real[0], asOf), // 표시용(D-7): 최근에 담당을 맡았으면 시작일(YYYY-MM-DD), 아니면 null. 세는 숫자에는 영향 없음
       handover_events: basis.events.length,
       handover_docs: basis.docs.length,
       evidence: uniq([w.gid, person.gid, ...basis.events, ...basis.docs]),

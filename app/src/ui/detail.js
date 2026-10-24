@@ -98,6 +98,11 @@ export function renderUniverseSummary(panel, s, shown = null, extras = {}) {
     const r = extras.riskSummary;
     panel.append(el('p', { class: 'risk-summary', 'data-testid': 'team-risk-summary' }, r.parts.join(' · '), ' ',
       el('button', { type: 'button', class: 'link', 'data-testid': 'btn-team-risk-more', onclick: r.onMore }, '자세히')));
+    // 지난 점검 대비(CR-18 D-3): 증감 한 줄과 「이번 점검 저장」. 기준은 이 브라우저 설정에만 있고 문서에는 들어가지 않는다
+    if (r.compare) {
+      panel.append(el('p', { class: 'risk-summary risk-compare', 'data-testid': 'team-risk-compare', 'data-has-baseline': r.compare.has ? 'true' : 'false' }, r.compare.text, ' ',
+        r.compare.canSave ? el('button', { type: 'button', class: 'small-btn', 'data-testid': 'btn-risk-baseline-save', onclick: r.compare.onSave }, '이번 점검 저장') : null));
+    }
   }
   if (s.missing.length) panel.append(el('p', { class: 'notice' }, `찾을 수 없는 하위 업무 지도:${s.missing.join(', ')}`));
   // 사번 충돌은 접힌 한 줄로(FU-13): 열자마자 노란 경고가 길게 보이면 무서우므로 「사번 확인 필요 n건」만 먼저 보이고, 펼치면 예전 내용 그대로

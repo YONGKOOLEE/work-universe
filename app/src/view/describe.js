@@ -74,7 +74,8 @@ export function attrsChangeText(before, after) {
 }
 
 // 이벤트를 한 줄 문장으로. 노드 ID는 라벨로 바꾸고, 숨긴 노드는 표시를 붙인다
-export function eventText(view, ev) {
+// opts.tagIssue(CR-18 D-14): 이력 목록은 모든 메모에 분류 꼬리표를 붙인다 — 이슈만 빠지던 결함. 근거 글(LLM 입력·근거 칩·문서 출력)의 문장은 그대로 두려고 기본은 false다
+export function eventText(view, ev, { tagIssue = false } = {}) {
   const p = ev.payload || {};
   const name = (id) => {
     if (!id) return null;
@@ -101,7 +102,7 @@ export function eventText(view, ev) {
     }
     case 'memo': {
       const cat = memoCategoryOf(p);
-      return `${cat === 'issue' || !Object.hasOwn(MEMO_CATEGORIES, cat) ? '' : `[${MEMO_CATEGORIES[cat]}] `}${ev.note || '메모'}`;
+      return `${(cat === 'issue' && !tagIssue) || !Object.hasOwn(MEMO_CATEGORIES, cat) ? '' : `[${MEMO_CATEGORIES[cat]}] `}${ev.note || '메모'}`;
     }
     case 'created':
     case 'updated':
@@ -199,7 +200,7 @@ export function describeNode(view, gid, { asOf = null, past = false } = {}) {
     gid: ev.gid,
     date: ev.occurred_at,
     type_label: eventTypeLabel(ev.type),
-    text: eventText(view, ev),
+    text: eventText(view, ev, { tagIssue: true }),
     // 시간 슬라이더로 과거를 볼 때 기준일 이후 이력은 흐리게 보인다
     after: !!asOf && ev.occurred_at > asOf,
   }));

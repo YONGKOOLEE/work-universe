@@ -32,12 +32,37 @@ const COLLABORATOR_TYPES = ['person', 'org'];
 // 최근 이슈로 보여 줄 메모 수(D-09 "최근 메모 N건")
 export const RECENT_MEMO_COUNT = 3;
 
+// 협업자 줄에 붙이는 연락처·소속(CR-18 D-9). 연락처는 속성 이름이 아래 중 무엇이어도 읽는다(값이 여럿이면 이 순서로 모아 ', '로 잇고 같은 값은 한 번). 소속은 속성 → 사람이면 노드 설명 순. 바꾸려면 여기 한 곳
+export const CONTACT_ATTR_KEYS = ['연락처', '연락', '내선', '전화', '메일', '이메일'];
+export const AFFILIATION_ATTR_KEYS = ['소속', '부서', '팀'];
+
+// 「진행 중인 일」에 덧붙이는 「최근 해결」(CR-18 D-11): 기준일에서 이 일수 안에 해결된 메모. 줄이 많을 때는 가장 최근 것부터 RECENT_RESOLVED_MAX줄만
+export const RECENT_RESOLVED_DAYS = 30;
+export const RECENT_RESOLVED_MAX = 3;
+
 const CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳'.split('');
 const live = (e) => !e.hidden;
+const DAY_MS = 86400000;
+const dayNumber = (ymd) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(ymd || ''));
+  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) / DAY_MS : null;
+};
 const attr = (node, key) => {
   const v = node.attrs && node.attrs[key];
   return v === undefined || v === null || String(v).trim() === '' ? null : String(v).trim();
 };
+
+/** 협업자의 연락처(D-9): CONTACT_ATTR_KEYS 속성의 값을 모아 ', '로 잇는다. 없으면 null */
+function contactOf(node) {
+  const values = [...new Set(CONTACT_ATTR_KEYS.map((k) => attr(node, k)).filter(Boolean))];
+  return values.length ? values.join(', ') : null;
+}
+
+/** 협업자의 소속(D-9): AFFILIATION_ATTR_KEYS 속성 중 처음 있는 값, 없으면 사람의 노드 설명. 없으면 null */
+function affiliationOf(node) {
+  for (const k of AFFILIATION_ATTR_KEYS) if (attr(node, k)) return attr(node, k);
+  return node.core_type === 'person' && node.description && String(node.description).trim() ? String(node.description).trim() : null;
+}
 
 /**
  * 초안 대상의 범위: 대상 노드에서 포함(contains) 연결을 따라 내려간 업무들.
@@ -268,6 +293,23 @@ export function buildHandoverDraft(view, input) {
   //    대상이 없는 메모는 단 주제 집합이 같은 "해결됨"으로 닫는다(검토5 I-10)
   //    판정은 미해결 이슈 목록(R-20)과 같은 함수를 쓴다(rules/issues.js)
   items.진행_중 = openMemos(view, { memos, categories: ['in_progress'] }).map(memoSentence);
+  // 최근 해결(CR-18 D-11): 기준일에서 RECENT_RESOLVED_DAYS일 안(기준일 당일 포함)에 기록된 「해결됨」 메모. 근거는 그 해결됨 메모 하나. 기준일이 없으면 만들지 않는다
+  if (asOf) {
+    const today = dayNumber(asOf);
+    const originalNote = (ev) => {
+      const original = ev.payload.resolves_id ? view.events.find((x) => x.gid === refGid(ev.universe_id, ev.payload.resolves_id)) : null;
+      return original && original.note ? String(original.note).trim() : '';
+    };
+    const resolvedLine = (ev) => {
+      const body = String(ev.note || '').trim().replace(/^해결:\s*/, '');
+      return sentence(`최근 해결: ${body && body !== '해결' ? body : originalNote(ev) || '해결로 표시'}(${ev.occurred_at})`, [ev.gid]);
+    };
+    const recent = ofCategory('resolved').filter((ev) => {
+      const d = dayNumber(ev.occurred_at);
+      return today !== null && d !== null && today - d >= 0 && today - d <= RECENT_RESOLVED_DAYS;
+    });
+    items.진행_중.push(...recent.slice(-RECENT_RESOLVED_MAX).reverse().map(resolvedLine));
+  }
 
   // 6) 산출물·문서 위치: 범위 업무의 산출 연결(만듦) + 산출물로 「참조」한 연결(참조, CR-17 J ⑩: 업무정의서 변환이 「관련 문서」를 참조로 잇는다). 근거는 산출물 노드. 위치 속성이 있으면 붙인다
   // 같은 업무가 같은 산출물을 만들고 참조하면 만듦 한 줄만. 참조는 산출물 유형 노드만(업무 → 주제 같은 참조는 이 항목이 아니다)
@@ -311,11 +353,15 @@ export function buildHandoverDraft(view, input) {
     const wn = name(view, workEnd);
     if (!collaborators.get(o.gid).works.includes(wn)) collaborators.get(o.gid).works.push(wn);
   }
+  // 협업 줄(D-9): 소속·연락처가 있으면 덧붙인다. 없으면 이전 문장 그대로. 근거는 협업자 노드 하나
+  const collabLine = ({ other, works: ws }) => {
+    const aff = affiliationOf(other);
+    const contact = contactOf(other);
+    return sentence(`협업: ${other.label}${other.emp_no ? `(${other.emp_no})` : ''} — 참조 ${ws.join(', ')}${aff ? `. 소속: ${aff}` : ''}${contact ? `. 연락: ${contact}` : ''}`, [other.gid]);
+  };
   items.관계자_연락처 = inquiry.concat([...people.values()].map(({ person, roles }) =>
     sentence(`${person.label}${person.emp_no ? `(${person.emp_no})` : ''} — ${roles.join(', ')}${attr(person, '연락처') ? `. 연락: ${attr(person, '연락처')}` : ''}`, [person.gid]),
-  ), [...collaborators.values()].map(({ other, works: ws }) =>
-    sentence(`협업: ${other.label}${other.emp_no ? `(${other.emp_no})` : ''} — 참조 ${ws.join(', ')}${attr(other, '연락처') ? `. 연락: ${attr(other, '연락처')}` : ''}`, [other.gid]),
-  ));
+  ), [...collaborators.values()].map(collabLine));
 
   // 8) 최근 이슈: 범주가 이슈(없으면 이슈)인 메모의 최근 N건
   items.최근_이슈 = ofCategory('issue').slice(-RECENT_MEMO_COUNT).reverse().map(memoSentence);

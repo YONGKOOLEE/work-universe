@@ -48,6 +48,9 @@ export const PAIR_TEXT = {
 // 「관련」 연결이 주제가 아닌 노드에 걸려 거절될 때 덧붙이는 안내(FU-20). 사람 → 업무는 「수행」, 업무 → 산출물은 「산출」, 그 밖의 가리킴은 「참조」(꼭지 제외)
 const RELATES_TO_HELP = ' 무엇을 고르면 되나: 사람을 업무에 이으려면 「수행」(사람 → 업무), 업무가 만든 문서·산출물이면 「산출」(업무 → 산출물), 그냥 가리키기만 하면 「참조」입니다. 「관련」은 대상이 주제 노드일 때만 씁니다.';
 
+// 사번 없는 사람을 저장했을 때의 안내(CR-18 D-15): 다른 팀 협업자는 사번을 모를 수 있으므로 겁먹지 않게 먼저 말한다
+export const NO_EMPNO_TEXT = '사번 없이 저장했습니다. 다른 팀 사람이면 사번 없이 두어도 됩니다(같은 사람인지는 나중에 여러 지도를 묶을 때 통합 확인 목록에서 확인합니다).';
+
 const name = (field) => FIELD_NAMES[field] || field;
 
 /**
@@ -139,7 +142,7 @@ export function messageFor(err, ctx = {}) {
       if (err.expected) return `${name(err.field)} 칸에는 ${TYPE_NAMES[err.expected] || err.expected} 노드만 고를 수 있습니다.`;
       return `${name(err.field)} 값을 확인하세요.`;
     case 'W-NO-EMPNO':
-      return '사번 없이 저장했습니다. 통합할 때 확인 목록에 오릅니다.';
+      return NO_EMPNO_TEXT;
     case 'W-STORAGE':
       if (err.reason === 'install') return `브라우저 저장소${err.quota ? ' 공간이 부족해' : '에 쓰지 못해'} 샘플을 저장하지 못했습니다. 샘플을 읽기 전용으로 엽니다. 「가상 데이터 초기화」로 공간을 비우면 다시 쓸 수 있습니다.`;
       if (err.reason === 'quota') return '브라우저 저장 공간이 가득 차서 저장하지 못했습니다. 바뀐 내용은 반영되지 않았습니다. 「가상 데이터 초기화」로 공간을 비울 수 있습니다.';
