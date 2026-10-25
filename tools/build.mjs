@@ -28,7 +28,8 @@ const js = result.outputFiles[0].text;
 
 // 제3자 라이선스 고지: 번들에 실제로 들어가는 패키지(esbuild metafile로 확인, RV10S-3)를 모두 적는다. 파일 하나만 전달돼도 고지가 따라가도록 HTML 주석으로도 넣는다.
 //   Cytoscape.js MIT · @anthropic-ai/sdk Apache-2.0(+이전 판 MIT, LICENSE-MIT) · @opentelemetry/api Apache-2.0 · @stablelib/base64 MIT · fast-sha256 Unlicense · standardwebhooks MIT
-//   standardwebhooks 패키지에는 LICENSE 파일이 없고(package.json license: MIT만), SDK의 _vendor/partial-json-parser는 별도 LICENSE·출처 표시가 없다 → 있는 그대로 적고 미확인으로 남긴다
+//   standardwebhooks: 패키지에 LICENSE 파일이 없다. npm 등록 정보는 MIT, 저장소 최상위 LICENSE는 Apache-2.0 → 둘 다 적는다(2026-10-25 확인)
+//   SDK의 _vendor/partial-json-parser: npm 패키지 partial-json-parser(작성자 gov)를 옮긴 것(SDK README), npm 등록 정보 ISC → ISC 허락 문구를 적는다(2026-10-25 확인)
 // files: 패키지 폴더의 라이선스 파일들(없는 것은 건너뛰고), note: 파일로 확인하지 못한 사항
 const third = async (dir, label, license, { files = ['LICENSE'], note = '' } = {}) => {
   const version = JSON.parse(await readFile(join(root, 'node_modules', dir, 'package.json'), 'utf8')).version;
@@ -40,12 +41,20 @@ const notice = [
   await third('cytoscape', 'Cytoscape.js', 'MIT'),
   await third('@anthropic-ai/sdk', '@anthropic-ai/sdk', 'Apache-2.0', {
     files: ['LICENSE', 'LICENSE-MIT'],
-    note: '아래 LICENSE-MIT는 1.0.0 이전 판과 그 이전에 합쳐진 외부 기여분에 적용된다. SDK 안의 _vendor/partial-json-parser는 별도 라이선스 파일이 없어 출처·라이선스를 확인하지 못했다(SDK와 함께 배포됨, 미확인).',
+    note: `아래 LICENSE-MIT는 1.0.0 이전 판과 그 이전에 합쳐진 외부 기여분에 적용된다.
+
+SDK 안의 _vendor/partial-json-parser는 npm 패키지 partial-json-parser(작성자 gov)를 옮긴 것이다(SDK의 _vendor/partial-json-parser/README.md). 그 패키지의 라이선스는 ISC다(npm 등록 정보 https://registry.npmjs.org/partial-json-parser, 2026-10-25 확인):
+
+Copyright (c) gov
+
+Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.`,
   }),
   await third('@opentelemetry/api', '@opentelemetry/api', 'Apache-2.0'),
   await third('@stablelib/base64', '@stablelib/base64', 'MIT'),
   await third('fast-sha256', 'fast-sha256', 'Unlicense'),
-  await third('standardwebhooks', 'standardwebhooks', 'MIT', { files: [], note: '이 패키지에는 LICENSE 파일이 없다. package.json의 license 필드가 MIT이며 저작권자 표기는 확인하지 못했다(미확인).' }),
+  await third('standardwebhooks', 'standardwebhooks', 'MIT / Apache-2.0', { files: [], note: '이 패키지에는 LICENSE 파일이 없다. npm 등록 정보(https://registry.npmjs.org/standardwebhooks/1.1.1)의 license는 MIT, author는 Standard Webhooks이고, 소스 저장소(https://github.com/standard-webhooks/standard-webhooks) 최상위 LICENSE는 Apache License 2.0이다(2026-10-25 확인). Apache License 2.0 전문은 위 @anthropic-ai/sdk 항목에 있다.' }),
 ].join('\n\n----------------------------------------\n\n');
 await writeFile(join(dist, 'THIRD_PARTY_LICENSES.txt'), notice);
 

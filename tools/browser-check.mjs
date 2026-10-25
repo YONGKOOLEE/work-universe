@@ -3833,6 +3833,8 @@ async function checkBrowser(browser, port) {
       const g1IssueMarked = g1IssueLines.filter((x) => x.marks === 1).length;
       check('G1 D-13 지난번 초안 이후 기록된 근거가 붙은 문장(최근 해결 두 줄, 방금 해결해 해결 날짜가 붙은 최근 이슈 줄)에만 작은 「새로」 표시(크기 있음), 나머지 문장에는 없음', g1Again.n === g1RecentMarked + g1IssueMarked && g1RecentMarked === 2 && g1IssueMarked <= 2 && g1IssueLines.filter((x) => x.marks === 1).every((x) => x.text.includes('해결')) && g1Again.n < g1Again.li && g1Again.sized && g1Again.text.every((t) => t === '새로'), JSON.stringify({ g1Again, g1Recent, g1IssueLines }));
       await shot(s.cdp, `${browser.name}-g1-draft-new-mark`);
+      const g1Chip = await evaluate(s.cdp, "(() => { const m = document.querySelector('[data-testid=draft-new-mark]'); if (!m) return null; return { w: m.getBoundingClientRect().width, li: m.closest('li').getBoundingClientRect().width }; })()");
+      check('G1 D-13 「새로」는 작은 칩(문장 줄 폭의 절반보다 좁음 — 한 줄을 꽉 채운 띠가 아님, 2026-10-25 사용자 "어디에 붙는지 못 찾겠음")', !!g1Chip && g1Chip.w > 0 && g1Chip.w < g1Chip.li / 2, JSON.stringify(g1Chip));
       // 그 뒤 새 기록이 없으면 다시 만든 초안에는 표시가 없다
       await makeDraft('U-A1/N-001', 'U-A1/N-011', 'U-A1/N-010');
       await sleep(300);
@@ -4112,6 +4114,8 @@ async function checkBrowser(browser, port) {
       await sleep(300);
       const c0 = await g3Q('[data-testid=team-risk-compare]');
       check('G3 D-3 저장한 점검이 없으면 위험 요약 아래에 「아직 저장한 점검 없음 — 「이번 점검 저장」을 누르면 다음에 비교합니다」와 저장 단추', !!c0 && c0.text.startsWith('아직 저장한 점검 없음 — 「이번 점검 저장」을 누르면 다음에 비교합니다') && !!(await g3Q('[data-testid=btn-risk-baseline-save]')), JSON.stringify(c0));
+      const g3Rw = await g3Q('[data-testid=rewind-grouped-note]');
+      check('묶은 지도 개요에는 「편집 되감기」 단추 대신 「편집 되감기: 묶은 지도에서는 쓸 수 없습니다 — 팀·업무 지도를 열어 되감으세요」(크기 있음)', !!g3Rw && g3Rw.w > 0 && g3Rw.text === '편집 되감기: 묶은 지도에서는 쓸 수 없습니다 — 팀·업무 지도를 열어 되감으세요' && (await g3Q('[data-testid=btn-rewind]')) === null, JSON.stringify(g3Rw));
       await clickTestId(s.cdp, 'btn-risk-baseline-save');
       await sleep(300);
       const c1 = await g3Q('[data-testid=team-risk-compare]');

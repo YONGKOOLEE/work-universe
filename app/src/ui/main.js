@@ -1383,7 +1383,8 @@ function start() {
       const rootGid = app.rootGid();
       panel.append(...[issueEntry(view, app.rootGid(), { rootGid: app.rootGid(), onOpen: () => openIssues(app.rootGid()) }),
         hiddenEntry(hiddenNodesOf(app.doc), { onOpen: () => { rememberOpener(); hiddenOpen = true; renderPanel(); } }),
-        app.rewindAvailable() ? rewindEntry({ points: app.editPoints(), onOpen: enterRewind }) : null,
+        // 묶은 지도에서는 되감기를 쓰지 않는다(D-30) — 입구가 통째로 사라져 헷갈리지 않게 글로 추가처럼 안내 한 줄
+        app.rewindAvailable() ? rewindEntry({ points: app.editPoints(), onOpen: enterRewind }) : el('p', { class: 'muted small', 'data-testid': 'rewind-grouped-note' }, '편집 되감기: 묶은 지도에서는 쓸 수 없습니다 — 팀·업무 지도를 열어 되감으세요'),
         el('div', { class: 'row' },
         el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft-universe', onclick: () => openDraft(rootGid) }, '인수인계 초안 만들기'),
         el('button', { type: 'button', 'data-testid': 'btn-insight-universe', onclick: () => openInsight('', 'risk') }, '인사이트 보기')),

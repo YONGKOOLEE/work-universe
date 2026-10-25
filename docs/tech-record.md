@@ -773,8 +773,8 @@
 | @opentelemetry/api | 1.10.0 | Apache-2.0 | LICENSE |
 | @stablelib/base64 | 1.0.1 | MIT | LICENSE |
 | fast-sha256 | 1.3.0 | Unlicense | LICENSE |
-| standardwebhooks | 1.1.1 | MIT(package.json만) | LICENSE 파일·저작권자 표기 없음 → **미확인** |
-| SDK `_vendor/partial-json-parser` | SDK 1.1.0 안 | **미확인** | 별도 라이선스 파일·출처 표시 없음 |
+| standardwebhooks | 1.1.1 | MIT(npm) · Apache-2.0(저장소 최상위 LICENSE) | LICENSE 파일 없음 — registry.npmjs.org/standardwebhooks/1.1.1, github.com/standard-webhooks/standard-webhooks(2026-10-25 밤 확인), 고지에 둘 다 |
+| SDK `_vendor/partial-json-parser` | SDK 1.1.0 안 | ISC | SDK README: npm `partial-json-parser`(작성자 gov)를 옮김 — registry.npmjs.org/partial-json-parser license ISC(2026-10-25 밤 확인), 고지에 ISC 허락 문구 |
 
 - **성능(RV10C-4):** 업무마다 연결·메모 전체를 훑던 곳을 색인 한 번으로(`rules/form.js` `edgeIndex` WeakMap, 미해결 메모 대상별 묶음, mergePlan 사번 없는 사람 이름 색인·업무 쌍 겹침 색인으로 상위 12개). 업무 3000개(`tools/perf-check.mjs` 데이터): handoverReadiness 1026 → 14ms, formReport 717 → 2ms, mergePlan 4188 → 158ms. 출력 동등성은 `tests/rv10-perf.test.js`(옛 판 복사본과 무작위 세계 300개 × 3종·동점 40판·내장 샘플 전부 deepEqual). 남은 위험: `hasCautionMemo`(handover.js)와 같은 규칙을 `cautionMemoFast`(form.js)가 한 번 더 구현 — 규칙을 바꾸면 둘 다(동등성 시험이 잡음).
 - **비밀값 검사(RV10S-12):** `tools/secret-scan.mjs`에 ps1·sh·bat·yml·toml·ini·env 등 확장자, `.github`·`.claude`, 시험 파일은 가짜 키 표지 줄만 제외, `--history [범위]`(git log -p의 추가된 줄, 값은 가림). 2026-10-25 실행: 파일 901개 0건, `--history HEAD` 커밋 155개 0건(하위 에이전트 실행 보고 — push 전 메인이 다시 실행).

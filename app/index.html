@@ -218,6 +218,7 @@
   .draft-item ul { display: grid; gap: 6px; }
   .draft-item li { display: grid; gap: 3px; overflow-wrap: anywhere; }
   .draft-item li > * { min-width: 0; } /* 화면 점검 S-1: 띄어쓰기 없는 긴 글자가 항목 전체를 패널 밖으로 밀어냄 */
+  .draft-item li > .new-mark { justify-self: start; } /* 「새로」 칩이 한 줄을 꽉 채운 띠로 보이지 않게(제 크기로 왼쪽에) */
   .draft-item.insufficient h4 { color: var(--muted); }
   .evidence-list { display: flex; flex-wrap: wrap; gap: 4px; }
   .evidence { padding: 0 8px; font-size: 11px; border-radius: 8px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
