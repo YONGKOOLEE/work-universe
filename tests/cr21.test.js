@@ -9,7 +9,7 @@ import { FEATURES, FEATURE_RESULT_LIMIT, featureBlock, searchFeatures } from '..
 import { RECENT_RECORDS, historyFocus, recentRecords } from '../app/src/view/recent-records.js';
 import { renderUniverseSummary, renderNodeDetail, HISTORY_SHOW, HISTORY_COLLAPSE_OVER } from '../app/src/ui/detail.js';
 import { describeNode, describeUniverse } from '../app/src/view/describe.js';
-import { GOALS, goalBar, goalSection, recentList } from '../app/src/ui/overview.js';
+import { recentList } from '../app/src/ui/overview.js';
 
 const q = (root, id) => root.querySelector(`[data-testid=${id}]`);
 const withDom = (fn) => async () => {
@@ -144,50 +144,63 @@ test('CR-21 B-1 이력 강조 대상: 방금 기록한 줄을 찾고, 접힌 목
 });
 
 // ── 화면 조각 ──
-test('CR-21 C 목적별 묶음: 단추 4개와 묶음이 짝이고, 비어 있는 묶음은 단추도 숨긴다', withDom((body) => {
-  const ids = GOALS.map((g) => g.key);
-  assert.deepEqual(ids, ['record', 'handover', 'check', 'edit']);
-  assert.deepEqual(GOALS.map((g) => g.label), ['기록하기', '인수인계', '점검', '지도 고치기']);
-  const bar = goalBar(['record', 'edit'], () => {});
-  assert.equal(bar.children.length, 2);
-  assert.ok(q(bar, 'goal-record') && q(bar, 'goal-edit') && !q(bar, 'goal-check'));
-  assert.equal(goalSection(GOALS[0], []), null);
-  assert.equal(goalSection(GOALS[0], [null]), null);
-  const sec = goalSection(GOALS[0], [document.createElement('p')]);
-  assert.equal(sec.getAttribute('data-testid'), 'goal-sec-record');
-  assert.equal(sec.querySelector('h3').textContent, '기록하기');
-}));
-
-test('CR-21 C 개요: 묶음 순서(기록하기→인수인계→점검→지도 고치기), 단추 줄은 요약 바로 아래·처음 할 일은 묶음 위, 일반 안내는 접힌 「처음이면 읽어 보세요」', withDom((body) => {
+// CR-22 W: CR-21 C의 목적별 묶음 4개(기록하기·인수인계·점검·지도 고치기)는 왼쪽 작업 공간 5개로 바뀌었다 — 개요 단추 줄(goal-bar)·묶음 머리글은 없다.
+// 같은 내용을 공간 첫 화면이 그린다(기록·인수인계·매주 점검·지도 관리, 처음 할 일·안내는 지도 보기). 묶음 상자 이름(goal-sec-*)은 그대로.
+test('CR-22 W 지도 보기: 지도 요약 → 처음 할 일 → 안내 한 줄 → 접힌 「처음이면 읽어 보세요」, 개요 단추 줄은 없다', withDom((body) => {
   const view = buildView(mkDoc('U-T', base(), [mkEdge('N-P1', 'N-W1', 'performs')], []), () => null);
   const s = describeUniverse(view);
   const panel = document.createElement('div');
   body.append(panel);
-  const p = (id) => { const x = document.createElement('p'); x.setAttribute('data-testid', id); return x; };
-  renderUniverseSummary(panel, s, 5, {
-    starter: { steps: [{ label: '업무 넣기', done: false }] }, preview: null, onGoal() {},
-    record: [p('issue-count'), p('weekly-quick')], handover: [p('btn-draft-universe')], check: [p('insight-hint')], edit: [p('rewind-entry')],
-  });
+  renderUniverseSummary(panel, s, 5, { space: 'map', starter: { steps: [{ label: '업무 넣기', done: false }] }, preview: null });
   const order = panel.children.map((c) => c.getAttribute('data-testid') || c.tagName.toLowerCase());
   const at = (id) => order.indexOf(id);
-  assert.ok(at('goal-bar') >= 0 && at('goal-bar') < at('starter-steps'), '단추 줄은 지도 요약 바로 아래(명세 1절)');
-  assert.ok(at('starter-steps') < at('goal-sec-record'), '처음 할 일은 묶음보다 위(명세 3절)');
-  assert.ok(at('goal-bar') < at('goal-sec-record') && at('goal-sec-record') < at('goal-sec-handover') && at('goal-sec-handover') < at('goal-sec-check') && at('goal-sec-check') < at('goal-sec-edit') && at('goal-sec-edit') < at('overview-help'), order.join(','));
+  assert.ok(at('summary') >= 0 && at('summary') < at('starter-steps'), order.join(','));
+  assert.ok(at('starter-steps') < at('ws-desc') && at('ws-desc') < at('overview-help'), order.join(','));
+  assert.match(q(panel, 'ws-desc').textContent, /왼쪽 메뉴/);
+  assert.equal(q(panel, 'goal-bar'), null);
+  assert.equal(q(panel, 'goal-sec-record'), null, '다른 공간의 묶음은 그리지 않는다');
   assert.equal(q(panel, 'overview-help').tagName, 'DETAILS');
   assert.ok(q(q(panel, 'overview-help'), 'hint') && q(q(panel, 'overview-help'), 'term-note'));
-  assert.ok(q(q(panel, 'goal-sec-record'), 'weekly-quick'), '기존 요소가 묶음 안에 있다');
-  assert.ok(q(q(panel, 'goal-sec-handover'), 'btn-draft-universe'));
-  assert.equal(q(panel, 'goal-sec-check').querySelector('h3').textContent, '점검');
 }));
 
-test('CR-21 C 개요: 아무 묶음도 없으면(읽기 전용 등) 단추 줄도 없다', withDom((body) => {
+test('CR-22 W 기록·인수인계·매주 점검·지도 관리: 공간 제목·설명 아래 그 공간의 조각만(기존 요소가 goal-sec-* 상자 안에)', withDom((body) => {
+  const view = buildView(mkDoc('U-T', base(), [mkEdge('N-P1', 'N-W1', 'performs')], []), () => null);
+  const s = describeUniverse(view);
+  const p = (id) => { const x = document.createElement('p'); x.setAttribute('data-testid', id); return x; };
+  const draw = (space, extras) => {
+    const panel = document.createElement('div');
+    body.append(panel);
+    renderUniverseSummary(panel, s, 5, { space, ...extras });
+    return panel;
+  };
+  const rec = draw('record', { record: [p('issue-count'), p('weekly-quick')], handover: [p('btn-draft-universe')] });
+  assert.equal(q(rec, 'ws-title').textContent, '기록');
+  assert.ok(q(q(rec, 'goal-sec-record'), 'weekly-quick'));
+  assert.equal(q(rec, 'btn-draft-universe'), null, '다른 공간의 조각은 그리지 않는다');
+  assert.equal(q(rec, 'summary'), null);
+  const han = draw('handover', { handover: [p('btn-draft-universe')] });
+  assert.equal(q(han, 'ws-title').textContent, '인수인계');
+  assert.ok(q(q(han, 'goal-sec-handover'), 'btn-draft-universe'));
+  const chk = draw('check', { check: [p('insight-hint')] });
+  assert.equal(q(chk, 'ws-title').textContent, '매주 점검');
+  assert.ok(q(q(chk, 'goal-sec-check'), 'insight-hint'));
+  const ed = draw('edit', { edit: [p('rewind-entry')] });
+  assert.equal(q(ed, 'ws-title').textContent, '지도 관리');
+  assert.ok(q(q(ed, 'goal-sec-edit'), 'rewind-entry'));
+  assert.equal(q(ed, 'goal-bar'), null);
+}));
+
+test('CR-22 W 공간: 조각이 하나도 없으면(읽기 전용 등) 상자 없이 제목·설명만, 알 수 없는 공간 이름은 지도 보기', withDom((body) => {
   const view = buildView(mkDoc('U-T', base(), [], []), () => null);
   const panel = document.createElement('div');
   body.append(panel);
-  renderUniverseSummary(panel, describeUniverse(view), 5, {});
-  assert.equal(q(panel, 'goal-bar'), null);
+  renderUniverseSummary(panel, describeUniverse(view), 5, { space: 'record' });
   assert.equal(q(panel, 'goal-sec-record'), null);
-  assert.ok(q(panel, 'hint'));
+  assert.ok(q(panel, 'ws-title'));
+  const map = document.createElement('div');
+  body.append(map);
+  renderUniverseSummary(map, describeUniverse(view), 5, { space: '엉뚱한값' });
+  assert.ok(q(map, 'summary') && q(map, 'hint'));
 }));
 
 test('CR-21 B 최근 기록 줄: 없으면 안내 한 줄, 있으면 줄마다 「보기」', withDom((body) => {

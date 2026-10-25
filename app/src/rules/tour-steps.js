@@ -16,7 +16,12 @@
 //   saved: boolean,            // 따라 하기를 시작한 뒤 저장(수정·추가 등)이 한 번 성공했음
 //   rewinding: boolean,        // 편집 되감기 모드가 켜져 있음(머리 띠가 보임)
 //   readOnly: boolean,         // 이 유니버스를 고칠 수 없음(읽기 전용)
+//   space: string,             // 지금 고른 작업 공간(map|record|handover|check|edit, CR-22 W)
+//   baselineSaved: boolean,    // 따라 하기를 시작한 뒤 「이번 점검 저장」을 눌렀음
+//   canSaveBaseline: boolean,  // 이 화면에서 점검을 저장할 수 있음(저장소가 없으면 거짓 — 저장 단계는 건너뛴다)
+//   summaryUsed: boolean,      // 따라 하기를 시작한 뒤 「점검 요약 보기」를 눌렀음
 // }
+// step.space = 이 단계를 하는 작업 공간. step.home = 들어설 때 그 공간의 첫 화면부터(열린 작업 화면을 닫음. 없으면 이미 그 공간일 때는 건드리지 않는다). 단계에 들어서면 앱이 그 공간으로 바꾸고(ui/tour.js의 onSpace), 사용자가 다른 공간으로 옮겨 짚을 단추가 안 보이면 그 공간의 메뉴 단추를 짚는다
 // target(state) = 짚을 대상 후보 목록. 앞에서부터 화면에 보이는 첫 번째를 쓴다.
 //   {sel: CSS 선택자, noScroll?}  화면의 요소(단추 등). 가려져 있으면 패널을 스크롤해 보이게 하지만 noScroll이면 하지 않는다
 //   {cy: 그래프 노드 선택자}  그래프 노드(cytoscape)
@@ -38,12 +43,14 @@ const HANDOVER = {
   steps: [
     {
       id: 'pick-work',
-      task: '하늘색 동그라미 「대사 확인」을 눌러 보세요. 오른쪽에 이 일을 무엇을 언제 누가 해 왔는지 나옵니다.',
+      space: 'map',
+      task: '그래프에서 하늘색 항목 「대사 확인」을 눌러 보세요. 오른쪽에 이 일을 무엇을 언제 누가 해 왔는지 나옵니다.',
       target: () => [{ cy: 'node[label = "대사 확인"]' }],
       done: (s) => s.selected === 'U-A1/N-001',
     },
     {
       id: 'read-history',
+      space: 'map',
       task: '오른쪽을 아래로 내려 담당 이력과 「미해결」을 보세요. 다 봤으면 「다음」을 누르세요.',
       next: true,
       // 선택을 풀었으면(Esc 등) 패널이 유니버스 요약이라 이력이 없다: 보조 문구와 함께 「대사 확인」을 다시 짚는다(재검증 N-6)
@@ -54,6 +61,7 @@ const HANDOVER = {
     },
     {
       id: 'make-draft',
+      space: 'handover', // 왼쪽 「인수인계」 공간(지도 전체 화면의 「인수인계 초안 만들기」가 있는 곳)
       // 9차 검토 R9-4: 보내는·받는 사람은 미리 골라 두므로(preset) 동작은 둘 — 「인수인계 초안 만들기」 → 「초안 만들기」
       // 2회차 FU-26: 「빈 곳을 누르고」를 뺐다. 업무·꼭지를 고른 채로도 오른쪽에 같은 이름의 단추(btn-draft)가 있고, 선택이 없으면 지도 전체의 단추(btn-draft-universe)가 있다
       task: '오른쪽의 「인수인계 초안 만들기」를 누른 뒤 「초안 만들기」를 누르세요.',
@@ -67,6 +75,7 @@ const HANDOVER = {
     },
     {
       id: 'evidence',
+      space: 'handover',
       task: '문장 밑의 「근거:」 칩을 하나 눌러 보세요. 그래프에서 근거가 빛납니다.',
       target: () => [{ sel: '.draft .evidence' }],
       done: (s) => s.evidenceUsed,
@@ -75,11 +84,12 @@ const HANDOVER = {
       // 9차 검토 R9-1(나): 고친 기록을 되감아 보는 단계. 샘플에 수정 이력이 미리 있어도 「직접 고쳐 보기」로 안내한다.
       // 완료는 상태로 판정: 되감기 모드가 켜지면(머리 띠가 보임) 끝. 읽기 전용이면 고칠 수 없으므로 이 단계를 건너뛴다
       id: 'edit-rewind',
+      space: 'edit', // 「편집 되감기」 입구는 「지도 관리」 공간에 있다
       // 처음 사용 점검 3회차: 본문은 한두 줄로 줄이고 세부 순서는 보조 문구(sub)로 옮겼다. 본문에는 이 단계가 연습이고 건너뛰어도 된다는 것과 하려는 일만 둔다
       task: '(연습, 건너뛰어도 됩니다) 「대사 확인」의 설명을 조금 고쳐 저장한 뒤, 「편집 되감기」로 고치기 전 지도를 봅니다.',
       sub: (s) => (s.saved
         ? '고쳐서 저장했어요. 이제 빈 곳을 누르고 「편집 되감기」를 누르세요'
-        : '순서: 「대사 확인」 → 「수정」에서 설명 끝에 글자 하나 더하고 「저장」 → 빈 곳 → 「편집 되감기」에서 시점 고르기. 예시라서 언제든 되돌릴 수 있어요'),
+        : '순서: 「대사 확인」 → 「수정」에서 설명 끝에 글자 하나 더하고 「저장」 → 왼쪽 「지도 관리」의 「편집 되감기」에서 시점 고르기. 예시라서 언제든 되돌릴 수 있어요'),
       target: (s) => {
         if (s.rewinding) return [{ sel: '[data-testid=rewind-bar]' }, { sel: '[data-testid=rewind-band]' }];
         const blank = { sel: '#graph', hint: BLANK_HINT };
@@ -97,40 +107,64 @@ const HANDOVER = {
 // team 시나리오의 단계 순서. CR-17 K(승인 2026-10-24): 기본은 'risk-first'(위험 요약 「자세히」 먼저, 마지막은 전체 보기 — 처음 사용 점검 FU-14·FU-33).
 // 이전 승인 문서(02 D-29: "team 시나리오는 5단계, 마지막은 내용이 있는 「반복 비효율」 탭에서 끝")의 순서는 'd29' 판이다.
 // 되돌리려면 이 상수 하나만 'd29'로 바꾼다(단위 테스트가 두 순서를 모두 고정한다).
-export const TEAM_ORDER = 'risk-first';
+export const TEAM_ORDER = 'weekly';
+// CR-22 W: 기본은 'weekly' — 매주 점검 공간에서 위험 요약 → 이번 점검 저장 → 점검 요약을 보고, 지도 보기 공간에서 펼치기·찾기(화면 조작 4단계를 2단계로 줄임). 나머지 두 순서는 예전 판
 export const TEAM_ORDERS = {
   d29: ['expand', 'find', 'neighborhood', 'full', 'insight'],
   'risk-first': ['risk', 'expand', 'find', 'neighborhood', 'full'],
+  weekly: ['risk', 'save', 'summary', 'expand', 'find'],
 };
 
 const TEAM_STEPS = {
   risk: {
     // 2회차 FU-33: 팀장의 질문(한 사람만 아는 일)에 바로 닿는다. 묶은 지도 위험 요약(FU-10)의 「자세히」가 인사이트를 「인수인계 위험」 탭으로 연다
     id: 'risk',
+    space: 'check',
+    home: true, // 단계에 들어설 때 그 공간의 첫 화면에서 시작(열려 있던 작업 화면은 닫는다)
     task: '오른쪽 위 「혼자만 아는 일 …」 줄의 「자세히」를 누르세요. 한 사람만 해 봤고 인수인계 기록이 없는 일이 나옵니다.',
     target: (s) => [{ sel: '[data-testid=btn-team-risk-more]' }, ...(s.selected || s.draftOpen ? [{ sel: '#graph', hint: BLANK_HINT }] : [])],
     done: (s) => s.insightOpen && s.insightKind === 'risk',
   },
+  save: {
+    // CR-22 W: 매주 점검의 핵심 — 오늘 숫자를 저장해 두면 다음 주에 「지난 점검 대비」로 비교한다. 인사이트가 열려 있으면 단계에 들어설 때 매주 점검 공간으로 바뀌며 닫힌다
+    id: 'save',
+    space: 'check',
+    task: '인사이트를 다 읽었으면 「닫기」를 누르고, 「이번 점검 저장」을 누르세요. 오늘의 숫자를 저장해 두면 다음 주에 지난 점검과 비교해 얼마나 늘고 줄었는지 볼 수 있습니다.',
+    sub: () => '예시 지도라 저장해도 괜찮아요(이 브라우저에만 남습니다)',
+    target: (s) => (s.insightOpen ? [{ sel: '[data-testid=insight-close]' }] : [{ sel: '[data-testid=btn-risk-baseline-save]' }]),
+    done: (s) => s.baselineSaved || s.canSaveBaseline === false,
+  },
+  summary: {
+    id: 'summary',
+    space: 'check',
+    task: '「점검 요약 보기」를 누르세요. 복사·내려받기·인쇄할 수 있는 한 장짜리 점검 요약이 나옵니다. 다 봤으면 「닫기」를 누르세요.',
+    target: (s) => (s.insightOpen ? [{ sel: '[data-testid=insight-close]' }] : [{ sel: '[data-testid=btn-risk-summary-open]' }]),
+    done: (s) => s.summaryUsed && !s.insightOpen,
+  },
   expand: {
     id: 'expand',
-    task: '이중 테두리 동그라미(접힌 팀) 하나를 두 번 눌러 펼쳐 보세요.',
+    space: 'map',
+    task: '이중 테두리 항목(접힌 팀) 하나를 두 번 눌러 펼쳐 보세요.',
     target: () => [{ cy: 'node[?collapsed]' }],
     done: (s) => s.expandedCount > 0,
   },
   find: {
     id: 'find',
+    space: 'map',
     task: '위의 「항목 찾기」에 "대사"를 넣고 결과 하나를 고르세요.',
     target: () => [{ sel: '[data-testid=find-input]' }],
     done: (s) => !!s.foundGid,
   },
   neighborhood: {
     id: 'neighborhood',
-    task: '오른쪽 첫 줄의 「주변만 보기」를 누르세요. 이어진 동그라미만 남습니다.',
+    space: 'map',
+    task: '오른쪽 첫 줄의 「주변만 보기」를 누르세요. 이어진 항목만 남습니다.',
     target: () => [{ sel: '[data-testid=btn-nbhd]' }, { sel: '[data-testid=more-tools] summary' }],
     done: (s) => s.nbhd,
   },
   full: {
     id: 'full',
+    space: 'map',
     task: '그래프 위의 「전체 보기」를 눌러 전체 지도로 돌아오세요.',
     target: () => [{ sel: '#fit' }],
     done: (s) => !s.nbhd,
@@ -138,6 +172,7 @@ const TEAM_STEPS = {
   insight: {
     // 마지막 단계(D-29): 「인사이트 보기」 → 내용이 있는 「반복 비효율」 탭. 인사이트의 기본 탭은 「인수인계 위험」이라 열린 뒤 탭을 한 번 더 누른다
     id: 'insight',
+    space: 'check',
     task: '빈 곳을 눌러 선택을 풀고 「인사이트 보기」를 누르세요. 맨 먼저 「인수인계 위험」(한 사람만 해 본 일)이 열립니다. 이어서 「반복 비효율」 탭을 누르세요.',
     target: (s) => (s.insightOpen ? [{ sel: '[data-testid=tab-repeat]' }]
       : s.selected || s.draftOpen ? [{ sel: '#graph', hint: BLANK_HINT }]
@@ -194,5 +229,5 @@ export function advance(scenario, index, state) {
 
 /** 시작할 때 쓰는 빈 상태(점검·단위 테스트에서도 쓴다) */
 export function emptyState(universeId = '') {
-  return { universeId, selected: null, draftOpen: false, draftShown: false, evidenceUsed: false, expandedCount: 0, foundGid: null, nbhd: false, insightOpen: false, insightKind: null, editing: false, saved: false, rewinding: false, readOnly: false };
+  return { space: 'map', baselineSaved: false, canSaveBaseline: true, summaryUsed: false, universeId, selected: null, draftOpen: false, draftShown: false, evidenceUsed: false, expandedCount: 0, foundGid: null, nbhd: false, insightOpen: false, insightKind: null, editing: false, saved: false, rewinding: false, readOnly: false };
 }

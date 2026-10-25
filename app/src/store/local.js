@@ -2,6 +2,7 @@
 
 import { DOC_COLLECTIONS, LABEL_MAX } from '../model/schema.js';
 import { cleanLastOpenedId, cleanRiskBaselines, cleanTourDone } from '../rules/daily-use.js';
+import { isWorkspace } from '../view/workspace.js';
 
 const INDEX_KEY = 'wu:v1:index';
 const SETTINGS_KEY = 'wu:v1:settings';
@@ -150,6 +151,7 @@ export function loadSettings(storage, defaults, allowed = null) {
     // 「도구 더 보기」 펼침(CR-13 A): true일 때만 펼침. 깨진 값은 접힘(기본)
     if (v.moreTools === true) out.moreTools = true;
     if (validPanelWidth(v.panelWidth)) out.panelWidth = v.panelWidth;
+    if (isWorkspace(v.workspace)) out.workspace = v.workspace; // 작업 공간(CR-22 W): 모르는 값은 버려 기본(지도 보기)이 된다
     if (cleanApiKey(v.apiKey)) out.apiKey = cleanApiKey(v.apiKey);
     if (cleanLlmModel(v.llmModel)) out.llmModel = cleanLlmModel(v.llmModel);
     applyDailyUse(out, v);
@@ -171,6 +173,7 @@ function pickSettings(settings) {
   if (settings.backupDismissedAt) out.backupDismissedAt = settings.backupDismissedAt;
   if (settings.moreTools === true) out.moreTools = true;
   if (validPanelWidth(settings.panelWidth)) out.panelWidth = settings.panelWidth;
+  if (isWorkspace(settings.workspace)) out.workspace = settings.workspace;
   if (cleanApiKey(settings.apiKey)) out.apiKey = cleanApiKey(settings.apiKey);
   if (cleanLlmModel(settings.llmModel)) out.llmModel = cleanLlmModel(settings.llmModel);
   applyDailyUse(out, settings);

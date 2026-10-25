@@ -23,7 +23,7 @@ import { renderNodeDetail, renderUniverseSummary } from './detail.js';
 import { edgeEditForm, edgeForm, eventForm, nodeForm } from './editor.js';
 import { draftPanel } from './draft.js';
 import { currentDenseN, insightPanel } from './insight.js';
-import { issueEntry, issuePanel } from './issues.js';
+import { issueEntry, issuePanel, issuesFor } from './issues.js';
 import { hiddenEntry, hiddenPanel } from './hidden.js';
 import { confirmText, doneText, failText, fillBand, hideBand, nodeChangeNote, pointLabeler, revertBlock, rewindEntry, rewindPanel } from './rewind.js';
 import { renderBackupNudge } from './backup.js';
@@ -56,8 +56,10 @@ import { scenarioOf } from '../rules/tour-steps.js';
 import { createFieldId, fillMineDefaults } from '../rules/new-universe.js';
 import { LEGEND_COLLAPSED_TEXT, OWNER_REQUIRED_TEXT, assignOps, keepDraftPick, mergePendingText, sameMark } from './flow-helpers.js';
 import { FEATURE_WORK_LIMIT, searchFeatures } from '../view/feature-index.js';
+import { WORKSPACES, cleanWorkspace, denseRows, followScreens, gapWorkRows, panelParts, planSwitch, recentHandoverDocs, soloRows, spaceBadges } from '../view/workspace.js';
 import { RECENT_RECORDS, recentRecords } from '../view/recent-records.js';
 import { flash, recentList } from './overview.js';
+import { denseBox, docsBox, gapBox, renderWorkspaceNav, soloBox } from './workspace.js';
 import { featureFind } from './feature-find.js';
 
 // 점검 도구(tools/*-check.mjs)만 주소에 ?check를 붙여 연다. 그때만 점검용 전역 window.__wu를 만든다(D-4-10, 사용자 결정 2026-10-03)
@@ -348,7 +350,12 @@ function start() {
     if (CHECK_MODE) window.__wu = { start: true, readOnly: app.readOnly };
     return;
   }
+  const adminButtons = ['create-open', 'group-open', 'import-open'].map((id) => $(id)); // 머리글에서 「지도 관리」 공간으로 옮긴 단추(CR-22 W). 한 번 만든 그대로 쓴다
+  const adminStash = $('ws-admin-stash');
   let selected = null; // 선택한 항목의 전역 ID
+  let space = cleanWorkspace(settings.workspace); // 왼쪽 작업 공간(CR-22 W). 메뉴로 고른 값은 이 브라우저 설정에 기억한다
+  let addPinned = false; // 「사람·업무·문서 추가」를 지도 관리 밖에서 불러 열어 둠(카드의 「관련 문서」·초안의 「＋ 사람 추가」). 공간을 바꾸면 풀림
+  let lastNodeTotal = 0; // 마지막으로 그린 공간 첫 화면의 항목 수(꼭지만 있는 빈 지도면 추가 칸을 지도 보기에서도 보인다)
   let editing = null; // 편집 중인 양식: {kind:'node'|'edge'|'event'|'edge-edit', edgeId?}
   let drafting = null; // 인수인계 초안 화면: {target}
   let insight = null; // 인사이트 화면: {work, kind}
@@ -365,6 +372,8 @@ function start() {
   let evidenceUsed = false; // 초안의 근거 칩을 눌렀음
   let foundGid = null; // 「항목 찾기」로 고른 항목
   let tourSaved = false; // 따라 하기를 시작한 뒤 저장이 한 번 성공했음(handover 5단계 안내용)
+  let baselineSaved = false; // 따라 하기를 시작한 뒤 「이번 점검 저장」을 눌렀음(team 단계 완료 조건)
+  let summaryUsed = false; // 따라 하기를 시작한 뒤 「점검 요약 보기」를 눌렀음(team 단계 완료 조건)
   let tour = null;
   const tourHook = () => { if (tour) tour.check(); };
   // 미해결·숨긴 노드·인사이트 패널(U-3): 열 때 「닫기」에 포커스, 닫으면 연 단추로 돌아간다(표 대화상자와 같게)
@@ -780,12 +789,14 @@ function start() {
         settings.riskBaseline = { ...(settings.riskBaseline || {}), [currentId()]: saved.entry };
         saveSettings(storage, settings);
         baselineNote = baselineSavedNote(at, { replaced: saved.replaced });
+        baselineSaved = true;
         renderPanel();
       },
     };
   }
   // 위험 요약의 「점검 요약 보기」(M2): 인사이트(인수인계 위험 탭)를 열고 위쪽의 「점검 요약」 줄로 간다
   function openCheckSummary() {
+    summaryUsed = true;
     openInsight('', 'risk');
     const bar = document.querySelector('[data-testid=summary-bar]');
     if (bar && typeof bar.scrollIntoView === 'function') bar.scrollIntoView({ block: 'start' });
@@ -870,6 +881,8 @@ function start() {
     const slot = $('add-slot');
     const typeSelect = slot.querySelector('[data-testid=node-type]');
     if (!work || !typeSelect || ![...typeSelect.options].some((o) => o.value === 'artifact')) return;
+    addPinned = true; // 카드에서 불렀으므로 「지도 관리」가 아니어도 추가 칸을 보인다
+    syncAdd();
     const details = document.querySelector('details.add');
     if (details) details.open = true;
     typeSelect.value = 'artifact';
@@ -1220,8 +1233,15 @@ function start() {
 
   // 화면 오른쪽 패널을 그린 뒤 따라 하기에 알린다(완료 조건 확인·대상 다시 짚기)
   function renderPanel() {
-    renderPanelBody();
+    renderPanelQuiet();
     tourHook();
+  }
+  // 따라 하기가 공간을 바꾸는 중에는 따라 하기를 다시 부르지 않는다(카드를 그리는 도중 다시 그려지는 것을 막는다)
+  function renderPanelQuiet() {
+    followOpenScreens(); // 작업 화면이 열려 있으면 메뉴가 그 공간으로
+    renderPanelBody();
+    renderNav();
+    syncAdd();
   }
 
   // 초안 창이 열린 채 다시 그려질 때(노드 추가·수정, 연결, 시간 이동 등) 고른 대상·보내는·받는 사람을 drafting.preset에 적어 둔다.
@@ -1238,6 +1258,7 @@ function start() {
 
   function renderPanelBody() {
     const panel = $('detail');
+    adminStash.append(...adminButtons); // 「지도 관리」의 단추 3개는 패널을 지우기 전에 보관함으로(없어지지 않게)
     if (drafting) keepDraftSelection();
     else draftDomLive = false;
     if (rw && rwPast && !selected) { // 편집 되감기: 시점 막대·목록
@@ -1426,41 +1447,7 @@ function start() {
       return;
     }
     if (!selected) {
-      const summary = describeUniverse(view);
-      // 묶은 지도(하위 유니버스가 있는 꼭지)만 위험 요약 한 줄(FU-10). 인사이트 탭과 같은 기준일·같은 밀집 기준의 같은 계산이다
-      const grouped = (view.ref_links || []).length > 0;
-      const riskNums = grouped ? teamRiskSummary(view, { asOf: asOf(), n: currentDenseN() }) : null;
-      // 이름 목록(FU5-1): 저장할 때 같이 남기고 지난 점검과 비교한다. 숫자와 같은 기준일·밀집 기준의 같은 계산이라 숫자와 어긋나지 않는다
-      // owners(M6): 업무별 지금 담당 이름. 기준에 함께 저장하고 「담당이 바뀐 업무」를 가린다
-      const riskNames = grouped ? { ...namesFromInspection(inspectionInput(view, { asOf: asOf(), n: currentDenseN(), mapName: '' })), owners: currentOwnersByWork(view, asOf()) } : null;
-      const riskSummary = grouped ? { parts: teamRiskParts(riskNums), onMore: () => openInsight('', 'risk'), compare: riskCompareFor(riskNums, riskNames) } : null;
-      const rootGid = app.rootGid();
-      // 개요는 목적별 묶음 4개로 나눈다(CR-21 C). 각 묶음 안에 놓을 요소를 여기서 만들어 넘기고, 틀·순서는 renderUniverseSummary가 정한다
-      renderUniverseSummary(panel, summary, display.nodes.length, {
-        split: splitHint(app.doc), starter: starterSteps(app.doc, view), onOpenFolder: folder && folder.state.supported && !rw && !app.readOnly ? openFolderTab : null, riskSummary, universeId: app.doc.universe.id, onSelect: (g) => { reveal(g); select(view.canonical(g)); },
-        onGoal: goGoal,
-        record: [issueEntry(view, rootGid, { rootGid, onOpen: () => openIssues(rootGid) }), weeklyBox(), recentBox()],
-        handover: [
-          el('div', { class: 'row' }, el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft-universe', onclick: () => openDraft(rootGid) }, '인수인계 초안 만들기')),
-          app.readOnly ? null : el('p', { class: 'muted small', 'data-testid': 'handover-assignee-hint' }, '업무별 담당만 바꾸려면 그래프에서 업무를 고른 뒤 「담당 바꾸기」'),
-        ],
-        check: [
-          // 묶지 않은 지도는 매주 점검(위험 요약·지난 점검 대비)이 없으므로 어디서 하는지 알린다
-          grouped ? null : el('p', { class: 'muted small', 'data-testid': 'check-ungrouped-note' }, '매주 점검은 팀·부서로 묶은 지도에서 합니다(머리글의 「업무 지도 묶기」)'),
-          el('div', { class: 'row' }, el('button', { type: 'button', 'data-testid': 'btn-insight-universe', onclick: () => openInsight('', 'risk') }, '인사이트 보기')),
-          el('p', { class: 'muted small', 'data-testid': 'insight-hint' }, '인사이트(인수인계 위험 탭부터 열림): 인수인계 위험(혼자만 아는 업무, 준비도, 파급 영향) · 유사 경험자 · 반복 비효율 · 밀집·공백(일이 몰린 사람, 담당자 없는 업무) · 흐름 변화'),
-        ],
-        edit: [
-          app.readOnly ? null : el('div', { class: 'row' }, el('button', { type: 'button', 'data-testid': 'goal-add-open', title: '화면 아래의 「사람·업무·문서 추가」를 펼칩니다', onclick: openAddForm }, '사람·업무·문서 추가'), el('span', { class: 'muted small' }, '하나씩 · 표로 · 글로 추가')),
-          // 묶은 지도에서는 되감기를 쓰지 않는다(D-30) — 입구가 통째로 사라져 헷갈리지 않게 글로 추가처럼 안내 한 줄
-          app.rewindAvailable() ? rewindEntry({ points: app.editPoints(), onOpen: enterRewind }) : el('p', { class: 'muted small', 'data-testid': 'rewind-grouped-note' }, '편집 되감기: 묶은 지도에서는 쓸 수 없습니다 — 팀·업무 지도를 열어 되감으세요'),
-          hiddenEntry(hiddenNodesOf(app.doc), { onOpen: () => { rememberOpener(); hiddenOpen = true; renderPanel(); } }),
-          mergeButton(),
-          folderEntry(),
-        ],
-      });
-      // 꼭지만 있으면 「노드 추가」를 펼쳐 둔다(검토5 U-5). 안내 문구(detail.js)와 같은 기준: 하위 유니버스를 묶은 화면은 노드가 있으므로 건드리지 않는다
-      if (summary.node_total <= 1 && !app.readOnly) document.querySelector('details.add').open = true;
+      renderSpaceHome(panel);
       return;
     }
     if (editing && isOwn(selected) && localNode(selected)) {
@@ -1492,6 +1479,152 @@ function start() {
     return detail;
   }
 
+  // ── 작업 공간(CR-22 W): 왼쪽 메뉴 5개. 항목을 고르지 않았을 때 오른쪽 패널은 고른 공간의 첫 화면이다 ──
+  // 지금 열려 있는 작업 화면 이름들(view/workspace.js의 WORK_SCREENS)
+  const openScreens = () => [drafting && 'draft', insight && 'insight', merging && 'merge', issues && 'issues', settingsOpen && 'settings', hiddenOpen && 'hidden', rw && 'rewind'].filter(Boolean);
+
+  // 작업 화면을 열면 메뉴가 그 공간으로 따라 바뀐다(초안 → 인수인계 …). 설정은 공간을 바꾸지 않는다
+  function followOpenScreens() {
+    const f = followScreens(space, openScreens());
+    if (f !== space) {
+      space = f;
+      addPinned = false;
+    }
+  }
+
+  // 메뉴 배지: 기록 = 미해결 수, 매주 점검 = 혼자만 아는 일 수(둘 다 기존 계산, 셀 수 없거나 0이면 배지 없음)
+  function renderNav() {
+    const rootGid = app.rootGid();
+    const risk = teamRiskSummary(view, { asOf: asOf(), n: currentDenseN() });
+    renderWorkspaceNav($('workspace-nav'), {
+      current: space,
+      badges: spaceBadges({ issues: issuesFor(view, rootGid, rootGid).length, solo: risk.solo }),
+      onPick: (k) => goSpace(k),
+    });
+  }
+
+  // 「사람·업무·문서 추가」 칸은 「지도 관리」 공간에서만 보인다. 카드·초안이 불러 열었거나(addPinned) 꼭지만 있는 빈 지도의 「지도 보기」에서는 첫 업무를 넣을 수 있게 보인다
+  function syncAdd() {
+    const emptyMap = space === 'map' && !selected && lastNodeTotal <= 1 && !openScreens().length;
+    document.querySelector('aside').classList.toggle('add-off', !(space === 'edit' || addPinned || emptyMap));
+  }
+
+  const SCROLL_TARGETS = {
+    history: ['#history-heading'],
+    assign: ['[data-testid=assignee-change]', '[data-testid=links]'],
+    edit: ['[data-testid=btn-edit]'],
+  };
+  // 항목 카드를 연 채 공간을 바꾸면 그 공간과 관련된 카드 위치로 스크롤한다(기록 → 이력, 인수인계 → 담당 바꾸기·수행 연결, 지도 관리 → 수정 단추)
+  function scrollCard(kind) {
+    for (const sel of SCROLL_TARGETS[kind] || []) {
+      const t = $('detail').querySelector(sel);
+      if (t) {
+        if (typeof t.scrollIntoView === 'function') t.scrollIntoView({ block: 'start' });
+        return;
+      }
+    }
+  }
+
+  /**
+   * 공간을 바꾼다. 열린 작업 화면(초안·인사이트·통합 확인·미해결·설정·숨긴 항목·되감기)은 닫고 그 공간의 첫 화면을 그린다.
+   * 항목 카드가 열려 있으면 그대로 두고 관련 위치로 스크롤한다. opts.tour: 따라 하기가 단계에 맞춰 바꾸는 중(기억하지 않고, 따라 하기를 다시 부르지 않음)
+   */
+  function goSpace(key, opts = {}) {
+    const plan = planSwitch({ to: key, hasCard: !!selected, open: openScreens() });
+    space = plan.space;
+    addPinned = false;
+    if (!opts.tour && opts.persist !== false && settings.workspace !== space) {
+      settings.workspace = space; // 고른 공간은 이 브라우저에 기억(지도를 바꿔도 유지)
+      saveSettings(storage, settings);
+    }
+    if (plan.closeScreens.includes('draft')) drafting = null;
+    if (plan.closeScreens.includes('insight')) insight = null;
+    if (plan.closeScreens.includes('merge')) merging = false;
+    if (plan.closeScreens.includes('issues')) issues = null;
+    if (plan.closeScreens.includes('settings')) settingsOpen = false;
+    if (plan.closeScreens.includes('hidden')) hiddenOpen = false;
+    if (plan.closeScreens.includes('rewind')) leaveRewind(); // 되감기를 끝내며 화면을 다시 그린다
+    if (opts.tour) renderPanelQuiet();
+    else renderPanel();
+    graph.highlight(selected);
+    if (plan.scroll && !opts.tour) scrollCard(plan.scroll);
+  }
+
+  // 공간 첫 화면. 공간마다 위에서부터 view/workspace.js의 panelParts가 정한 조각을 그린다(없는 조각·막힌 조각은 빼고)
+  function renderSpaceHome(panel) {
+    const summary = describeUniverse(view);
+    lastNodeTotal = summary.node_total;
+    // 묶은 지도(하위 유니버스가 있는 꼭지)만 위험 요약 한 줄(FU-10). 인사이트 탭과 같은 기준일·같은 밀집 기준의 같은 계산이다
+    const grouped = (view.ref_links || []).length > 0;
+    const rootGid = app.rootGid();
+    const pickGid = (g) => { reveal(g); select(view.canonical(g)); };
+    const starter = space === 'map' ? starterSteps(app.doc, view) : null;
+    const split = space === 'map' ? splitHint(app.doc) : null;
+    const parts = panelParts(space, {
+      grouped, readOnly: app.readOnly, rewinding: !!rw, starter: !!starter, split: !!split, empty: summary.node_total <= 1,
+      folder: !!(folder && folder.state.supported && !rw && !app.readOnly), conflicts: summary.empno_conflicts.length > 0, stale: summary.stale_links.length > 0,
+    });
+    const asOfDate = asOf();
+    const n = currentDenseN();
+    const insightRow = () => [
+      el('div', { class: 'row' }, el('button', { type: 'button', 'data-testid': 'btn-insight-universe', onclick: () => openInsight('', 'risk') }, '인사이트 보기')),
+      el('p', { class: 'muted small', 'data-testid': 'insight-hint' }, '인사이트(인수인계 위험 탭부터 열림): 인수인계 위험(혼자만 아는 업무, 준비도, 파급 영향) · 유사 경험자 · 반복 비효율 · 밀집·공백(일이 몰린 사람, 담당자 없는 업무) · 흐름 변화'),
+    ];
+    // 조각 이름 → 요소(들). 여기서 null이면 그 조각은 그리지 않는다
+    const build = {
+      issues: () => issueEntry(view, rootGid, { rootGid, onOpen: () => openIssues(rootGid) }),
+      weekly: () => weeklyBox(),
+      recent: () => recentBox(),
+      draft: () => el('div', { class: 'row' }, el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft-universe', onclick: () => openDraft(rootGid) }, '인수인계 초안 만들기')),
+      'assignee-hint': () => el('p', { class: 'muted small', 'data-testid': 'handover-assignee-hint' }, '업무별 담당만 바꾸려면 그래프에서 업무를 고른 뒤 「담당 바꾸기」'),
+      gaps: () => gapBox(gapWorkRows(view, { asOf: asOfDate, n }), pickGid),
+      solo: () => soloBox(soloRows(view, { asOf: asOfDate }), pickGid),
+      docs: () => docsBox(recentHandoverDocs(view), pickGid),
+      'map-risk': () => [soloBox(soloRows(view, { asOf: asOfDate }), pickGid), denseBox(denseRows(view, { asOf: asOfDate, n }), pickGid), gapBox(gapWorkRows(view, { asOf: asOfDate, n }), pickGid)],
+      'group-hint': () => el('p', { class: 'muted small', 'data-testid': 'check-ungrouped-note' }, '지난 점검과 비교하고 저장하는 매주 점검은 팀·부서로 묶은 지도에서 합니다 → 「지도 관리」의 「업무 지도 묶기」'),
+      insight: () => insightRow(),
+      'add-open': () => el('div', { class: 'row' }, el('button', { type: 'button', 'data-testid': 'goal-add-open', title: '화면 아래의 「사람·업무·문서 추가」를 펼칩니다', onclick: openAddForm }, '사람·업무·문서 추가'), el('span', { class: 'muted small' }, '하나씩 · 표로 · 글로 추가')),
+      admin: () => adminBlock(),
+      // 묶은 지도에서는 되감기를 쓰지 않는다(D-30) — 입구가 통째로 사라져 헷갈리지 않게 글로 추가처럼 안내 한 줄
+      rewind: () => (app.rewindAvailable() ? rewindEntry({ points: app.editPoints(), onOpen: enterRewind }) : el('p', { class: 'muted small', 'data-testid': 'rewind-grouped-note' }, '편집 되감기: 묶은 지도에서는 쓸 수 없습니다 — 팀·업무 지도를 열어 되감으세요')),
+      hidden: () => hiddenEntry(hiddenNodesOf(app.doc), { onOpen: () => { rememberOpener(); hiddenOpen = true; renderPanel(); } }),
+      merge: () => mergeButton(),
+      folder: () => folderEntry(),
+    };
+    const listOf = () => parts.flatMap((k) => (build[k] ? [build[k]()].flat() : [])).filter(Boolean);
+    const riskNums = space === 'check' && grouped ? teamRiskSummary(view, { asOf: asOfDate, n }) : null;
+    // 이름 목록(FU5-1): 저장할 때 같이 남기고 지난 점검과 비교한다. 숫자와 같은 기준일·밀집 기준의 같은 계산이라 숫자와 어긋나지 않는다
+    // owners(M6): 업무별 지금 담당 이름. 기준에 함께 저장하고 「담당이 바뀐 업무」를 가린다
+    const riskNames = riskNums ? { ...namesFromInspection(inspectionInput(view, { asOf: asOfDate, n, mapName: '' })), owners: currentOwnersByWork(view, asOfDate) } : null;
+    const riskSummary = riskNums ? { parts: teamRiskParts(riskNums), onMore: () => openInsight('', 'risk'), compare: riskCompareFor(riskNums, riskNames) } : null;
+    renderUniverseSummary(panel, summary, display.nodes.length, {
+      space, split, starter, universeId: app.doc.universe.id, riskSummary,
+      onOpenFolder: folder && folder.state.supported && !rw && !app.readOnly ? openFolderTab : null,
+      onGoStep: goStep,
+      [space]: space === 'map' ? undefined : listOf(),
+    });
+    // 꼭지만 있으면 「노드 추가」를 펼쳐 둔다(검토5 U-5). 안내 문구(detail.js)와 같은 기준: 하위 유니버스를 묶은 화면은 노드가 있으므로 건드리지 않는다
+    if (summary.node_total <= 1 && !app.readOnly) document.querySelector('details.add').open = true;
+  }
+
+  // 「지도 관리」 공간: 머리글에서 옮겨 온 「새 업무 지도」·「업무 지도 묶기」·「가져오기·내보내기」. 단추는 한 번 만든 그대로(id·동작 유지)이고, 패널을 다시 그릴 때마다 보관함에서 꺼내 끼운다
+  function adminBlock() {
+    return el('div', { class: 'ws-admin', 'data-testid': 'ws-admin' },
+      el('p', { class: 'small' }, el('strong', {}, '업무 지도')),
+      el('div', { class: 'row' }, ...adminButtons),
+      el('p', { class: 'muted small' }, '새 업무 지도를 만들거나, 지도를 팀·부서로 묶거나, 파일로 가져오고 내보냅니다'));
+  }
+
+  // 「처음 할 일」 줄을 누르면 그 일을 하는 공간으로 가서 해당 자리를 잠깐 강조한다
+  function goStep(st) {
+    goSpace(st.space);
+    const t = $('detail').querySelector(st.space === 'record' ? '[data-testid=weekly-quick]' : '[data-testid=goal-add-open]');
+    if (t) {
+      if (typeof t.scrollIntoView === 'function') t.scrollIntoView({ block: 'start' });
+      flash(t);
+    }
+  }
+
   function select(gid) {
     if (gid !== selected) { editing = null; baselineNote = ''; }
     settingsOpen = false;
@@ -1517,15 +1650,7 @@ function start() {
     if (!node.empty()) graph.cy.animate({ center: { eles: node } }, { duration: 200 });
   }
 
-  // ── 길 찾기(CR-21): 개요 단추·최근 기록·기능 찾기 ──
-  // 「무엇을 할까요?」 단추: 그 묶음으로 스크롤하고 머리를 잠깐 강조한다
-  function goGoal(key) {
-    const sec = $('detail').querySelector(`[data-testid=goal-sec-${key}]`);
-    if (!sec) return;
-    if (typeof sec.scrollIntoView === 'function') sec.scrollIntoView({ block: 'start' });
-    flash(sec.querySelector('h3'));
-  }
-
+  // ── 길 찾기(CR-21 B·A, CR-22 W): 최근 기록·기능 찾기 ──
   // 개요 「최근 기록」(B-2): 계산은 view/recent-records.js. 「보기」는 알림의 「이력에서 보기」와 같은 이동
   function recentBox() {
     return recentList(recentRecords(view), (row) => showHistory(row.target_gid, [row.gid]));
@@ -1543,15 +1668,16 @@ function start() {
 
   // 기능 찾기(A): 결과의 동작 키(view/feature-index.js의 go)를 푼다. 못 쓰는 기능(blocked)은 목록이 흐리게 보이고 여기까지 오지 않는다
   const featureCtx = () => ({ readOnly: app.readOnly, rewinding: !!rw, grouped: isGroupedView(view), folderOk: !!(folder && folder.state.supported), tourOk: !!tour });
-  // 개요의 요소로 간다: 선택·열린 패널을 풀어 개요를 그린 뒤 그 요소(없으면 해당 묶음의 머리)를 강조한다
-  function showInOverview(testid, sec) {
+  // 그 기능이 있는 공간으로 바꾼 뒤, 선택·열린 패널을 풀어 공간 첫 화면을 그리고 그 요소(없으면 공간 제목)를 강조한다
+  function showInOverview(testid, toSpace) {
+    if (toSpace) goSpace(toSpace);
     select(null);
     const root = $('detail');
     const hit = root.querySelector(`[data-testid=${testid}]`);
-    const target = hit || (sec ? root.querySelector(`[data-testid=goal-sec-${sec}]`) : null);
+    const target = hit || root.querySelector('[data-testid=check-ungrouped-note]') || root.querySelector('[data-testid=ws-title]');
     if (!target) return;
     if (typeof target.scrollIntoView === 'function') target.scrollIntoView({ block: 'start' });
-    flash(hit || target.querySelector('h3'));
+    flash(target);
   }
   // 고른 항목의 상세에서 접힌 상자(담당 바꾸기·협업자 추가)를 펼쳐 강조한다
   function openDetailBox(testid) {
@@ -1592,7 +1718,9 @@ function start() {
   }
   function goFeature(r) {
     const [kind, arg, arg2] = r.go.split(':');
-    if (kind === 'ov') return showInOverview(arg, r.sec);
+    if (kind === 'ov') return showInOverview(arg, r.space);
+    // 그 기능이 있는 공간으로 먼저 바꾼다(되감기 중 창만 여는 기능은 되감기를 끝내지 않도록 그대로 둔다)
+    if (r.space && !(rw && kind === 'dlg')) goSpace(r.space);
     if (kind === 'node') return goNodeFeature(r);
     if (kind === 'dlg') return openDialogFeature(arg, arg2);
     if (kind === 'insight') {
@@ -2277,6 +2405,8 @@ function start() {
     if (want === 'person' && e.detail.label) return addPersonDirect(e.detail);
     const typeSelect = $('add-slot').querySelector('[data-testid=node-type]');
     if (!typeSelect || ![...typeSelect.options].some((o) => o.value === want)) return;
+    addPinned = true; // 초안의 「＋ 사람 추가」처럼 다른 공간에서 불렀으면 추가 칸을 보인다
+    syncAdd();
     document.querySelector('details.add').open = true;
     typeSelect.value = want;
     typeSelect.dispatchEvent(new Event('change'));
@@ -2327,6 +2457,10 @@ function start() {
   const tourState = () => ({
     universeId: currentId(),
     selected,
+    space,
+    baselineSaved,
+    canSaveBaseline: canSaveBaseline(),
+    summaryUsed,
     draftOpen: !!drafting,
     draftShown: !!drafting && draftShown,
     evidenceUsed,
@@ -2352,7 +2486,14 @@ function start() {
         settings.tourDone = { ...(settings.tourDone || {}), [scenario]: nowIso() };
         saveSettings(storage, settings);
       },
-      onStart: () => { draftShown = false; evidenceUsed = false; foundGid = null; tourSaved = false; },
+      onStart: () => { draftShown = false; evidenceUsed = false; foundGid = null; tourSaved = false; baselineSaved = false; summaryUsed = false; },
+      onSpace: (key, opt = {}) => {
+        if (opt.home) { goSpace(key, { tour: true }); return true; }
+        if (key === space) return true;
+        if (openScreens().some((x) => x !== 'settings')) return false; // 읽고 있는 초안 같은 작업 화면은 닫지 않는다 — 닫히면 따라 하기가 다시 바꾼다
+        goSpace(key, { tour: true });
+        return true;
+      }, // 단계에 맞는 공간으로(CR-22 W). 이미 그 공간이면 열린 초안 같은 작업 화면을 닫지 않는다. 기억하지 않고 따라 하기를 다시 부르지 않는다
       onMake: () => createDialog.openMine(),
       canMake: !app.readOnly,
       toolsHint: () => !toolsOpen,
@@ -2431,6 +2572,11 @@ function start() {
     },
     // CR-14 C 점검용: 가짜 폴더 손잡이(메모리)를 연결된 상태로 둔다
     useFolderHandle: (handle) => (folder ? folder.useHandle(handle) : Promise.resolve()),
+    // CR-22 W 점검용: 작업 공간
+    get space() {
+      return space;
+    },
+    goSpace: (key, persist = true) => goSpace(key, { persist }), // persist=false: 설정에 기억하지 않는다(점검 도구가 위치 때문에 옮길 때)
     // CR-14 A 점검용: 편집 되감기 상태
     get rewind() {
       return rw ? { at: rw.at } : null;

@@ -356,7 +356,7 @@ test('M2·M6 위험 요약 줄: 「이번 점검 저장」 옆에 「점검 요�
   const draw = (compare) => {
     const panel = document.createElement('div');
     body.append(panel);
-    renderUniverseSummary(panel, s, 3, { riskSummary: { parts: ['가'], onMore() {}, compare } });
+    renderUniverseSummary(panel, s, 3, { space: 'check', riskSummary: { parts: ['가'], onMore() {}, compare } });
     return panel;
   };
   let opened = 0;

@@ -130,7 +130,7 @@ test('FU5-1·2 개요 화면: 이름이 바뀌었으면 접힌 「바뀐 것 보
   const draw = (compare) => {
     const panel = document.createElement('div');
     body.append(panel);
-    renderUniverseSummary(panel, s, 3, { riskSummary: { parts: ['가'], onMore() {}, compare } });
+    renderUniverseSummary(panel, s, 3, { space: 'check', riskSummary: { parts: ['가'], onMore() {}, compare } });
     return panel;
   };
   const mk = (extra) => ({ text: '지난 점검(2026-10-18) 대비: 혼자만 아는 일 +1', has: true, canSave: true, onSave() {}, ...extra });

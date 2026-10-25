@@ -98,10 +98,39 @@ function connect(wsUrl) {
   };
 }
 
-async function evaluate(cdp, expression) {
+// ── CR-22 W(2026-10-26): 개요가 왼쪽 작업 공간 5개로 나뉘어, 예전 점검이 찾던 요소가 다른 공간에 있다 ──
+// 예전 점검 약 250곳이 「지도 전체 화면」에서 요소를 바로 찾았다. 사용자처럼, 식이 찾는 요소가 지금 화면에 없고 그 요소가 사는 공간이 정해져 있으면
+// 먼저 그 공간으로 간다(window.__wu.goSpace — 메뉴를 누른 것과 같다). 판정 기대값은 그대로이고 위치 때문에 깨지는 것만 이 한 곳에서 맞춘다.
+// 「CR-22 W」 새 점검은 공간이 바뀌지 않아야 하는 확인을 하므로 raw(cdp, 식)로 이 도우미 없이 실행한다.
+const SPACE_TESTIDS = {
+  map: ['starter-steps', 'starter-go', 'starter-preview', 'starter-team-hint', 'btn-starter-folder', 'split-hint', 'overview-help', 'term-note'],
+  record: ['weekly-quick', 'weekly-work', 'weekly-category', 'weekly-note', 'weekly-add', 'weekly-date', 'weekly-msg', 'issue-count', 'btn-issues', 'recent-records', 'recent-item', 'recent-go', 'recent-empty'],
+  handover: ['btn-draft-universe', 'handover-assignee-hint', 'ws-gaps', 'ws-solo', 'ws-docs'],
+  check: ['btn-insight-universe', 'insight-hint', 'team-risk-summary', 'team-risk-compare', 'team-risk-changes', 'btn-team-risk-more', 'btn-risk-baseline-save', 'btn-risk-summary-open', 'risk-baseline-saved', 'check-ungrouped-note'],
+  edit: ['goal-add-open', 'btn-rewind', 'rewind-grouped-note', 'merge-hint', 'btn-merge', 'folder-entry', 'btn-folder-entry', 'empno-conflicts', 'empno-conflicts-summary', 'empno-conflict', 'stale-links', 'hidden-count', 'btn-hidden'],
+};
+// 추가 칸은 「지도 관리」 밖에서는 숨어 있어(높이 0) 크기를 재거나 눈에 보이는 것을 확인하는 식만 그 공간으로 옮긴다. 값을 읽고 쓰는 식은 숨어 있어도 되므로 그대로 둔다
+const ADD_FORM_WORDS = ['details.add', 'add-slot', 'btn-table-add', 'btn-text-add', 'btn-table-edit', 'text-add-grouped-note', 'add-tools-note', 'add-done', 'add-folded', 'node-form-add'];
+const LAYOUT_WORDS = ['getBoundingClientRect', 'offsetHeight', 'offsetWidth', 'offsetParent', 'scrollIntoView', 'checkVisibility', '.open = true']; // 「.open = true」: 추가 칸을 펼친다는 것은 그 칸을 쓰려는 것
+async function ensureSpace(cdp, expression) {
+  const want = [];
+  for (const [space, ids] of Object.entries(SPACE_TESTIDS)) for (const id of ids) if (new RegExp(`(?<![a-z0-9-])${id}(?![a-z0-9-])`).test(expression)) want.push([id, space]);
+  if (/data-testid=summary\]/.test(expression)) want.push(['summary', 'map']);
+  const add = ADD_FORM_WORDS.some((w) => expression.includes(w)) && LAYOUT_WORDS.some((w) => expression.includes(w));
+  if (!want.length && !add) return;
+  await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const w = window.__wu; if (!w || w.start || !w.goSpace) return; if (w.rewind || document.querySelector('#detail .draft, #detail .insight, [data-testid=issue-panel], [data-testid=settings-close], [data-testid=hidden-close], [data-testid=merge-panel]')) return; if (${add}) { const a = document.querySelector('aside'); if (a && a.classList.contains('add-off')) { w.goSpace('edit', false); return; } } for (const [id, sp] of ${JSON.stringify(want)}) { if (!document.querySelector('[data-testid="' + id + '"]')) { w.goSpace(sp, false); return; } } })()`,
+    returnByValue: true,
+  }).catch(() => {});
+}
+async function raw(cdp, expression) {
   const r = await cdp.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
   if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
   return r.result.value;
+}
+async function evaluate(cdp, expression) {
+  await ensureSpace(cdp, expression);
+  return raw(cdp, expression);
 }
 
 async function waitFor(cdp, expression, timeout = 5000) {
@@ -712,6 +741,8 @@ async function checkBrowser(browser, port) {
     await sleep(150);
 
     const tourInfo = () => evaluate(s.cdp, 'window.__wu.tour');
+    // CR-22 W: 따라 하기가 단계마다 공간을 바꾸는지(window.__wu.space와 메뉴 눌림)
+    const wsNow = () => raw(s.cdp, "({ space: window.__wu.space, pressed: [...document.querySelectorAll('[data-testid=workspace-nav] button')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.dataset.space) })");
     const nameOnScreen = (name) => evaluate(s.cdp, `(() => { const n = ${JSON.stringify(name)}; const box = document.createElement('div'); for (const q of ['header', 'main']) { const c = document.querySelector(q).cloneNode(true); const slot = c.querySelector('#tour-slot'); if (slot) slot.remove(); box.append(c); } if (box.textContent.includes(n)) return true; if ([...document.querySelectorAll('[aria-label],[placeholder]')].some((e) => (e.getAttribute('aria-label') || '').includes(n) || (e.getAttribute('placeholder') || '').includes(n))) return true; return window.__wu.cy.nodes().some((x) => x.data('label') === n); })()`);
     // 지금 단계 문구의 「…」 이름이 실제 화면에 있는지(「다음」은 따라 하기 카드의 단추)
     const stepNamesOk = async () => {
@@ -747,6 +778,7 @@ async function checkBrowser(browser, port) {
     const sn1 = await stepNamesOk();
     check('CR-13 A 1단계 문구의 「」 이름(대사 확인)이 실제 화면에 있고, 깜빡이는 대상은 그래프의 「대사 확인」 노드', sn1.missing.length === 0 && sn1.names.length >= 1 && (await blinkIds()).join() === 'U-A1/N-001', JSON.stringify(sn1));
     await shot(s.cdp, `${browser.name}-36a-tour-handover-1`);
+    { const w = await wsNow(); check('CR-22 W handover 1단계: 메뉴가 「지도 보기」로 눌려 있음(단계마다 공간이 정해져 있다)', w.space === 'map' && w.pressed.join() === 'map', JSON.stringify(w)); }
     // 행동 없이 다른 노드를 누르면 진행하지 않는다(완료 조건은 「대사 확인」 선택)
     await clickNode(s.cdp, 'U-A1/N-002');
     check('CR-13 A 1단계: 다른 노드(자료 수집)를 누르면 진행하지 않음', (await tourInfo()).index === 0);
@@ -792,6 +824,8 @@ async function checkBrowser(browser, port) {
     await sleep(300);
     const preset = await evaluate(s.cdp, "({ target: document.querySelector('[data-testid=draft-target]').selectedOptions[0].textContent, from: document.querySelector('[data-testid=draft-from]').selectedOptions[0].textContent, to: document.querySelector('[data-testid=draft-to]').selectedOptions[0].textContent })");
     check('CR-13 A 3단계 초안 화면: 대상 월말 정산 점검(지도 전체, FU-2)·보내는 사람 윤바다·받는 사람 서하늘이 미리 골라져 있고, 화면만 열어서는 진행하지 않음', preset.target === '월말 정산 점검' && preset.from === '윤바다' && preset.to === '서하늘' && (await tourInfo()).index === 2, JSON.stringify(preset));
+    const wsH3 = await wsNow();
+    check('CR-22 W handover 3단계(초안 열림): 메뉴가 「인수인계」로 눌려 있음', wsH3.space === 'handover' && wsH3.pressed.join() === 'handover', JSON.stringify(wsH3));
     await shot(s.cdp, `${browser.name}-36c-tour-handover-3`);
     await evaluate(s.cdp, "document.querySelector('[data-testid=draft-form] button[type=submit]').click()");
     await sleep(400);
@@ -821,10 +855,14 @@ async function checkBrowser(browser, port) {
     const w4Ev2 = await evaluate(s.cdp, "(() => { const c = document.querySelector('.draft .evidence'); const li = c.closest('li'); c.click(); const closed = !li.querySelector('[data-testid=evidence-text]'); c.click(); const reopened = !!li.querySelector('[data-testid=evidence-text]'); c.click(); const multi = [...document.querySelectorAll('.draft li')].find((x) => x.querySelectorAll('.evidence').length >= 2); let switched = null; if (multi) { const [a, b] = multi.querySelectorAll('.evidence'); a.click(); const ta = multi.querySelector('[data-testid=evidence-text]').textContent; b.click(); const tb = multi.querySelector('[data-testid=evidence-text]'); switched = { changed: !!tb && tb.textContent !== ta, one: multi.querySelectorAll('[data-testid=evidence-text]').length === 1 }; } return { closed, reopened, switched }; })()");
     check('처음 사용 W4(FU-29) 같은 칩을 다시 누르면 근거 글이 접히고(다시 누르면 열림), 같은 묶음의 다른 칩을 누르면 글이 바뀜(한 줄만 보임)', w4Ev2.closed && w4Ev2.reopened && (w4Ev2.switched === null || (w4Ev2.switched.changed && w4Ev2.switched.one)), JSON.stringify(w4Ev2));
     await shot(s.cdp, `${browser.name}-36d2-tour-handover-5`);
-    // 5단계: 「대사 확인」 → 「수정」 → 설명 끝에 글자 하나 → 「저장」 → 빈 곳 → 「편집 되감기」
+    // 5단계: 「대사 확인」 → 「수정」 → 설명 끝에 글자 하나 → 「저장」 → 「지도 관리」 공간 → 「편집 되감기」
     await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
     await sleep(200);
     check('R9-1 5단계에서 노드를 고르면 짚는 대상이 「수정」 단추', await evaluate(s.cdp, "!!document.querySelector('[data-testid=btn-edit].tour-target')"));
+    {
+      const wsH5 = await wsNow();
+      check('CR-22 W handover 5단계: 초안이 닫히면 따라 하기가 메뉴를 「지도 관리」로 바꿈(편집 되감기 입구가 있는 공간)', wsH5.space === 'edit' && wsH5.pressed.join() === 'edit', JSON.stringify(wsH5));
+    }
     await clickTestId(s.cdp, 'btn-edit');
     await sleep(200);
     const curDesc = await evaluate(s.cdp, "document.querySelector('[data-testid=node-description]').value");
@@ -841,7 +879,7 @@ async function checkBrowser(browser, port) {
     check('R9-1 「편집 되감기」를 누르면 띠가 보이고 끝 카드: 「끝! 이제 내 업무로 해 볼까요?」', ti.mode === 'end' && !(await evaluate(s.cdp, "document.querySelector('[data-testid=rewind-band]').hidden")) && (await text(s.cdp, '[data-testid=tour-end]')) === '끝! 이제 내 업무로 해 볼까요?', JSON.stringify(ti));
     await clickTestId(s.cdp, 'btn-rewind-back');
     await sleep(300);
-    check('CR-13 A 근거 칩을 누르면 끝 카드: 「끝! 이제 내 업무로 해 볼까요?」, 「이제 내 업무로 해 보기」, 「닫기」, 접힌 상태면 「도구 더 보기」 안내 한 줄(강제로 펼치지 않음)', ti.mode === 'end' && (await text(s.cdp, '[data-testid=tour-end]')) === '끝! 이제 내 업무로 해 볼까요?' && (await text(s.cdp, '[data-testid=tour-mine]')) === '이제 내 업무로 해 보기' && (await text(s.cdp, '[data-testid=tour-skip]')) === '닫기' && (await text(s.cdp, '[data-testid=tour-tools-hint]')).includes('「도구 더 보기」에서 흐름 정렬·거르기도 써 보세요') && (await evaluate(s.cdp, 'window.__wu.toolsOpen')) === false, JSON.stringify(ti));
+    check('CR-13 A 근거 칩을 누르면 끝 카드: 「끝! 이제 내 업무로 해 볼까요?」, 「이제 내 업무로 해 보기」, 「닫기」, 인수인계 목적의 권유 한 줄(CR-22 W: 「인수인계」·「기록」 공간 안내, 이 시나리오에는 「도구 더 보기」 권유가 맞지 않아 뺐고 강제로 펼치지도 않음)', ti.mode === 'end' && (await text(s.cdp, '[data-testid=tour-end]')) === '끝! 이제 내 업무로 해 볼까요?' && (await text(s.cdp, '[data-testid=tour-mine]')) === '이제 내 업무로 해 보기' && (await text(s.cdp, '[data-testid=tour-skip]')) === '닫기' && (await text(s.cdp, '[data-testid=tour-end-hint]')).includes('왼쪽 「인수인계」 공간') && !(await text(s.cdp, '[data-testid=tour-end-hint]')).includes('도구 더 보기') && (await evaluate(s.cdp, 'window.__wu.toolsOpen')) === false, JSON.stringify(ti));
     const wbEnd = await evaluate(s.cdp, "(() => { const m = document.querySelector('[data-testid=tour-mine]'); const g = document.querySelector('[data-testid=tour-end-guide]'); const k = document.querySelector('[data-testid=tour-make]'); return { mine: m ? { text: m.textContent, primary: m.classList.contains('primary'), disabled: m.disabled, visible: m.checkVisibility() } : null, guide: g ? g.textContent : '', make: !!k, skip: !!document.querySelector('[data-testid=tour-skip]') }; })()");
     check('처음 사용 W-B(CR-18-3) 따라 하기 끝 카드: 안내 「예시를 봤으면, 내 업무 이름 하나로 작은 지도를 만들어 보세요.」, 으뜸 단추 「이제 내 업무로 해 보기」(켜짐·보임), 같은 일 하던 「내 업무 지도 만들기」는 없고 「닫기」는 그대로', !!wbEnd.mine && wbEnd.mine.text === '이제 내 업무로 해 보기' && wbEnd.mine.primary && !wbEnd.mine.disabled && wbEnd.mine.visible && wbEnd.guide === '예시를 봤으면, 내 업무 이름 하나로 작은 지도를 만들어 보세요.' && !wbEnd.make && wbEnd.skip, JSON.stringify(wbEnd));
     await shot(s.cdp, `${browser.name}-36e-tour-end`);
@@ -878,9 +916,10 @@ async function checkBrowser(browser, port) {
     // ── 처음 사용 W2(2026-10-24, FU-9) 「?」 도움말 상자: 보임(크기)·용어 4개·생성 방식 3개·「따라 하기 다시 보기」·Esc로 닫힘·"null" 없음 ──
     await clickTestId(s.cdp, 'tour-open');
     await sleep(250);
-    const hb = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=help-box]'); if (!b) return null; const r = b.getBoundingClientRect(); const q = (id) => document.querySelector('[data-testid=' + id + ']'); const t = q('help-tour'); return { open: b.open, w: r.width, h: r.height, terms: [...document.querySelectorAll('[data-testid=help-terms] dt')].map((e) => e.textContent), gen: [...document.querySelectorAll('[data-testid=help-gen] dt')].map((e) => e.textContent), intro: (q('help-intro') || {}).textContent || '', tour: t ? t.textContent : null, tourSize: t ? t.getBoundingClientRect().width > 0 : false, close: (q('help-close') || {}).textContent || '', text: b.textContent, inView: r.top >= 0 && r.bottom <= window.innerHeight }; })()");
+    const hb = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=help-box]'); if (!b) return null; const r = b.getBoundingClientRect(); const q = (id) => document.querySelector('[data-testid=' + id + ']'); const t = q('help-tour'); return { open: b.open, w: r.width, h: r.height, spaces: [...document.querySelectorAll('[data-testid=help-spaces] dt')].map((e) => e.textContent), genFold: (() => { const d = document.querySelector('[data-testid=help-gen-fold]'); return d ? { tag: d.tagName, open: d.open } : null; })(), terms: [...document.querySelectorAll('[data-testid=help-terms] dt')].map((e) => e.textContent), gen: [...document.querySelectorAll('[data-testid=help-gen] dt')].map((e) => e.textContent), intro: (q('help-intro') || {}).textContent || '', tour: t ? t.textContent : null, tourSize: t ? t.getBoundingClientRect().width > 0 : false, close: (q('help-close') || {}).textContent || '', text: b.textContent, inView: r.top >= 0 && r.bottom <= window.innerHeight }; })()");
     check('처음 사용 W2(FU-9) 「?」 → 도움말 상자가 열리고 크기가 있으며 화면 안에 들어옴(따라 하기는 아직 시작되지 않음)', !!hb && hb.open === true && hb.w > 0 && hb.h > 0 && hb.inView && (await tourInfo()).mode === 'off', JSON.stringify(hb && { ...hb, text: '' }));
-    check('처음 사용 W2(FU-9) 도움말 한 줄 설명과 용어 4개(업무 지도·노드·꼭지·근거 칩)·생성 방식 3개(사전 생성·규칙 기반·Claude API)', !!hb && hb.intro.includes('누가 언제 무엇을 했는지 기록해 두고') && hb.intro.includes('「혼자만 아는 업무」 경고') && JSON.stringify(hb.terms) === JSON.stringify(['업무 지도', '항목', '지도 중심', '근거 칩']) && JSON.stringify(hb.gen) === JSON.stringify(['사전 생성', '규칙 기반', 'Claude API']), JSON.stringify(hb && { terms: hb.terms, gen: hb.gen })); // CR-18-2
+    // CR-22 W: 「왼쪽 공간」 절 5줄을 더했고 용어에 묶은 지도·혼자만 아는 일·미해결을 더했으며(4 → 7), 문장 생성 방식 3항목은 접어 둔다
+    check('처음 사용 W2(FU-9)·CR-22 W 도움말 한 줄 설명 · 왼쪽 공간 5줄(지도 보기·기록·인수인계·매주 점검·지도 관리) · 용어 7개(업무 지도·항목·지도 중심·묶은 지도·혼자만 아는 일·미해결·근거 칩) · 접힌 문장 생성 방식 3개(사전 생성·규칙 기반·Claude API)', !!hb && hb.intro.includes('누가 언제 무엇을 했는지 기록해 두고') && hb.intro.includes('「혼자만 아는 업무」 경고') && JSON.stringify(hb.spaces) === JSON.stringify(['지도 보기', '기록', '인수인계', '매주 점검', '지도 관리']) && JSON.stringify(hb.terms) === JSON.stringify(['업무 지도', '항목', '지도 중심', '묶은 지도', '혼자만 아는 일', '미해결', '근거 칩']) && JSON.stringify(hb.gen) === JSON.stringify(['사전 생성', '규칙 기반', 'Claude API']) && hb.genFold && hb.genFold.tag === 'DETAILS' && hb.genFold.open === false, JSON.stringify(hb && { spaces: hb.spaces, terms: hb.terms, gen: hb.gen, genFold: hb.genFold })); // CR-18-2
     check('처음 사용 W2(FU-9) 도움말 상자에 「따라 하기 다시 보기」(크기 있음)와 「닫기」 단추가 있고 "null" 글자가 없음', !!hb && hb.tour === '따라 하기 다시 보기' && hb.tourSize && hb.close === '닫기' && !hb.text.includes('null'));
     await shot(s.cdp, `${browser.name}-0c-help-box`);
     await s.cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
@@ -951,7 +990,10 @@ async function checkBrowser(browser, port) {
     ti = await tourInfo();
     check('CR-13 A 갈래 c 「팀 업무를 한눈에 보고 싶어요」 → 가상 운영부가 열리고 따라 하기 1/5(이야기: 75개 중 18개만 보임)', openedTeam && ti.scenario === 'team' && ti.index === 0 && (await text(s.cdp, '[data-testid=tour-story]')).includes('75개 중 18개만 보이고') && (await evaluate(s.cdp, 'window.__wu.cy.nodes().length')) === 18 && (await hashClean()), JSON.stringify(ti));
     const collapsedId = await evaluate(s.cdp, "window.__wu.cy.nodes('[?collapsed]')[0].id()");
-    // CR-17 K(위험 요약 먼저 판, TEAM_ORDER = 'risk-first'). 처음 사용 점검 2회차 FU-33: team 따라 하기 순서가 위험 요약의 「자세히」 → 펼치기 → 찾기 → 주변만 보기 → 전체 보기로 바뀜(옛 순서는 펼치기 → 인사이트 보기 → …)
+    // CR-22 W: 기본 순서는 'weekly' — 위험 요약의 「자세히」 → 「이번 점검 저장」 → 「점검 요약 보기」(여기까지 「매주 점검」 공간) → 접힌 팀 펼치기 → 항목 찾기(「지도 보기」 공간). 화면 조작 4단계(펼치기·찾기·주변만 보기·전체 보기)를 2단계로 줄이고 매주 점검 2단계를 넣었다.
+    // (이전 CR-17 K 위험 요약 먼저 판은 위험 요약의 「자세히」 → 펼치기 → 찾기 → 주변만 보기 → 전체 보기였다)
+    const wsT1 = await wsNow();
+    check('CR-22 W team 1단계의 공간은 「매주 점검」: 메뉴가 따라 바뀌어 눌려 있고 위험 요약 줄이 보임', wsT1.space === 'check' && wsT1.pressed.join() === 'check' && (await raw(s.cdp, "!!document.querySelector('[data-testid=team-risk-summary]')")), JSON.stringify(wsT1));
     // 노드 하나를 골라 둔다: 선택이 남아 있으면 위험 요약이 가려지므로 「빈 곳을 누르세요」 표지(N-2)가 보이는지 먼저 확인한다
     await evaluate(s.cdp, "window.__wu.select(window.__wu.cy.nodes('[!collapsed]')[0].id())");
     await sleep(300);
@@ -961,44 +1003,50 @@ async function checkBrowser(browser, port) {
     await blankClick();
     check('처음 사용 W4(FU-33) team 1단계: 빈 곳을 누르면 표지가 사라지고 깜빡이는 대상은 위험 요약 줄의 「자세히」', (await hintInfo()) === null && (await evaluate(s.cdp, "document.querySelector('[data-testid=btn-team-risk-more]').classList.contains('tour-target')")));
     const tn1 = await stepNamesOk();
-    check('처음 사용 W4(FU-33) team 1단계 문구: 「혼자만 아는 일 …」 줄의 「자세히」(줄 이름은 줄임표 앞부분이 요약 줄에 있고, 「자세히」 단추가 화면에 있음)', tn1.names.join('|') === '혼자만 아는 일 …|자세히' && tn1.missing.every((n) => n === '혼자만 아는 일 …') && (await text(s.cdp, '[data-testid=team-risk-summary]')).includes('혼자만 아는 일') && (await text(s.cdp, '[data-testid=tour-task]')).includes('한 사람만 해 봤고 인수인계 기록이 없는 일이 나옵니다'), JSON.stringify(tn1));
+    check('처음 사용 W4(FU-33) team 1단계 문구: 「혼자만 아는 일 …」 줄의 「자세히」(줄 이름은 줄임표 앞부분이 요약 줄에 있고, 「자세히」 단추가 화면에 있음)', tn1.names.join('|') === '혼자만 아는 일 …|자세히' && tn1.missing.every((n) => n === '혼자만 아는 일 …') && (await text(s.cdp, '[data-testid=team-risk-summary]')).includes('혼자만 아는 일') && (await text(s.cdp, '[data-testid=tour-task]')).includes('한 사람만 해 봤고 인수인계 기록이 없는 일'), JSON.stringify(tn1));
     await shot(s.cdp, `${browser.name}-37a-tour-team-1`);
     await evaluate(s.cdp, "document.querySelector('[data-testid=btn-team-risk-more]').click()");
     await sleep(500);
     const insShow = await evaluate(s.cdp, "({ tab: document.querySelector('[data-testid=tab-risk]').classList.contains('active'), len: document.querySelector('#detail').textContent.length })");
     ti = await tourInfo();
-    check('CR-13 A team 1단계 → 「자세히」로 인사이트가 「인수인계 위험」 탭으로 열리면(내용이 보임, FU-5) 2/5(접힌 팀 펼치기)', ti.index === 1 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 2/5' && insShow.tab && insShow.len > 100, JSON.stringify({ ti, insShow }));
+    check('CR-13 A team 1단계 → 「자세히」로 인사이트가 「인수인계 위험」 탭으로 열리면(내용이 보임, FU-5) 2/5(이번 점검 저장), 이때 짚는 대상은 인사이트의 「닫기」', ti.index === 1 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 2/5' && insShow.tab && insShow.len > 100 && (await evaluate(s.cdp, "document.querySelector('[data-testid=insight-close]').classList.contains('tour-target')")), JSON.stringify({ ti, insShow }));
     await shot(s.cdp, `${browser.name}-37d-tour-team-insight`);
-    check('CR-13 A team 2단계: 깜빡이는 대상은 접힌 팀(이중 테두리) 노드', (await blinkIds()).includes(collapsedId));
+    const tn2 = await stepNamesOk();
+    check('CR-22 W team 2단계 문구의 「」 이름: 「닫기」는 지금 화면에 있고 「이번 점검 저장」은 인사이트를 닫으면 보임', tn2.names.join('|') === '닫기|이번 점검 저장' && tn2.missing.every((n) => n === '이번 점검 저장'), JSON.stringify(tn2));
+    await evaluate(s.cdp, "document.querySelector('[data-testid=insight-close]').click()");
+    await sleep(300);
+    check('CR-22 W team 2단계: 인사이트를 닫으면 「매주 점검」 첫 화면의 「이번 점검 저장」이 화면에 있고 그것을 짚음(저장 전에는 진행하지 않음)', (await tourInfo()).index === 1 && (await text(s.cdp, '[data-testid=team-risk-compare]')).includes('이번 점검 저장') && (await evaluate(s.cdp, "document.querySelector('[data-testid=btn-risk-baseline-save]').classList.contains('tour-target')")));
+    await evaluate(s.cdp, "document.querySelector('[data-testid=btn-risk-baseline-save]').click()");
+    await sleep(400);
+    ti = await tourInfo();
+    check('CR-22 W team 2단계 → 「이번 점검 저장」을 누르면 3/5(점검 요약 보기), 저장 알림이 보이고 짚는 대상은 「점검 요약 보기」', ti.index === 2 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 3/5' && !!(await text(s.cdp, '[data-testid=risk-baseline-saved]')) && (await evaluate(s.cdp, "document.querySelector('[data-testid=btn-risk-summary-open]').classList.contains('tour-target')")), JSON.stringify(ti));
+    await shot(s.cdp, `${browser.name}-37e-tour-team-save`);
+    await evaluate(s.cdp, "document.querySelector('[data-testid=btn-risk-summary-open]').click()");
+    await sleep(500);
+    check('CR-22 W team 3단계: 「점검 요약 보기」를 눌러 요약이 열려도 아직 3/5, 짚는 대상은 「닫기」', (await tourInfo()).index === 2 && !!(await evaluate(s.cdp, "document.querySelector('[data-testid=summary-bar]')")) && (await evaluate(s.cdp, "document.querySelector('[data-testid=insight-close]').classList.contains('tour-target')")));
+    await shot(s.cdp, `${browser.name}-37f-tour-team-summary`);
+    await evaluate(s.cdp, "document.querySelector('[data-testid=insight-close]').click()");
+    await sleep(500);
+    ti = await tourInfo();
+    check('CR-22 W team 3단계 → 요약을 닫으면 4/5(접힌 팀 펼치기), 메뉴가 「지도 보기」로 바뀜', ti.index === 3 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 4/5' && (await wsNow()).space === 'map' && (await wsNow()).pressed.join() === 'map', JSON.stringify({ ti, ws: await wsNow() }));
+    check('CR-13 A team 4단계: 깜빡이는 대상은 접힌 팀(이중 테두리) 노드', (await blinkIds()).includes(collapsedId));
     const dbl = await evaluate(s.cdp, `(() => { const n = window.__wu.cy.getElementById(${JSON.stringify(collapsedId)}); const p = n.renderedPosition(); const r = document.getElementById('graph').getBoundingClientRect(); return { x: r.left + p.x, y: r.top + p.y }; })()`);
     await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: dbl.x, y: dbl.y });
     for (const c of [1, 2]) { await s.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: dbl.x, y: dbl.y, button: 'left', clickCount: c }); await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: dbl.x, y: dbl.y, button: 'left', clickCount: c }); }
     await sleep(700);
     ti = await tourInfo();
-    check('CR-13 A team 2단계 → 접힌 팀을 두 번 눌러 펼치면 3/5(노드 찾기)', ti.index === 2 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 3/5' && (await evaluate(s.cdp, 'window.__wu.cy.nodes().length')) > 18, JSON.stringify(ti));
+    check('CR-13 A team 4단계 → 접힌 팀을 두 번 눌러 펼치면 5/5(항목 찾기)', ti.index === 4 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 5/5' && (await evaluate(s.cdp, 'window.__wu.cy.nodes().length')) > 18, JSON.stringify(ti));
     const tn3 = await stepNamesOk();
-    check('CR-13 A team 3단계 문구의 「」 이름(노드 찾기)이 실제 화면에 있고 깜빡이는 대상은 찾기 칸', tn3.missing.length === 0 && (await evaluate(s.cdp, "document.querySelector('[data-testid=find-input]').classList.contains('tour-target')")), JSON.stringify(tn3));
+    check('CR-13 A team 5단계 문구의 「」 이름(항목 찾기)이 실제 화면에 있고 깜빡이는 대상은 찾기 칸', tn3.missing.length === 0 && (await evaluate(s.cdp, "document.querySelector('[data-testid=find-input]').classList.contains('tour-target')")), JSON.stringify(tn3));
     await evaluate(s.cdp, "(() => { const i = document.querySelector('[data-testid=find-input]'); i.value = ''; i.focus(); })()");
     await s.cdp.send('Input.insertText', { text: '대사' });
     await sleep(250);
-    check('CR-13 A team 3단계: 찾기 칸에 글자만 넣어서는 진행하지 않음', (await tourInfo()).index === 2);
+    check('CR-13 A team 5단계: 찾기 칸에 글자만 넣어서는 진행하지 않음', (await tourInfo()).index === 4);
     await evaluate(s.cdp, "document.querySelector('[data-testid=find-hit]').click()");
     await sleep(500);
-    ti = await tourInfo();
-    check('CR-13 A team 3단계 → 찾기 결과를 고르면 4/5(주변만 보기)', ti.index === 3 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 4/5', JSON.stringify(ti));
-    const tn4 = await stepNamesOk();
-    check('CR-13 A team 4단계 문구의 「」 이름(주변만 보기)이 실제 화면에 있고 깜빡이는 대상은 그 단추', tn4.missing.length === 0 && (await evaluate(s.cdp, "document.querySelector('[data-testid=btn-nbhd]').classList.contains('tour-target')")), JSON.stringify(tn4));
-    await evaluate(s.cdp, "document.querySelector('[data-testid=btn-nbhd]').click()");
-    await sleep(600);
-    ti = await tourInfo();
-    check('CR-13 A team 4단계 → 「주변만 보기」를 누르면 5/5(전체 보기로 돌아오기), 이때 깜빡이는 대상은 「전체 보기」', ti.index === 4 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 5/5' && !!(await evaluate(s.cdp, 'window.__wu.nbhd')) && (await evaluate(s.cdp, "document.getElementById('fit').classList.contains('tour-target')")), JSON.stringify(ti));
-    const tn5 = await stepNamesOk();
-    check('CR-13 A team 5단계 문구의 「」 이름(전체 보기)이 실제 화면에 있음', tn5.missing.length === 0 && tn5.names.includes('전체 보기'), JSON.stringify(tn5));
-    await shot(s.cdp, `${browser.name}-37b-tour-team-4`);
-    await evaluate(s.cdp, "document.getElementById('fit').click()");
-    await sleep(600);
-    check('CR-13 A team 5단계 → 「전체 보기」로 돌아오면(주변만 보기 해제) 끝 카드', (await tourInfo()).mode === 'end' && (await text(s.cdp, '[data-testid=tour-end]')) === '끝! 이제 내 업무로 해 볼까요?' && (await text(s.cdp, '[data-testid=tour-card] .tour-count')) === '따라 하기 5/5 끝' && !(await evaluate(s.cdp, 'window.__wu.nbhd')));
+    check('CR-22 W team 5단계 → 찾기 결과를 고르면 끝 카드(팀 따라 하기는 5단계)', (await tourInfo()).mode === 'end' && (await text(s.cdp, '[data-testid=tour-end]')) === '끝! 이제 내 업무로 해 볼까요?' && (await text(s.cdp, '[data-testid=tour-card] .tour-count')) === '따라 하기 5/5 끝');
     check('처음 사용 W-B(CR-18-3) 팀 따라 하기 끝 카드에도 안내 한 줄과 「이제 내 업무로 해 보기」', (await text(s.cdp, '[data-testid=tour-mine]')) === '이제 내 업무로 해 보기' && (await text(s.cdp, '[data-testid=tour-end-guide]')) === '예시를 봤으면, 내 업무 이름 하나로 작은 지도를 만들어 보세요.');
+    check('CR-22 W 끝 카드 권유는 목적에 맞는 문장: 팀 → 「매주 점검」 공간에서 이어 하기(「도구 더 보기」는 접혀 있을 때만 덧붙음)', (await text(s.cdp, '[data-testid=tour-end-hint]')).includes('「매주 점검」 공간'));
     await shot(s.cdp, `${browser.name}-37d-tour-team-end`);
     await evaluate(s.cdp, "document.querySelector('[data-testid=tour-skip]').click()");
     // 「?」: 다른 유니버스(U-K1)에서는 두 시나리오 고르기 → 팀을 고르면 U-D1이 열리고 team 시작
@@ -1120,6 +1168,23 @@ async function checkBrowser(browser, port) {
     await sleep(150);
     check('첫 업무: 개요에 「처음 할 일」 상자가 보이고 크기가 있음(3단계, 완료 표시 없음)', await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=starter-steps]'); if (!b) return false; const r = b.getBoundingClientRect(); return r.width > 0 && r.height > 0 && b.textContent.includes('처음 할 일') && b.querySelectorAll('li').length === 3 && b.querySelectorAll('li[data-done=\"1\"]').length === 0; })()"));
     check('첫 업무: 업무 개수 노드가 하나라 「업무 더 넣기」가 남아 있음, 나눠 보세요 안내는 없음', (await text(s.cdp, '[data-testid=starter-steps]')).includes('업무 더 넣기') && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=split-hint]')")));
+    // CR-22 W: 「처음 할 일」은 지금 화면 이름으로 쓰고, 줄을 누르면 그 일을 하는 공간으로 간다(기록 / 지도 관리)
+    {
+      const steps = await raw(s.cdp, "[...document.querySelectorAll('[data-testid=starter-steps] li')].map((li) => ({ text: li.textContent, go: li.querySelector('[data-testid=starter-go]') ? li.querySelector('[data-testid=starter-go]').dataset.space : null }))");
+      check('CR-22 W 처음 할 일: 1번은 「기록」 공간의 「이번 주 기록」(「이력 추가」 아님), 3번은 「지도 관리」 공간의 추가 — 갈 공간이 붙은 줄만 눌림', steps.length === 3 && steps[0].text.includes('「기록」') && !steps.some((x) => x.text.includes('이력 추가')) && steps[0].go === 'record' && steps[1].go === null && steps[2].go === 'edit' && steps[2].text.includes('「지도 관리」'), JSON.stringify(steps));
+      await raw(s.cdp, "document.querySelector('[data-testid=starter-go][data-space=record]').click()");
+      await sleep(250);
+      const st1 = await raw(s.cdp, "({ space: window.__wu.space, weekly: !!document.querySelector('[data-testid=weekly-quick].goal-flash') })");
+      check('CR-22 W 처음 할 일의 1번 줄을 누르면 「기록」 공간으로 바뀌고 「이번 주 기록」 양식이 강조됨', st1.space === 'record' && st1.weekly, JSON.stringify(st1));
+      await raw(s.cdp, "document.querySelector('[data-testid=ws-map]').click()");
+      await sleep(200);
+      await raw(s.cdp, "document.querySelector('[data-testid=starter-go][data-space=edit]').click()");
+      await sleep(250);
+      const st3 = await raw(s.cdp, "({ space: window.__wu.space, add: !!document.querySelector('[data-testid=goal-add-open].goal-flash'), addOpen: document.querySelector('details.add').getBoundingClientRect().height > 0 })");
+      check('CR-22 W 처음 할 일의 3번 줄을 누르면 「지도 관리」 공간으로 바뀌고 「사람·업무·문서 추가」가 강조되며 추가 칸이 보임', st3.space === 'edit' && st3.add && st3.addOpen, JSON.stringify(st3));
+      await raw(s.cdp, "document.querySelector('[data-testid=ws-map]').click()");
+      await sleep(200);
+    }
     // ── CR-16 ③ 빈 출발 미리 보기(2026-10-23): 「처음 할 일」 아래 접힌 상자 → 펼치면 「샘플」·월말 정산 사전 생성 문장 ──
     // 처음 사용 W5 FU-34: 「처음 할 일」 아래 한 줄 「팀과 함께 쓰려면 → 「가져오기·내보내기」의 「폴더 연결」」(링크를 누르면 그 탭이 열림), 폴더 연결 ③ 문구
     const teamHint = await evaluate(s.cdp, "(() => { const h = document.querySelector('[data-testid=starter-team-hint]'); const st = document.querySelector('[data-testid=starter-steps]'); const pv = document.querySelector('[data-testid=starter-preview]'); if (!h) return null; const r = h.getBoundingClientRect(); return { text: h.textContent, w: r.width, h: r.height, belowSteps: r.top >= st.getBoundingClientRect().bottom - 1, abovePreview: !pv || r.bottom <= pv.getBoundingClientRect().top + 1, link: !!h.querySelector('[data-testid=btn-starter-folder]') }; })()");
@@ -1635,13 +1700,13 @@ async function checkBrowser(browser, port) {
     const handle0 = await evaluate(s.cdp, "(() => { const r = document.getElementById('panel-resizer').getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height), role: document.getElementById('panel-resizer').getAttribute('role') }; })()");
     // 폭을 바꿔도 보던 가운데가 그대로(사용자 지적 2026-10-23: 넓히면 오른쪽이 가려짐): 꼭지 노드의 "그래프 가운데에서의 거리"가 변하지 않아야 한다
     // 배율은 폭 비율대로(노드 크기가 따라옴), 가운데 노드의 "가운데에서의 상대 거리"는 폭 비율로 줄어든다
-    const centerOff = () => evaluate(s.cdp, "(() => { const c = window.__wu.cy.container().getBoundingClientRect(); const n = window.__wu.cy.nodes().filter((x) => x.visible())[0]; if (!n) return { dx: 0, dy: 0, w: Math.round(c.width), zoom: window.__wu.cy.zoom(), none: true }; const p = n.renderedPosition(); return { dx: p.x - c.width / 2, dy: p.y - c.height / 2, w: Math.round(c.width), zoom: window.__wu.cy.zoom() }; })()");
+    const centerOff = () => evaluate(s.cdp, "(() => { const c = window.__wu.cy.container().getBoundingClientRect(); const n = window.__wu.cy.nodes().filter((x) => x.visible())[0]; if (!n) return { dx: 0, dy: 0, w: Math.round(c.width), h: Math.round(c.height), zoom: window.__wu.cy.zoom(), none: true }; const p = n.renderedPosition(); return { dx: p.x - c.width / 2, dy: p.y - c.height / 2, w: Math.round(c.width), h: Math.round(c.height), zoom: window.__wu.cy.zoom() }; })()");
     const off0 = await centerOff();
     for (let k = 0; k < 5; k += 1) await evaluate(s.cdp, "document.getElementById('panel-resizer').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true }))");
     await sleep(400);
     const off1 = await centerOff();
     const ratio = off1.w / off0.w;
-    check('패널 폭을 100px 넓히면 그래프 배율이 폭 비율대로 줄고(노드 크기 따라옴) 가운데는 그대로(가려지지 않음)', off1.w === off0.w - 100 && Math.abs(off1.zoom / off0.zoom - ratio) < 0.02 && Math.abs(off1.dx - off0.dx * ratio) <= 2 && Math.abs(off1.dy - off0.dy * ratio) <= 2, JSON.stringify([off0, off1]));
+    check('패널 폭을 100px 넓히면 그래프 배율이 폭 비율대로 줄고(노드 크기 따라옴) 가운데는 그대로(가려지지 않음)', off1.w === off0.w - 100 && Math.abs(off1.zoom / off0.zoom - ratio) < 0.02 && Math.abs(off1.dx - off0.dx * ratio) <= 2 && (off1.h !== off0.h || Math.abs(off1.dy - off0.dy * ratio) <= 2), JSON.stringify([off0, off1])); // CR-22 W: 왼쪽 메뉴가 그래프를 104px 좁혀 도구줄이 감기며 그래프 높이가 달라질 수 있다 — 높이가 달라지면 폭 기준인 세로 위치는 비교하지 않는다
     for (let k = 0; k < 4; k += 1) await evaluate(s.cdp, "document.getElementById('panel-resizer').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }))");
     await sleep(300);
     const wk1 = await asideW();
@@ -3175,8 +3240,11 @@ async function checkBrowser(browser, port) {
       check('W3 FU-6 노드 상세 맨 위에 「← 지도 전체 보기」(크기 있음), 이 화면에는 지도 전체용 단추가 없음', !!back && back.first && back.w > 20 && back.text === '← 지도 전체 보기' && !back.draftUniverse, JSON.stringify(back));
       await clickTestId(s.cdp, 'detail-back-universe');
       await sleep(250);
-      const afterBack = await evaluate(s.cdp, "({ sel: window.__wu.selected, draft: !!document.querySelector('[data-testid=btn-draft-universe]'), insight: !!document.querySelector('[data-testid=btn-insight-universe]'), summary: !!document.querySelector('[data-testid=team-risk-summary]') })");
-      check('W3 FU-6 「← 지도 전체 보기」 → 선택이 풀리고 꼭지 상세(「인수인계 초안 만들기」「인사이트 보기」·위험 요약)로', afterBack.sel === null && afterBack.draft && afterBack.insight && afterBack.summary, JSON.stringify(afterBack));
+      // CR-22 W: 꼭지 상세가 공간 5개로 나뉘어 「인수인계 초안 만들기」는 「인수인계」, 「인사이트 보기」·위험 요약은 「매주 점검」 공간에 있다(공간 이동은 점검 도우미가 한다)
+      const afterBack = await evaluate(s.cdp, "({ sel: window.__wu.selected })");
+      afterBack.draft = await evaluate(s.cdp, "!!document.querySelector('[data-testid=btn-draft-universe]')");
+      Object.assign(afterBack, await evaluate(s.cdp, "({ insight: !!document.querySelector('[data-testid=btn-insight-universe]'), summary: !!document.querySelector('[data-testid=team-risk-summary]') })"));
+      check('W3 FU-6 「← 지도 전체 보기」 → 선택이 풀리고 꼭지 상세(「인수인계」 공간의 「인수인계 초안 만들기」, 「매주 점검」 공간의 「인사이트 보기」·위험 요약)로', afterBack.sel === null && afterBack.draft && afterBack.insight && afterBack.summary, JSON.stringify(afterBack));
     } else {
       check('W3 가상 운영부(U-D1) 열기', false, 'U-D1이 열리지 않음');
     }
@@ -5068,73 +5136,202 @@ async function checkBrowser(browser, port) {
       return evaluate(s.cdp, "(() => { const d = document.querySelector('[data-testid=weekly-done]'); return d ? { text: d.textContent, btn: !!d.querySelector('[data-testid=goto-history]') } : null; })()");
     };
 
-    // ── C 개요 목적별 묶음 ──
+    // ── CR-22 W 작업 공간: 왼쪽 메뉴 5개와 공간별 패널(CR-21 C의 개요 단추 4개·목적별 묶음 머리글을 메뉴가 대신한다. 묶음 상자 이름 goal-sec-*는 그대로) ──
+    // 이 블록은 공간이 저절로 바뀌지 않아야 확인되는 것들이라 raw()(자동 이동 없음)로 읽는다
+    const w22 = {
+      pick: async (key) => { await raw(s.cdp, `document.querySelector('[data-testid=ws-${key}]').click()`); await sleep(200); },
+      info: () => raw(s.cdp, "(() => { const t = document.querySelector('[data-testid=ws-title]'); return { space: window.__wu.space, pressed: [...document.querySelectorAll('[data-testid=workspace-nav] button')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.dataset.space), title: t ? t.textContent : null, h2: (document.querySelector('#detail h2') || {}).textContent || null }; })()"),
+      has: (sel) => raw(s.cdp, `!!document.querySelector(${JSON.stringify(sel)})`),
+      vis: (sel) => raw(s.cdp, `(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return false; const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; })()`),
+      inSec: (sec, sel) => raw(s.cdp, `!!document.querySelector('[data-testid=goal-sec-${sec}] ' + ${JSON.stringify(sel)})`),
+      saved: () => raw(s.cdp, "JSON.parse(localStorage.getItem('wu:v1:settings') || '{}').workspace || null"),
+      txt: (sel) => raw(s.cdp, `(document.querySelector(${JSON.stringify(sel)}) || {}).textContent || ''`),
+      inView: (sel) => raw(s.cdp, `(() => { const e = document.querySelector(${JSON.stringify(sel)}); const a = document.querySelector('aside').getBoundingClientRect(); if (!e) return false; const r = e.getBoundingClientRect(); return r.height > 0 && r.top >= a.top - 1 && r.bottom <= a.bottom + 1; })()`),
+    };
+    if (await c21Go('U-A1', { clean: ['U-A1'], mutate: "{ const v = JSON.parse(localStorage.getItem('wu:v1:settings') || '{}'); delete v.workspace; localStorage.setItem('wu:v1:settings', JSON.stringify(v)); }" })) {
+      await raw(s.cdp, 'window.__wu.select(null)');
+      await sleep(200);
+      // 메뉴 모양: 세로로 쌓인 5개, 그래프 왼쪽
+      const nav = await raw(s.cdp, "(() => { const bs = [...document.querySelectorAll('[data-testid=workspace-nav] button')]; const r = bs.map((b) => b.getBoundingClientRect()); const n = document.querySelector('[data-testid=workspace-nav]').getBoundingClientRect(); const g = document.getElementById('graph').getBoundingClientRect(); return { labels: bs.map((b) => b.querySelector('.ws-label').textContent), ids: bs.map((b) => b.dataset.testid), pressed: bs.map((b) => b.getAttribute('aria-pressed')), lefts: new Set(r.map((x) => Math.round(x.left))).size, tops: r.map((x) => Math.round(x.top)), minW: Math.min(...r.map((x) => x.width)), minH: Math.min(...r.map((x) => x.height)), clipped: bs.some((b) => b.scrollWidth > b.clientWidth + 1), navRight: n.right, graphLeft: g.left, navW: Math.round(n.width) }; })()");
+      check('CR-22 W 왼쪽 메뉴: 단추 5개(지도 보기·기록·인수인계·매주 점검·지도 관리)가 세로로 쌓이고(같은 왼쪽, 위에서 아래로) 크기가 있고 글자가 잘리지 않으며 그래프 왼쪽에 있음',
+        nav.labels.join('|') === '지도 보기|기록|인수인계|매주 점검|지도 관리' && nav.ids.join() === 'ws-map,ws-record,ws-handover,ws-check,ws-edit' && nav.lefts === 1 && nav.tops.every((t, i) => i === 0 || t > nav.tops[i - 1]) && nav.minW > 60 && nav.minH > 24 && !nav.clipped && nav.navRight <= nav.graphLeft + 1, JSON.stringify(nav));
+      check('CR-22 W 처음 열면 「지도 보기」: ws-map만 눌림(aria-pressed), 설정에 아직 공간이 없음', nav.pressed.join() === 'true,false,false,false,false' && (await w22.saved()) === null, JSON.stringify({ pressed: nav.pressed, saved: await w22.saved() }));
+      // 지도 보기 패널
+      const mapPanel = await raw(s.cdp, "(() => { const q = (id) => document.querySelector('[data-testid=' + id + ']'); const a = document.querySelector('details.add'); const ar = a.getBoundingClientRect(); const help = q('overview-help'); return { summary: !!q('summary'), desc: (q('ws-desc') || {}).textContent || '', help: help ? { open: help.open, summary: help.querySelector('summary').textContent, hint: !!help.querySelector('[data-testid=hint]'), term: !!help.querySelector('[data-testid=term-note]') } : null, others: ['goal-bar', 'weekly-quick', 'btn-draft-universe', 'btn-insight-universe', 'goal-add-open', 'ws-admin'].filter((id) => q(id)), addH: Math.round(ar.height) }; })()");
+      check('CR-22 W 지도 보기 패널: 지도 요약 · 안내 한 줄(왼쪽 메뉴에서 고르라는 말) · 접힌 「처음이면 읽어 보세요」(hint·term-note), 다른 공간의 요소(기록 양식·초안 단추·추가·관리)는 없음',
+        mapPanel.summary && mapPanel.desc.includes('왼쪽 메뉴') && mapPanel.help && mapPanel.help.open === false && mapPanel.help.summary === '처음이면 읽어 보세요' && mapPanel.help.hint && mapPanel.help.term && mapPanel.others.length === 0, JSON.stringify(mapPanel));
+      check('CR-22 W 「사람·업무·문서 추가」 칸은 「지도 관리」가 아니면 보이지 않음(지도 보기에서 높이 0)', mapPanel.addH === 0, String(mapPanel.addH));
+      check('CR-22 W 머리글에는 지도 선택·무엇을 할까요?·「?」·「설정」만: 「새 업무 지도」·「업무 지도 묶기」·「가져오기·내보내기」가 머리글에 보이지 않음(보관함에 숨음)',
+        (await raw(s.cdp, "[...document.querySelectorAll('header button')].filter((b) => b.offsetParent).map((b) => b.id || b.textContent.trim()).join('|')")) === 'home|tour-open|settings-open' && !(await w22.vis('#create-open')) && !(await w22.vis('#group-open')) && !(await w22.vis('#import-open')));
+      await shot(s.cdp, `${browser.name}-cr22-1-map`);
+
+      // 기록
+      await w22.pick('record');
+      const rec = await w22.info();
+      check('CR-22 W 「기록」 공간: 눌림 ws-record, 제목 「기록」, 미해결 입구·이번 주 기록·최근 기록이 goal-sec-record 안, 설정에 공간이 기억됨',
+        rec.space === 'record' && rec.pressed.join() === 'record' && rec.title === '기록' && (await w22.inSec('record', '[data-testid=issue-count]')) && (await w22.inSec('record', '[data-testid=weekly-quick]')) && (await w22.inSec('record', '[data-testid=recent-records]')) && (await w22.saved()) === 'record', JSON.stringify(rec));
+      check('CR-22 W 「기록」 공간에는 지도 요약·초안 단추·추가 칸이 없음', !(await w22.has('[data-testid=summary]')) && !(await w22.has('[data-testid=btn-draft-universe]')) && !(await w22.has('[data-testid=ws-admin]')) && (await raw(s.cdp, "Math.round(document.querySelector('details.add').getBoundingClientRect().height)")) === 0);
+      await shot(s.cdp, `${browser.name}-cr22-2-record`);
+
+      // 인수인계
+      await w22.pick('handover');
+      const han = await w22.info();
+      const hanRows = await raw(s.cdp, "({ gaps: document.querySelectorAll('[data-testid=ws-gap-row]').length, gapTotal: (document.querySelector('[data-testid=ws-gaps]') || {}).dataset ? document.querySelector('[data-testid=ws-gaps]').dataset.total : null, solo: document.querySelectorAll('[data-testid=ws-solo-row]').length, soloTotal: document.querySelector('[data-testid=ws-solo]') ? document.querySelector('[data-testid=ws-solo]').dataset.total : null, docs: document.querySelectorAll('[data-testid=ws-doc-row]').length })");
+      check('CR-22 W 「인수인계」 공간: 제목 「인수인계」, 초안 만들기 단추 · 담당만 바꾸는 법 한 줄 · 담당 공백 업무(최대 5) · 혼자만 아는 일(상위 5) · 최근 확정한 인수인계서(최대 3)가 goal-sec-handover 안',
+        han.space === 'handover' && han.title === '인수인계' && (await w22.inSec('handover', '[data-testid=btn-draft-universe]')) && (await w22.inSec('handover', '[data-testid=handover-assignee-hint]')) && (await w22.inSec('handover', '[data-testid=ws-gaps]')) && (await w22.inSec('handover', '[data-testid=ws-solo]')) && (await w22.inSec('handover', '[data-testid=ws-docs]')) && hanRows.gaps <= 5 && hanRows.solo <= 5 && hanRows.docs <= 3 && hanRows.soloTotal !== null, JSON.stringify({ han, hanRows }));
+      // 업무 줄의 이름을 누르면 그 항목이 골라짐(공간은 그대로, 카드가 열림)
+      const pickedSolo = await raw(s.cdp, "(() => { const b = document.querySelector('[data-testid=ws-solo-pick]'); if (!b) return null; const g = b.dataset.gid; b.click(); return g; })()");
+      await sleep(250);
+      check('CR-22 W 「인수인계」 공간의 혼자만 아는 일 줄을 누르면 그 업무가 골라지고(카드 열림) 공간은 그대로', pickedSolo !== null && (await raw(s.cdp, 'window.__wu.selected')) === pickedSolo && (await w22.info()).space === 'handover', String(pickedSolo));
+      await raw(s.cdp, 'window.__wu.select(null)');
+      await sleep(200);
+      await shot(s.cdp, `${browser.name}-cr22-3-handover`);
+
+      // 매주 점검(묶지 않은 지도)
+      await w22.pick('check');
+      const chk = await w22.info();
+      const soloN = await raw(s.cdp, "document.querySelector('[data-testid=ws-solo]') ? document.querySelector('[data-testid=ws-solo]').dataset.total : null");
+      const badge = await raw(s.cdp, "(document.querySelector('[data-testid=ws-badge-check]') || {}).textContent || null");
+      check('CR-22 W 「매주 점검」(묶지 않은 지도): 제목 「매주 점검」, 이 지도의 혼자만 아는 일·일 몰린 사람·담당 공백 목록 + 「지도 관리 › 업무 지도 묶기」 안내 + 인사이트 보기, 위험 요약 줄(묶은 지도용)은 없음',
+        chk.space === 'check' && chk.title === '매주 점검' && (await w22.inSec('check', '[data-testid=ws-solo]')) && (await w22.inSec('check', '[data-testid=ws-dense]')) && (await w22.inSec('check', '[data-testid=ws-gaps]')) && (await w22.txt('[data-testid=check-ungrouped-note]')).includes('「지도 관리」의 「업무 지도 묶기」') && (await w22.inSec('check', '[data-testid=btn-insight-universe]')) && (await w22.inSec('check', '[data-testid=insight-hint]')) && !(await w22.has('[data-testid=team-risk-summary]')), JSON.stringify({ chk, soloN }));
+      check('CR-22 W 배지: 「매주 점검」 배지의 숫자 = 목록의 혼자만 아는 일 수(같은 계산), 0이면 배지 없음', (Number(soloN) > 0 ? badge === String(soloN) : badge === null), JSON.stringify({ soloN, badge }));
+      await shot(s.cdp, `${browser.name}-cr22-4-check`);
+
+      // 지도 관리: 머리글에서 옮겨 온 단추 3개
+      await w22.pick('edit');
+      const ed = await w22.info();
+      const admin = await raw(s.cdp, "(() => { const a = document.querySelector('[data-testid=ws-admin]'); const bs = a ? ['create-open', 'group-open', 'import-open'].map((id) => { const b = document.getElementById(id); const r = b.getBoundingClientRect(); return { id, inAdmin: a.contains(b), w: r.width, h: r.height, text: b.textContent }; }) : []; const add = document.querySelector('details.add').getBoundingClientRect(); return { bs, addH: Math.round(add.height) }; })()");
+      check('CR-22 W 「지도 관리」 공간: 제목 「지도 관리」, 「새 업무 지도」「업무 지도 묶기」「가져오기·내보내기」 단추(id 그대로)가 이 공간 안에 크기를 갖고 보임, 추가 열기·편집 되감기 입구가 있고 아래 「사람·업무·문서 추가」 칸이 보임',
+        ed.space === 'edit' && ed.title === '지도 관리' && admin.bs.map((b) => b.text).join('|') === '새 업무 지도|업무 지도 묶기|가져오기·내보내기' && admin.bs.every((b) => b.inAdmin && b.w > 40 && b.h > 10) && (await w22.inSec('edit', '[data-testid=goal-add-open]')) && ((await w22.inSec('edit', '[data-testid=btn-rewind]')) || (await w22.inSec('edit', '[data-testid=rewind-grouped-note]'))) && admin.addH > 20, JSON.stringify({ ed, admin }));
+      await shot(s.cdp, `${browser.name}-cr22-5-edit`);
+      // 이동한 단추는 하던 일 그대로
+      const dlg = async (btn, dlgId) => {
+        await raw(s.cdp, `document.getElementById('${btn}').click()`);
+        await sleep(200);
+        const open = await raw(s.cdp, `document.getElementById('${dlgId}').open`);
+        await raw(s.cdp, `document.getElementById('${dlgId}').close()`);
+        return open;
+      };
+      check('CR-22 W 이동한 단추는 하던 일 그대로: 「새 업무 지도」→만들기 창, 「업무 지도 묶기」→묶기 창, 「가져오기·내보내기」→가져오기 창', (await dlg('create-open', 'create-dialog')) && (await dlg('group-open', 'group-dialog')) && (await dlg('import-open', 'import-dialog')));
+      check('CR-22 W 「사람·업무·문서 추가」 단추(goal-add-open) → 아래 추가 칸이 펼쳐지고 보임', await (async () => { await raw(s.cdp, "document.querySelector('details.add').open = false"); await raw(s.cdp, "document.querySelector('[data-testid=goal-add-open]').click()"); await sleep(150); return (await raw(s.cdp, "document.querySelector('details.add').open")) && (await w22.inView('details.add summary')); })());
+      // 기억: 다시 열어도, 다른 지도를 열어도 유지
+      check('CR-22 W 고른 공간은 이 브라우저 설정에 기억(workspace=edit)', (await w22.saved()) === 'edit');
+      await raw(s.cdp, 'location.reload()').catch(() => {});
+      await sleep(500);
+      await c21Wait('U-A1');
+      const rem = await w22.info();
+      check('CR-22 W 다시 열어도 마지막에 고른 공간(지도 관리)이 눌려 있고 그 공간 첫 화면', rem.space === 'edit' && rem.pressed.join() === 'edit' && rem.title === '지도 관리', JSON.stringify(rem));
+      await raw(s.cdp, "location.hash = 'U-D1'; location.reload()").catch(() => {});
+      await sleep(500);
+      await c21Wait('U-D1');
+      const rem2 = await w22.info();
+      check('CR-22 W 지도를 바꿔도(가상 운영부) 공간이 유지됨: 지도마다가 아니라 브라우저 설정', rem2.space === 'edit' && rem2.pressed.join() === 'edit', JSON.stringify(rem2));
+      check('CR-22 W 묶은 지도의 「지도 관리」: 통합 확인 목록 입구가 이 공간 안', await w22.inSec('edit', '[data-testid=merge-hint]'));
+      await w22.pick('check');
+      const grp = await raw(s.cdp, "({ risk: document.querySelector('[data-testid=team-risk-summary]') ? document.querySelector('[data-testid=team-risk-summary]').textContent : null, inSec: !!document.querySelector('[data-testid=goal-sec-check] [data-testid=team-risk-compare]'), save: !!document.querySelector('[data-testid=goal-sec-check] [data-testid=btn-risk-baseline-save]'), note: !!document.querySelector('[data-testid=check-ungrouped-note]'), lists: !!document.querySelector('[data-testid=ws-solo]'), badge: (document.querySelector('[data-testid=ws-badge-check]') || {}).textContent || null, first: document.querySelector('[data-testid=goal-sec-check]').children[0].getAttribute('data-testid') })");
+      const grpSolo = (/혼자만 아는 일 (\d+)개/.exec(grp.risk || '') || [])[1] || null;
+      check('CR-22 W 묶은 지도의 「매주 점검」: 위험 요약이 맨 앞, 지난 점검 대비·이번 점검 저장이 같은 상자 안, 묶기 안내·목록 상자는 없음, 배지 숫자 = 위험 요약의 혼자만 아는 일 수',
+        grp.first === 'team-risk-summary' && grp.inSec && grp.save && !grp.note && !grp.lists && grp.badge === grpSolo, JSON.stringify({ grp, grpSolo }));
+      await shot(s.cdp, `${browser.name}-cr22-6-check-grouped`);
+      await raw(s.cdp, "(() => { const v = JSON.parse(localStorage.getItem('wu:v1:settings') || '{}'); delete v.workspace; localStorage.setItem('wu:v1:settings', JSON.stringify(v)); })()");
+    } else check('CR-22 W 작업 공간', false, '월말 정산 점검이 열리지 않음');
+
+    // 공간 전환 상태 규칙
     if (await c21Go('U-A1', { clean: ['U-A1'] })) {
-      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await raw(s.cdp, 'window.__wu.select(null)');
       await sleep(200);
-      const labels = await evaluate(s.cdp, "['goal-record', 'goal-handover', 'goal-check', 'goal-edit'].map((id) => { const b = document.querySelector('[data-testid=' + id + ']'); const r = b ? b.getBoundingClientRect() : { width: 0, height: 0 }; return { id, text: b ? b.textContent : null, w: r.width, h: r.height }; })");
-      check('CR-21 C 「무엇을 할까요?」 단추 4개(기록하기·인수인계·점검·지도 고치기)가 크기가 있게 보임, 글자가 꺾이지 않음(높이 < 44)', labels.map((l) => l.text).join('|') === '기록하기|인수인계|점검|지도 고치기' && labels.every((l) => l.w > 40 && l.h > 10 && l.h < 44), JSON.stringify(labels));
-      const barRow = await evaluate(s.cdp, "(() => { const bs = [...document.querySelectorAll('[data-testid=goal-bar] button')]; return { tops: bs.map((b) => Math.round(b.getBoundingClientRect().top)), over: bs.some((b) => b.scrollWidth > b.clientWidth + 1) }; })()");
-      check('CR-21 C 기본 패널 폭(380px)에서 단추 4개가 한 줄이고 글자가 잘리지 않음', barRow.tops.length === 4 && new Set(barRow.tops).size === 1 && !barRow.over, JSON.stringify(barRow));
-      check('CR-21 C 단추 줄이 지도 요약(규모) 바로 아래, 그 뒤로 묶음 4개가 기록하기 → 인수인계 → 점검 → 지도 고치기 순',
-        (await c21Before('[data-testid=summary]', '[data-testid=goal-bar]')) && (await c21Before('[data-testid=goal-bar]', '[data-testid=goal-sec-record]')) && (await c21Before('[data-testid=goal-sec-record]', '[data-testid=goal-sec-handover]')) && (await c21Before('[data-testid=goal-sec-handover]', '[data-testid=goal-sec-check]')) && (await c21Before('[data-testid=goal-sec-check]', '[data-testid=goal-sec-edit]')) && (await c21Before('[data-testid=goal-sec-edit]', '[data-testid=overview-help]')));
-      const heads = await evaluate(s.cdp, "['record', 'handover', 'check', 'edit'].map((k) => { const s = document.querySelector('[data-testid=goal-sec-' + k + ']'); return s ? { h3: s.querySelector('h3').tagName === 'H3' ? s.querySelector('h3').textContent : null, desc: s.querySelector('.goal-desc') ? s.querySelector('.goal-desc').textContent : null } : null; })");
-      check('CR-21 C 묶음마다 머리글(h3)과 한 줄 설명', heads.every((h) => h && h.h3 && h.desc && h.desc.length > 10) && heads.map((h) => h.h3).join('|') === '기록하기|인수인계|점검|지도 고치기', JSON.stringify(heads));
-      check('CR-21 C 기존 요소가 묶음 안에: 기록하기(미해결 입구·이번 주 기록·최근 기록)', (await c21In('[data-testid=goal-sec-record]', '[data-testid=issue-count]')) && (await c21In('[data-testid=goal-sec-record]', '[data-testid=weekly-quick]')) && (await c21In('[data-testid=goal-sec-record]', '[data-testid=recent-records]')));
-      check('CR-21 C 기존 요소가 묶음 안에: 인수인계(초안 만들기 단추·담당 바꾸기 안내 한 줄)', (await c21In('[data-testid=goal-sec-handover]', '[data-testid=btn-draft-universe]')) && (await c21In('[data-testid=goal-sec-handover]', '[data-testid=handover-assignee-hint]')) && (await text(s.cdp, '[data-testid=handover-assignee-hint]')).includes('「담당 바꾸기」'));
-      check('CR-21 C 기존 요소가 묶음 안에: 점검(인사이트 보기·설명 줄, 묶지 않은 지도는 매주 점검 안내 한 줄)', (await c21In('[data-testid=goal-sec-check]', '[data-testid=btn-insight-universe]')) && (await c21In('[data-testid=goal-sec-check]', '[data-testid=insight-hint]')) && (await c21In('[data-testid=goal-sec-check]', '[data-testid=check-ungrouped-note]')) && (await text(s.cdp, '[data-testid=check-ungrouped-note]')).includes('묶은 지도에서 합니다') && !(await c21Box('[data-testid=team-risk-summary]')));
-      check('CR-21 C 기존 요소가 묶음 안에: 지도 고치기(추가 열기·편집 되감기 입구·폴더 연결 입구)', (await c21In('[data-testid=goal-sec-edit]', '[data-testid=goal-add-open]')) && ((await c21In('[data-testid=goal-sec-edit]', '[data-testid=rewind-entry]')) || (await c21In('[data-testid=goal-sec-edit]', '[data-testid=rewind-grouped-note]'))) && ((await c21In('[data-testid=goal-sec-edit]', '[data-testid=folder-entry]')) || !(await c21Box('[data-testid=folder-entry]'))));
-      const help = await evaluate(s.cdp, "(() => { const d = document.querySelector('[data-testid=overview-help]'); return d ? { tag: d.tagName, open: d.open, summary: d.querySelector('summary').textContent, hint: !!d.querySelector('[data-testid=hint]'), term: !!d.querySelector('[data-testid=term-note]') } : null; })()");
-      check('CR-21 C 일반 안내(hint·term-note)는 맨 아래 접힌 「처음이면 읽어 보세요」(overview-help)', !!help && help.tag === 'DETAILS' && help.open === false && help.summary === '처음이면 읽어 보세요' && help.hint && help.term, JSON.stringify(help));
-      await shot(s.cdp, `${browser.name}-cr21-1-overview`);
-      // 단추 → 스크롤·머리 강조
-      await clickTestId(s.cdp, 'goal-edit');
-      await sleep(150);
-      const f1 = await c21Box('[data-testid=goal-sec-edit] h3');
-      check('CR-21 C 「지도 고치기」 단추 → 그 묶음 머리가 패널 안에 보이고 강조(goal-flash)', !!f1 && f1.flash && (await c21InView('[data-testid=goal-sec-edit] h3')), JSON.stringify(f1));
-      await shot(s.cdp, `${browser.name}-cr21-2-goal-edit`);
-      check('CR-21 C 강조는 잠깐 뒤(약 1.5초) 사라짐', await waitFor(s.cdp, "!document.querySelector('[data-testid=goal-sec-edit] h3').classList.contains('goal-flash')", 3500));
-      await clickTestId(s.cdp, 'goal-record');
-      await sleep(150);
-      const f2 = await c21Box('[data-testid=goal-sec-record] h3');
-      check('CR-21 C 「기록하기」 단추 → 묶음 머리가 보이고 강조', !!f2 && f2.flash && (await c21InView('[data-testid=goal-sec-record] h3')), JSON.stringify(f2));
-      await clickTestId(s.cdp, 'goal-check');
-      await sleep(150);
-      check('CR-21 C 「점검」 단추 → 묶음 머리 강조·보임', (await c21Flash('[data-testid=goal-sec-check] h3')) && (await c21InView('[data-testid=goal-sec-check] h3')));
-      await clickTestId(s.cdp, 'goal-handover');
-      await sleep(150);
-      check('CR-21 C 「인수인계」 단추 → 묶음 머리 강조·보임', (await c21Flash('[data-testid=goal-sec-handover] h3')) && (await c21InView('[data-testid=goal-sec-handover] h3')));
-      // 「사람·업무·문서 추가」 열기
-      await evaluate(s.cdp, "document.querySelector('details.add').open = false");
-      await clickTestId(s.cdp, 'goal-add-open');
-      await sleep(150);
-      check('CR-21 C 「지도 고치기」의 「사람·업무·문서 추가」 단추 → 아래 추가 칸이 펼쳐지고 보임', (await evaluate(s.cdp, "document.querySelector('details.add').open")) && (await c21InView('details.add summary')));
-      // 좁은 패널(330px 이하 안쪽 폭)에서는 2×2
-      await evaluate(s.cdp, "(() => { const a = document.querySelector('aside'); a.style.width = '300px'; a.scrollTop = 0; })()");
-      await sleep(150);
-      const narrow = await evaluate(s.cdp, "(() => { const bs = [...document.querySelectorAll('[data-testid=goal-bar] button')]; return { cols: getComputedStyle(document.querySelector('[data-testid=goal-bar]')).gridTemplateColumns.split(' ').length, tops: new Set(bs.map((b) => Math.round(b.getBoundingClientRect().top))).size, over: bs.some((b) => b.scrollWidth > b.clientWidth + 1) }; })()");
-      check('CR-21 C 패널을 좁히면(300px) 단추가 2×2로 내려가고 글자가 잘리지 않음', narrow.cols === 2 && narrow.tops === 2 && !narrow.over, JSON.stringify(narrow));
-      await shot(s.cdp, `${browser.name}-cr21-3-goal-narrow`);
-      await evaluate(s.cdp, "document.querySelector('aside').style.width = ''");
-    } else check('CR-21 C 개요', false, '월말 정산 점검이 열리지 않음');
-
-    // 묶은 지도: 점검 묶음에 위험 요약·지난 점검 대비, 지도 고치기 묶음에 통합 확인
-    if (await c21Go('U-D1', { clean: ['U-D1'] })) {
-      await evaluate(s.cdp, 'window.__wu.select(null)');
+      // 초안 → 인수인계, 다른 공간으로 가면 초안이 닫힘
+      await w22.pick('handover');
+      await raw(s.cdp, "document.querySelector('[data-testid=btn-draft-universe]').click()");
+      await sleep(250);
+      const d1 = await w22.info();
+      check('CR-22 W 상태 규칙: 인수인계 초안을 열면 메뉴는 「인수인계」(초안 화면이 보임)', d1.space === 'handover' && (await w22.has('#detail .draft')), JSON.stringify(d1));
+      await w22.pick('check');
+      const d2 = await w22.info();
+      check('CR-22 W 상태 규칙: 다른 공간(매주 점검)을 고르면 열린 초안이 닫히고 그 공간 첫 화면', d2.space === 'check' && !(await w22.has('#detail .draft')) && d2.title === '매주 점검', JSON.stringify(d2));
+      // 인사이트 → 매주 점검, 기록으로 가면 닫힘
+      await raw(s.cdp, "document.querySelector('[data-testid=btn-insight-universe]').click()");
+      await sleep(250);
+      check('CR-22 W 상태 규칙: 인사이트를 열면 메뉴는 「매주 점검」', (await w22.info()).space === 'check' && (await w22.has('[data-testid=insight-close]')));
+      await w22.pick('record');
+      check('CR-22 W 상태 규칙: 기록을 고르면 인사이트가 닫히고 「기록」 첫 화면', !(await w22.has('[data-testid=insight-close]')) && (await w22.info()).title === '기록');
+      // 미해결 목록 → 기록, 다른 공간으로 가면 닫힘 (미해결 하나 남긴 뒤)
+      await raw(s.cdp, "(() => { const q = (id) => document.querySelector('[data-testid=' + id + ']'); const w = q('weekly-work'); w.value = w.options[1].value; w.dispatchEvent(new Event('change')); const c = q('weekly-category'); c.value = 'issue'; c.dispatchEvent(new Event('change')); q('weekly-note').value = '공간 시험 이슈'; q('weekly-add').click(); })()");
+      await sleep(300);
+      const badgeRec = await raw(s.cdp, "(document.querySelector('[data-testid=ws-badge-record]') || {}).textContent || null");
+      const issueN = await raw(s.cdp, "(document.querySelector('[data-testid=issue-count]') || {}).dataset ? document.querySelector('[data-testid=issue-count]').dataset.count : null");
+      check('CR-22 W 배지: 「기록」 배지의 숫자 = 「미해결 n건」의 n', Number(issueN) > 0 && badgeRec === issueN, JSON.stringify({ badgeRec, issueN }));
+      await raw(s.cdp, "document.querySelector('[data-testid=btn-issues]').click()");
+      await sleep(250);
+      check('CR-22 W 상태 규칙: 미해결 목록을 열면 메뉴는 「기록」', (await w22.info()).space === 'record' && (await w22.has('[data-testid=issue-panel]')));
+      await w22.pick('map');
+      check('CR-22 W 상태 규칙: 지도 보기를 고르면 미해결 목록이 닫힘', !(await w22.has('[data-testid=issue-panel]')) && (await w22.info()).space === 'map');
+      // 설정은 공간을 바꾸지 않고, 공간을 고르면 닫힘
+      await raw(s.cdp, "document.getElementById('settings-open').click()");
       await sleep(200);
-      check('CR-21 C 묶은 지도: 위험 요약·지난 점검 대비·이번 점검 저장이 「점검」 묶음 안, 매주 점검 안내 한 줄은 없음',
-        (await c21In('[data-testid=goal-sec-check]', '[data-testid=team-risk-summary]')) && (await c21In('[data-testid=goal-sec-check]', '[data-testid=team-risk-compare]')) && (await c21In('[data-testid=goal-sec-check]', '[data-testid=btn-risk-baseline-save]')) && (await c21In('[data-testid=goal-sec-check]', '[data-testid=btn-insight-universe]')) && !(await c21Box('[data-testid=check-ungrouped-note]')));
-      check('CR-21 C 묶은 지도: 통합 확인 목록 입구가 「지도 고치기」 묶음 안, 위험 요약이 「점검」 묶음 맨 앞', (await c21In('[data-testid=goal-sec-edit]', '[data-testid=merge-hint]')) && (await evaluate(s.cdp, "document.querySelector('[data-testid=goal-sec-check]').children[2].getAttribute('data-testid') === 'team-risk-summary'")));
-      await shot(s.cdp, `${browser.name}-cr21-4-overview-grouped`);
-    } else check('CR-21 C 묶은 지도 개요', false, '가상 운영부가 열리지 않음');
+      check('CR-22 W 상태 규칙: 설정을 열어도 메뉴(지도 보기)는 그대로', (await w22.info()).space === 'map' && (await w22.has('[data-testid=settings-close]')));
+      await w22.pick('record');
+      check('CR-22 W 상태 규칙: 공간을 고르면 설정 화면도 닫힘', !(await w22.has('[data-testid=settings-close]')) && (await w22.info()).space === 'record');
+      // 숨긴 항목·통합 확인은 지도 관리
+      await w22.pick('edit');
+      // 편집 되감기: 고친 기록이 둘 이상 있어야 하므로 항목 하나를 더한다
+      await submitAdd(s.cdp, 'topic', '공간 시험 주제');
+      await sleep(200);
+      await raw(s.cdp, 'window.__wu.select(null)'); // 추가하면 새 항목이 골라져 카드가 열린다 — 공간 첫 화면으로 돌아온다
+      await sleep(200);
+      await w22.pick('edit');
+      if (await w22.has('[data-testid=btn-rewind]')) {
+        await raw(s.cdp, "document.querySelector('[data-testid=btn-rewind]').click()");
+        await sleep(400);
+        const rwI = await raw(s.cdp, "({ rewind: !!window.__wu.rewind, space: window.__wu.space, band: !document.querySelector('[data-testid=rewind-band]').hidden, create: document.getElementById('create-open').disabled, group: document.getElementById('group-open').disabled, add: !document.querySelector('[data-testid=ws-admin]') })");
+        check('CR-22 W 편집 되감기 중: 메뉴는 「지도 관리」, 새 업무 지도·업무 지도 묶기는 꺼짐(되감기에서 편집 기능 없음)', rwI.rewind && rwI.space === 'edit' && rwI.band && rwI.create && rwI.group, JSON.stringify(rwI));
+        await w22.pick('record');
+        const rwO = await raw(s.cdp, "({ rewind: window.__wu.rewind, band: !document.querySelector('[data-testid=rewind-band]').hidden, space: window.__wu.space, weekly: !!document.querySelector('[data-testid=weekly-quick]') })");
+        check('CR-22 W 상태 규칙: 되감기 중 다른 공간을 고르면 되감기가 끝나고(띠가 사라짐) 그 공간 첫 화면', rwO.rewind === null && !rwO.band && rwO.space === 'record' && rwO.weekly, JSON.stringify(rwO));
+      } else check('CR-22 W 편집 되감기 상태 규칙', false, '「편집 되감기」 입구가 없음');
+      // 항목 카드: 열린 채 유지, 공간마다 관련 위치로
+      await raw(s.cdp, "window.__wu.select('U-A1/N-001')");
+      await sleep(250);
+      await w22.pick('record');
+      const cardKept = await raw(s.cdp, 'window.__wu.selected');
+      check('CR-22 W 상태 규칙: 항목 카드를 연 채 「기록」을 고르면 카드는 유지되고 이력 머리가 패널 안에 보임', cardKept === 'U-A1/N-001' && (await w22.inView('#history-heading')), String(cardKept));
+      await w22.pick('handover');
+      check('CR-22 W 상태 규칙: 카드를 연 채 「인수인계」를 고르면 카드 유지, 담당 바꾸기·수행 연결 쪽이 보임', (await raw(s.cdp, 'window.__wu.selected')) === 'U-A1/N-001' && ((await w22.inView('[data-testid=assignee-change]')) || (await w22.inView('[data-testid=links]'))));
+      await w22.pick('edit');
+      check('CR-22 W 상태 규칙: 카드를 연 채 「지도 관리」를 고르면 카드 유지, 「수정」 단추가 보임', (await raw(s.cdp, 'window.__wu.selected')) === 'U-A1/N-001' && (await w22.inView('[data-testid=btn-edit]')));
+      await w22.pick('map');
+      check('CR-22 W 상태 규칙: 「지도 보기」를 고르면 카드는 그대로', (await raw(s.cdp, 'window.__wu.selected')) === 'U-A1/N-001' && (await w22.info()).space === 'map');
+      // 카드에서 작업 화면을 열면 메뉴가 따라 감
+      await raw(s.cdp, "document.querySelector('[data-testid=btn-draft]').click()");
+      await sleep(250);
+      check('CR-22 W 상태 규칙: 카드의 「인수인계 초안 만들기」를 누르면 메뉴가 「인수인계」로 바뀜', (await w22.info()).space === 'handover' && (await w22.has('#detail .draft')));
+      await raw(s.cdp, 'window.__wu.select(null)');
+      await sleep(200);
+      // 좁은 창(<1100px): 메뉴가 그래프 위 가로 한 줄
+      await s.cdp.send('Emulation.setDeviceMetricsOverride', { width: 1000, height: 700, deviceScaleFactor: 1, mobile: false });
+      await sleep(400);
+      const narrowNav = await raw(s.cdp, "(() => { const bs = [...document.querySelectorAll('[data-testid=workspace-nav] button')]; const r = bs.map((b) => b.getBoundingClientRect()); const n = document.querySelector('[data-testid=workspace-nav]').getBoundingClientRect(); const g = document.getElementById('graph').getBoundingClientRect(); return { tops: new Set(r.map((x) => Math.round(x.top))).size, lefts: r.map((x) => Math.round(x.left)), navBottom: Math.round(n.bottom), graphTop: Math.round(g.top), graphH: Math.round(g.height), scrollX: document.documentElement.scrollWidth > window.innerWidth, clipped: bs.some((b) => b.scrollWidth > b.clientWidth + 1) }; })()");
+      check('CR-22 W 좁은 창(1000px): 메뉴가 그래프 위 가로 한 줄(5개가 같은 높이, 왼쪽에서 오른쪽)이고 글자가 잘리지 않고 가로 스크롤이 생기지 않음',
+        narrowNav.tops === 1 && narrowNav.lefts.every((l, i) => i === 0 || l > narrowNav.lefts[i - 1]) && narrowNav.navBottom <= narrowNav.graphTop + 1 && narrowNav.graphH > 150 && !narrowNav.scrollX && !narrowNav.clipped, JSON.stringify(narrowNav));
+      await shot(s.cdp, `${browser.name}-cr22-7-narrow`);
+      await s.cdp.send('Emulation.clearDeviceMetricsOverride');
+      await sleep(300);
+    } else check('CR-22 W 공간 전환 상태 규칙', false, '월말 정산 점검이 열리지 않음');
 
-    // 읽기 전용(문서 버전이 새로워 열림): 편집 기능이 원래 안 보이는 규칙 그대로 — 기록·추가 입구가 없고, 비면 묶음도 숨김
+    // 읽기 전용(문서 버전이 새로워 열림): 편집 기능이 원래 안 보이는 규칙 그대로 — 기록 양식·담당 바꾸기 안내·추가 입구가 없고, 메뉴 5개는 그대로 있다
     if (await c21GoReadOnly()) {
-      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await raw(s.cdp, 'window.__wu.select(null)');
       await sleep(200);
-      const ro = await evaluate(s.cdp, "({ ro: window.__wu.readOnly, weekly: !!document.querySelector('[data-testid=weekly-quick]'), add: !!document.querySelector('[data-testid=goal-add-open]'), hint: !!document.querySelector('[data-testid=handover-assignee-hint]'), bar: [...document.querySelectorAll('[data-testid=goal-bar] button')].map((b) => b.textContent), secs: ['record', 'handover', 'check', 'edit'].filter((k) => document.querySelector('[data-testid=goal-sec-' + k + ']')) })");
-      check('CR-21 C 읽기 전용: 이번 주 기록·추가 열기·담당 바꾸기 안내는 없고, 보이는 묶음과 단추가 짝(빈 묶음 단추 숨김)', ro.ro === true && !ro.weekly && !ro.add && !ro.hint && ro.bar.length === ro.secs.length && ro.secs.includes('record') && ro.secs.includes('check'), JSON.stringify(ro));
-    } else check('CR-21 C 읽기 전용 개요', false, '월말 정산 점검이 열리지 않음');
+      const roNav = await raw(s.cdp, "[...document.querySelectorAll('[data-testid=workspace-nav] button')].length");
+      await w22.pick('record');
+      const roRec = { weekly: await w22.has('[data-testid=weekly-quick]'), issues: await w22.has('[data-testid=issue-count]'), recent: await w22.has('[data-testid=recent-records]') };
+      await w22.pick('handover');
+      const roHan = { hint: await w22.has('[data-testid=handover-assignee-hint]'), draft: await w22.has('[data-testid=btn-draft-universe]') };
+      await w22.pick('edit');
+      const roEd = await raw(s.cdp, "({ add: !!document.querySelector('[data-testid=goal-add-open]'), admin: !!document.querySelector('[data-testid=ws-admin]'), group: document.getElementById('group-open').disabled, readOnly: window.__wu.readOnly })");
+      check('CR-22 W 읽기 전용: 메뉴 5개는 있고, 기록 공간에 이번 주 기록이 없으며(미해결·최근 기록은 보기), 인수인계 공간에 담당 바꾸기 안내가 없고, 지도 관리에 추가 열기가 없으며 업무 지도 묶기는 꺼짐',
+        roEd.readOnly === true && roNav === 5 && !roRec.weekly && roRec.issues && roRec.recent && !roHan.hint && roHan.draft && !roEd.add && roEd.admin && roEd.group, JSON.stringify({ roNav, roRec, roHan, roEd }));
+    } else check('CR-22 W 읽기 전용 공간', false, '월말 정산 점검이 열리지 않음');
 
     // ── B 쓴 것 바로 보이기 ──
     if (await c21Go('U-A1', { clean: ['U-A1'] })) {
@@ -5212,8 +5409,8 @@ async function checkBrowser(browser, port) {
       await shot(s.cdp, `${browser.name}-cr21-8-feature-pick`);
       await evaluate(s.cdp, "document.querySelector('[data-testid=feature-find-work]').click()");
       await sleep(350);
-      const asg = await evaluate(s.cdp, "(() => { const d = document.querySelector('#detail [data-testid=assignee-change]'); return { sel: window.__wu.selected, open: d ? d.open : null, flash: d ? d.classList.contains('goal-flash') : null }; })()");
-      check('CR-21 A 업무 이름을 누르면 그 업무가 골라지고 상세의 「담당 바꾸기」 상자가 펼쳐져 강조', !!asg.sel && asg.open === true && asg.flash === true, JSON.stringify(asg));
+      const asg = await evaluate(s.cdp, "(() => { const d = document.querySelector('#detail [data-testid=assignee-change]'); return { sel: window.__wu.selected, space: window.__wu.space, open: d ? d.open : null, flash: d ? d.classList.contains('goal-flash') : null }; })()");
+      check('CR-21 A·CR-22 W 업무 이름을 누르면 그 업무가 골라지고(메뉴는 「인수인계」) 상세의 「담당 바꾸기」 상자가 펼쳐져 강조', !!asg.sel && asg.space === 'handover' && asg.open === true && asg.flash === true, JSON.stringify(asg));
       await shot(s.cdp, `${browser.name}-cr21-9-feature-assignee`);
       // 업무를 이미 고른 상태에서는 목록 없이 바로
       await evaluate(s.cdp, "window.__wu.select('U-A1/N-002')");
@@ -5229,13 +5426,14 @@ async function checkBrowser(browser, port) {
       check('CR-21 A 「점검」 → 첫 결과가 매주 점검(점검 묶음)', hp.length >= 1 && hp[0].id === 'weekly-check', JSON.stringify(hp.map((h) => h.id)));
       await c21Click('weekly-check');
       await sleep(300);
-      const chk = await evaluate(s.cdp, "({ sel: window.__wu.selected, head: !!document.querySelector('[data-testid=goal-sec-check] h3.goal-flash') })");
-      check('CR-21 A 「점검」 결과를 고르면 선택이 풀리고 개요의 「점검」 묶음 머리가 보이며 강조', chk.sel === null && chk.head && (await c21InView('[data-testid=goal-sec-check] h3')), JSON.stringify(chk));
+      // CR-22 W: 결과의 공간(매주 점검)으로 바뀐 뒤 이동·강조. 묶지 않은 지도라 「매주 점검」 안내 줄(check-ungrouped-note)로 간다
+      const chk = await raw(s.cdp, "({ sel: window.__wu.selected, space: window.__wu.space, head: !!document.querySelector('[data-testid=check-ungrouped-note].goal-flash') })");
+      check('CR-21 A·CR-22 W 「점검」 결과를 고르면 「매주 점검」 공간으로 바뀌고 선택이 풀리며 묶지 않은 지도의 매주 점검 안내 줄이 보이며 강조', chk.sel === null && chk.space === 'check' && chk.head && (await c21InView('[data-testid=check-ungrouped-note]')), JSON.stringify(chk));
       // 미해결 → 개요 요소
       await c21Type('미해결');
       await c21Click('issues');
       await sleep(250);
-      check('CR-21 A 「미해결」 → 개요의 「미해결 n건」 줄로 가서 강조', (await c21Flash('[data-testid=issue-count]')) && (await c21InView('[data-testid=issue-count]')));
+      check('CR-21 A·CR-22 W 「미해결」 → 「기록」 공간으로 바뀌고 「미해결 n건」 줄로 가서 강조', (await raw(s.cdp, 'window.__wu.space')) === 'record' && (await c21Flash('[data-testid=issue-count]')) && (await c21InView('[data-testid=issue-count]')));
       // 글로 → 창
       await c21Type('글로');
       const hg = await c21Hits();
@@ -5511,6 +5709,17 @@ async function checkBrowser(browser, port) {
     const bannerInfo = () => evaluate(s.cdp, "(() => { const b = document.getElementById('embed-banner'); const r = b.getBoundingClientRect(); const btn = document.querySelector('[data-testid=embed-import]'); return { hidden: b.hidden, w: r.width, h: r.height, text: b.textContent, btnOff: btn ? btn.disabled : null, hash: location.hash, ro: window.__wu.readOnly, id: window.__wu.doc.universe.id }; })()");
     check('CR-13 B 내용 포함 파일 열기: 시작 화면 없이 그 유니버스가 보임', await openFile(fA1) && (await evaluate(s.cdp, "window.__wu.doc.universe.id")) === 'U-A1' && !(await evaluate(s.cdp, "document.body.classList.contains('start-mode')")));
     check('CR-13 A 읽기 전용(내용 포함 파일)에서는 머리글 「?」와 따라 하기 카드를 쓰지 않음(다른 유니버스를 열 수 없으므로)', (await evaluate(s.cdp, "document.getElementById('tour-open').hidden")) === true && (await evaluate(s.cdp, 'window.__wu.tour')) === null);
+    // CR-22 W: 내용 포함 HTML(읽기 전용)에서도 메뉴 5개가 있고, 편집 기능(이번 주 기록 양식·추가 열기)은 없으며, 저장하는 「이번 점검 저장」 입구도 쓰지 않는다
+    {
+      const roPick = async (k) => { await raw(s.cdp, `document.querySelector('[data-testid=ws-${k}]').click()`); await sleep(200); };
+      const roNav = await raw(s.cdp, "[...document.querySelectorAll('[data-testid=workspace-nav] button')].length");
+      await roPick('record');
+      const e1 = await raw(s.cdp, "({ weekly: !!document.querySelector('[data-testid=weekly-quick]'), recent: !!document.querySelector('[data-testid=recent-records]') })");
+      await roPick('edit');
+      const e2 = await raw(s.cdp, "({ add: !!document.querySelector('[data-testid=goal-add-open]'), group: document.getElementById('group-open').disabled, ro: window.__wu.readOnly, saved: !!(JSON.parse(localStorage.getItem('wu:v1:settings') || '{}').workspace) })").catch(() => ({ add: null }));
+      check('CR-22 W 내용 포함 HTML(읽기 전용): 메뉴 5개, 기록 공간에 이번 주 기록 양식이 없고(최근 기록은 보임), 지도 관리에 추가 열기가 없으며 업무 지도 묶기는 꺼짐', roNav === 5 && !e1.weekly && e1.recent && !e2.add && e2.group === true && e2.ro === true, JSON.stringify({ roNav, e1, e2 }));
+      await roPick('map');
+    }
     check('CR-13 B 보낸 쪽에서 추가한 노드가 보임(내용이 들어 있음)', await hasLabel(s.cdp, marker));
     const b1 = await bannerInfo();
     check('CR-13 B 읽기 전용 안내 줄(크기 있음)과 「내 업무 지도로 가져오기」 단추, 읽기 전용', !b1.hidden && b1.w > 0 && b1.h > 0 && b1.text.includes('이 파일에 담긴 「') && b1.text.includes('읽기 전용') && b1.text.includes('내 업무 지도로 가져오기') && b1.btnOff === false && b1.ro === true && b1.hash.startsWith('#embed/'), JSON.stringify(b1));

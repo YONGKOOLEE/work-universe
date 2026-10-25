@@ -26,12 +26,13 @@ test('시나리오는 handover·team 둘(handover·team 모두 5단계), 이야�
 });
 
 test('단계 문구에 「」 화면 이름이 있고, 실제 화면의 단추·칸 이름과 같은 글자다', () => {
-  const known = new Set(['대사 확인', '미해결', '다음', '인수인계 초안 만들기', '초안 만들기', '근거:', '항목 찾기', '주변만 보기', '전체 보기', '인사이트 보기', '인수인계 위험', '수정', '저장', '편집 되감기', '혼자만 아는 일 …', '자세히', '반복 비효율']); // 2회차 FU-33: 위험 요약 먼저 판의 1단계가 위험 요약 줄의 「자세히」. R11-11: 기본(D-29) 판의 마지막 단계가 「반복 비효율」 탭 // CR-18-2
+  const known = new Set(['대사 확인', '미해결', '다음', '인수인계 초안 만들기', '초안 만들기', '근거:', '항목 찾기', '주변만 보기', '전체 보기', '인사이트 보기', '인수인계 위험', '수정', '저장', '편집 되감기', '혼자만 아는 일 …', '자세히', '반복 비효율', '이번 점검 저장', '점검 요약 보기', '닫기']); // 2회차 FU-33: 위험 요약 먼저 판의 1단계가 위험 요약 줄의 「자세히」. R11-11: 기본(D-29) 판의 마지막 단계가 「반복 비효율」 탭 // CR-18-2
   for (const id of TOUR_IDS) {
     const names = scenarioOf(id).steps.flatMap((st) => quotedNames(st.task));
     assert.ok(names.length >= 4, id);
     for (const n of names) assert.ok(known.has(n), `${id}: 「${n}」은 화면에 있는 이름이 아니다`);
   }
+  for (const n of teamScenario('weekly').steps.flatMap((st) => quotedNames(st.task))) assert.ok(known.has(n), `team(weekly): 「${n}」은 화면에 있는 이름이 아니다`);
   for (const n of teamScenario('risk-first').steps.flatMap((st) => quotedNames(st.task))) assert.ok(known.has(n), `team(risk-first): 「${n}」은 화면에 있는 이름이 아니다`);
   assert.deepEqual(quotedNames('「가」와 「나 다」'), ['가', '나 다']);
   assert.deepEqual(quotedNames('없음'), []);
@@ -77,14 +78,14 @@ test('handover 3단계(R9-4): 동작은 「인수인계 초안 만들기」 → 
   assert.deepEqual(draft.preset, { target: '월말 정산 점검', from: '윤바다', to: '서하늘' });
 });
 
-test('handover 5단계(R9-1 나) 문구·보조 문구·짚기: 대사 확인 → 수정 → 저장 → 빈 곳 → 편집 되감기', () => {
+test('handover 5단계(R9-1 나) 문구·보조 문구·짚기: 대사 확인 → 수정 → 저장 → 지도 관리 → 편집 되감기', () => {
   const rew = scenarioOf('handover').steps[4];
   // 3회차: 본문(task)은 한두 줄로 — 하려는 일만 두고, 세부 순서(수정·글자 하나·저장·빈 곳)는 보조 문구(sub)로 옮겼다
   assert.deepEqual(quotedNames(rew.task), ['대사 확인', '편집 되감기']);
   assert.ok(rew.task.length <= 80, `본문이 길다: ${rew.task.length}자`);
   assert.match(rew.task, /^\(연습, 건너뛰어도 됩니다\) /); // 2회차 FU-28 → 3회차
   const base = emptyState('U-A1');
-  assert.deepEqual(quotedNames(rew.sub(base)), ['대사 확인', '수정', '저장', '편집 되감기']);
+  assert.deepEqual(quotedNames(rew.sub(base)), ['대사 확인', '수정', '저장', '지도 관리', '편집 되감기']); // CR-22: 편집 되감기는 「지도 관리」 공간에 있어 문구에 공간을 함께 쓴다
   assert.match(rew.sub(base), /글자 하나/);
   assert.match(rew.sub(base), /언제든 되돌릴 수 있어요/);
   assert.match(rew.sub({ ...base, saved: true }), /^고쳐서 저장했어요/);

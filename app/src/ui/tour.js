@@ -10,6 +10,15 @@ const BLINK_MS = 650;
 
 // 끝 카드의 안내 한 줄(CR-18-3)
 export const END_GUIDE = '예시를 봤으면, 내 업무 이름 하나로 작은 지도를 만들어 보세요.';
+// 끝 카드의 권유 한 줄은 시나리오의 목적에 맞춘다(CR-22 W): 인수인계를 따라 한 사람에게 「도구 더 보기」는 맞지 않는다
+const END_HINTS = {
+  handover: () => '인수인계는 왼쪽 「인수인계」 공간에서, 업무에 남기는 기록은 「기록」 공간에서 언제든 할 수 있어요.',
+  team: (toolsClosed) => `${toolsClosed ? '큰 지도는 「도구 더 보기」의 흐름 정렬·거르기로 좁혀 보고, ' : ''}매주 점검은 왼쪽 「매주 점검」 공간에서 이어 하세요.`,
+};
+/** 끝 카드 권유 한 줄. toolsClosed: 「도구 더 보기」가 아직 접혀 있음 */
+export function endHint(scenarioId, toolsClosed = false) {
+  return END_HINTS[scenarioId] ? END_HINTS[scenarioId](toolsClosed) : '';
+}
 
 /**
  * @param {{
@@ -21,7 +30,8 @@ export const END_GUIDE = '예시를 봤으면, 내 업무 이름 하나로 작�
  *   onStart?: () => void,                 // 시작할 때 앱 쪽 표시(초안·근거·찾기)를 지운다
  *   onMake: () => void,                   // 끝 카드의 「이제 내 업무로 해 보기」·「내 업무 지도 만들기」(둘 다 「내 업무 지도 만들기」 창을 연다)
  *   canMake?: boolean,
- *   toolsHint?: () => boolean,            // 끝 카드에 「도구 더 보기」 안내 한 줄을 띄울지
+ *   toolsHint?: () => boolean,            // 끝 카드에 「도구 더 보기」 안내를 덧붙일지(팀 시나리오만 쓴다)
+ *   onSpace?: (space:string, opts:{home:boolean}) => (boolean|void), // false를 돌려주면 지금은 못 바꿈(읽고 있는 초안 같은 작업 화면을 닫지 않으려고) — 화면이 닫힌 뒤 check()에서 다시 시도한다     // 단계에 들어설 때 그 단계의 작업 공간으로 바꾼다(CR-22 W). 화면을 다시 그려도 따라 하기를 다시 부르지 않아야 한다
  *   onFinish?: (scenarioId:string) => void, // 끝 카드에 이르렀거나 단계 중 건너뛰었을 때(CR-18 D-2: 앱이 이 브라우저 설정에 「한 번 했음」을 남긴다)
  * }} o
  */
@@ -36,6 +46,8 @@ export function createTour(o) {
   let subEl = null; // 보조 문구(단계에 sub가 있을 때, 재검증 N-6)
   let reduced = false;
   let finishedFor = null; // 이번 시작에서 onFinish를 이미 불렀음(같은 시작에서 두 번 부르지 않는다)
+  let spacedFor = ''; // 공간을 맞춰 둔 단계(시나리오:번호). 같은 단계에서는 사용자가 옮긴 공간을 다시 되돌리지 않는다
+  let pendingSpace = ''; // 단계에 들어설 때 열린 작업 화면(초안 등) 때문에 못 바꾼 공간. 그 화면이 닫히면 바꾼다
   try { reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { /* 모르면 깜빡임 */ }
 
   // 접힌 <details> 안의 단추는 크기를 가져도 보이지 않는다: checkVisibility()로 판정한다(없는 브라우저는 offsetParent)
@@ -54,7 +66,10 @@ export function createTour(o) {
   function currentTargets() {
     if (mode !== 'step' || !sc) return [];
     const st = sc.steps[index];
-    return st && st.target ? st.target(o.getState()) : [];
+    const base = st && st.target ? st.target(o.getState()) : [];
+    // 단계의 공간이 아닌 곳에 있어 짚을 단추가 안 보이면 그 공간의 메뉴 단추를 짚는다(CR-22 W). 보이는 첫 대상이 쓰이므로 맨 뒤에 둔다
+    const menu = st && st.space && o.getState().space !== st.space ? [{ sel: `[data-testid=ws-${st.space}]`, noScroll: true }] : [];
+    return [...base, ...menu];
   }
 
   function setHint(parent, text) {
@@ -122,6 +137,8 @@ export function createTour(o) {
   function stop() {
     mode = 'off';
     sc = null;
+    spacedFor = '';
+    pendingSpace = '';
     subEl = null;
     if (timer) { clearInterval(timer); timer = null; }
     blinkOn = true;
@@ -161,7 +178,7 @@ export function createTour(o) {
         el('div', { class: 'tour-head' }, el('span', { class: 'tour-count' }, `따라 하기 ${sc.steps.length}/${sc.steps.length} 끝`)),
         el('p', { class: 'tour-task', 'data-testid': 'tour-end' }, '끝! 이제 내 업무로 해 볼까요?'),
         el('p', { class: 'muted small', 'data-testid': 'tour-end-guide' }, END_GUIDE),
-        o.toolsHint && o.toolsHint() ? el('p', { class: 'tour-hint', 'data-testid': 'tour-tools-hint' }, '이제 「도구 더 보기」에서 흐름 정렬·거르기도 써 보세요.') : null,
+        endHint(sc.id, !!(o.toolsHint && o.toolsHint())) ? el('p', { class: 'tour-hint', 'data-testid': 'tour-end-hint' }, endHint(sc.id, !!(o.toolsHint && o.toolsHint()))) : null,
         el('div', { class: 'row' },
           // CR-18-3: 따라 하기를 닫고 「내 업무 지도 만들기」 창을 연다(시작 화면 「내 업무를 정리해 두고 싶어요」와 같은 창). 같은 일을 하던 예전 「내 업무 지도 만들기」 단추는 뺐다(한 카드에 같은 일 단추 둘)
           el('button', { type: 'button', class: 'primary small-btn', 'data-testid': 'tour-mine', disabled: o.canMake === false, onclick: () => { stop(); o.onMake(); } }, '이제 내 업무로 해 보기'),
@@ -170,6 +187,12 @@ export function createTour(o) {
       return paint();
     }
     const st = sc.steps[index];
+    // 단계에 들어설 때 한 번 그 단계의 공간으로 바꾼다(열린 작업 화면은 닫힌다). 카드를 그리기 전에 해 둔다
+    const key = `${sc.id}:${index}`;
+    if (st.space && o.onSpace && spacedFor !== key) {
+      spacedFor = key;
+      pendingSpace = o.onSpace(st.space, { home: !!st.home }) === false ? st.space : '';
+    }
     subEl = st.sub ? el('p', { class: 'tour-sub', 'data-testid': 'tour-sub', role: 'status' }) : null;
     o.slot.replaceChildren(card(
       el('div', { class: 'tour-head' },
@@ -199,6 +222,8 @@ export function createTour(o) {
       if (o.onStart) o.onStart();
       sc = next;
       finishedFor = null;
+      spacedFor = '';
+      pendingSpace = '';
       mode = 'step';
       index = advance(sc, 0, o.getState());
       if (index >= sc.steps.length) mode = 'end';
@@ -214,6 +239,8 @@ export function createTour(o) {
     },
     /** 앱이 화면을 다시 그린 뒤·사용자 행동 뒤에 부른다: 완료 조건을 보고 다음 단계로 */
     check() {
+      // 못 바꾼 공간은 작업 화면이 닫히면 바꾼다(한 번 바꾸면 끝 — 그 뒤 사용자가 옮기는 공간은 건드리지 않는다)
+      if (mode === 'step' && pendingSpace && o.onSpace && o.onSpace(pendingSpace, { home: false }) !== false) pendingSpace = '';
       if (mode === 'step') {
         const ni = advance(sc, index, o.getState());
         if (ni !== index) {

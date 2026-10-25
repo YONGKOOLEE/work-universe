@@ -143,20 +143,25 @@ test('FU-10·13 개요: 위험 요약 한 줄(+ 「자세히」)과 접힌 「�
     const panel = document.createElement('div');
     body.append(panel);
     let more = 0;
-    renderUniverseSummary(panel, s, 10, { riskSummary: { parts: teamRiskParts(teamRiskSummary(v, { asOf: ASOF, n: 3 })), onMore: () => { more += 1; } } });
+    renderUniverseSummary(panel, s, 10, { space: 'check', riskSummary: { parts: teamRiskParts(teamRiskSummary(v, { asOf: ASOF, n: 3 })), onMore: () => { more += 1; } } });
     const line = panel.querySelector('[data-testid=team-risk-summary]');
     assert.ok(line);
     assert.match(line.textContent, /혼자만 아는 일 \d+개 · 일 몰린 사람 \d+명 · 담당자 빈 일 \d+개/);
     panel.querySelector('[data-testid=btn-team-risk-more]').fire('click');
     assert.equal(more, 1);
-    const fold = panel.querySelector('[data-testid=empno-conflicts]');
+    // 사번 충돌 안내는 「지도 관리」 공간에 있다(CR-22 W)
+    assert.equal(panel.querySelector('[data-testid=empno-conflicts]'), null, '매주 점검 공간에는 없다');
+    const editPanel = document.createElement('div');
+    body.append(editPanel);
+    renderUniverseSummary(editPanel, s, 10, { space: 'edit' });
+    const fold = editPanel.querySelector('[data-testid=empno-conflicts]');
     assert.ok(fold, '사번 충돌이 있는 샘플');
     assert.equal(fold.tagName, 'DETAILS');
-    assert.equal(panel.querySelector('[data-testid=empno-conflicts-summary]').textContent, `사번 확인 필요 ${s.empno_conflicts.length}건`);
-    assert.ok(panel.querySelector('[data-testid=empno-conflict]').textContent.includes('V-1002'));
+    assert.equal(editPanel.querySelector('[data-testid=empno-conflicts-summary]').textContent, `사번 확인 필요 ${s.empno_conflicts.length}건`);
+    assert.ok(editPanel.querySelector('[data-testid=empno-conflict]').textContent.includes('V-1002'));
     // 요약을 주지 않으면(업무 하나짜리 지도) 줄이 없다
     const panel2 = document.createElement('div');
-    renderUniverseSummary(panel2, describeUniverse(viewOf('U-A1')), 10, {});
+    renderUniverseSummary(panel2, describeUniverse(viewOf('U-A1')), 10, { space: 'check' });
     assert.equal(panel2.querySelector('[data-testid=team-risk-summary]'), null);
     assert.equal(panel2.querySelector('[data-testid=empno-conflicts]'), null);
   } finally {

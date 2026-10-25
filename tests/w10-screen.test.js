@@ -268,10 +268,10 @@ test('R11-10 ④: 사전 생성 초안에 규칙 기반 항목이 섞이면 맨 
 
 // ── R11-11: 팀 따라 하기 두 순서 ──
 test('R11-11·CR-17 K: 기본 순서는 위험 요약 먼저(TEAM_ORDER), D-29 판(펼치기 → 찾기 → 주변만 → 전체 보기 → 「인사이트 보기」 → 「반복 비효율」 탭)도 상수만 바꾸면', () => {
-  assert.equal(TEAM_ORDER, 'risk-first');
-  assert.deepEqual(Object.keys(TEAM_ORDERS).sort(), ['d29', 'risk-first']);
+  assert.equal(TEAM_ORDER, 'weekly'); // CR-22 W: 기본이 weekly로 바뀜(risk-first·d29는 예전 판으로 남는다)
+  assert.deepEqual(Object.keys(TEAM_ORDERS).sort(), ['d29', 'risk-first', 'weekly']);
   const d29 = teamScenario('d29');
-  assert.deepEqual(scenarioOf('team').steps.map((s) => s.id), ['risk', 'expand', 'find', 'neighborhood', 'full']);
+  assert.deepEqual(scenarioOf('team').steps.map((s) => s.id), ['risk', 'save', 'summary', 'expand', 'find']);
   assert.deepEqual(d29.steps.map((s) => s.id), ['expand', 'find', 'neighborhood', 'full', 'insight']);
   assert.deepEqual(teamScenario('d29').steps.map((s) => s.id), ['expand', 'find', 'neighborhood', 'full', 'insight']);
   assert.deepEqual(teamScenario('risk-first').steps.map((s) => s.id), ['risk', 'expand', 'find', 'neighborhood', 'full']);

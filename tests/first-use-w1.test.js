@@ -327,9 +327,11 @@ test('FU-14·FU-33·R11-11·CR-17 K: 팀 따라 하기 순서 — 기본은 위�
   assert.deepEqual(steps.map((s) => s.id), ['expand', 'find', 'neighborhood', 'full', 'insight']);
   assert.equal(steps.length, 5);
   assert.match(steps[4].task, /「반복 비효율」 탭을 누르세요/);
+  // CR-22 W: 기본은 'weekly'(위험 요약 → 이번 점검 저장 → 점검 요약 → 펼치기 → 찾기). 위험 요약 먼저 판(risk-first)은 예전 판으로 남는다
   const riskFirst = scenarioOf('team').steps;
-  assert.deepEqual(riskFirst.map((s) => s.id), teamScenario('risk-first').steps.map((s) => s.id), '기본 = risk-first');
-  assert.deepEqual(riskFirst.map((s) => s.id), ['risk', 'expand', 'find', 'neighborhood', 'full']);
+  assert.deepEqual(riskFirst.map((s) => s.id), teamScenario('weekly').steps.map((s) => s.id), '기본 = weekly');
+  assert.deepEqual(riskFirst.map((s) => s.id), ['risk', 'save', 'summary', 'expand', 'find']);
+  assert.deepEqual(teamScenario('risk-first').steps.map((s) => s.id), ['risk', 'expand', 'find', 'neighborhood', 'full']);
   assert.match(riskFirst[0].task, /「혼자만 아는 일 …」 줄의 「자세히」/);
   assert.match(riskFirst[0].task, /한 사람만 해 봤고 인수인계 기록이 없는 일/);
 });

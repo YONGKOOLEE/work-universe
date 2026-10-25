@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PROVIDERS } from '../app/src/llm/providers.js';
 import {
-  HELP_CLOSE_LABEL, HELP_GEN, HELP_INTRO, HELP_TERMS, HELP_TOUR_LABEL, helpPanel, helpTexts,
+  HELP_CLOSE_LABEL, HELP_GEN, HELP_INTRO, HELP_SPACES, HELP_TERMS, HELP_TOUR_LABEL, helpPanel, helpTexts,
 } from '../app/src/ui/help.js';
 import { TEAM_NOTE, WHY_AI_BODY, WHY_STEPS, startScreen } from '../app/src/ui/start.js';
 import { installDom, uninstallDom } from './dom-stub.js';
@@ -62,14 +62,16 @@ test('시작 화면 처음 보이는 글(「…」 밖)에 유니버스·노드�
   assert.ok(!/유니버스|노드|꼭지/.test(WHY_AI_BODY));
 });
 
-test('FU-9 도움말 문구: 한 줄 설명·용어 4개·생성 방식 3개 이름과 순서', () => {
+test('FU-9 도움말 문구: 한 줄 설명·왼쪽 공간 5개·용어 7개·생성 방식 3개 이름과 순서', () => {
   assert.equal(HELP_INTRO, '이 앱은 업무마다 누가 언제 무엇을 했는지 기록해 두고, 담당자가 바뀔 때 근거 달린 인수인계 초안과 「혼자만 아는 업무」 경고를 만듭니다.');
-  assert.deepEqual(HELP_TERMS.map((t) => t.term), ['업무 지도', '항목', '지도 중심', '근거 칩']); // CR-18-2
+  // CR-22 W: 용어에 묶은 지도·혼자만 아는 일·미해결을 더했고(4 → 7), 왼쪽 공간 5줄 절을 더했다. 「항목」은 동그라미가 아니라 도형(모양이 유형마다 다르다)
+  assert.deepEqual(HELP_SPACES.map((t) => t.term), ['지도 보기', '기록', '인수인계', '매주 점검', '지도 관리']);
+  assert.deepEqual(HELP_TERMS.map((t) => t.term), ['업무 지도', '항목', '지도 중심', '묶은 지도', '혼자만 아는 일', '미해결', '근거 칩']); // CR-18-2
   assert.deepEqual(HELP_GEN.map((t) => t.term), ['사전 생성', '규칙 기반', 'Claude API']);
   assert.ok(HELP_TERMS[1].desc.includes('사람·업무·산출물·주제·조직'));
   assert.ok(HELP_TERMS[2].desc.includes('업무 지도 전체'));
   assert.ok(![...HELP_TERMS, ...HELP_GEN].some((t) => /유니버스/.test(`${t.term} ${t.desc}`)), '도움말에 「유니버스」가 없다(CR-17 A)');
-  assert.ok(HELP_TERMS[3].desc.includes('「근거:」') && HELP_TERMS[3].desc.includes('빛납니다'));
+  assert.ok(HELP_TERMS[6].desc.includes('「근거:」') && HELP_TERMS[6].desc.includes('빛납니다'));
   assert.ok(HELP_GEN[0].desc.includes('근거를 검사'));
   assert.ok(HELP_GEN[2].desc.includes('「설정」'));
   for (const t of [...HELP_TERMS, ...HELP_GEN]) assert.ok(t.term && t.desc, t.term);
@@ -92,7 +94,7 @@ test('FU-9 도움말 글의 「…」 이름이 실제 화면(도움말 파일 �
   for (const n of quotedNames([TEAM_NOTE])) assert.ok(src.includes(n), `화면에 없는 이름: 「${n}」`);
 });
 
-test('FU-9 helpPanel: 제목·한 줄 설명·용어 4·생성 방식 3, 「따라 하기 다시 보기」와 「닫기」가 각자 콜백만 부른다', () => {
+test('FU-9 helpPanel: 제목·한 줄 설명·공간 5·용어 7·생성 방식 3(접힘), 「따라 하기 다시 보기」와 「닫기」가 각자 콜백만 부른다', () => {
   const body = installDom();
   try {
     const calls = [];
@@ -100,7 +102,10 @@ test('FU-9 helpPanel: 제목·한 줄 설명·용어 4·생성 방식 3, 「따�
     body.append(panel);
     assert.equal(panel.querySelector('h2').textContent, '도움말');
     assert.equal(panel.querySelector('[data-testid=help-intro]').textContent, HELP_INTRO);
-    assert.equal(panel.querySelectorAll('[data-testid=help-terms] dt').length, 4);
+    assert.equal(panel.querySelectorAll('[data-testid=help-spaces] dt').length, 5);
+    assert.equal(panel.querySelectorAll('[data-testid=help-terms] dt').length, 7);
+    assert.equal(panel.querySelector('[data-testid=help-gen-fold]').tagName, 'DETAILS', '문장 생성 방식은 접어 둔다');
+    assert.equal(panel.querySelector('[data-testid=help-gen-fold]').attrs.has('open'), false);
     assert.equal(panel.querySelectorAll('[data-testid=help-gen] dt').length, 3);
     const tour = panel.querySelector('[data-testid=help-tour]');
     const close = panel.querySelector('[data-testid=help-close]');

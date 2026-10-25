@@ -246,16 +246,16 @@ test('CR-18-3 팀 따라 하기 끝 카드에도 같은 단추·안내가 있다
   const t = makeTour();
   t.state.universeId = 'U-D1';
   t.tour.start('team');
-  // risk-first: 위험 → 펼치기 → 찾기 → 주변만 보기 → 전체 보기
+  // 기본(CR-22 W 'weekly'): 위험 → 이번 점검 저장 → 점검 요약 → 펼치기 → 찾기
   Object.assign(t.state, { insightOpen: true, insightKind: 'risk' });
+  t.tour.check();
+  Object.assign(t.state, { baselineSaved: true });
+  t.tour.check();
+  Object.assign(t.state, { summaryUsed: true, insightOpen: false });
   t.tour.check();
   Object.assign(t.state, { expandedCount: 1 });
   t.tour.check();
   Object.assign(t.state, { foundGid: 'U-D1/N-001' });
-  t.tour.check();
-  Object.assign(t.state, { nbhd: true });
-  t.tour.check();
-  Object.assign(t.state, { nbhd: false });
   t.tour.check();
   assert.equal(t.tour.info().mode, 'end');
   assert.ok(q(t.slot, 'tour-end-guide'));

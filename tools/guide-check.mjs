@@ -115,7 +115,9 @@ async function walk(browser, port) {
     // 3단계: 빈 곳 → 인수인계 초안 만들기 → 윤바다 → 서하늘 → 초안 만들기
     const box = await ev(cdp, "(() => { const r = document.getElementById('graph').getBoundingClientRect(); return { x: r.left + 12, y: r.top + 12 }; })()");
     await mouseAt(cdp, box.x, box.y);
-    const ok3a = await clickText(cdp, labels.find((l) => l.includes('인수인계 초안')));
+    // CR-22 W: 지도 전체 화면의 「인수인계 초안 만들기」는 왼쪽 「인수인계」 공간에 있다 — 메뉴를 먼저 누른다(실행안내 문장은 메인이 고친다)
+    const ok3m = await clickText(cdp, '인수인계', '.ws-btn');
+    const ok3a = ok3m && await clickText(cdp, labels.find((l) => l.includes('인수인계 초안')));
     const ok3b = (await pickOption(cdp, '[data-testid=draft-from]', '윤바다')) && (await pickOption(cdp, '[data-testid=draft-to]', '서하늘'));
     const ok3c = await clickText(cdp, '초안 만들기', '#detail button');
     await sleep(300);
@@ -126,7 +128,8 @@ async function walk(browser, port) {
     await shot(cdp, `${browser.name}-g3-draft`);
     // 4단계
     await mouseAt(cdp, box.x, box.y);
-    const ok4 = await clickText(cdp, labels.find((l) => l.includes('인사이트')));
+    const ok4m = await clickText(cdp, '매주 점검', '.ws-btn'); // CR-22 W: 「인사이트 보기」는 왼쪽 「매주 점검」 공간에 있다(초안은 공간을 옮기면 닫힌다)
+    const ok4 = ok4m && await clickText(cdp, labels.find((l) => l.includes('인사이트')));
     const tabs = await ev(cdp, "[...document.querySelectorAll('.tabs .tab')].map((t) => t.textContent).join('|')");
     check('4단계: 「인사이트 보기」에 유사 경험자·반복 비효율·밀집·공백·흐름 변화 탭과 "사람이 정합니다"', ok4 && ['유사 경험자', '반복 비효율', '밀집·공백', '흐름 변화'].every((t) => tabs.includes(t)) && (await panel(cdp)).includes('사람이 정합니다'), tabs);
     await shot(cdp, `${browser.name}-g4-insight`);

@@ -371,7 +371,7 @@
   h4 { margin: 12px 0 4px; font-size: 14px; color: var(--accent); }
   dd { white-space: pre-line; }
   /* 따라 하기(CR-13 A): 오른쪽 패널 맨 위에 붙는 카드. 대상은 .tour-target(요소)·cytoscape 클래스 tour-target(노드)으로 짚는다 */
-  .tour-slot { position: sticky; top: -16px; z-index: 3; margin: -16px -16px 12px; padding: 10px 16px; background: var(--panel-2); border-bottom: 2px solid var(--accent); }
+  .tour-slot { position: sticky; top: -16px; z-index: 30; margin: -16px -16px 12px; padding: 10px 16px; background: var(--panel-2); border-bottom: 2px solid var(--accent); }
   .tour-slot + .aside-tools { margin-top: 0; }
   .tour-card { display: grid; gap: 6px; font-size: 14px; }
   .tour-card .tour-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -381,8 +381,9 @@
   .tour-card .tour-sub { margin: 0; color: var(--warn-text); font-size: 13px; }
   .tour-card .tour-hint { margin: 0; color: var(--ok); font-size: 13px; }
   .tour-card .row { margin-top: 2px; }
-  .tour-target { outline: 3px solid #ffd84d; outline-offset: 2px; animation: tour-pulse 1.1s ease-in-out infinite; }
-  @keyframes tour-pulse { 0%, 100% { outline-color: #ffd84d; } 50% { outline-color: rgba(255, 216, 77, .15); } }
+  /* 짚기 강조는 흰 점선(CR-22 W): 노랑은 그래프의 미해결 강조·공간 강조가 쓴다 */
+  .tour-target { outline: 3px dashed #fff; outline-offset: 2px; animation: tour-pulse 1.1s ease-in-out infinite; }
+  @keyframes tour-pulse { 0%, 100% { outline-color: #fff; } 50% { outline-color: rgba(255, 255, 255, .25); } }
   .tour-target.tour-inset { outline-offset: -4px; } /* 그래프처럼 큰 대상은 테두리를 안쪽에 그린다(재검증 N-2) */
   .tour-blank-hint { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 4; pointer-events: none; padding: 6px 16px; border-radius: 999px; background: var(--panel-2); color: var(--text); border: 2px solid var(--accent); font-size: 14px; font-weight: bold; white-space: nowrap; animation: tour-hint-pulse 1.1s ease-in-out infinite; }
   @keyframes tour-hint-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
@@ -416,11 +417,7 @@
   details.start-more > section { margin-bottom: 20px; }
   /* 길 찾기(CR-21): 개요의 「무엇을 할까요?」 단추·목적별 묶음·최근 기록, 방금 기록한 이력 줄, 머리글 기능 찾기 */
   #detail { container-type: inline-size; }
-  .goal-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 4px; }
-  .goal-bar button { flex: 1 1 auto; padding: 6px 8px; font-size: 13px; white-space: nowrap; }
-  @container (max-width: 310px) { .goal-bar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .goal-sec { margin-top: 4px; }
-  .goal-sec > h3 { border-radius: 6px; }
   .goal-sec > .goal-desc { margin: 0 0 8px; }
   .goal-flash { outline: 3px solid #ffd84d; outline-offset: 2px; border-radius: 6px; }
   details.overview-help { margin-top: 16px; }
@@ -438,7 +435,7 @@
   .feature-box { position: relative; flex: 3 1 200px; min-width: 150px; max-width: 340px; } /* 남는 폭을 지도 선택(1)보다 많이(3) 받아 안내 글이 덜 잘리게 */
   .feature-box input[type=search] { width: 100%; border-radius: 999px; padding: 6px 10px; font-size: 13px; }
   .feature-box ~ .spacer { flex: 0 0 0; } /* 남는 폭은 지도 선택·기능 찾기 칸이 나눠 쓴다(안내 글이 잘리지 않게). 오른쪽 단추는 아래 margin-left로 붙인다 */
-  #create-open { margin-left: auto; }
+  #tour-open { margin-left: auto; } /* 오른쪽 끝에 「?」·「설정」 */
   .feature-results { position: absolute; top: calc(100% + 4px); left: 0; width: 420px; max-width: 90vw; max-height: 70vh; overflow: auto; margin: 0; padding: 4px; list-style: none; background: var(--panel-2); border: 1px solid var(--accent); border-radius: 8px; z-index: 8; box-shadow: 0 6px 18px rgba(0,0,0,.5); }
   .feature-results button.feature-hit { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; width: 100%; text-align: left; border: 0; border-radius: 6px; background: none; padding: 6px 8px; white-space: normal; }
   .feature-results button.feature-hit:hover, .feature-results button.feature-hit:focus-visible { background: var(--chip); outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -450,7 +447,25 @@
   .feature-results .none, .feature-results .pick-head { padding: 8px; color: var(--warn-text); font-size: 13px; }
   .feature-results .pick-list { display: grid; gap: 2px; }
   .feature-results .pick-list button { width: 100%; text-align: left; border-radius: 6px; }
-  @media (max-width: 800px) { .aside-tools { display: none; } .panel-resizer { display: none; } aside, main.wide aside { width: auto !important; } main { flex-direction: column; } aside { width: auto; border-left: 0; border-top: 1px solid var(--line); max-height: 50vh; } .graph-wrap { min-height: 320px; } }
+  /* 작업 공간(CR-22 W): 그래프 왼쪽 세로 메뉴 5개(좁은 창은 그래프 위 가로 줄)와 공간별 패널 조각 */
+  .ws-nav { flex: none; width: 112px; display: flex; flex-direction: column; gap: 6px; padding: 10px 6px; background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; }
+  .ws-btn { display: flex; align-items: center; justify-content: space-between; gap: 3px; width: 100%; border-radius: 10px; padding: 10px 6px 10px 8px; text-align: left; font-size: 13px; line-height: 1.25; white-space: nowrap; }
+  .ws-btn[aria-pressed=true] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: bold; }
+  .ws-btn[aria-pressed=true]:focus-visible { outline-color: var(--text); }
+  .ws-badge { flex: none; min-width: 18px; padding: 0 4px; border-radius: 10px; background: var(--warn-bg); color: var(--warn-text); border: 1px solid #5a4c1c; font-size: 11px; font-weight: bold; text-align: center; }
+  .ws-btn[aria-pressed=true] .ws-badge { background: var(--accent-ink); color: var(--accent); border-color: var(--accent-ink); }
+  .ws-list, .ws-admin { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; margin: 0 0 10px; }
+  .ws-list > p, .ws-admin > p { margin: 0 0 6px; }
+  .ws-rows { display: grid; gap: 6px; }
+  .ws-rows li { padding-bottom: 6px; border-bottom: 1px dashed var(--line); overflow-wrap: anywhere; }
+  .ws-rows li:last-child { border-bottom: 0; padding-bottom: 0; }
+  aside.add-off details.add, aside.add-off .add-folded { display: none !important; } /* 「사람·업무·문서 추가」는 지도 관리 공간에서만(syncAdd) */
+  @media (max-width: 1099px) {
+    main { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-rows: auto minmax(0, 1fr); }
+    .ws-nav { grid-column: 1 / -1; width: auto; flex-direction: row; flex-wrap: wrap; padding: 6px 12px; border-right: 0; border-bottom: 1px solid var(--line); overflow: visible; }
+    .ws-btn { width: auto; padding: 6px 14px; border-radius: 999px; font-size: 13px; }
+  }
+  @media (max-width: 800px) { main { display: flex; } .aside-tools { display: none; } .panel-resizer { display: none; } aside, main.wide aside { width: auto !important; } main { flex-direction: column; } aside { width: auto; border-left: 0; border-top: 1px solid var(--line); max-height: 50vh; } .graph-wrap { min-height: 320px; } }
 </style>
 </head>
 <body>
@@ -459,11 +474,14 @@
   <select id="universe-picker" aria-label="업무 지도 선택"></select>
   <div id="feature-box" class="feature-box" data-testid="feature-box"></div>
   <span class="spacer"></span>
-  <button type="button" id="create-open" class="primary">새 업무 지도</button>
-  <button type="button" id="group-open">업무 지도 묶기</button>
-  <button type="button" id="import-open" title="업무정의서 문서를 붙여 넣어 초벌로 바꾸거나, JSON 파일을 열거나, 지금 업무 지도를 JSON 파일로 내려받습니다">가져오기·내보내기</button>
   <button type="button" id="tour-open" class="tour-open" data-testid="tour-open" title="도움말(용어 설명·따라 하기 다시 보기)" aria-label="도움말">?</button>
   <button type="button" id="settings-open" title="생성 방식과 작성자 이름을 정합니다">설정</button>
+  <!-- 「지도 관리」 공간으로 옮긴 단추 3개의 보관함(CR-22 W): 화면에는 지도 관리 공간 패널에 끼워 보이고, 그 밖에는 여기서 숨은 채 id·동작을 지킨다 -->
+  <div id="ws-admin-stash" hidden>
+    <button type="button" id="create-open" class="primary">새 업무 지도</button>
+    <button type="button" id="group-open">업무 지도 묶기</button>
+    <button type="button" id="import-open" title="업무정의서 문서를 붙여 넣어 초벌로 바꾸거나, JSON 파일을 열거나, 지금 업무 지도를 JSON 파일로 내려받습니다">가져오기·내보내기</button>
+  </div>
 </header>
 <div id="start-screen"></div>
 <p id="banner" role="alert" hidden></p>
@@ -471,6 +489,7 @@
 <p id="backup-nudge" role="status" data-testid="backup-nudge" hidden></p>
 <p id="folder-note" role="status" data-testid="folder-note" hidden></p>
 <main>
+  <nav id="workspace-nav" class="ws-nav" data-testid="workspace-nav" aria-label="작업 공간"></nav>
   <div class="graph-wrap">
     <div id="rewind-band" class="rewind-band" data-testid="rewind-band" role="status" hidden></div>
     <div class="explore-row">

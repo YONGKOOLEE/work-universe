@@ -8,7 +8,7 @@ import { buildView } from '../view/view.js';
 /**
  * @param {object} doc 현재 유니버스 문서
  * @param {object} view buildView 결과
- * @returns {{steps:{key:string, label:string, done:boolean, work?:{gid:string,label:string}}[]}|null} 보일 것이 없으면 null
+ * @returns {{steps:{key:string, label:string, done:boolean, space?:string, work?:{gid:string,label:string}}[]}|null} space: 누르면 갈 작업 공간(없으면 글자만) 보일 것이 없으면 null
  */
 export function starterSteps(doc, view) {
   if (doc.universe.is_sample) return null;
@@ -18,7 +18,9 @@ export function starterSteps(doc, view) {
   const steps = [
     {
       key: 'memo',
-      label: `하늘색 업무 「${works[0].label}」을 누르고 「이력 추가」 → 메모로 주의사항·이슈 한 줄 남기기`,
+      // 지금 화면 이름으로(CR-22 W): 왼쪽 「기록」 공간의 「이번 주 기록」. 줄을 누르면 그 공간으로 간다(space)
+      label: `「기록」 공간에서 업무 「${works[0].label}」에 주의사항·이슈 한 줄 남기기`,
+      space: 'record',
       work: { gid: works[0].gid, label: works[0].label },
       done: doc.events.some((e) => e.type === 'memo'),
     },
@@ -29,7 +31,8 @@ export function starterSteps(doc, view) {
     },
     {
       key: 'more',
-      label: '업무 더 넣기(「사람·업무·문서 추가」 또는 「표로 추가」)',
+      label: '업무 더 넣기(「지도 관리」 공간의 「사람·업무·문서 추가」 또는 「표로 추가」)',
+      space: 'edit',
       done: works.length >= 2,
     },
   ];
