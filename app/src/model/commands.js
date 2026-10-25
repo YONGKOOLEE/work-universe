@@ -20,10 +20,11 @@ import {
   TEXT_MAX,
   USER_EVENT_TYPES,
   hasKey,
+  isUnsafeKey,
   pairAllowed,
   pairKey,
 } from './schema.js';
-import { eventPayloadErrors } from './validate.js';
+import { badTags, eventPayloadErrors, longTextPath } from './validate.js';
 
 const ID_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 
@@ -85,7 +86,8 @@ function nodeFieldError(doc, f, { excludeId, isUpdate = false } = {}) {
       f.attrs !== null &&
       typeof f.attrs === 'object' &&
       !Array.isArray(f.attrs) &&
-      Object.values(f.attrs).every((v) => typeof v === 'string' || typeof v === 'number');
+      Object.keys(f.attrs).every((k) => !isUnsafeKey(k)) && // 프로토타입을 건드리는 키는 받지 않는다(검토10 S-8)
+      Object.values(f.attrs).every((v) => typeof v === 'string' || (typeof v === 'number' && Number.isFinite(v))); // NaN·Infinity는 JSON에서 null이 된다(검토10 C-7)
     if (!ok) return { code: CODES.SCHEMA, field: 'attrs' };
   }
   if (periodError(f.period)) return { code: CODES.SCHEMA, field: 'period' };
@@ -93,7 +95,7 @@ function nodeFieldError(doc, f, { excludeId, isUpdate = false } = {}) {
   if (f.attrs && Object.values(f.attrs).some((v) => String(v).length > TEXT_MAX)) return { code: CODES.SCHEMA, field: 'attrs', too_long: TEXT_MAX };
   // 가져오기 검증(validate.js, 검토9 S-2)과 같은 개수·길이 상한: 앱이 저장한 문서를 다시 가져오지 못하는 일을 막는다
   if (f.attrs && Object.keys(f.attrs).length > ATTRS_MAX_KEYS) return { code: CODES.SCHEMA, field: 'attrs', too_many: ATTRS_MAX_KEYS };
-  if (Array.isArray(f.tags) && (f.tags.length > TAGS_MAX || f.tags.some((t) => typeof t === 'string' && t.length > TEXT_MAX))) return { code: CODES.SCHEMA, field: 'tags', too_many: TAGS_MAX };
+  if (f.tags !== undefined && badTags(f.tags)) return { code: CODES.SCHEMA, field: 'tags', too_many: TAGS_MAX };
   const dup = findDuplicateNode(doc.nodes, f, excludeId);
   if (dup) return { code: CODES.DUP, existing_id: dup.id };
   return null;
@@ -508,7 +510,11 @@ export function addEvent(doc, input, ctx) {
   const candidate = { type: input.type, payload: input.payload };
   const [first] = eventPayloadErrors(doc, nodesById, edgeIds, candidate);
   if (first) return fail(first.code, { field: first.field, ...(first.expected ? { expected: first.expected } : {}) });
+  // 이력 payload 안의 긴 글: 가져오기 검증(validate.js)과 같은 상한(검토10 C-7)
+  const longAt = input.payload === undefined ? null : longTextPath(input.payload);
+  if (longAt !== null) return fail(CODES.SCHEMA, { field: longAt ? longAt.split('.')[0] : 'payload', too_long: TEXT_MAX });
   const prev = input.payload && input.payload.previous_handover_id;
+  if (prev && typeof prev !== 'string') return fail(CODES.SCHEMA, { field: 'previous_handover_id' });
   if (prev && !prev.includes('/') && !doc.events.some((e) => e.id === prev && e.type === 'handover')) {
     return fail(CODES.SCHEMA, { field: 'previous_handover_id' });
   }
@@ -549,6 +555,7 @@ export function createUniverse(input, ctx) {
   if (!text(input.level) || text(input.level).length > LABEL_MAX) return fail(CODES.REQUIRED, { field: 'level' });
   if (!text(input.owner) || text(input.owner).length > LABEL_MAX) return fail(CODES.REQUIRED, { field: 'owner' });
   if (text(input.description).length > TEXT_MAX) return fail(CODES.SCHEMA, { field: 'description', too_long: TEXT_MAX });
+  if (Array.isArray(input.tags) && input.tags.length && badTags(input.tags)) return fail(CODES.SCHEMA, { field: 'tags', too_many: TAGS_MAX });
 
   const random = ctx.random || Math.random;
   const rootId = newId(ID_PREFIX.node, random);
@@ -743,7 +750,7 @@ export function applyBatch(doc, ops, ctx) {
       const r = updateNode(work, op.id, op.changes, ctx);
       if (!r.ok) {
         failedRows.add(row);
-        errors.push({ row, error: r.error });
+        errors.push({ row: shown, error: r.error });
         return;
       }
       work = r.doc;
@@ -789,8 +796,9 @@ export function applyBatch(doc, ops, ctx) {
           errors.push({ row: shown, error: a.error });
           return;
         }
+        // 담당 시작은 연결 생성·담당 이력(·종료 이력)을 함께 남긴다: 이벤트를 문서에서 새로 늘어난 만큼 모두 담는다(검토10 C-12)
+        events.push(...a.doc.events.slice(work.events.length));
         work = a.doc;
-        events.push(a.event);
         assignments.push(a.edge);
         rows.push({ row, kind: 'assigned', edge: a.edge });
         return;

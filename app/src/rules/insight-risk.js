@@ -9,7 +9,7 @@ import { edgeStatus, periodStatus } from '../view/describe.js';
 import { refGid } from '../view/view.js';
 import { SUBTYPE_HANDOVER_DOC, SUBTYPE_ROLE } from '../model/schema.js';
 import { josa } from '../model/josa.js';
-import { workFormMissing } from './form.js';
+import { edgeIndex, workFormMissing } from './form.js';
 import { openMemos, memoTarget } from './issues.js';
 
 /** 바꾸기 쉬운 상수 한 곳(CR-14 8절 C14-4·C14-5) */
@@ -43,7 +43,7 @@ const isRole = (n) => n.subtype === SUBTYPE_ROLE;
 function performers(view, workGid, asOf) {
   const people = new Map(); // gid → {node, current}
   let any = false;
-  for (const e of view.edges) {
+  for (const e of edgeIndex(view).byTarget.get(workGid) || []) {
     if (!live(e) || e.core_type !== 'performs' || e.target !== workGid) continue;
     const p = view.getNode(e.source);
     if (!p || p.hidden || p.core_type !== 'person') continue;
@@ -78,7 +78,7 @@ export function newOwnerText(item) {
 function handoverBasis(view, work, asOf) {
   const events = (view.index.eventsByNode.get(work.gid) || []).filter((ev) => ev.type === 'handover' && ev.occurred_at <= asOf && view.canonical(refGid(ev.universe_id, ev.payload.work_id)) === work.gid);
   const docs = [];
-  for (const e of view.edges) {
+  for (const e of edgeIndex(view).bySource.get(work.gid) || []) {
     if (!live(e) || e.core_type !== 'produces' || e.source !== work.gid) continue;
     const a = view.getNode(e.target);
     if (a && !a.hidden && a.core_type === 'artifact' && a.subtype === SUBTYPE_HANDOVER_DOC && !docs.includes(a.gid)) docs.push(a.gid);
@@ -163,10 +163,19 @@ export function handoverReadiness(view, { asOf }) {
   const asOfDay = dayNum(asOf);
   const memos = view.events.filter((ev) => ev.type === 'memo' && ev.occurred_at <= asOf);
   const open = openMemos(view, { memos });
+  // 미해결 메모를 대상별로 한 번만 묶는다(업무마다 전체를 훑지 않게, RV10C-4). 묶음 안 순서는 open의 순서 그대로
+  const openByTarget = new Map();
+  for (const ev of open) {
+    const t = memoTarget(view, ev);
+    const list = openByTarget.get(t);
+    if (list) list.push(ev);
+    else openByTarget.set(t, [ev]);
+  }
+  const bySource = edgeIndex(view).bySource;
   const items = works.map((w) => {
     const formMissing = workFormMissing(view, w.gid) || [];
-    const issues = open.filter((ev) => memoTarget(view, ev) === w.gid);
-    const artifacts = view.edges.filter((e) => live(e) && e.core_type === 'produces' && e.source === w.gid && view.getNode(e.target)?.core_type === 'artifact' && !view.getNode(e.target).hidden);
+    const issues = openByTarget.get(w.gid) || [];
+    const artifacts = (bySource.get(w.gid) || []).filter((e) => live(e) && e.core_type === 'produces' && view.getNode(e.target)?.core_type === 'artifact' && !view.getNode(e.target).hidden);
     const { people } = performers(view, w.gid, asOf);
     const currents = [...people.values()].filter((x) => x.current && !isRole(x.node));
     const roleOnlyNow = currents.length === 0 && [...people.values()].some((x) => x.current && isRole(x.node));

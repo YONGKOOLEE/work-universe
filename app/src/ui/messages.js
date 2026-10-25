@@ -117,10 +117,14 @@ export function messageFor(err, ctx = {}) {
       if (err.reason === 'not_hidden') return '숨기지 않은 항목은 완전히 삭제할 수 없습니다. 먼저 숨기세요.';
       if (err.deleted) return '완전히 삭제한 항목은 되살릴 수 없습니다.';
       if (err.reason === 'invalid') return `이 업무 지도에 형식 오류 ${err.count}건이 있습니다. 보이는 내용이 일부 맞지 않을 수 있습니다.`;
+      // 내용 포함 HTML에 든 지도 중 형식이 깨진 것은 빼고 연다(검토10 C-2)
+      if (err.reason === 'embed_skipped') return `이 파일에 담긴 업무 지도 ${err.count}개(${(err.names || []).map((x) => `「${x}」`).join(', ')})는 형식이 맞지 않아 빼고 열었습니다. 나머지 지도는 그대로 볼 수 있습니다.`;
+      if (err.too_deep) return `파일 안의 내용이 너무 깊게 겹쳐 있어(${err.too_deep}겹 넘음) 업무 지도로 읽지 않았습니다.`;
       if (err.field === 'period') return '기간을 확인하세요. 날짜는 YYYY-MM-DD(1900~2200년)이고, 끝은 시작보다 앞일 수 없습니다.';
       if (err.field === 'end_date' && err.future) return '끝 날짜는 오늘보다 뒤일 수 없습니다. 지금 담당 중이면 끝 날짜를 비우고, 끝날 때 「담당 종료」를 기록하세요.';
       if (err.field === 'end_date') return '끝 날짜를 확인하세요(YYYY-MM-DD). 끝 날짜는 담당 시작 날짜보다 앞일 수 없습니다.';
       if (err.mismatch) return '해결 표시의 대상·주제가 닫으려는 메모와 다릅니다. 아무것도 저장하지 않았습니다.';
+      if (err.field === 'occurred_at' && err.future) return '날짜는 오늘보다 뒤일 수 없습니다. 아무것도 저장하지 않았습니다.';
       if (err.field === 'occurred_at') return '날짜를 확인하세요(YYYY-MM-DD, 1900~2200년의 실제 있는 날짜).';
       if (err.field === 'label') return '지도 중심 이름은 업무 지도 이름과 같아서 여기서 바꿀 수 없습니다.';
       if (err.unknown_type) return `알 수 없는 유형 「${err.unknown_type}」입니다. 업무·사람·산출물·조직·주제 중 하나를 쓰세요.`;

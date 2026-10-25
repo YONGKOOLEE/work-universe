@@ -64,8 +64,8 @@ test('같은 날 같은 사람 사이의 같은 업무 인수인계를 두 번 �
   const nodes = app.doc.nodes.length;
   assert.deepEqual(app.confirmHandover({ draft: d, text: TEXT, date: '2026-10-03' }).error, { code: 'E-CONFIRM', reason: 'duplicate' });
   assert.equal(app.doc.nodes.length, nodes);
-  // 다른 날이면 새로 확정(이름은 날짜로 구별)
-  assert.equal(app.confirmHandover({ draft: d, text: TEXT, date: '2026-10-04' }).ok, true);
+  // 다른 날이면 새로 확정(이름은 날짜로 구별). 오늘(NOW)보다 뒤 날짜는 거부하므로(검토10 C-9) 앞선 날로
+  assert.equal(app.confirmHandover({ draft: d, text: TEXT, date: '2026-10-02' }).ok, true);
   const ro = createApp({ store: null, samples: SAMPLES, currentId: 'U-A1', now: () => NOW });
   assert.equal(ro.confirmHandover({ draft: draftOf(ro, 'U-A1/N-001', 'U-A1/N-012', 'U-A1/N-011'), text: TEXT, date: '2026-10-03' }).error.code, 'W-STORAGE');
 });

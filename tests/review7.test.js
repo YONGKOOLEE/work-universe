@@ -73,7 +73,7 @@ test('K-2 확정본 본문: 2000자 경계가 줄바꿈이어도 이어 붙이�
 test('K-2 확정본 본문 2007자: 경계가 공백 여러 개 한가운데여도 원문과 같다', () => {
   const text = `${'가'.repeat(1990)}${' '.repeat(10)}${'나'.repeat(7)}`;
   assert.equal(text.length, 2007);
-  const { body, app } = confirmText(text, '2026-10-14');
+  const { body, app } = confirmText(text, '2026-10-12'); // 오늘(NOW 10-13)보다 뒤 날짜는 거부(검토10 C-9)
   assert.equal(body, text);
   assert.equal(validateDocument(app.doc).ok, true);
 });
@@ -82,7 +82,7 @@ test('K-2 긴 본문(5000자, 곳곳에 줄바꿈·공백): 원문과 같고 설
   let text = '';
   for (let i = 0; text.length < 5000; i += 1) text += `${i}번 줄 내용입니다 \n`;
   text = text.slice(0, 5000);
-  const { body, node } = confirmText(text, '2026-10-15');
+  const { body, node } = confirmText(text, '2026-10-11'); // 오늘(NOW 10-13)보다 뒤 날짜는 거부(검토10 C-9)
   assert.equal(body, text);
   assert.ok(node.description.length <= TEXT_MAX && node.description === node.description.trim());
 });

@@ -181,8 +181,8 @@ async function walk(browser, port) {
     const backOk = await clickText(cdp, allLabel || '전체 보기', '#fit');
     await sleep(600);
     check(`7단계: 「${allLabel}」 → 전체 그래프로 돌아옴`, backOk && (await ev(cdp, 'window.__wu.nbhd')) === null && (await ev(cdp, 'window.__wu.cy.nodes().length')) >= before7);
-    // 안내 4절: 초기화 버튼
-    check('안내 4절: 「가져오기·내보내기」 창 안에 「가상 데이터 초기화」 버튼이 있고 머리글에는 없음', (await ev(cdp, "document.getElementById('import-open').click(); [...document.querySelectorAll('#import-dialog button')].some((b) => b.textContent.includes('가상 데이터 초기화'))")) && !(await ev(cdp, "[...document.querySelectorAll('header button')].some((b) => b.textContent.includes('가상 데이터 초기화'))")));
+    // 안내 5절(알아 두실 점): 초기화 버튼
+    check('안내 5절: 「가져오기·내보내기」 창 안에 「가상 데이터 초기화」 버튼이 있고 머리글에는 없음', (await ev(cdp, "document.getElementById('import-open').click(); [...document.querySelectorAll('#import-dialog button')].some((b) => b.textContent.includes('가상 데이터 초기화'))")) && !(await ev(cdp, "[...document.querySelectorAll('header button')].some((b) => b.textContent.includes('가상 데이터 초기화'))")));
   } finally {
     cdp.close();
     proc.kill();

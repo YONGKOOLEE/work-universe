@@ -103,18 +103,29 @@ export function explainInsight(req, { provider = null, exists }) {
 }
 
 /**
+ * 이 PC의 지역 시각을 시간대 표기가 붙은 ISO 꼴(YYYY-MM-DDTHH:MM:SS+09:00)로 돌려준다(ui/time.js nowIso와 같은 결과).
+ * toISOString은 UTC라 한국 00~09시에 날짜가 전날로 찍힌다(RV10C-1). llm 모듈은 ui를 부르지 않으므로 같은 계산을 여기에 둔다.
+ */
+export function localNowIso(d = new Date()) {
+  const p = (n) => String(n).padStart(2, '0');
+  const off = -d.getTimezoneOffset();
+  const abs = Math.abs(off);
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}${off >= 0 ? '+' : '-'}${p(Math.floor(abs / 60))}:${p(abs % 60)}`;
+}
+
+/**
  * 문서 → 유니버스 변환(역할 d, CR-3·CR-5 ②). 규칙 기반 초벌 변환이 기본이고, 공급자가 문서 변환(convert)을 할 수 있으면 그 결과를 쓴다(CR-3 B 자리).
  * 공급자 결과는 스키마 검증과 원문 근거(모든 노드의 attrs.원문)를 통과해야 쓴다. 아니면 규칙 기반 결과와 원인을 돌려준다(R-04 ③).
  * 사전 생성은 내장 샘플용이라 새 문서에는 결과가 없다 → 규칙 기반.
  * @param {string} text 문서 원문
- * @param {{provider?:object|null, ruleConvert:(text:string)=>object}} opts ruleConvert: rules/doc-convert.js의 convertDocument를 감싼 것
+ * @param {{provider?:object|null, ruleConvert:(text:string)=>object, now?:()=>string}} opts ruleConvert: rules/doc-convert.js의 convertDocument를 감싼 것. now: 「AI로 변환」에 쓸 지역 시각(ISO, 시간대 포함). 없으면 이 PC의 지역 시각
  * @returns {{ok:boolean, doc?:object, report?:object, error?:object, method:string, fallback:object|null, note?:string|null}}
  *   fallback: 공급자가 실패해 규칙 기반으로 바꾼 원인. note: 실패는 아니지만 알릴 것(사전 생성)
  */
-export function convertDocumentWith(text, { provider = null, ruleConvert }) {
+export function convertDocumentWith(text, { provider = null, ruleConvert, now = localNowIso }) {
   // 실시간 공급자(키 있음)면 결과에 「AI로 변환」 손잡이(ai)를 붙인다. 동기 결과는 그대로 규칙 기반이고, 화면이 단추를 눌렀을 때만 ai.run을 부른다(T-37).
   // 키가 없으면 ai가 없어 화면에 단추도 없다
-  const aiHook = isLive(provider) ? { model: provider.model, run: (t) => convertDocumentAsync(t, { provider }) } : null;
+  const aiHook = isLive(provider) ? { model: provider.model, run: (t) => convertDocumentAsync(t, { provider, now }) } : null;
   const rule = (fallback, note = null) => ({ ...ruleConvert(text), method: 'rule', fallback, note, ...(aiHook ? { ai: aiHook } : {}) });
   if (aiHook) return rule(null);
   if (!provider || provider.name === 'none') return rule(null);
@@ -363,7 +374,7 @@ const convertMemo = new WeakMap();
  * @returns {Promise<null | {ok:true, doc:object, report:object, method:'llm', model:string, fallback:null, cached:boolean, dropped:object[]} | {ok:false, fallback:{code:string, reason:string}}>}
  *   null: 실시간 공급자가 아님(키 없음). ok:false: 실패 — 화면이 규칙 변환 결과를 대신 보여 준다(R-04 ③)
  */
-export async function convertDocumentAsync(text, { provider = null, now = () => new Date().toISOString(), random } = {}) {
+export async function convertDocumentAsync(text, { provider = null, now = localNowIso, random } = {}) {
   if (!isLive(provider) || typeof provider.convert !== 'function') return null;
   const fail = (reason, code = FALLBACK) => ({ ok: false, fallback: { code, reason } });
   const input = checkConvertInput(text);

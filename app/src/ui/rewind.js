@@ -67,6 +67,8 @@ export function limitTexts(limits) {
   const n = (code) => limits.filter((l) => l.code === code).length;
   if (n('purged')) out.push(`「완전히 삭제」한 항목 ${n('purged')}개는 내용을 지웠으므로 「(삭제된 항목)」 자리표시로만 보입니다.`);
   if (n('identity_detail')) out.push('같은 사람·업무 판정의 점수·이유·판정자는 기록에 없어, 판정 상태만 그때로 보입니다.');
+  const kept = limits.filter((l) => l.code === 'user_events_kept').reduce((sum, l) => sum + (l.count || 0), 0);
+  if (kept) out.push(`이 시점 뒤에 남긴 메모·인수인계·담당 같은 사용자 이력 ${kept}건은 되감아도 그대로 남습니다. 담당을 넘긴 기록이 있으면 연결은 그때로 돌아가도 넘긴 기록은 이력에 보입니다.`);
   return out;
 }
 
@@ -84,6 +86,8 @@ export function confirmText(preview, at, labelOf = pointLabel) {
   if (extra) lines.push(`- 묶음·같은 사람 판정 ${extra}건도 그때 상태로 맞춥니다.`);
   const skipped = preview.limits.filter((l) => ['purged_skip', 'edge_end_hidden', 'identity_created_after'].includes(l.code)).length;
   if (skipped) lines.push('- 되살릴 수 없는 일부(완전히 삭제한 항목 등)는 그대로 둡니다.');
+  const kept = preview.limits.filter((l) => l.code === 'user_events_kept').reduce((sum, l) => sum + (l.count || 0), 0);
+  if (kept) lines.push(`- 이 시점 뒤의 사용자 이력(메모·인수인계·담당 등) ${kept}건은 남습니다.`);
   lines.push('메모·인수인계·담당 같은 사용자 기록은 그대로 남습니다. 되돌린 기록도 이력에 남아, 다시 되감을 수 있습니다.');
   return lines.join('\n');
 }

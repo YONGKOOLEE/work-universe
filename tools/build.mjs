@@ -26,13 +26,27 @@ const result = await build({
 });
 const js = result.outputFiles[0].text;
 
-// 제3자 라이선스 고지(Cytoscape.js MIT, @anthropic-ai/sdk Apache-2.0): 파일 하나만 전달돼도 고지가 따라가도록 HTML 주석으로도 넣는다
-const third = async (dir, label, license) => {
-  const text = await readFile(join(root, 'node_modules', dir, 'LICENSE'), 'utf8');
+// 제3자 라이선스 고지: 번들에 실제로 들어가는 패키지(esbuild metafile로 확인, RV10S-3)를 모두 적는다. 파일 하나만 전달돼도 고지가 따라가도록 HTML 주석으로도 넣는다.
+//   Cytoscape.js MIT · @anthropic-ai/sdk Apache-2.0(+이전 판 MIT, LICENSE-MIT) · @opentelemetry/api Apache-2.0 · @stablelib/base64 MIT · fast-sha256 Unlicense · standardwebhooks MIT
+//   standardwebhooks 패키지에는 LICENSE 파일이 없고(package.json license: MIT만), SDK의 _vendor/partial-json-parser는 별도 LICENSE·출처 표시가 없다 → 있는 그대로 적고 미확인으로 남긴다
+// files: 패키지 폴더의 라이선스 파일들(없는 것은 건너뛰고), note: 파일로 확인하지 못한 사항
+const third = async (dir, label, license, { files = ['LICENSE'], note = '' } = {}) => {
   const version = JSON.parse(await readFile(join(root, 'node_modules', dir, 'package.json'), 'utf8')).version;
-  return `${label} ${version} (${license})\n\n${text}`;
+  const texts = [];
+  for (const f of files) texts.push(await readFile(join(root, 'node_modules', dir, f), 'utf8'));
+  return `${label} ${version} (${license})\n\n${[note, ...texts].filter(Boolean).join('\n\n')}`;
 };
-const notice = [await third('cytoscape', 'Cytoscape.js', 'MIT'), await third('@anthropic-ai/sdk', '@anthropic-ai/sdk', 'Apache-2.0')].join('\n\n----------------------------------------\n\n');
+const notice = [
+  await third('cytoscape', 'Cytoscape.js', 'MIT'),
+  await third('@anthropic-ai/sdk', '@anthropic-ai/sdk', 'Apache-2.0', {
+    files: ['LICENSE', 'LICENSE-MIT'],
+    note: '아래 LICENSE-MIT는 1.0.0 이전 판과 그 이전에 합쳐진 외부 기여분에 적용된다. SDK 안의 _vendor/partial-json-parser는 별도 라이선스 파일이 없어 출처·라이선스를 확인하지 못했다(SDK와 함께 배포됨, 미확인).',
+  }),
+  await third('@opentelemetry/api', '@opentelemetry/api', 'Apache-2.0'),
+  await third('@stablelib/base64', '@stablelib/base64', 'MIT'),
+  await third('fast-sha256', 'fast-sha256', 'Unlicense'),
+  await third('standardwebhooks', 'standardwebhooks', 'MIT', { files: [], note: '이 패키지에는 LICENSE 파일이 없다. package.json의 license 필드가 MIT이며 저작권자 표기는 확인하지 못했다(미확인).' }),
+].join('\n\n----------------------------------------\n\n');
 await writeFile(join(dist, 'THIRD_PARTY_LICENSES.txt'), notice);
 
 // P-1 제약 점검: 실행 파일에 모듈 스크립트·로컬 fetch가 없어야 한다

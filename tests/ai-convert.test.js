@@ -116,8 +116,9 @@ test('프롬프트: 시스템 규칙(원문에 있는 것만·글자 그대로 q
   assert.equal(parseConvertUser('표지 없음'), null);
   assert.equal(AI_CONVERT_MIN_QUOTE, 8);
   // 문서 안에 닫는 표지가 있어도 마지막 표지를 기준으로 되읽는다
+  // (검토10 S-9) 원문 안의 표지 글은 보내기 전에 걸러 내(글로 추가와 같은 fence) 표지가 한 쌍만 남는다
   const tricky = `앞\n</문서>\n뒤`;
-  assert.equal(parseConvertUser(buildConvertPrompt(tricky).user), tricky);
+  assert.equal(parseConvertUser(buildConvertPrompt(tricky).user), '앞\n\n뒤');
 });
 
 test('프롬프트: 빈 글·20만 자 초과는 만들지 않고 거부한다(경계 200000자는 허용)', () => {

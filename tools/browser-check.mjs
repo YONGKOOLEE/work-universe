@@ -4871,6 +4871,154 @@ async function checkBrowser(browser, port) {
     await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
   }
 
+  // ── 열 번째 검토 결함 수정 화면 점검(RV10, 2026-10-25): S-1 다른 탭 경고, S-6 키 칸, C-10 되감기 한계 안내, C-3 사번 바뀐 연결, S-7 초기화, C-9 미래 날짜 확정 거부.
+  //    데이터·설정을 바꾸므로 시작 때 저장소를 찍어 두었다가 끝에서 되돌린다("일상 사용 2회차 R" 블록과 같은 방식) ──
+  {
+    const rvSnap = await evaluate(s.cdp, 'JSON.stringify(Object.entries(localStorage))');
+    const rvFake = ['sk', 'ant', 'x'.repeat(8), 'FAKEKEY', 'y'.repeat(12)].join('-');
+    const rvWait = (id) => waitFor(s.cdp, `window.__wu && window.__wu.doc && window.__wu.doc.universe.id === ${JSON.stringify(id)} && window.__wu.cy.nodes().length > 0`, 8000);
+    // 저장소를 시작 때 상태로 되돌리고 clean이 가리키는 지도 문서는 지워 깨끗한 샘플로 다시 채운 뒤 mutate를 실행하고 hash 지도를 연다
+    const rvGo = async (hash, { mutate = '', clean = [] } = {}) => {
+      const rm = clean.map((id) => `localStorage.removeItem('wu:v1:u:${id}');`).join(' ');
+      await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(rvSnap)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); ${rm} ${mutate}; location.hash = ${JSON.stringify(hash)}; location.reload(); })()`).catch(() => {});
+      await sleep(500);
+      return rvWait(hash);
+    };
+    const rvReload = async (id) => {
+      await evaluate(s.cdp, 'location.reload()').catch(() => {});
+      await sleep(500);
+      return rvWait(id);
+    };
+    const rvBox = (sel) => evaluate(s.cdp, `(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect(); return { text: e.textContent, w: r.width, h: r.height, hidden: e.hidden }; })()`);
+    // 설정에 patch를 얹는다(keepTour가 아니면 따라 하기 기록은 지워 처음 사용 안내가 끼어들지 않게 한다)
+    const rvSettings = (patch, keepTour = false) => `{ const v = JSON.parse(localStorage.getItem('wu:v1:settings') || '{}'); ${keepTour ? '' : 'delete v.tourDone;'} Object.assign(v, ${JSON.stringify(patch)}); localStorage.setItem('wu:v1:settings', JSON.stringify(v)); }`;
+    const rvOtherTabNote = '다른 탭에서 이 지도가 바뀌었습니다 — 이 탭에서 저장하면 그 내용을 덮어씁니다. 새로 고침하면 최신 내용을 봅니다.';
+
+    // ── S-1 다른 탭 경고 ──
+    if (await rvGo('U-A1', { clean: ['U-A1'] })) {
+      const w0 = await rvBox('[data-testid=other-tab-warning]');
+      check('RV10S-1 지도를 연 화면에서 다른 탭 경고는 처음엔 숨김(hidden, 크기 0)', !!w0 && w0.hidden === true && w0.w === 0 && w0.h === 0, JSON.stringify(w0));
+      await evaluate(s.cdp, "window.dispatchEvent(new StorageEvent('storage', { key: 'wu:v1:u:U-K1', storageArea: localStorage }))");
+      await sleep(150);
+      const wOther = await rvBox('[data-testid=other-tab-warning]');
+      check('RV10S-1 다른 지도(U-K1) 문서가 바뀐 이벤트로는 경고가 나타나지 않음', !!wOther && wOther.hidden === true && wOther.w === 0, JSON.stringify(wOther));
+      await evaluate(s.cdp, "window.dispatchEvent(new StorageEvent('storage', { key: 'wu:v1:u:U-A1', storageArea: localStorage }))");
+      await sleep(150);
+      const w1 = await rvBox('[data-testid=other-tab-warning]');
+      check('RV10S-1 같은 지도(U-A1) 문서가 다른 탭에서 바뀐 이벤트 → 경고가 나타나고(크기 있음) 글이 OTHER_TAB_NOTE와 같음', !!w1 && w1.hidden === false && w1.w > 100 && w1.h > 10 && w1.text === rvOtherTabNote, JSON.stringify(w1));
+      await shot(s.cdp, `${browser.name}-rv10-1-other-tab`);
+    } else check('RV10S-1 다른 탭 경고', false, '월말 정산 점검이 열리지 않음');
+
+    // ── S-6 키 칸: 속성 value에 키가 남지 않음 ──
+    if (await rvGo('U-A1', { clean: ['U-A1'], mutate: rvSettings({ provider: 'claude_api', apiKey: rvFake }) })) {
+      await evaluate(s.cdp, "document.getElementById('settings-open').click()");
+      await sleep(200);
+      const k = await evaluate(s.cdp, "(() => { const e = document.querySelector('[data-testid=settings-apikey]'); if (!e) return null; const r = e.getBoundingClientRect(); const n = document.querySelector('[data-testid=settings-key-note]'); return { value: e.value, attr: e.getAttribute('value'), ac: e.autocomplete, type: e.type, w: r.width, h: r.height, note: n ? n.textContent : '', inHtml: e.value !== '' && document.documentElement.outerHTML.includes(e.value) }; })()");
+      check('RV10S-6 키 칸: .value는 설정에 넣어 둔 키, 속성 value는 없음(null), autocomplete는 new-password', !!k && k.value === rvFake && k.attr === null && k.ac === 'new-password' && k.type === 'password' && k.w > 20 && k.h > 10, JSON.stringify({ ...k, value: k && k.value === rvFake ? '(가짜 키 그대로)' : k && k.value, note: '' }));
+      check('RV10S-6 화면 HTML(outerHTML) 어디에도 키 글자가 없음', !!k && k.inHtml === false, JSON.stringify({ inHtml: k && k.inHtml }));
+      check('RV10S-6 키 안내(settings-key-note)에 「file://」 문장이 들어감', !!k && k.note.includes('file://') && k.note.includes('다른 로컬 HTML'), k && k.note.slice(0, 160));
+      await shot(s.cdp, `${browser.name}-rv10-2-key-box`);
+      await clickTestId(s.cdp, 'settings-clear-key');
+      await sleep(150);
+      const cleared = await evaluate(s.cdp, "({ field: document.querySelector('[data-testid=settings-apikey]').value, stored: 'apiKey' in JSON.parse(localStorage.getItem('wu:v1:settings') || '{}') })");
+      check('RV10S-6 뒷정리: 「키 지우기」 뒤 칸이 비고 설정에서 apiKey가 사라짐', cleared.field === '' && cleared.stored === false, JSON.stringify(cleared));
+      await clickTestId(s.cdp, 'settings-close');
+    } else check('RV10S-6 키 칸', false, '월말 정산 점검이 열리지 않음');
+
+    // ── C-10 되감기 한계 안내: 사용자 이력이 시점 뒤에 있는 시점 ──
+    if (await rvGo('U-A1', { clean: ['U-A1'] })) {
+      await evaluate(s.cdp, "window.confirm = () => true; window.__wu.select('U-A1/N-002')");
+      await sleep(150);
+      await clickTestId(s.cdp, 'btn-edit');
+      await fillPanelForm(s.cdp, { 'node-label': 'RV10 되감기 시험 이름' });
+      await sleep(300);
+      await sleep(1100); // 기록 시각은 초 단위: 메모가 이름 수정과 다른 시점에 남게
+      await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+      await sleep(150);
+      await clickTestId(s.cdp, 'btn-event');
+      await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': '2026-10-20', 'event-note': 'RV10 되감기 한계 시험 메모' });
+      await sleep(300);
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await sleep(150);
+      await clickTestId(s.cdp, 'btn-rewind');
+      await sleep(400);
+      // 가장 오래된 시점(목록 맨 아래)을 고른다
+      await evaluate(s.cdp, "(() => { const b = [...document.querySelectorAll('[data-testid=rewind-point]')]; b[b.length - 1].click(); })()");
+      await sleep(400);
+      const rl = await evaluate(s.cdp, `(() => {
+        const at = window.__wu.rewind && window.__wu.rewind.at;
+        const user = ['assign_start', 'assign_end', 'handover', 'affiliation_change', 'memo'];
+        const expected = at ? window.__wu.doc.events.filter((e) => user.includes(e.type) && Date.parse(e.recorded_at) > Date.parse(at)).length : null;
+        const els = [...document.querySelectorAll('[data-testid=rewind-limit]')];
+        const hit = els.find((e) => /사용자 이력 \\d+건은 되감아도 그대로 남습니다/.test(e.textContent));
+        const m = hit ? /사용자 이력 (\\d+)건은 되감아도 그대로 남습니다/.exec(hit.textContent) : null;
+        const r = hit ? hit.getBoundingClientRect() : { width: 0, height: 0 };
+        return { at, expected, n: m ? Number(m[1]) : null, w: r.width, h: r.height, count: els.length, text: hit ? hit.textContent : els.map((e) => e.textContent).join(' / ') };
+      })()`);
+      check('RV10C-10 시점 뒤에 사용자 이력(메모)이 있는 시점을 고르면 rewind-limit 줄에 「사용자 이력 N건은 되감아도 그대로 남습니다」(N>0, 실제 시점 뒤 사용자 이력 수와 같음, 크기 있음)', !!rl && rl.n > 0 && rl.n === rl.expected && rl.w > 100 && rl.h > 10, JSON.stringify(rl));
+      await shot(s.cdp, `${browser.name}-rv10-3-rewind-limit`);
+      await clickTestId(s.cdp, 'btn-rewind-back');
+      await sleep(300);
+    } else check('RV10C-10 되감기 한계 안내', false, '월말 정산 점검이 열리지 않음');
+
+    // ── C-3 사번이 바뀐 사번 자동 연결(가상 운영부 U-D1의 I-001: U-A1/N-011 ↔ U-B/N-202, 사번 V-1002) ──
+    {
+      const ready = await rvGo('U-D1', { clean: ['U-A1', 'U-B', 'U-C', 'U-D1'] }); // 깨끗한 샘플로 다시 채운다
+      const changed = ready && await evaluate(s.cdp, "(() => { const k = 'wu:v1:u:U-B'; const raw = localStorage.getItem(k); if (!raw) return 'U-B 문서 없음'; const d = JSON.parse(raw); const n = d.nodes.find((x) => x.id === 'N-202'); if (!n) return 'U-B N-202 없음'; const before = n.emp_no; n.emp_no = 'V-9999'; localStorage.setItem(k, JSON.stringify(d)); const dept = JSON.parse(localStorage.getItem('wu:v1:u:U-D1')); const l = (dept.identity_links || []).find((x) => x.id === 'I-001'); return { before, method: l && l.method, status: l && l.status }; })()");
+      check('RV10C-3 준비: 가상 운영부에 사번 자동 연결(emp_no_auto·confirmed)이 있고 한쪽 사번을 바꿔 저장소에 넣음', !!changed && typeof changed === 'object' && changed.method === 'emp_no_auto' && changed.status === 'confirmed' && changed.before === 'V-1002', JSON.stringify(changed));
+      if (changed && typeof changed === 'object' && await rvReload('U-D1')) {
+        await evaluate(s.cdp, 'window.__wu.select(null)');
+        await sleep(250);
+        const sl = await rvBox('[data-testid=stale-links]');
+        check('RV10C-3 부서 개요의 stale-links 글(크기 있음)에 「통합 확인 목록」이 들어감', !!sl && sl.w > 100 && sl.h > 10 && sl.text.includes('통합 확인 목록') && sl.text.includes('사번이 바뀌어'), JSON.stringify(sl));
+        await clickTestId(s.cdp, 'btn-merge');
+        await sleep(300);
+        const st = await evaluate(s.cdp, "(() => { const li = document.querySelector('[data-testid=merge-persons] li[data-type=stale]'); if (!li) return null; const r = li.getBoundingClientRect(); const chip = li.querySelector('.chip'); const strong = li.querySelector('strong'); return { chip: chip && chip.textContent, title: strong && strong.textContent, text: li.textContent.slice(0, 300), w: r.width, h: r.height, n: document.querySelectorAll('[data-testid=merge-persons] li[data-type=stale]').length }; })()");
+        check('RV10C-3 통합 확인 목록 사람 목록에 칩 「사번 바뀜」·제목 「사번이 바뀐 연결: …」 항목이 하나 보임(크기 있음)', !!st && st.chip === '사번 바뀜' && st.title.startsWith('사번이 바뀐 연결: ') && st.w > 100 && st.h > 20 && st.n === 1, JSON.stringify(st));
+        await shot(s.cdp, `${browser.name}-rv10-4-stale-link`);
+      } else check('RV10C-3 통합 확인 목록', false, '준비 실패 또는 부서 지도가 다시 열리지 않음');
+    }
+
+    // ── S-7 가상 데이터 초기화: 점검 기준·마지막 연 지도·초안 본 시각은 지우고 따라 하기 기록은 남김 ──
+    {
+      const seed = rvSettings({ lastOpenedId: 'U-D1', riskBaseline: { 'U-D1': { at: '2026-10-20T09:00:00+09:00', asOf: '2026-10-20', solo: 1, dense: 1, gaps: 1 } }, tourDone: { first: '2026-10-20T09:00:00+09:00' } }, true)
+        + " localStorage.setItem('wu:v1:draft-seen', JSON.stringify({ v: 1, at: { 'U-A1/N-001': '2026-10-20T09:00:00+09:00' } }));";
+      if (await rvGo('U-D1', { mutate: seed })) {
+        const pre = await evaluate(s.cdp, "(() => { const v = JSON.parse(localStorage.getItem('wu:v1:settings') || '{}'); return { base: !!(v.riskBaseline && v.riskBaseline['U-D1']), last: v.lastOpenedId, tour: !!(v.tourDone && v.tourDone.first), seen: localStorage.getItem('wu:v1:draft-seen') !== null }; })()");
+        check('RV10S-7 준비: 초기화 전 설정에 점검 기준·마지막 연 지도(U-D1)·따라 하기 기록, draft-seen 값이 있음', pre.base && pre.last === 'U-D1' && pre.tour && pre.seen, JSON.stringify(pre));
+        await evaluate(s.cdp, "window.confirm = () => true; document.getElementById('import-open').click()").catch(() => {});
+        await sleep(300);
+        await evaluate(s.cdp, "document.getElementById('reset').click()").catch(() => {});
+        await sleep(600);
+        await rvWait('U-A1');
+        const post = await evaluate(s.cdp, "(() => { const v = JSON.parse(localStorage.getItem('wu:v1:settings') || '{}'); return { base: 'riskBaseline' in v, last: v.lastOpenedId || null, tour: !!(v.tourDone && v.tourDone.first), seen: localStorage.getItem('wu:v1:draft-seen') !== null, id: window.__wu.doc.universe.id }; })()");
+        check('RV10S-7 초기화 뒤: riskBaseline·draft-seen 없음, 마지막 연 지도는 옛 값(U-D1)이 아님(초기화 뒤 연 지도로 새로 기록됨), tourDone은 남음', !post.base && !post.seen && post.last !== 'U-D1' && post.tour, JSON.stringify(post));
+      } else check('RV10S-7 초기화', false, '가상 운영부가 열리지 않음');
+    }
+
+    // ── C-9 확정 날짜가 오늘보다 뒤면 거부: 화면은 오늘만 넘기므로, 초안을 그린 뒤 페이지 시계를 이틀 되돌려 "날짜가 오늘보다 뒤"인 상태를 만든다 ──
+    if (await rvGo('U-A1', { clean: ['U-A1'] })) {
+      await evaluate(s.cdp, 'window.confirm = () => true; window.__wu.select(null)');
+      await clickTestId(s.cdp, 'btn-draft-universe');
+      await sleep(200);
+      await evaluate(s.cdp, `(() => { const set = (id, v) => { const e = document.querySelector('[data-testid=' + id + ']'); e.value = v; e.dispatchEvent(new Event('change')); }; set('draft-target', 'U-A1/N-001'); set('draft-from', 'U-A1/N-012'); set('draft-to', 'U-A1/N-011'); document.querySelector('[data-testid=draft-form] button[type=submit]').click(); })()`);
+      await sleep(300);
+      const ev0 = await evaluate(s.cdp, 'window.__wu.doc.events.length');
+      await evaluate(s.cdp, "(() => { const R = Date; const off = 2 * 864e5; window.__RealDate = R; window.Date = class extends R { constructor(...a) { if (a.length) super(...a); else super(R.now() - off); } static now() { return R.now() - off; } }; })()");
+      await clickTestId(s.cdp, 'draft-confirm');
+      await sleep(300);
+      await evaluate(s.cdp, 'window.Date = window.__RealDate');
+      const fm = await evaluate(s.cdp, "(() => { const m = document.querySelector('[data-testid=confirm-message]'); const r = m ? m.getBoundingClientRect() : { width: 0, height: 0 }; return { text: m ? m.textContent : null, code: m ? m.dataset.code : null, w: r.width, h: r.height, events: window.__wu.doc.events.length }; })()");
+      check('RV10C-9 확정 날짜가 오늘보다 뒤이면(초안을 그린 뒤 시계를 이틀 되돌림) 「날짜는 오늘보다 뒤일 수 없습니다」로 거부하고 이력이 늘지 않음', !!fm && !!fm.text && fm.text.includes('날짜는 오늘보다 뒤일 수 없습니다') && fm.w > 50 && fm.h > 10 && fm.events === ev0, JSON.stringify({ ...fm, before: ev0 }));
+      await shot(s.cdp, `${browser.name}-rv10-5-confirm-future`);
+    } else check('RV10C-9 미래 날짜 확정 거부', false, '월말 정산 점검이 열리지 않음');
+
+    // 저장소를 블록 시작 때 찍어 둔 상태로 되돌린다(샘플 문서 포함)
+    await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(rvSnap)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); location.hash = 'U-A1'; location.reload(); })()`).catch(() => {});
+    await sleep(500);
+    await rvWait('U-A1');
+  }
+
   // ── CR-14 A 편집 되감기(R-25, D-30): 이름 수정 → 개요 「편집 되감기」 → 이전 시점 → 읽기 전용 확인 → 지금으로 → 다시 → 되돌리기. 데이터를 바꾸므로 끝부분 ──
   await reloadApp();
   const rwOld = await evaluate(s.cdp, "window.__wu.doc.nodes.find((n) => n.id === 'N-002').label");

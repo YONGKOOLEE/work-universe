@@ -3,7 +3,7 @@
 // 연결 칸(2026-10-18 CR-13 C): 새 행(업무)의 「담당자·산출물·다음 업무」 칸 → 이름으로 노드를 찾아(없으면 새로 만들어) 수행·산출·선후행 연결. 「표로 고치기」에는 연결 칸이 없다.
 // 기본값은 docs/decisions-pending.md 8절(T19-1~17). 바꾸기 쉽게 TABLE_RULES 한 곳에 둔다.
 
-import { BATCH_MAX_ROWS, CODES, LABEL_MAX, NODE_TYPES, normalizeLabel } from './schema.js';
+import { BATCH_MAX_ROWS, CODES, LABEL_MAX, NODE_TYPES, isUnsafeKey, normalizeLabel } from './schema.js';
 
 export const TABLE_RULES = {
   maxRows: BATCH_MAX_ROWS, // T19-11
@@ -87,7 +87,7 @@ export function parseAttrsCell(text) {
     const at = p.indexOf('=');
     const key = at < 0 ? '' : p.slice(0, at).trim();
     // 객체 프로토타입을 건드리는 키는 받지 않는다(조용히 사라지지 않게 거부. 검토7 K-5)
-    if (!key || key === '__proto__' || key === 'constructor' || key === 'prototype') return { attrs: null, error: { code: CODES.SCHEMA, field: 'attrs', format: true } };
+    if (!key || isUnsafeKey(key)) return { attrs: null, error: { code: CODES.SCHEMA, field: 'attrs', format: true } };
     const value = p.slice(at + 1).trim();
     attrs[key] = value === '' ? null : value;
   }

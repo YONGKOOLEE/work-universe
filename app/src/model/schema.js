@@ -199,3 +199,9 @@ export function eventTypeLabel(type) {
 
 // 표 입력(T-19, D-18)에서 한 번에 처리하는 행 수 상한(T19-11). 바꾸려면 여기 한 곳만 고친다
 export const BATCH_MAX_ROWS = 100;
+
+// 가져온 JSON의 중첩 깊이 상한(검토10 S-5). 정상 문서는 7겹 안팎이다. 바꾸려면 여기 한 곳만 고친다
+export const DOC_MAX_DEPTH = 16;
+
+// ID·속성 키로 받지 않는 이름: 객체 프로토타입을 건드리거나 조용히 사라진다(검토7 K-5, 검토10 S-8). table.js·commands.js·validate.js가 같이 쓴다
+export const isUnsafeKey = (k) => k === '__proto__' || k === 'constructor' || k === 'prototype';

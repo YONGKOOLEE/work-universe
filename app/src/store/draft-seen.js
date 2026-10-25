@@ -35,3 +35,14 @@ export function writeDraftSeen(storage, targetGid, iso) {
     return false;
   }
 }
+
+/** 기억을 모두 지운다(가상 데이터 초기화, 검토10 S-7). 저장소가 없거나 실패하면 false */
+export function clearDraftSeen(storage) {
+  if (!storage) return false;
+  try {
+    storage.removeItem(KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}

@@ -128,7 +128,7 @@ export function renderUniverseSummary(panel, s, shown = null, extras = {}) {
       el('summary', { class: 'notice', 'data-testid': 'empno-conflicts-summary' }, `사번 확인 필요 ${s.empno_conflicts.length}건`),
       ...s.empno_conflicts.map((c) => el('p', { class: 'notice', 'data-testid': 'empno-conflict' }, `확인할 것: 사번 충돌 — ${c.emp_no}가 서로 다른 이름으로 있습니다(${c.nodes.map((n) => `${n.label}·${n.universe_name}`).join(', ')}). 자동으로 합치지 않았으니 같은 사람인지 확인해 주세요.`))));
   }
-  if (s.stale_links.length) panel.append(el('p', { class: 'notice', 'data-testid': 'stale-links' }, `사번이 바뀌어 더는 맞지 않는 사번 자동 연결 ${s.stale_links.length}건은 합치지 않았습니다. 다시 확인이 필요합니다.`));
+  if (s.stale_links.length) panel.append(el('p', { class: 'notice', 'data-testid': 'stale-links' }, `사번이 바뀌어 더는 맞지 않는 사번 자동 연결 ${s.stale_links.length}건은 합치지 않았습니다. 「통합 확인 목록」에서 같은 사람인지 다시 골라 주세요.`));
   // 큰 유니버스: 업무별로 나누라는 안내(막지 않는다)
   if (extras.split) {
     panel.append(el('p', { class: 'hint', 'data-testid': 'split-hint' }, `${extras.universeId === 'U-K1' ? '이 샘플은 단계마다 항목을 만든 비교 자료입니다. ' : ''}항목 ${s.node_total}개 — 한 화면에 다 그리면 이름이 작아집니다(월말 정산 점검은 업무 3개·항목 10개). 업무 하나씩 업무 지도로 만들고 「업무 지도 묶기」로 묶으면 위에서는 접혀 보입니다. 지금은 「항목 찾기」나, 항목을 고른 뒤 「주변만 보기」로 좁혀 보세요.`));

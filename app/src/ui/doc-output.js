@@ -57,13 +57,27 @@ export function downloadWithNotice(btn, name, html) {
   return r;
 }
 
+// 인쇄 문서에는 스크립트가 필요 없다(RV10S-11). 지금은 모든 글이 이스케이프돼 안전하지만, 실수로 새도 실행되지 않게 막는다.
+// sandbox 대신 메타를 쓴다: 인쇄는 부모가 iframe의 contentWindow.print()를 부르므로 allow-same-origin·allow-modals가 필요해 sandbox가 인쇄를 깰 위험이 더 크다.
+export const PRINT_CSP_META = `<meta http-equiv="Content-Security-Policy" content="script-src 'none'">`;
+
+/** 문서 HTML의 맨 앞(head 안, 없으면 doctype 바로 뒤)에 스크립트 금지 메타를 넣는다. 다른 부분은 그대로 */
+export function withNoScript(html) {
+  const text = String(html);
+  const head = /<head(\s[^>]*)?>/i.exec(text);
+  if (head) return text.slice(0, head.index + head[0].length) + PRINT_CSP_META + text.slice(head.index + head[0].length);
+  const doctype = /^\s*<!doctype[^>]*>/i.exec(text);
+  if (doctype) return text.slice(0, doctype[0].length) + PRINT_CSP_META + text.slice(doctype[0].length);
+  return PRINT_CSP_META + text;
+}
+
 /** 숨긴 iframe에 HTML을 넣고 그 창의 print()를 부른다(팝업 차단을 피한다). 인쇄 뒤 iframe은 치운다 */
 export function printHtml(html) {
   const f = document.createElement('iframe');
   f.setAttribute('aria-hidden', 'true');
   f.dataset.testid = 'print-frame';
   f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
-  f.srcdoc = html;
+  f.srcdoc = withNoScript(html);
   f.addEventListener('load', () => {
     const w = f.contentWindow;
     w.addEventListener('afterprint', () => setTimeout(() => f.remove(), 500));

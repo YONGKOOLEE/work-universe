@@ -29,7 +29,9 @@ export function settingsPanel(o) {
   // 「Claude API」를 고를 때만 키·모델 칸을 만든다(다른 방식에서는 화면에 아무것도 없다)
   let keyBox = null;
   const keyBoxFor = () => {
-    const keyInput = el('input', { type: 'password', autocomplete: 'off', spellcheck: 'false', maxlength: String(API_KEY_MAX), value: o.apiKey || '', placeholder: '키를 붙여 넣으세요', 'aria-label': 'API 키', 'data-testid': 'settings-apikey' });
+    // 값은 .value로만 넣는다(속성 value에 두면 DOM 속성에 키가 남는다, RV10S-6). 브라우저의 비밀번호 저장 제안도 막는다
+    const keyInput = el('input', { type: 'password', autocomplete: 'new-password', spellcheck: 'false', maxlength: String(API_KEY_MAX), placeholder: '키를 붙여 넣으세요', 'aria-label': 'API 키', 'data-testid': 'settings-apikey' });
+    keyInput.value = o.apiKey || '';
     const modelInput = el('input', { type: 'text', autocomplete: 'off', spellcheck: 'false', maxlength: String(LLM_MODEL_MAX), value: o.llmModel || '', placeholder: DEFAULT_LLM_MODEL, 'aria-label': '모델', 'data-testid': 'settings-model' });
     const status = el('p', { class: 'muted small', 'aria-live': 'polite', 'data-testid': 'settings-key-status' });
     const showStatus = (hasKey) => { status.textContent = hasKey ? '키가 입력되어 있습니다. 초안과 인사이트 설명을 실시간으로 다듬습니다.' : '키가 없습니다. 미리 받아 둔 문장(사전 생성)으로, 없으면 기록을 그대로 모은 문장(규칙 기반)으로 보여 줍니다.'; };

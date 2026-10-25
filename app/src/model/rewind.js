@@ -7,11 +7,12 @@
 //  - 「완전히 삭제」(purge)한 노드는 내용·붙은 연결을 이미 지웠으므로 자리표시로만 남는다(limit 'purged').
 //  - 노드 updated_at은 그 노드의 남은 생성·수정·숨김 이력 중 마지막 시각(없으면 created_at)으로 복원한다.
 //    이력 없이 들어온 노드(문서 변환·가져오기)는 이력이 되감기에 닿지 않는 한 값을 그대로 둔다.
+//  - 사용자 이력(메모·인수인계·담당·소속 변경)은 되감아도 지우지 않는다. 시점 뒤에 남는 건수를 limit 'user_events_kept'(count)로 알린다.
 //  - 동일성 연결의 수정 이력에는 status·method 이전 값만 있다. 점수·이유·판정자·판정 시각은 복원하지 못한다(limit 'identity_detail').
 
 import { addEdge, addRef, decideIdentity, hideEdge, hideNode, hideRef, restoreNode, updateEdge, updateNode } from './commands.js';
 import { nodeDupKey } from './checks.js';
-import { LABEL_MAX } from './schema.js';
+import { LABEL_MAX, USER_EVENT_TYPES } from './schema.js';
 
 // 되돌리기 중간에 이름이 겹칠 노드를 잠시 비켜 둘 이름(같은 묶음 안에서 곧 그때 이름으로 바뀐다)
 const tempLabel = (n) => { const tail = ` (되감기 중 ${n.id})`; return `${String(n.label).slice(0, Math.max(1, LABEL_MAX - tail.length))}${tail}`; };
@@ -199,6 +200,9 @@ export function rewind(doc, at) {
   const found = work.events.findIndex(isLater);
   const cut = found < 0 ? work.events.length : found;
   for (let i = work.events.length - 1; i >= cut; i -= 1) reverseEvent(work, work.events[i], ctx);
+  // 사용자 이력(메모·인수인계·담당 …)은 되감아도 남는다(C14-3). 몇 건이 남는지 알린다(RV10C-10)
+  const keptUser = work.events.slice(cut).filter((ev) => ev && USER_EVENT_TYPES.includes(ev.type)).length;
+  if (keptUser) ctx.limits.push({ code: 'user_events_kept', count: keptUser });
   work.events = work.events.slice(0, cut);
   // updated_at: 남은 노드 이력 중 마지막 시각, 없으면 created_at
   for (const id of ctx.touched) {

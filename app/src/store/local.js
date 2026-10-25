@@ -129,12 +129,15 @@ function applyDailyUse(out, v) {
   if (base) out.riskBaseline = base;
 }
 
+// loadSettings가 돌려주는 객체에 "읽은 시점의 저장 모양"을 붙인다(saveSettings가 이 탭이 바꾼 칸만 알아내는 기준)
+const remember = (obj) => { lastSeen.set(obj, pickSettings(obj)); return obj; };
+
 /** 설정(12.4 wu:v1:settings): 공급자 선택·작성자 이름 등. 저장소가 없거나 값이 깨졌으면 기본값. apiKey·llmModel은 실시간 Claude API용(CR-15) */
 export function loadSettings(storage, defaults, allowed = null) {
   if (!storage) return { ...defaults };
   try {
     const v = JSON.parse(storage.getItem(SETTINGS_KEY) || 'null');
-    if (!v || typeof v !== 'object' || Array.isArray(v)) return { ...defaults };
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return remember({ ...defaults });
     // 모르는 공급자 이름은 기본값으로 바로잡는다(표시와 저장값이 어긋나지 않게, 검토3 LLM-3)
     const provider = typeof v.provider === 'string' && (!allowed || allowed.includes(v.provider)) ? v.provider : defaults.provider;
     // 마지막 내보내기·백업 권유를 닫은 시각(12.4, D-23). 날짜로 읽을 수 없으면 없는 것으로 본다
@@ -150,31 +153,120 @@ export function loadSettings(storage, defaults, allowed = null) {
     if (cleanApiKey(v.apiKey)) out.apiKey = cleanApiKey(v.apiKey);
     if (cleanLlmModel(v.llmModel)) out.llmModel = cleanLlmModel(v.llmModel);
     applyDailyUse(out, v);
-    return out;
+    return remember(out);
   } catch {
     return { ...defaults };
   }
 }
 
-/** 설정을 저장한다. 실패하면 false(화면에서는 이번 세션 동안만 유지) */
+// 설정 한 키의 직렬화 길이 상한(RV10S-14): 점검 기준(지도마다 둘 × 지도 30 × 담당 100)이 쌓이면 최악 100만 자까지 커진다. 넘으면 오래된 점검 기준부터 버린다
+export const SETTINGS_MAX_CHARS = 200000;
+
+/** 저장할 모양으로 고른다(알 수 없는 칸·깨진 값은 뺀다). loadSettings가 읽은 값과 저장소에서 다시 읽은 값에도 같이 쓴다 */
+function pickSettings(settings) {
+  const out = { provider: settings.provider };
+  const author = cleanAuthorName(settings.authorName);
+  if (author) out.authorName = author;
+  if (settings.lastExportAt) out.lastExportAt = settings.lastExportAt;
+  if (settings.backupDismissedAt) out.backupDismissedAt = settings.backupDismissedAt;
+  if (settings.moreTools === true) out.moreTools = true;
+  if (validPanelWidth(settings.panelWidth)) out.panelWidth = settings.panelWidth;
+  if (cleanApiKey(settings.apiKey)) out.apiKey = cleanApiKey(settings.apiKey);
+  if (cleanLlmModel(settings.llmModel)) out.llmModel = cleanLlmModel(settings.llmModel);
+  applyDailyUse(out, settings);
+  return out;
+}
+
+// 여러 탭(RV10S-1): loadSettings가 돌려준 객체마다 "읽었을 때/마지막으로 저장했을 때의 저장 모양"을 기억해 둔다.
+// 저장할 때 이 탭이 바꾼 칸만 쓰고, 안 바꾼 칸은 저장 직전 저장소의 값을 따른다(다른 탭이 지운 키가 되살아나지 않게)
+const lastSeen = new WeakMap();
+const MAP_FIELDS = ['riskBaseline', 'tourDone']; // 지도·시나리오별 칸은 항목 단위로 합친다
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+function mergeField(mine, seen, theirs) {
+  return same(mine, seen) ? theirs : mine;
+}
+
+function mergeSettings(mine, seen, theirs) {
+  const out = {};
+  for (const k of new Set([...Object.keys(mine), ...Object.keys(seen), ...Object.keys(theirs)])) {
+    if (MAP_FIELDS.includes(k)) {
+      const m = mine[k] || {};
+      const s0 = seen[k] || {};
+      const t = theirs[k] || {};
+      const sub = {};
+      for (const id of new Set([...Object.keys(m), ...Object.keys(s0), ...Object.keys(t)])) {
+        const v = mergeField(m[id], s0[id], t[id]);
+        if (v !== undefined) sub[id] = v;
+      }
+      if (Object.keys(sub).length) out[k] = sub;
+    } else {
+      const v = mergeField(mine[k], seen[k], theirs[k]);
+      if (v !== undefined) out[k] = v;
+    }
+  }
+  return out;
+}
+
+/** 점검 기준 한 지도 항목(기준 하나 또는 배열)에서 가장 늦은 저장 시각(ms). 읽을 수 없으면 0 */
+function latestAt(entry) {
+  const rows = Array.isArray(entry) ? entry : [entry];
+  return Math.max(0, ...rows.map((r) => (r && typeof r.at === 'string' && Date.parse(r.at)) || 0));
+}
+
+/** 직렬화 길이가 상한을 넘으면 가장 오래 전에 점검한 지도의 기준부터 버린다 */
+function capSize(out) {
+  if (JSON.stringify(out).length <= SETTINGS_MAX_CHARS || !out.riskBaseline) return out;
+  const ids = Object.keys(out.riskBaseline).sort((a, b) => latestAt(out.riskBaseline[a]) - latestAt(out.riskBaseline[b]));
+  const rest = { ...out.riskBaseline };
+  const trimmed = { ...out, riskBaseline: rest };
+  for (const id of ids) {
+    delete rest[id];
+    if (!Object.keys(rest).length) delete trimmed.riskBaseline;
+    if (JSON.stringify(trimmed).length <= SETTINGS_MAX_CHARS) break;
+  }
+  return trimmed;
+}
+
+/** 설정을 저장한다. 실패하면 false(화면에서는 이번 세션 동안만 유지). loadSettings로 읽은 객체면 다른 탭이 저장한 칸을 지우지 않는다 */
 export function saveSettings(storage, settings) {
   if (!storage) return false;
   try {
-    const out = { provider: settings.provider };
-    const author = cleanAuthorName(settings.authorName);
-    if (author) out.authorName = author;
-    if (settings.lastExportAt) out.lastExportAt = settings.lastExportAt;
-    if (settings.backupDismissedAt) out.backupDismissedAt = settings.backupDismissedAt;
-    if (settings.moreTools === true) out.moreTools = true;
-    if (validPanelWidth(settings.panelWidth)) out.panelWidth = settings.panelWidth;
-    if (cleanApiKey(settings.apiKey)) out.apiKey = cleanApiKey(settings.apiKey);
-    if (cleanLlmModel(settings.llmModel)) out.llmModel = cleanLlmModel(settings.llmModel);
-    applyDailyUse(out, settings);
+    let out = pickSettings(settings);
+    const seen = lastSeen.get(settings);
+    if (seen) {
+      let theirs = null;
+      try {
+        const raw = JSON.parse(storage.getItem(SETTINGS_KEY) || 'null');
+        if (raw && typeof raw === 'object' && !Array.isArray(raw)) theirs = pickSettings(raw);
+      } catch {
+        theirs = null; // 저장소 값이 깨졌으면 이 탭의 값으로 다시 쓴다
+      }
+      if (theirs) out = mergeSettings(out, seen, theirs);
+      if (out.provider === undefined) out.provider = settings.provider;
+    }
+    out = capSize(out);
     storage.setItem(SETTINGS_KEY, JSON.stringify(out));
+    // 다음 저장의 기준은 이 탭의 지금 값이다(합친 결과로 두면 다른 탭이 지운 칸을 이 탭이 "바꾼" 것으로 보아 되살린다)
+    if (seen) lastSeen.set(settings, pickSettings(settings));
     return true;
   } catch {
     return false;
   }
+}
+
+// ── 다른 탭 변경 감지(RV10S-1) ──────────────────────────────────────────────
+export const OTHER_TAB_NOTE = '다른 탭에서 이 지도가 바뀌었습니다 — 이 탭에서 저장하면 그 내용을 덮어씁니다. 새로 고침하면 최신 내용을 봅니다.';
+
+/** window의 storage 이벤트가 "같은 저장소의 이 지도 문서가 다른 탭에서 바뀜(또는 저장소 전체 비움)"인가 */
+export function otherTabChangedUniverse(event, storage, universeId) {
+  if (!event || !storage || event.storageArea !== storage) return false;
+  return event.key === null || event.key === universeKey(universeId);
+}
+
+/** 점검 기준 저장 단추를 켜도 되는가(D-3): 저장소가 있고, 읽기 전용(내용 포함 HTML 보기 등)이 아니고, 편집 되감기 중이 아닐 때만 */
+export function baselineSaveAllowed({ storage, readOnly, rewinding }) {
+  return !!storage && !readOnly && !rewinding;
 }
 
 

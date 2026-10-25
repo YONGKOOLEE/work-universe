@@ -162,15 +162,19 @@ export const CONVERT_SYSTEM_PROMPT = [
   '9. 응답은 지정된 JSON 형식만 내세요.',
 ].join('\n');
 
+// 글·항목 이름 안의 표지 위조를 막는다(닫는 표지를 써서 바깥으로 빠져나가려는 글). markers의 표지를 모두 지운다
+const fence = (s, markers) => markers.reduce((acc, m) => acc.split(m).join(''), String(s));
+const CONVERT_MARKERS = [CONVERT_DOC_OPEN, CONVERT_DOC_CLOSE];
+
 /**
- * 문서 변환 프롬프트의 사용자 글. 원문은 그대로 넣는다(앞뒤 표지만 붙인다)
+ * 문서 변환 프롬프트의 사용자 글. 원문은 그대로 넣는다(앞뒤 표지만 붙인다). 원문 안의 같은 표지는 지운다(RV10S-9, 글로 추가와 같은 방식)
  * @param {string} text
  */
 export const convertUserText = (text) => [
   '다음 문서를 업무 유니버스로 변환해 주세요. 항목마다 문서에서 글자 그대로 따온 quote를 함께 주세요.',
   '',
   CONVERT_DOC_OPEN,
-  text,
+  fence(text, CONVERT_MARKERS),
   CONVERT_DOC_CLOSE,
 ].join('\n');
 
@@ -232,6 +236,7 @@ export const EXTRACT_TEXT_OPEN = '<글>';
 export const EXTRACT_TEXT_CLOSE = '</글>';
 export const EXTRACT_ITEMS_OPEN = '<지도의 항목>';
 export const EXTRACT_ITEMS_CLOSE = '</지도의 항목>';
+const EXTRACT_MARKERS = [EXTRACT_TEXT_OPEN, EXTRACT_TEXT_CLOSE, EXTRACT_ITEMS_OPEN, EXTRACT_ITEMS_CLOSE];
 
 export const EXTRACT_SYSTEM_PROMPT = [
   '당신은 몇 문장짜리 업무 메모에서 「업무 유니버스」의 항목(사람·업무·산출물·조직·주제)과 연결을 찾아 주는 도우미입니다.',
@@ -248,8 +253,6 @@ export const EXTRACT_SYSTEM_PROMPT = [
   '9. 응답은 지정된 JSON 형식만 내세요.',
 ].join('\n');
 
-// 글·항목 이름 안의 표지 위조를 막는다(닫는 표지를 써서 바깥으로 빠져나가려는 글)
-const fence = (s) => [EXTRACT_TEXT_OPEN, EXTRACT_TEXT_CLOSE, EXTRACT_ITEMS_OPEN, EXTRACT_ITEMS_CLOSE].reduce((acc, m) => acc.split(m).join(''), String(s));
 
 /**
  * 글로 추가 프롬프트의 사용자 글
@@ -260,11 +263,11 @@ export const extractUserText = (text, existing = []) => [
   '다음 글에서 항목과 연결을 찾아 주세요. 항목과 연결마다 글에서 글자 그대로 따온 quote를 함께 주세요.',
   '',
   EXTRACT_TEXT_OPEN,
-  fence(text),
+  fence(text, EXTRACT_MARKERS),
   EXTRACT_TEXT_CLOSE,
   '',
   EXTRACT_ITEMS_OPEN,
-  ...existing.map((x) => `- ${NODE_TYPES[x.type] || x.type}: ${fence(String(x.label).replace(/\s+/g, ' '))}`),
+  ...existing.map((x) => `- ${NODE_TYPES[x.type] || x.type}: ${fence(String(x.label).replace(/\s+/g, ' '), EXTRACT_MARKERS)}`),
   EXTRACT_ITEMS_CLOSE,
 ].join('\n');
 

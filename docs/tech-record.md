@@ -760,3 +760,22 @@
   - 화면: 「생성 중…」 동안 확정 잠금 → 바뀌면 안내 뒤 해제(R10-11), 키 칸 비움·가상 데이터 초기화 때 응답 캐시 삭제(R10-12, `createApp({clearLlmCache})`). ai-convert 표시 속성 2000자 자름(R10-7).
   - T-38 점검 3건의 실제 원인: ① merge 화면이 실시간 공급자를 그대로 `explainInsight`에 넘겨 사전 생성 대신 규칙 문장이 나옴 → `syncProvider`로(후보 이유에는 refine을 걸지 않음 — 의도대로) ③ 메모리 캐시로 즉시 온 응답이 `st.result`에 남아 다른 노드를 고른 뒤 다시 열 때 보임 → 옛 패널이 DOM에서 빠져 있으면 결과 비움. ② 는 기대값만.
   - 테스트 `tests/cr15-r10.test.js` 27개(+DOM 흉내 `tests/dom-stub.js`), 전체 925. 바꾼 기존 테스트: quote 3~7자 데이터 → 8자 이상(검증 강화), 옛 키 없음 문구, `{}` 응답 문구(R10-14), fake-client 변환 모드의 주제 인용을 다음 줄까지(새 규칙에서 8자 미만이라 버려짐).
+
+## 55. 열 번째 검토 결함 수정: 제3자 고지·성능 색인·검증 맞춤 (2026-10-25)
+
+- **계기:** docs/review-2026-10-25.md 2·3절. 결정 기본값은 decisions-pending 25절(C21-1~12), 한계는 limits L-63~L-72.
+- **제3자 고지(RV10S-3, 확인일 2026-10-25, 출처: node_modules의 package.json·LICENSE 파일, 번들 포함 여부는 esbuild metafile):** `tools/build.mjs` `third()`가 여러 라이선스 파일과 비고를 받게 고침.
+
+| 패키지 | 버전 | 라이선스 | 근거 |
+|---|---|---|---|
+| cytoscape | 3.34.3 | MIT | LICENSE |
+| @anthropic-ai/sdk | 1.1.0 | Apache-2.0(+ 1.0 이전 판분 MIT) | LICENSE, LICENSE-MIT — 둘 다 고지 |
+| @opentelemetry/api | 1.10.0 | Apache-2.0 | LICENSE |
+| @stablelib/base64 | 1.0.1 | MIT | LICENSE |
+| fast-sha256 | 1.3.0 | Unlicense | LICENSE |
+| standardwebhooks | 1.1.1 | MIT(package.json만) | LICENSE 파일·저작권자 표기 없음 → **미확인** |
+| SDK `_vendor/partial-json-parser` | SDK 1.1.0 안 | **미확인** | 별도 라이선스 파일·출처 표시 없음 |
+
+- **성능(RV10C-4):** 업무마다 연결·메모 전체를 훑던 곳을 색인 한 번으로(`rules/form.js` `edgeIndex` WeakMap, 미해결 메모 대상별 묶음, mergePlan 사번 없는 사람 이름 색인·업무 쌍 겹침 색인으로 상위 12개). 업무 3000개(`tools/perf-check.mjs` 데이터): handoverReadiness 1026 → 14ms, formReport 717 → 2ms, mergePlan 4188 → 158ms. 출력 동등성은 `tests/rv10-perf.test.js`(옛 판 복사본과 무작위 세계 300개 × 3종·동점 40판·내장 샘플 전부 deepEqual). 남은 위험: `hasCautionMemo`(handover.js)와 같은 규칙을 `cautionMemoFast`(form.js)가 한 번 더 구현 — 규칙을 바꾸면 둘 다(동등성 시험이 잡음).
+- **비밀값 검사(RV10S-12):** `tools/secret-scan.mjs`에 ps1·sh·bat·yml·toml·ini·env 등 확장자, `.github`·`.claude`, 시험 파일은 가짜 키 표지 줄만 제외, `--history [범위]`(git log -p의 추가된 줄, 값은 가림). 2026-10-25 실행: 파일 901개 0건, `--history HEAD` 커밋 155개 0건(하위 에이전트 실행 보고 — push 전 메인이 다시 실행).
+- **메인 검토에서 고친 것:** ① 설정 합치기가 저장 뒤 기준을 합친 결과로 두어 두 번째 저장에서 다른 탭이 지운 키가 되살아남 → 기준을 이 탭의 값으로(시험 추가) ② 깨진 내장 지도 이름을 만들 때 universe가 없으면 예외 → 「이름 없음」 ③ 하위 에이전트 편집으로 rewind.js가 CRLF가 되어 결함 주입 시험이 실패 → LF로 ④ 기존 시험 4건의 고정 시각이 확정 날짜보다 앞섬(미래 날짜 거부) → 날짜를 고정 시각 이하로, AI 변환 표지 시험은 새 동작으로.

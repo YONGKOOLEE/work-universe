@@ -1,7 +1,8 @@
 // 화면 진입점. 빌드하면 모듈 없는 단일 스크립트(IIFE)가 된다(P-1).
 
 import { createApp } from '../app/app.js';
-import { cleanApiKey, cleanAuthorName, cleanLlmModel, createLlmCache, createStore, loadSettings, openStorage, saveSettings } from '../store/local.js';
+import { OTHER_TAB_NOTE, baselineSaveAllowed, cleanApiKey, cleanAuthorName, cleanLlmModel, createLlmCache, createStore, loadSettings, openStorage, otherTabChangedUniverse, saveSettings } from '../store/local.js';
+import { clearDraftSeen } from '../store/draft-seen.js';
 import { createFakeClient } from '../llm/fake-client.js';
 import { PREGEN } from '../../data/pregen.js';
 import { DEFAULT_PROVIDER, PROVIDERS, createProvider } from '../llm/providers.js';
@@ -183,7 +184,7 @@ function wireImportDialog(app, $, getProvider, methodLabel, onExport = null, onR
     onReset,
     dialog: $('import-dialog'),
     app,
-    convert: (text) => convertDocumentWith(text, { provider: getProvider(), ruleConvert: (t) => convertDocument(t, { now: nowIso() }) }),
+    convert: (text) => convertDocumentWith(text, { provider: getProvider(), now: nowIso, ruleConvert: (t) => convertDocument(t, { now: nowIso() }) }),
     methodLabel,
     example: DOC_EXAMPLE,
     onImported: openUniverse,
@@ -241,6 +242,13 @@ function start() {
     // 확정자·통합 확인 목록 판정(decideIdentity)의 기록 주체(R-22, D-24). 설정은 아래에서 읽으므로 부를 때마다 지금 값을 돌려준다
     authorName: () => settings.authorName,
     clearLlmCache: () => llmCache.clear(), // 가상 데이터 초기화에서 실시간 응답 캐시도 지운다(R10-12)
+    // 가상 데이터 초기화에서 이 브라우저에만 남긴 점검 기준·마지막으로 연 지도·초안 「새로」 기준도 지운다(검토10 S-7). 따라 하기를 본 기록(tourDone)은 남긴다
+    clearBrowserMemory: () => {
+      delete settings.riskBaseline;
+      delete settings.lastOpenedId;
+      saveSettings(storage, settings);
+      clearDraftSeen(storage);
+    },
   });
 
   const $ = (id) => document.getElementById(id);
@@ -299,6 +307,12 @@ function start() {
   if (folder) {
     folder.subscribe(showFolderNote);
     folder.init().catch(() => {});
+  }
+  // 다른 탭이 같은 지도 문서를 바꾸면 화면 위쪽에 경고 한 줄(RV10S-1). 자동으로 새로 고치거나 합치지 않는다(이 탭에서 저장하면 덮어쓴다)
+  if (storage && hashId() && !embedMode && backupSlot) {
+    const tabNote = el('p', { id: 'other-tab-note', class: 'notice', role: 'alert', style: 'margin:0;border-radius:0;padding:6px 16px;font-size:14px', 'data-testid': 'other-tab-warning', hidden: true }, OTHER_TAB_NOTE);
+    backupSlot.before(tabNote);
+    window.addEventListener('storage', (ev) => { if (otherTabChangedUniverse(ev, storage, currentId())) tabNote.hidden = false; });
   }
   const openImport = wireImportDialog(app, $, () => provider, providerLabel, hashId() ? doExport : null, doReset, hashId() ? doExportHtml : null, folder);
 
@@ -709,7 +723,7 @@ function start() {
   // 지도마다 기준을 최근 둘까지 둔다(일상 사용 2회차 M1): 같은 날 다시 저장하면 그날 것을 바꾸고, 날이 바뀌면 새로 더한다. 비교는 오늘보다 앞선 날의 가장 최근 기준과 한다
   const riskEntryOf = () => (settings.riskBaseline || {})[currentId()] || null;
   const riskPick = () => pickBaseline(riskEntryOf(), todayLocal());
-  const canSaveBaseline = () => !!storage && !app.readOnly && !rw; // 읽기 전용·내용 포함 파일·되감기 중에는 저장 단추를 끈다(보기는 된다)
+  const canSaveBaseline = () => baselineSaveAllowed({ storage, readOnly: app.readOnly, rewinding: !!rw }); // 읽기 전용·내용 포함 파일·되감기 중에는 저장 단추를 끈다(보기는 된다)
   function riskCompareFor(nums, names) {
     const pick = riskPick();
     const cmp = compareRisk(nums, pick.base, names, { savedToday: pick.savedToday });

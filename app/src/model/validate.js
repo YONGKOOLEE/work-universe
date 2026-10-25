@@ -14,12 +14,14 @@ import {
   IDENTITY_METHODS,
   IDENTITY_STATUSES,
   ATTRS_MAX_KEYS,
+  DOC_MAX_DEPTH,
   LABEL_MAX,
   NODE_TYPES,
   SCHEMA_VERSION,
   TAGS_MAX,
   TEXT_MAX,
   UPDATE_KEYS,
+  isUnsafeKey,
   pairAllowed,
   DOC_COLLECTIONS,
 } from './schema.js';
@@ -33,9 +35,9 @@ const has = (obj, key) => typeof key === 'string' && Object.hasOwn(obj, key);
 // 값이 있을 때 글자이고 상한 이하인지(가져온 JSON의 숫자·배열·너무 긴 값을 막는다)
 const badText = (v, max) => v !== undefined && v !== null && (typeof v !== 'string' || v.length > max);
 // 태그 목록: 글자만, 개수·원소 길이 상한(검토9 S-2)
-const badTags = (t) => !(Array.isArray(t) && t.length <= TAGS_MAX && t.every((x) => typeof x === 'string' && x.length <= TEXT_MAX));
+export const badTags = (t) => !(Array.isArray(t) && t.length <= TAGS_MAX && t.every((x) => typeof x === 'string' && x.length <= TEXT_MAX));
 // 이벤트 payload 안의 모든 글자(중첩·배열 포함)가 상한 이하인가(깊이 제한). 상한을 넘는 글자가 있으면 그 경로를 돌려준다
-function longTextPath(v, path = '', depth = 0) {
+export function longTextPath(v, path = '', depth = 0) {
   if (typeof v === 'string') return v.length > TEXT_MAX ? path : null;
   if (depth >= 4 || v === null || typeof v !== 'object') return null;
   for (const [k, x] of Object.entries(v)) {
@@ -43,6 +45,18 @@ function longTextPath(v, path = '', depth = 0) {
     if (hit) return hit;
   }
   return null;
+}
+
+// 문서 전체의 중첩 깊이가 상한을 넘는가(검토10 S-5). 재귀 없이 확인한다(20만 겹도 멈추지 않게)
+function tooDeep(root) {
+  const stack = [[root, 1]];
+  while (stack.length) {
+    const [v, d] = stack.pop();
+    if (v === null || typeof v !== 'object') continue;
+    if (d > DOC_MAX_DEPTH) return true;
+    for (const x of Object.values(v)) if (x !== null && typeof x === 'object') stack.push([x, d + 1]);
+  }
+  return false;
 }
 
 /**
@@ -60,6 +74,10 @@ export function validateDocument(doc) {
     err(CODES.SCHEMA, '');
     return result();
   }
+  if (tooDeep(doc)) {
+    err(CODES.SCHEMA, '', { too_deep: DOC_MAX_DEPTH });
+    return result();
+  }
   if (doc.schema_version !== SCHEMA_VERSION) {
     err(CODES.SCHEMA, 'schema_version', { found: doc.schema_version });
     return result(true);
@@ -75,7 +93,7 @@ export function validateDocument(doc) {
     if (isBlank(u[k])) err(CODES.REQUIRED, `universe.${k}`);
   }
   // 전역 참조는 "유니버스ID/노드ID"이므로 ID에 '/'나 공백이 있으면 둘로 잘못 갈린다(검토 2026-10-03, 가져온 파일)
-  const badId = (v) => typeof v === 'string' && !isBlank(v) && !ID_PATTERN.test(v);
+  const badId = (v) => typeof v === 'string' && !isBlank(v) && (!ID_PATTERN.test(v) || isUnsafeKey(v));
   if (badId(u.id)) err(CODES.SCHEMA, 'universe.id', { bad_id: true });
   ['nodes', 'edges', 'events'].forEach((k) => doc[k].forEach((x, i) => {
     if (isObject(x) && badId(x.id)) err(CODES.SCHEMA, `${k}[${i}].id`, { bad_id: true });
@@ -90,7 +108,8 @@ export function validateDocument(doc) {
   (Array.isArray(u.subtypes) ? u.subtypes : []).forEach((s, i) => {
     const path = `universe.subtypes[${i}]`;
     if (!isObject(s) || isBlank(s.name) || s.name.length > LABEL_MAX) return err(CODES.REQUIRED, path);
-    if (!has(NODE_TYPES, s.core_type) && !has(EDGE_TYPES, s.core_type)) return err(CODES.SCHEMA, path);
+    // 꼭지에는 하위 유형을 등록하지 않는다(commands.addSubtype과 같은 규칙, 검토10 C-6)
+    if ((!has(NODE_TYPES, s.core_type) && !has(EDGE_TYPES, s.core_type)) || s.core_type === 'root') return err(CODES.SCHEMA, path);
     const key = `${s.core_type}|${s.name}`;
     if (seenSubtypes.has(key)) err(CODES.DUP, path);
     seenSubtypes.add(key);
@@ -116,7 +135,8 @@ export function validateDocument(doc) {
     else if (n.deleted === true && n.hidden !== true) err(CODES.SCHEMA, `${path}.deleted`);
     if (periodError(n.period)) err(CODES.SCHEMA, `${path}.period`);
     if (n.attrs !== undefined) {
-      const okAttrs = isObject(n.attrs) && Object.values(n.attrs).every((v) => typeof v === 'string' || typeof v === 'number');
+      const okAttrs = isObject(n.attrs) && Object.keys(n.attrs).every((k) => !isUnsafeKey(k))
+        && Object.values(n.attrs).every((v) => typeof v === 'string' || (typeof v === 'number' && Number.isFinite(v)));
       const tooBig = okAttrs && (Object.keys(n.attrs).length > ATTRS_MAX_KEYS || Object.values(n.attrs).some((v) => String(v).length > TEXT_MAX));
       if (!okAttrs || tooBig) err(CODES.SCHEMA, `${path}.attrs`);
     }
@@ -160,6 +180,8 @@ export function validateDocument(doc) {
     const tgt = nodesById.get(e.target);
     if (!isBlank(e.source) && !src) err(CODES.SCHEMA, `${path}.source`);
     if (!isBlank(e.target) && !tgt) err(CODES.SCHEMA, `${path}.target`);
+    // 자기 자신으로 가는 연결은 명령(addEdge)이 거부한다. 같은 규칙(검토10 C-6)
+    if (src && tgt && e.source === e.target) err(CODES.SCHEMA, `${path}.target`, { self_loop: true });
     if (src && tgt && !pairAllowed(e.core_type, src.core_type, tgt.core_type)) err(CODES.PAIR, path);
     if (e.subtype && !subtypeRegistered(doc, e.core_type, e.subtype)) err(CODES.SUBTYPE, `${path}.subtype`);
     if (periodError(e.period)) err(CODES.SCHEMA, `${path}.period`);
@@ -187,6 +209,10 @@ export function validateDocument(doc) {
     else if (!isDate(ev.occurred_at)) err(CODES.SCHEMA, `${path}.occurred_at`);
     if (ev.source !== undefined && !EVENT_SOURCES.includes(ev.source)) err(CODES.SCHEMA, `${path}.source`);
     for (const e of eventPayloadErrors(doc, nodesById, edgeIds, ev)) err(e.code, `${path}.payload.${e.field}`);
+    // 인수인계는 보내는 사람과 받는 사람이 달라야 한다(commands.addEvent와 같은 규칙, 검토10 C-6)
+    if (ev.type === 'handover' && isObject(ev.payload) && ev.payload.from_person_id && ev.payload.from_person_id === ev.payload.to_person_id) {
+      err(CODES.SCHEMA, `${path}.payload.to_person_id`, { same_person: true });
+    }
     const longAt = ev.payload === undefined ? null : longTextPath(ev.payload);
     if (longAt !== null) err(CODES.SCHEMA, `${path}.payload${longAt ? '.' + longAt : ''}`, { too_long: TEXT_MAX });
   });
@@ -216,6 +242,7 @@ export function validateDocument(doc) {
     if (linkIds.has(l.id)) err(CODES.DUP, `${path}.id`);
     linkIds.add(l.id);
     if (!isGlobalRef(l.a) || !isGlobalRef(l.b)) err(CODES.SCHEMA, `${path}.a`);
+    else if (l.a === l.b) err(CODES.SCHEMA, `${path}.b`, { same_node: true }); // decideIdentity와 같은 규칙(검토10 C-6)
     if (badText(l.reason, TEXT_MAX)) err(CODES.SCHEMA, `${path}.reason`);
     if (!IDENTITY_KINDS.includes(l.kind)) err(CODES.SCHEMA, `${path}.kind`);
     if (!IDENTITY_METHODS.includes(l.method)) err(CODES.SCHEMA, `${path}.method`);

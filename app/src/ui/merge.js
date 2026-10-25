@@ -150,7 +150,7 @@ function renderMerge(o, plan, aiHead) {
 
   const personList = plan.persons.length
     ? el('ul', { class: 'patterns', 'data-testid': 'merge-persons' }, ...plan.persons.map((p) => el('li', { 'data-type': p.type },
-      el('div', { class: 'who' }, el('strong', {}, p.title), el('span', { class: 'chip' }, p.type === 'conflict' ? '사번 충돌' : '사번 없음')),
+      el('div', { class: 'who' }, el('strong', {}, p.title), el('span', { class: 'chip' }, p.type === 'conflict' ? '사번 충돌' : p.type === 'stale' ? '사번 바뀜' : '사번 없음')),
       el('div', { class: 'muted small' }, p.reason),
       chips(view, p.evidence_ids, o.onFocus),
       // 같은 사람이 있는지 비교할 상대가 없는 "사번 없음" 카드는 누를 것이 없으므로 고치는 길을 적는다(여섯 번째 검토 U-12)

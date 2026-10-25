@@ -49,6 +49,10 @@ export function laterThan(nowStr, other) {
   return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}${suffix}`;
 }
 
+// 시계가 마지막 기록보다 이만큼(밀리초) 이내로 뒤처졌을 때만 마지막 기록 + 1초로 올린다. 되감기·연속 동작으로 이미 1~몇 초 앞선 기록 뒤에 붙이는 경우를 덮는다.
+// 이보다 많이 뒤처진 시계(다른 PC의 시계가 앞섬 등)는 지금처럼 시계 값을 그대로 쓴다(L-42). 바꾸기 쉽게 이 상수 한 곳에 둔다
+const CLOCK_BUMP_WINDOW_MS = 60000;
+
 function clone(doc) {
   return JSON.parse(JSON.stringify(doc));
 }
@@ -77,11 +81,12 @@ export function storageFailReason(err) {
 }
 
 /**
- * @param {{store: object|null, samples: object[], currentId?: string, now: ()=>string}} deps
+ * @param {{store: object|null, samples: object[], currentId?: string, now: ()=>string, clearBrowserMemory?: ()=>void}} deps
+ *   clearBrowserMemory: 「가상 데이터 초기화」 때 부르는, 이 브라우저 설정의 기억(점검 기준·초안 본 시각·마지막으로 연 지도)을 지우는 손잡이(RV10S-7). 앱은 설정 저장소를 모른다.
  *   store가 null이면 저장소를 쓸 수 없는 상태다(W-STORAGE → 샘플 읽기 전용, 5.3).
  *   currentId가 없거나 찾을 수 없으면 첫 샘플을 연다.
  */
-export function createApp({ store, samples, currentId, now, authorName, locked = false, clearLlmCache = null }) {
+export function createApp({ store, samples, currentId, now: rawNow, authorName, locked = false, clearLlmCache = null, clearBrowserMemory = null }) {
   const warnings = [];
   // 확정자·통합 확인 목록 판정(decideIdentity)의 기록 주체(R-22, D-24). 작성자 이름이 있으면 그 이름, 없거나 깨졌으면 지금 문구
   const author = () => cleanAuthorName(typeof authorName === 'function' ? authorName() : authorName) || DEFAULT_AUTHOR;
@@ -147,7 +152,22 @@ export function createApp({ store, samples, currentId, now, authorName, locked =
   const guardBase = () => (!writable ? { ok: false, error: { code: CODES.STORAGE } } : docReadOnly ? { ok: false, error: { code: CODES.SCHEMA, reason: 'version' } } : null);
   const guard = () => guardBase() || (rewinding ? { ok: false, error: { code: CODES.SCHEMA, reason: 'rewinding' } } : null);
 
-  return {
+  // 기록 시각(RV10C-11): 한 사용자 동작(app의 공개 메서드 한 번) 안에서는 모든 명령이 같은 시각을 쓴다(새 지도 + 첫 업무가 초 경계에서 둘로 갈리지 않게).
+  // 그 시각이 이 지도의 마지막 기록보다 늦지 않으면(같은 초 등) 마지막 기록 + 1초로 올린다: 되감기 직후 같은 초에 추가해도 되감기 묶음에 섞이지 않는다.
+  // 마지막 기록이 시계보다 CLOCK_BUMP_WINDOW_MS 넘게 앞서 있으면 지금처럼 시계 값을 그대로 쓴다
+  const stampNow = () => {
+    const raw = rawNow();
+    const bumped = laterThanLast(raw, doc.events);
+    return bumped !== raw && Date.parse(bumped) - Date.parse(raw) <= CLOCK_BUMP_WINDOW_MS ? bumped : raw;
+  };
+  let actionDepth = 0;
+  let actionNow = null;
+  const now = () => {
+    if (actionDepth === 0) return stampNow();
+    if (actionNow === null) actionNow = stampNow();
+    return actionNow;
+  };
+  const api = {
     get doc() {
       return doc;
     },
@@ -480,6 +500,8 @@ export function createApp({ store, samples, currentId, now, authorName, locked =
      */
     confirmHandover({ draft, text, date, transfer: wantTransfer = false }) {
       if (guard()) return guard();
+      // 날짜는 오늘까지(RV10C-9): 화면은 오늘 이하만 넘기지만 app에서도 막는다(과거 시간 보기에서 확정해 미래 날짜가 소급 종료로 이어지지 않게). 과거 날짜(소급)는 막지 않는다
+      if (String(date) > String(now()).slice(0, 10)) return { ok: false, error: { code: CODES.SCHEMA, field: 'occurred_at', future: true } };
       const v = buildView(doc, resolve);
       const target = draft && v.getNode(draft.target);
       if (!target || !DRAFT_TARGET_TYPES.includes(target.core_type)) return { ok: false, error: { code: CODES.SCHEMA, field: 'target' } };
@@ -697,7 +719,29 @@ export function createApp({ store, samples, currentId, now, authorName, locked =
       } catch {
         // 캐시는 근거 지문으로 다시 검증하므로 남아도 틀린 문장을 쓰지 않는다
       }
+      // 이 브라우저 설정의 기억(점검 기준·초안 본 시각·마지막으로 연 지도)도 지운다(RV10S-7). 지워진 지도 ID를 가리키는 값이 남지 않게. 못 지워도 초기화는 성공이다
+      try {
+        if (typeof clearBrowserMemory === 'function') clearBrowserMemory();
+      } catch {
+        // 남은 기억은 없는 지도 ID를 가리킬 뿐이라 화면이 알아서 무시한다
+      }
       return { ok: true };
     },
   };
+  // 메서드마다 「한 동작」 경계를 씌운다(안에서 다른 메서드를 불러도 가장 바깥이 경계). getter와 값은 그대로
+  for (const [k, d] of Object.entries(Object.getOwnPropertyDescriptors(api))) {
+    if (typeof d.value !== 'function') continue;
+    const fn = d.value;
+    api[k] = function action(...args) {
+      if (actionDepth === 0) actionNow = null;
+      actionDepth += 1;
+      try {
+        return fn.apply(this, args);
+      } finally {
+        actionDepth -= 1;
+        if (actionDepth === 0) actionNow = null;
+      }
+    };
+  }
+  return api;
 }

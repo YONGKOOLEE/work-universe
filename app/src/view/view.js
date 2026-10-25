@@ -2,7 +2,7 @@
 // 원본 문서는 바꾸지 않는다(R-11 ⑤). 노드마다 출처를 전역 참조("<유니버스 ID>/<노드 ID>")로 유지한다.
 // 브라우저 기능(DOM, 저장소)을 쓰지 않는다.
 
-import { EVENT_PAYLOAD, edgeTypeLabel, hasKey, nodeTypeLabel, NODE_TYPES, normalizeEmpNo, normalizeLabel } from '../model/schema.js';
+import { EVENT_PAYLOAD, edgeTypeLabel, hasKey, nodeTypeLabel, NODE_TYPES, normalizeEmpNo, normalizeLabel, pairKey } from '../model/schema.js';
 
 export function toGid(universeId, localId) {
   return `${universeId}/${localId}`;
@@ -98,6 +98,7 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
   };
   const unresolvedLinks = [];
   const staleLinks = []; // 사번 자동 연결인데 그 뒤 사번이 바뀌어 더는 맞지 않는 연결(다시 확인 필요)
+  const staleItems = []; // 위 연결의 {id, a, b}: 통합 확인 목록이 다시 묻는다(RV10C-3)
   for (const doc of docs) {
     for (const link of doc.identity_links || []) {
       if (link.status !== 'confirmed') continue;
@@ -111,6 +112,7 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
         const [x, y] = [nodeByGid.get(link.a), nodeByGid.get(link.b)];
         if (!x.emp_no || !y.emp_no || normalizeEmpNo(x.emp_no) !== normalizeEmpNo(y.emp_no)) {
           staleLinks.push(link.id);
+          staleItems.push({ id: link.id, a: link.a, b: link.b });
           continue;
         }
       }
@@ -123,7 +125,10 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
   }
   const canonical = (gid) => (nodeByGid.has(gid) ? find(gid) : gid);
   // 판정한 쌍(대표 노드 기준). 같은 사람이 여러 유니버스에 있어도 한 번 판정하면 된다
-  const decidedPairs = new Set(docs.flatMap((d) => (d.identity_links || []).filter((l) => l.status !== 'pending').map((l) => [canonical(l.a), canonical(l.b)].sort().join('|'))));
+  // 사번이 바뀌어 맞지 않게 된 자동 연결은 판정한 쌍으로 치지 않는다 — 치면 다시 확인할 길이 없다(RV10C-3)
+  const stalePairs = new Set(staleItems.map((x) => pairKey(x.a, x.b)));
+  const decidedLink = (l) => l.status !== 'pending' && !(l.status === 'confirmed' && l.method === 'emp_no_auto' && stalePairs.has(pairKey(l.a, l.b)));
+  const decidedPairs = new Set(docs.flatMap((d) => (d.identity_links || []).filter(decidedLink).map((l) => [canonical(l.a), canonical(l.b)].sort().join('|'))));
   for (const n of nodes) {
     const c = canonical(n.gid);
     if (c !== n.gid) nodeByGid.get(c).merged_from.push(n.gid);
@@ -255,7 +260,8 @@ export function buildView(rootDoc, resolveUniverse = () => null) {
       .map(([emp_no, list]) => ({ code: 'W-EMPNO-CONFLICT', emp_no, nodes: list.map((n) => ({ gid: n.gid, label: n.label, universe_name: n.universe_name })) })),
     index: { byEmpNo, byTypeLabel, eventsByNode, nodesByTopic },
     // 묶인 모든 문서의 판정 기록(확정·거부). 아래층(팀)에서 한 판정을 위층(부서) 확인 목록이 다시 묻지 않게 한다(여섯 번째 검토 C-4)
-    decided_links: docs.flatMap((d) => (d.identity_links || []).filter((l) => l.status !== 'pending')),
+    decided_links: docs.flatMap((d) => (d.identity_links || []).filter(decidedLink)),
+    stale_link_items: staleItems,
 
     canonical,
     getNode: (gid) => nodeByGid.get(canonical(gid)),

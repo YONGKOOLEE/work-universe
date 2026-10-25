@@ -14,8 +14,12 @@ export const FOLDER_TEXT = {
   unsupported: '이 브라우저에서는 폴더 연결을 쓸 수 없습니다(Chrome·Edge에서 됩니다). 내보내기·가져오기로 파일을 주고받으세요.',
   intro: '고른 폴더에 저장할 때마다 이 업무 지도 파일이 생기고, 같은 폴더의 동료 파일을 읽어 팀 지도로 묶습니다. 남의 파일은 고치지 않습니다.',
   changed: '폴더에 바뀐 파일이 있습니다 — 새로 고침',
+  tooBig: '이 파일은 1MB를 넘어 다른 사람이 폴더에서 읽지 못합니다. 업무 지도가 커졌으니 나눠 쓰는 것을 권합니다.',
+  renamed: (name) => `폴더에 같은 이름의 다른 업무 지도 파일이 있어 「${name}」으로 저장했습니다.`,
   mirrorFailed: '폴더에 저장하지 못했습니다. 브라우저 저장은 끝났습니다. 「폴더 연결」 탭에서 다시 시도하세요.',
 };
+
+const utf8Size = (text) => new TextEncoder().encode(String(text)).length;
 
 const errText = (e) => {
   const n = e && e.name;
@@ -39,17 +43,19 @@ export function createFolderLink(o) {
     changed: false, warning: '', message: '', busy: false, loaded: false, lastSaved: null,
   };
   let stopObserve = null;
+  const idNames = new Map(); // 유니버스 ID → 같은 이름의 남의 파일을 만나 ID를 붙여 쓰기로 한 파일 이름(RV10S-4)
   const timers = new Map(); // 유니버스 ID → 기다리는 저장 {timer, name, text}
 
   const notify = () => subs.forEach((f) => { try { f(); } catch { /* 화면 갱신 실패가 저장을 막지 않게 */ } });
   const authorName = () => (o.getAuthor && o.getAuthor()) || '';
   // 파일 이름은 지금 연 유니버스의 것만 만든다(거울 저장·내 파일 구분). 같은 이름의 유니버스가 둘 이상이면 ID를 붙인다(R9-3)
-  const fileFor = (id) => {
+  const nameFor = (id, forceId) => {
     const u = o.app.doc.universe;
     const name = id === u.id ? u.name : '';
     const dup = name ? o.app.universes().filter((x) => x.name === name).length > 1 : false;
-    return myFileName({ authorName: authorName(), universeName: name, universeId: id, withId: dup });
+    return myFileName({ authorName: authorName(), universeName: name, universeId: id, withId: dup || forceId });
   };
+  const fileFor = (id) => idNames.get(id) || nameFor(id, false);
   const connected = () => !!st.handle && !st.needsPermission;
 
   function stopWatching() {
@@ -61,9 +67,10 @@ export function createFolderLink(o) {
     stopWatching();
     if (!connected()) return;
     stopObserve = api.observeFolder(st.handle, (names) => {
-      const mine = fileFor(o.app.doc.universe.id);
+      const id = o.app.doc.universe.id;
+      const mine = new Set([fileFor(id), nameFor(id, true)]);
       // 내 파일과 임시 파일(.crswap 등)의 변화는 무시한다. 남의 .json이 바뀐 때만 알린다
-      if (names.some((n) => /\.json$/i.test(n) && n !== mine)) {
+      if (names.some((n) => /\.json$/i.test(n) && !mine.has(n))) {
         st.changed = true;
         notify();
       }
@@ -81,8 +88,10 @@ export function createFolderLink(o) {
     }
     const me = o.app.doc.universe.id;
     st.texts = new Map(r.files.map((f) => [f.name, f.text]));
-    st.plan = planFolder(r.files, { myFiles: new Set([fileFor(me)]), existingIds: new Set(o.app.universes().map((u) => u.id)), currentId: me })
-      .map((p, i) => ({ ...p, size: r.files[i].size, lastModified: r.files[i].lastModified }));
+    // 내 파일 이름 후보(그냥 이름·ID 붙인 이름)라도 안의 유니버스 ID가 내 것이 아니면 남의 파일이다(RV10S-4)
+    st.plan = planFolder(r.files, { myFiles: new Set([fileFor(me), nameFor(me, true)]), existingIds: new Set(o.app.universes().map((u) => u.id)), currentId: me })
+      .map((p, i) => ({ ...p, size: r.files[i].size, lastModified: r.files[i].lastModified }))
+      .map((p) => (p.mine && p.ok && p.universe.id !== me ? { ...p, mine: false } : p));
     for (const p of st.plan) if (!st.selected.has(p.name)) st.selected.set(p.name, p.ok && !p.mine && !p.current);
     st.notes = r.notes;
     st.changed = false;
@@ -97,6 +106,7 @@ export function createFolderLink(o) {
     st.needsPermission = false;
     st.message = '';
     st.warning = '';
+    idNames.clear();
     watch();
     if (write) await saveNow();
     await reload();
@@ -160,6 +170,7 @@ export function createFolderLink(o) {
       stopWatching();
       for (const t of timers.values()) clearTimer(t.timer);
       timers.clear();
+      idNames.clear();
       await api.forgetFolder();
       Object.assign(st, { handle: null, name: '', needsPermission: false, plan: [], notes: [], texts: new Map(), changed: false, warning: '', message: '', lastSaved: null });
       notify();
@@ -230,11 +241,30 @@ export function createFolderLink(o) {
     },
   };
 
+  // 쓰기 전에 같은 이름 파일을 들여다본다. 다른 유니버스 ID의 파일이면 ID를 붙인 이름으로 바꾼다(같은 ID면 지금대로 덮어쓴다).
+  // 들여다보지 못하거나 읽을 수 없는 파일이면 판단하지 않고 지금대로 쓴다.
+  async function chooseName(job) {
+    if (typeof api.peekFile !== 'function') return job.name;
+    const id = o.app.doc.universe.id;
+    const p = await api.peekFile(st.handle, job.name);
+    if (!p.ok || !p.exists || p.text === null) return job.name;
+    const parsed = parseImportText(p.text);
+    const theirs = parsed.ok && parsed.doc && parsed.doc.universe && parsed.doc.universe.id;
+    if (!theirs || theirs === id) return job.name;
+    const alt = nameFor(id, true);
+    if (alt === job.name) return job.name;
+    idNames.set(id, alt);
+    return alt;
+  }
+
   async function write(job) {
-    const r = await api.writeMine(st.handle, job.name, job.text);
+    const name = await chooseName(job);
+    const renamed = idNames.has(o.app.doc.universe.id); // 한 번 ID 붙인 이름으로 옮기면 연결을 끊을 때까지 그 이름을 쓰고, 알림도 남긴다
+    const r = await api.writeMine(st.handle, name, job.text);
     if (r.ok) {
-      st.warning = '';
-      st.lastSaved = job.name;
+      st.warning = renamed ? FOLDER_TEXT.renamed(name) : '';
+      if (utf8Size(job.text) > folderApi.FOLDER_MAX_BYTES) st.warning = [st.warning, FOLDER_TEXT.tooBig].filter(Boolean).join(' ');
+      st.lastSaved = name;
     } else {
       st.warning = FOLDER_TEXT.mirrorFailed;
     }

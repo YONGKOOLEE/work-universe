@@ -131,6 +131,29 @@ export async function writeMine(handle, fileName, text) {
 }
 
 /**
+ * 폴더의 파일 하나를 쓰기 전에 들여다본다(RV10S-4: 같은 이름의 남의 파일을 덮어쓰지 않으려고). 만들지 않는다.
+ * 1MB를 넘는 파일은 내용을 읽지 않고 text:null로 돌려준다.
+ * @returns {Promise<{ok:true, exists:false} | {ok:true, exists:true, size:number, text:string|null} | {ok:false, error:object}>}
+ */
+export async function peekFile(handle, fileName) {
+  try {
+    if (!handle || typeof fileName !== 'string' || !fileName) return { ok: false, error: { name: 'BadName', message: '파일 이름이 올바르지 않습니다' } };
+    let fh;
+    try {
+      fh = await handle.getFileHandle(fileName);
+    } catch (e) {
+      if (e && e.name === 'NotFoundError') return { ok: true, exists: false };
+      throw e;
+    }
+    const file = await fh.getFile();
+    if (file.size > FOLDER_MAX_BYTES) return { ok: true, exists: true, size: file.size, text: null };
+    return { ok: true, exists: true, size: file.size, text: await file.text() };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/**
  * 폴더 안 .json 파일을 읽는다(하위 폴더 제외). 1MB를 넘거나 읽다 실패한 파일은 건너뛰고 notes에 이유를 남긴다.
  * @returns {Promise<{ok:true, files:{name:string,size:number,lastModified:number,text:string}[], notes:{name:string, reason:string}[]} | {ok:false, error:object}>}
  */

@@ -2,6 +2,8 @@
 // 브라우저 기능(DOM·저장소)을 쓰므로 단위 테스트 대상이 아니다. 순수 부분은 view/embed.js.
 
 import { createApp } from '../app/app.js';
+import { CODES } from '../model/schema.js';
+import { validateDocument } from '../model/validate.js';
 import { createStore, openStorage } from '../store/local.js';
 import { EMBED_ID, buildEmbed, insertEmbed, parseEmbed, stripEmbed } from '../view/embed.js';
 import { el } from './dom.js';
@@ -39,14 +41,33 @@ function memoryStorage() {
   return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => { m.set(k, String(v)); }, removeItem: (k) => { m.delete(k); } };
 }
 
-/** 내장 문서를 메모리 저장소에 넣은 읽기 전용 앱 */
+/**
+ * 내장 문서를 메모리 저장소에 넣은 읽기 전용 앱.
+ * 문서마다 검증해(RV10C-2) 형식이 깨진 문서는 빼고 연다 — 하나가 깨졌다고 화면 전체가 멈추지 않게. 뺀 문서는 app.warnings에
+ * {code:'E-SCHEMA', reason:'embed_skipped', names, count}로 남긴다. 꼭지 문서가 깨졌으면 남은 문서 중 첫 번째를 연다.
+ */
 export function createEmbedApp(embed, { samples, currentId, now }) {
   const store = createStore(memoryStorage());
-  const embedded = new Set(embed.docs.map((d) => d.universe.id));
-  for (const d of embed.docs) store.saveUniverse(JSON.parse(JSON.stringify(d)));
+  const good = [];
+  const skipped = [];
+  for (const d of embed.docs) {
+    let ok = false;
+    try {
+      ok = validateDocument(d).ok;
+    } catch {
+      ok = false; // 검증기가 못 읽을 만큼 깨진 문서도 뺀다
+    }
+    if (ok) good.push(d);
+    else skipped.push(d);
+  }
+  const embedded = new Set(good.map((d) => d.universe.id));
+  for (const d of good) store.saveUniverse(JSON.parse(JSON.stringify(d)));
   // 같은 ID의 내장 샘플은 보내 온 판을 그대로 보이게 한다(앱이 새 샘플로 바꿔 넣지 않게)
   const rest = samples.filter((s) => !embedded.has(s.universe.id));
-  return createApp({ store, samples: rest.length ? rest : samples, currentId, now, locked: true });
+  const open = embedded.has(currentId) || !good.length ? currentId : good[0].universe.id;
+  const app = createApp({ store, samples: rest.length ? rest : samples, currentId: open, now, locked: true });
+  if (skipped.length) app.warnings.push({ code: CODES.SCHEMA, reason: 'embed_skipped', count: skipped.length, names: skipped.map((d) => (d && d.universe && (d.universe.name || d.universe.id)) || '이름 없음') });
+  return app;
 }
 
 /** 내려받을 HTML: 앱 원본 + 지금 유니버스와 하위 유니버스. 넣을 자리가 없으면 null */
@@ -71,9 +92,12 @@ export function importEmbedToStorage(embed, { samples, now, confirm = (m) => win
   if (conflicts.length && !confirm(`같은 ID의 업무 지도가 이미 있습니다: ${conflicts.map((x) => `「${x.p.conflict.name}」`).join(', ')}. 덮어쓸까요? 덮어쓰면 그 업무 지도에 고친 내용은 사라집니다.`)) {
     return { ok: false, cancelled: true, message: '가져오기를 취소했습니다.' };
   }
+  let done = 0;
   for (const { d, p } of previews) {
     const r = app.importUniverse(d, { overwrite: !!p.conflict });
-    if (!r.ok) return { ok: false, message: `「${d.universe.name}」를 가져오지 못했습니다.` };
+    // 중간에 실패하면 앞에서 가져온 것은 그대로 남는다(되돌리지 않음) — 몇 개인지 알린다(folder-link.js와 같은 문구, RV10S-10)
+    if (!r.ok) return { ok: false, message: `「${d.universe.name}」를 가져오지 못했습니다${done ? `(앞의 ${done}개는 이미 가져왔습니다)` : ''}.` };
+    done += 1;
   }
   return { ok: true };
 }

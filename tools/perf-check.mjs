@@ -6,13 +6,16 @@ import { mkdir, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { performance } from 'node:perf_hooks';
-import { createUniverse, addNode, addEdge, addEvent } from '../app/src/model/commands.js';
+import { createUniverse, addNode, addEdge, addEvent, addRef } from '../app/src/model/commands.js';
 import { validateDocument } from '../app/src/model/validate.js';
 import { buildView } from '../app/src/view/view.js';
 import { projectView } from '../app/src/view/collapse.js';
 import { buildHandoverDraft, scopeWorks } from '../app/src/rules/handover.js';
 import { similarExperts, repeatInefficiency, densityGaps, personLoad, workLoad } from '../app/src/rules/insight.js';
 import { flowChange, timeMonths } from '../app/src/rules/flow.js';
+import { handoverReadiness } from '../app/src/rules/insight-risk.js';
+import { formReport } from '../app/src/rules/form.js';
+import { mergePlan } from '../app/src/merge/merge.js';
 import { createProvider } from '../app/src/llm/providers.js';
 import { refineDraft } from '../app/src/llm/connector.js';
 import { PREGEN } from '../app/data/pregen.js';
@@ -80,6 +83,18 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   time('흐름 변화(월)', () => flowChange(view, { unit: 'month', asOf: '2026-10-02' }));
   time('흐름 변화(과거 기준일 50회)', () => { for (let i = 0; i < 50; i += 1) flowChange(view, { unit: 'month', asOf: '2026-03-31' }); });
   time('시간 범위(timeMonths)', () => timeMonths(view, '2026-10-02'));
+  // RV10C-4: 업무 3000개에서 느렸던 세 계산(연결·메모 색인으로 줄임). 통합 확인은 하위 업무 지도 셋을 묶은 뷰로 잰다
+  time('인수인계 준비도(전체)', () => handoverReadiness(view, { asOf: '2026-10-02' }));
+  time('표준 양식 점검(전체)', () => formReport(view));
+  {
+    const ctx = { now: '2026-10-01T09:00:00+09:00' };
+    const kids = [0, 1, 2].map(() => makeUniverse(Math.max(10, Math.round(n / 3))).doc);
+    const byId = new Map(kids.map((k) => [k.universe.id, k]));
+    let parent = createUniverse({ name: '규모 점검 통합', level: '부서', owner: '가상 점검팀' }, ctx).doc;
+    for (const k of kids) parent = addRef(parent, k.universe.id, ctx, (id) => byId.get(id) || null).doc;
+    const merged = buildView(parent, (id) => byId.get(id) || null);
+    time('통합 확인 목록(mergePlan)', () => mergePlan(merged, parent.identity_links));
+  }
   const draft = buildHandoverDraft(view, { target: `${doc.universe.id}/${doc.universe.root_node_id}`, from: `${doc.universe.id}/${people[0]}`, to: `${doc.universe.id}/${people[1]}`, similar: [] }).draft;
   const exists = (g) => view.lookup(g).found || view.events.some((e) => e.gid === g);
   time('사전 생성 조회(초안, 결과 없음)', () => refineDraft(draft, { provider: createProvider('pregen', { pregen: PREGEN }), exists }));
