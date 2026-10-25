@@ -193,7 +193,7 @@ test('CR-22 F 사번 바로 넣기: 사번 없음 줄이고 그 지도 문서가
   assert.equal(canInlineEmpNo({ ...item, b: 'U-Y/N-001' }, { readOnly: false, ownerDoc: {} }), true, '비교 상대가 있어도 사번을 넣을 수 있다');
   assert.equal(canInlineEmpNo(item, { readOnly: true, ownerDoc: {} }), false);
   assert.equal(canInlineEmpNo(item, { readOnly: false, ownerDoc: null }), false, '이 브라우저 저장소에 없음');
-  assert.equal(canInlineEmpNo(item, { readOnly: false, ownerDoc: { readOnly: true } }), false);
+  assert.equal(canInlineEmpNo(item, { readOnly: false, ownerDoc: {}, ownerReadOnly: true }), false /* R11 RV11C-11: 문서에는 readOnly 필드가 없어 validateDocument 결과를 넘긴다 */);
   assert.equal(canInlineEmpNo({ type: 'conflict' }, { readOnly: false, ownerDoc: {} }), false);
 });
 

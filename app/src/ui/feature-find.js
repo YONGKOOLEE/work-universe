@@ -8,6 +8,9 @@ import { el } from './dom.js';
  *   search: (q:string) => {id:string,name:string,where:string,blocked:string|null}[],
  *   onGo: (result:object) => (void|{pick:{works:{gid:string,label:string}[], note?:string}}),
  *   onPick: (gid:string, result:object) => void,
+ *   records?: (q:string) => {query:string, total:number, rows:object[]},   // 쓴 것 찾기(R11 FU6-4): 기능 결과가 없거나 적을 때 아래에 「기록에서 …」를 더한다
+ *   recordFew?: number,                                                    // 기능 결과가 이 수 이하일 때만
+ *   onRecord?: (row:object) => void, onRecordsAll?: (q:string) => void,
  * }} o  onGo가 {pick}을 돌려주면 「그래프에서 업무를 먼저 고르세요」와 업무 이름 목록을 보이고, 이름을 누르면 onPick(gid, result)
  */
 export function featureFind(o) {
@@ -44,12 +47,23 @@ export function featureFind(o) {
       return close();
     }
     hits = o.search(q);
+    const rec = o.records && hits.length <= (o.recordFew ?? 2) ? o.records(q) : null;
+    const recordItems = rec && rec.rows.length ? [
+      el('li', { class: 'rec-head', 'data-testid': 'feature-find-records-head' }, `기록에서 「${rec.query}」 ${rec.total}건`),
+      ...rec.rows.map((r) => el('li', { class: 'rec-row' }, el('button', { type: 'button', class: 'feature-hit', 'data-testid': 'feature-find-record', 'data-gid': r.gid, onclick: () => { close(); input.value = ''; o.onRecord(r); } },
+        el('span', { class: 'feat-name' }, `${r.date} · ${r.target}`),
+        el('span', { class: 'feat-where' }, `[${r.kind}] ${r.text}`),
+        el('span', { class: 'feat-go' }, '보기'))))
+      , rec.total > rec.rows.length && o.onRecordsAll
+        ? el('li', { class: 'rec-more' }, el('button', { type: 'button', class: 'link', 'data-testid': 'feature-find-records-all', onclick: () => { close(); input.value = ''; o.onRecordsAll(q); } }, `외 ${rec.total - rec.rows.length}건 — 기록 표에서 모두 보기`))
+        : null,
+    ].filter(Boolean) : [];
     list.replaceChildren(...(hits.length
       ? hits.map((h) => el('li', {}, el('button', { type: 'button', class: 'feature-hit', 'data-testid': 'feature-find-result', 'data-id': h.id, 'aria-disabled': h.blocked ? 'true' : null, onclick: () => choose(h) },
         el('span', { class: 'feat-name' }, h.name),
         el('span', { class: 'feat-where' }, h.blocked ? `이 화면에서는 쓸 수 없음(${h.blocked})` : h.where),
         el('span', { class: 'feat-go' }, '바로 가기'))))
-      : [el('li', { class: 'none', role: 'status', 'data-testid': 'feature-find-none' }, `찾는 기능 없음: 「${q}」 — 다른 낱말(예: 담당, 미해결, 점검, 글로)로 찾아 보세요`)]));
+      : [el('li', { class: 'none', role: 'status', 'data-testid': 'feature-find-none' }, `찾는 기능 없음: 「${q}」 — 다른 낱말(예: 담당, 미해결, 점검, 글로)로 찾아 보세요`)]).concat(recordItems));
     list.hidden = false;
   }
 

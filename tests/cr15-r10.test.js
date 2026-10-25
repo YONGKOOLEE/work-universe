@@ -502,9 +502,11 @@ test('R10-11: 키가 없으면 DOM에 변화가 없다 — 안내 칸도 잠금�
   }
   try {
     const { q } = openDraft(live(createFakeClient({ delayMs: 20 })), { readOnly: true });
-    assert.equal(q('draft-confirm').disabled, true);
+    // R11 RV11-9: 읽기 전용에서는 잠긴 단추 대신 단추 자체가 없고 이유 한 줄(confirm-readonly)만 보인다
+    assert.equal(q('draft-confirm'), null);
+    assert.ok(q('confirm-readonly'));
     await sleep(80);
-    assert.equal(q('draft-confirm').disabled, true, '읽기 전용은 응답이 와도 잠금 그대로');
+    assert.equal(q('draft-confirm'), null, '읽기 전용은 응답이 와도 확정 단추가 생기지 않는다');
   } finally {
     uninstallDom();
   }

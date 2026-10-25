@@ -34,16 +34,22 @@ export function categoryGate(category) {
  * @param view 합성 뷰
  * @param workGid 업무의 전역 참조
  */
-export function resolveCloseCount(view, workGid) {
+export function resolveCloseCount(view, workGid, date = '') {
   if (!workGid) return 0;
   const key = view.canonical(workGid);
-  return openMemos(view).filter((ev) => memoKey(view, ev) === key).length;
+  // R11 RV11C-1: 새 「해결됨」 메모는 이력 순서상 날짜(occurred_at)가 그 날짜 이하인 메모 뒤에 놓이므로(같은 날은 닫힘, view.js·rules/issues.js 규칙)
+  // 고른 날짜보다 뒤 날짜의 미해결은 닫히지 않는다. 날짜를 모르면(빈 글) 날짜를 거르지 않는다
+  const d = String(date || '').trim();
+  return openMemos(view).filter((ev) => memoKey(view, ev) === key && (!d || String(ev.occurred_at) <= d)).length;
 }
 
 /** 「해결됨」을 고른 칩 아래 미리 알림 문구. 0건이면 닫을 것이 없다는 말 */
-export function resolveWarningText(n) {
-  return n > 0 ? `이 업무 미해결 ${n}건이 모두 닫힙니다` : '이 업무에 닫을 미해결은 없습니다';
+export function resolveWarningText(n, what = '업무') {
+  return n > 0 ? `이 ${what} 미해결 ${n}건이 모두 닫힙니다` : `이 ${what}에 닫을 미해결은 없습니다`;
 }
+
+/** 카드 대상 유형 → 미리 알림에 쓸 말(업무가 아니면 「항목」·「사람」·「주제」) */
+export const closeTargetWord = (coreType) => ({ work: '업무', person: '사람', topic: '주제' }[coreType] || '항목');
 
 /**
  * 메모 양식이 저장할 입력. 기존 이력 추가의 메모와 같은 모양(app.addEvent)이다. 분류·업무·내용이 비면 막는다.
@@ -138,7 +144,10 @@ export function successNotice(kind, d) {
     case 'assign':
       return { testid: 'assign-done', text: `「${d.name}」${josa(d.name, '을/를')} 이 업무의 담당으로 넣었습니다${d.existing ? '' : ' (새 사람으로 만들었습니다)'}.`, goto: node(d.workGid) };
     case 'identity': // 통합 확인의 같은 사람/다른 사람(같은 업무/다른 업무) 판정
-      return { testid: 'identity-done', text: `${d.a}와 ${d.b}${josa(d.b, '을/를')} ${d.same ? '같은' : '다른'} ${d.kind === 'work' ? '업무' : '사람'}으로 판정했습니다.`, goto: node(d.nodeGid) };
+    { // 조사는 josa로 붙인다 — 「다른 업무으로」 오류(R11 FU6-7): 업무는 받침이 없어 「로」, 사람은 받침 ㅁ이라 「으로」
+      const what = d.kind === 'work' ? '업무' : '사람';
+      return { testid: 'identity-done', text: `${d.a}와 ${d.b}${josa(d.b, '을/를')} ${d.same ? '같은' : '다른'} ${what}${josa(what, '으로/로')} 판정했습니다.`, goto: node(d.nodeGid) };
+    }
     case 'add-one': // 하나씩 추가
       return { testid: 'add-one-done', text: `${d.count > 1 ? `${d.count}개 추가` : '1개 추가'} · 「${d.label}」${d.extra ? ` ${d.extra}` : ''}`, goto: node(d.nodeGid), goLabel: d.core === 'work' ? '업무 보기' : '' };
     case 'table-add': // 표로 추가·글로 추가
@@ -186,7 +195,10 @@ export function addNodeOps({ input, attachRoot, link = null, names = null, doc }
     else if (table[0]) ops = [table[0]]; // 이름 칸 쪽 오류(여럿·너무 김 등): 그 행 오류를 그대로 돌려 아무것도 저장하지 않는다
   }
   if (link && ops[0].op === 'addNode') {
-    ops.push({ op: 'addEdge', row: 2, input: { core_type: link.core_type, source: link.out ? '@1' : link.other_id, target: link.out ? link.other_id : '@1' } });
+    const input = { core_type: link.core_type, source: link.out ? '@1' : link.other_id, target: link.out ? link.other_id : '@1' };
+    // 이름 칸이 만든 연결과 같은 연결(종류·시작·대상)이면 한 번만(R11 RV11C-8: 같은 상대를 양쪽에 넣으면 E-DUP로 전체가 거부되던 것)
+    const dup = ops.some((o) => o.op === 'addEdge' && o.input && o.input.core_type === input.core_type && o.input.source === input.source && o.input.target === input.target);
+    if (!dup) ops.push({ op: 'addEdge', row: 2, input });
   }
   return ops;
 }
@@ -215,7 +227,8 @@ export function groupedStrip(plan, { name = '', auto = 0 } = {}) {
 }
 
 /** 통합 확인의 「사번 없음」 줄에서 사번을 바로 넣을 수 있는가: 그 사람이 있는 하위 지도가 이 브라우저 저장소에 있고 쓸 수 있을 때만 */
-export function canInlineEmpNo(item, { readOnly, ownerDoc }) {
+export function canInlineEmpNo(item, { readOnly, ownerDoc, ownerReadOnly = false }) {
+  // 문서 객체에는 readOnly 필드가 없다(R11 RV11C-11): 부르는 쪽이 validateDocument(doc).readOnly를 ownerReadOnly로 넘긴다
   if (readOnly || !item || item.type !== 'no_empno' || !ownerDoc) return false;
-  return !ownerDoc.readOnly;
+  return !ownerReadOnly;
 }

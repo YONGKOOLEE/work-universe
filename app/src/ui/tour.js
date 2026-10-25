@@ -254,6 +254,10 @@ export function createTour(o) {
         paint(); // 그래프·패널이 다시 그려졌으면 짚기를 다시 한다
       }
     },
+    /** 사용자가 왼쪽 메뉴를 직접 눌렀다: 보류해 둔 공간 이동은 취소한다(R11 RV11C-5 — 사용자가 고른 공간을 되돌리지 않게) */
+    cancelPendingSpace() {
+      pendingSpace = '';
+    },
     /** 초안 화면이 미리 골라 둘 보내는·받는 사람(지금 단계에 있을 때만) */
     preset() {
       return mode === 'step' && sc.steps[index].preset ? sc.steps[index].preset : undefined;

@@ -196,7 +196,7 @@ function renderMerge(o, plan, aiHead) {
 
   return el('div', { class: 'insight', 'data-testid': 'merge-panel' },
     el('div', { class: 'row panel-head' }, el('h2', {}, '통합 확인'), el('button', { type: 'button', 'data-testid': 'merge-close', onclick: o.onClose }, '닫기')),
-    el('p', { class: 'muted small' }, '같은 사번·이름의 사람은 자동으로 하나로 이었습니다. 아래는 사람이 확인할 항목입니다. 확인하지 않아도 이 업무 지도는 그대로 볼 수 있고, 원래 업무 지도는 바뀌지 않습니다.'),
+    el('p', { class: 'muted small' }, '같은 사번·이름의 사람은 자동으로 하나로 이었습니다. 아래는 사람이 확인할 항목입니다. 확인하지 않아도 이 업무 지도는 그대로 볼 수 있습니다. 판정만으로는 원래 업무 지도가 바뀌지 않습니다(「사번 넣기」는 그 사람이 있는 원래 지도에 사번을 넣습니다).'),
     plan.auto.length && !o.readOnly ? el('p', { class: 'notice', 'data-testid': 'merge-auto' }, `사번·이름이 같은 사람 ${plan.auto.length}명을 아직 잇지 않았습니다. `,
       el('button', { type: 'button', class: 'link', onclick: o.onApplyAuto }, '사번 자동 연결 적용')) : null,
     el('h3', {}, `사람 확인 ${plan.persons.length}건`),

@@ -22,8 +22,10 @@ export function renderWorkspaceNav(nav, o) {
       'data-space': w.key,
       'aria-pressed': String(o.current === w.key),
       title: n && BADGE_TITLE[w.key] ? `${w.desc} — ${BADGE_TITLE[w.key](n)}` : w.desc,
+      // 배지의 뜻을 스크린리더에도(R11 FU6-16): 「기록, 미해결 3건」
+      'aria-label': n && BADGE_TITLE[w.key] ? `${w.label}, ${BADGE_TITLE[w.key](n)}` : null,
       onclick: () => o.onPick(w.key),
-    }, el('span', { class: 'ws-label' }, w.label), n ? el('span', { class: 'ws-badge', 'data-testid': `ws-badge-${w.key}` }, String(n)) : null);
+    }, el('span', { class: 'ws-label' }, w.label), n ? el('span', { class: 'ws-badge', 'data-testid': `ws-badge-${w.key}`, title: BADGE_TITLE[w.key] ? BADGE_TITLE[w.key](n) : null }, String(n)) : null);
   }));
   if (keep) {
     const again = [...nav.children].find((b) => b.dataset.space === keep);
@@ -40,7 +42,7 @@ function listBox(testid, title, { total, rows, unit, lack, none, more }, rowEl) 
     total !== null && total > rows.length ? el('p', { class: 'muted small' }, `외 ${total - rows.length}${unit} — ${more}`) : null);
 }
 
-const pick = (onSelect, gid, text, testid) => el('button', { type: 'button', class: 'link', 'data-testid': testid, 'data-gid': gid, title: '이 항목을 그래프에서 고릅니다', onclick: () => onSelect(gid) }, text);
+const pick = (onSelect, gid, text, testid) => el('button', { type: 'button', class: 'link', 'data-testid': testid, 'data-gid': gid, title: '이 항목의 카드를 엽니다', onclick: () => onSelect(gid) }, text);
 
 /** 인수인계 공간: 담당 공백 업무(최대 5) */
 export function gapBox(g, onSelect) {
@@ -52,7 +54,10 @@ export function gapBox(g, onSelect) {
 export function soloBox(sg, onSelect) {
   return listBox('ws-solo', '혼자만 아는 일', { ...sg, unit: '개', lack: '담당(수행) 기록이 부족해 셀 수 없음', none: '없음', more: '「매주 점검」의 인사이트 「인수인계 위험」 탭에서 모두 봅니다' },
     (r) => el('li', { 'data-testid': 'ws-solo-row', 'data-level': r.level },
-      pick(onSelect, r.work_gid, r.work, 'ws-solo-pick'), el('span', { class: 'muted small' }, ` — ${r.person}만 해 봄 · ${r.text}`)));
+      pick(onSelect, r.work_gid, r.work, 'ws-solo-pick'), el('span', { class: 'muted small' }, ' — '),
+      // 사람 이름은 눌러서 그 사람 카드를 연다(R11 FU6-8: 위험 목록에서 바로 연락처·맡은 업무를 보게)
+      el('button', { type: 'button', class: 'link', 'data-testid': 'ws-solo-person', 'data-gid': r.person_gid, title: '이 사람의 카드를 엽니다', onclick: () => onSelect(r.person_gid) }, r.person),
+      el('span', { class: 'muted small' }, `만 해 봄 · ${r.text}`)));
 }
 
 /** 매주 점검(묶지 않은 지도): 일이 몰린 사람 상위 5 */

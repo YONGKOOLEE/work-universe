@@ -6,7 +6,7 @@ import { EDGE_TYPES, MEMO_CATEGORIES, NODE_TYPES, allowedRelations, pairAllowed 
 import { el } from './dom.js';
 import { josa, messageFor } from './messages.js';
 import { todayLocal } from './time.js';
-import { memoParts } from './memo-form.js';
+import { gateWrap, memoParts } from './memo-form.js';
 
 // 하위 유형 선택 칸: 목록에서 고르거나 "새 하위 유형"을 입력한다(1.3 ②).
 // getType()은 지금 고른 핵심 유형(노드 유형 또는 관계)을 돌려준다. refresh()로 유형이 바뀔 때 목록을 다시 채운다.
@@ -188,11 +188,12 @@ function messageBox() {
   };
 }
 
-function actions(submitText, onCancel) {
+function actions(submitText, onCancel, onBlockedClick = null) {
+  const submit = el('button', { type: 'submit', class: 'primary' }, submitText);
   return el(
     'div',
     { class: 'row' },
-    el('button', { type: 'submit', class: 'primary' }, submitText),
+    onBlockedClick ? gateWrap(submit, onBlockedClick) : submit, // 막힌 단추를 눌러도 반응(R11 FU6-5)
     onCancel ? el('button', { type: 'button', onclick: onCancel }, '취소') : null,
   );
 }
@@ -529,7 +530,7 @@ export function edgeEditForm(o) {
 const CATEGORY_HINT = '분류에 따라 인수인계 초안의 칸이 정해집니다: 이슈 → 「최근 이슈」, 진행 중 → 「진행 중인 일」, 주의사항 → 「주의사항·노하우」';
 
 const EVENT_CHOICES = [
-  ['memo', '메모(이슈·결정)'],
+  ['memo', '메모'], // R11 FU6-5: 「메모(이슈·결정)」 → 「메모」(분류 칩이 이슈·진행 중·주의사항·해결됨을 가르므로 괄호가 거짓 안내)
   ['handover', '인수인계'],
   ['assign_start', '담당 시작'],
   ['assign_end', '담당 종료'],
@@ -559,7 +560,8 @@ export function eventForm(o) {
   let submitBtn = null;
   let parts = null;
   const syncGate = () => { if (submitBtn && parts) submitBtn.disabled = type.value === 'memo' && !parts.category(); };
-  parts = o.memoChips ? memoParts({ prefix: 'event', topics: byType('topic'), checkedTopic: o.node.id, closeCount: o.closeCount, onChange: () => syncGate() }) : null;
+  parts = o.memoChips ? memoParts({ prefix: 'event', topics: byType('topic'), checkedTopic: o.node.id, closeCount: o.closeCount ? () => o.closeCount(date.value) : null, closeWord: o.closeWord, onChange: () => syncGate() }) : null;
+  if (parts) date.addEventListener('change', () => parts.refresh()); // 날짜를 바꾸면 닫히는 건수가 달라진다(R11 RV11C-1)
   const category = parts ? parts.select : select(Object.entries(MEMO_CATEGORIES), 'issue', { 'data-testid': 'event-category' });
   const topics = parts ? null : el('div', { class: 'checks' }, ...byType('topic').map((t) => el('label', { class: 'check' }, el('input', { type: 'checkbox', value: t.id, checked: t.id === o.node.id }), ` ${t.label}`)));
   // 「이미 끝난 일(해결됨으로 기록)」(CR-18 D-12): 분류가 이슈일 때만 보인다. 켜면 이슈 메모와 그것을 닫는 해결됨 메모를 같은 날짜로 한 번에 남긴다(저장은 부르는 쪽: input.also_resolved)
@@ -574,7 +576,7 @@ export function eventForm(o) {
   // (DOM 요소는 한 곳에만 붙을 수 있다)
   const groups = {
     memo: () => (parts
-      ? [el('div', { class: 'field' }, el('span', {}, '분류'), parts.chipRow, parts.gate, category), parts.warn, el('p', { class: 'muted small', 'data-testid': 'category-hint' }, CATEGORY_HINT), parts.topics ? field('관련 주제(선택)', parts.topics) : null, pastBox].filter(Boolean)
+      ? [el('div', { class: 'field' }, el('span', {}, '분류'), parts.hint, parts.chipRow, parts.gate, category), parts.warn, el('p', { class: 'muted small', 'data-testid': 'category-hint' }, CATEGORY_HINT), parts.topics ? field('관련 주제(선택)', parts.topics) : null, pastBox].filter(Boolean)
       : [field('분류', category), el('p', { class: 'muted small', 'data-testid': 'category-hint' }, CATEGORY_HINT), field('관련 주제(선택)', topics), pastBox]),
     handover: () => [field('업무', work), field('보내는 사람', from), field('받는 사람', to), field('인수인계서(선택)', artifact), field('이전 인수인계 참조(선택)', previous)],
     assign_start: () => [
@@ -601,9 +603,20 @@ export function eventForm(o) {
     slot,
     field('내용', note),
     msg.box,
-    actions('기록', o.onCancel),
+    actions('기록', o.onCancel, parts ? () => parts.needCategory() : null),
   );
   submitBtn = parts ? [...form.querySelectorAll('button')].find((b) => b.getAttribute('type') === 'submit') || null : null;
+  // 쓰던 메모 보관(R11 FU6-3): o.keep({get,set,clear})가 있으면 이 업무에 쓰던 글·분류를 채우고, 쓰는 대로 보관한다. 저장이 되면 지운다(보관은 이 탭의 메모리뿐)
+  if (o.keep && parts) {
+    const had = o.keep.get();
+    if (had) {
+      note.value = had.note;
+      parts.setCategory(had.category);
+    }
+    const hold = () => { if (type.value === 'memo') o.keep.set({ category: parts.category(), note: note.value }); };
+    note.addEventListener('input', hold);
+    parts.select.addEventListener('change', hold);
+  }
   syncGate();
   form.addEventListener('submit', (evt) => {
     evt.preventDefault();
@@ -622,7 +635,9 @@ export function eventForm(o) {
     const input = { type: type.value, occurred_at: date.value, payload, note: note.value };
     if (type.value === 'assign_start' && endDate.value) input.end_date = endDate.value;
     if (type.value === 'memo' && category.value === 'issue' && pastDone.checked) input.also_resolved = true;
-    msg.show(o.onSubmit(input), { kind: 'event' });
+    const saved = o.onSubmit(input);
+    if (o.keep && saved && saved.ok) o.keep.clear();
+    msg.show(saved, { kind: 'event' });
   });
   return form;
 }

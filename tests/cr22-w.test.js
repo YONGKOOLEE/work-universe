@@ -58,26 +58,22 @@ test('CR-22 W 상태 규칙 ① 작업 화면을 열면 메뉴가 그 공간으�
   assert.equal(followScreens('map', ['settings', 'draft']), 'handover', '설정과 함께여도 공간이 정해진 화면을 따른다');
 });
 
-test('CR-22 W 상태 규칙 ② 메뉴로 공간을 바꾸면 열린 작업 화면은 모두 닫고, 항목 카드는 두며 관련 위치로 스크롤', () => {
+test('CR-22 W 상태 규칙 ② 메뉴로 공간을 바꾸면 열린 작업 화면은 모두 닫는다(R11 FU6-1: 항목 카드도 닫으므로 계획에 카드 유지·스크롤은 없다)', () => {
+  // R11 FU6-1 변경 이유: 카드를 둔 채 강조만 바뀌면 「메뉴가 안 먹는다」로 보여 keepCard·scroll 규칙을 없앴다. 영향: R-08 ⑧~⑪ 공간 메뉴
   const open = ['draft', 'insight', 'settings'];
-  const p = planSwitch({ to: 'record', hasCard: false, open });
-  assert.deepEqual(p, { space: 'record', closeScreens: ['draft', 'insight', 'settings'], keepCard: false, scroll: null });
-  // 카드가 있으면 유지하고 공간마다 스크롤 위치
-  assert.deepEqual(planSwitch({ to: 'record', hasCard: true, open: [] }), { space: 'record', closeScreens: [], keepCard: true, scroll: 'history' });
-  assert.equal(planSwitch({ to: 'handover', hasCard: true }).scroll, 'assign');
-  assert.equal(planSwitch({ to: 'edit', hasCard: true }).scroll, 'edit');
-  assert.equal(planSwitch({ to: 'map', hasCard: true }).scroll, null);
-  assert.equal(planSwitch({ to: 'check', hasCard: true }).scroll, null);
-  assert.equal(planSwitch({ to: 'edit', hasCard: false }).scroll, null, '카드가 없으면 스크롤하지 않는다');
+  const p = planSwitch({ to: 'record', open });
+  assert.deepEqual(p, { space: 'record', closeScreens: ['draft', 'insight', 'settings'] });
+  assert.equal('keepCard' in planSwitch({ to: 'edit' }), false);
+  assert.equal('scroll' in planSwitch({ to: 'edit' }), false);
   // 같은 공간을 다시 눌러도 작업 화면은 닫힌다(그 공간 첫 화면으로)
-  assert.deepEqual(planSwitch({ to: 'check', hasCard: false, open: ['insight'] }).closeScreens, ['insight']);
+  assert.deepEqual(planSwitch({ to: 'check', open: ['insight'] }).closeScreens, ['insight']);
   // 되감기·숨긴 항목·통합 확인도 닫는다
-  assert.deepEqual(planSwitch({ to: 'map', hasCard: false, open: ['rewind', 'hidden', 'merge', 'issues'] }).closeScreens, ['merge', 'issues', 'rewind', 'hidden']);
+  assert.deepEqual(planSwitch({ to: 'map', open: ['rewind', 'hidden', 'merge', 'issues'] }).closeScreens, ['merge', 'issues', 'rewind', 'hidden']);
   // 모르는 공간은 기본, 열린 화면 목록이 없어도 된다
-  assert.equal(planSwitch({ to: '엉뚱', hasCard: false }).space, 'map');
-  assert.deepEqual(planSwitch({ to: 'map', hasCard: false }).closeScreens, []);
+  assert.equal(planSwitch({ to: '엉뚱' }).space, 'map');
+  assert.deepEqual(planSwitch({ to: 'map' }).closeScreens, []);
   // 열린 목록에 없는 이름은 무시
-  assert.deepEqual(planSwitch({ to: 'map', hasCard: false, open: ['쓰레기'] }).closeScreens, []);
+  assert.deepEqual(planSwitch({ to: 'map', open: ['쓰레기'] }).closeScreens, []);
 });
 
 test('CR-22 W 배지: 기록 = 미해결 수, 매주 점검 = 혼자만 아는 일 수. 0·셀 수 없음(null)·NaN은 배지 없음', () => {

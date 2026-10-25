@@ -30,6 +30,7 @@ const EDGE = GRAPH_COLORS.EDGE; // 배경(BG)과의 대비 3:1 이상(CR-22 G, �
 const ACCENT = '#a6d86b';
 
 const LAYOUT_LABEL_MAX_NODES = 25; // 이 수 이하의 지도만 배치 계산에 이름 자리를 넣는다
+const BIG_TUNED_MAX = 200; // 큰 지도 배치값(온도 1000·냉각 0.99·반복 1500)을 쓰는 노드 수 상한. 이 수를 넘으면 예전 값(120·0.97·1200)
 const colorOf =(el) => TYPE_COLORS[el.data('core_type')] || UNKNOWN_COLOR;
 
 // 꼭지에서 몇 단계 떨어졌는지(연결 방향 무시). 닿지 않는 노드는 가장 바깥 고리로 보낸다.
@@ -240,6 +241,7 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
   // 이전 규칙(화면 6px 미만 숨김)은 150개 지도에서 이름이 1개만 보였다(검토 ② 1.3).
   const LOD_PAD = LOD.LABEL_PAD_PX;
   let focusId = null; // 고르거나 올린 항목
+  let spaceMarks = { cls: null, gids: [], dim: false }; // 공간별 강조(CR-22 G2). 이름 단계(FU6-8)도 이 값을 본다
   let emph = new Set(); // 그 항목과 이웃(이름을 크게, 우선순위 1)
   let labelTimer = 0;
   let lastLabelStats = { zoom: 0, shown: 0, total: 0 };
@@ -268,7 +270,7 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
       const ok = b && Number.isFinite(b.x1) && b.w > 0;
       return {
         id: n.id(),
-        rank: labelPriority({ type: n.data('core_type'), focus: n.id() === focusId, near: emph.has(n.id()), degree: n.data('degree') || 0 }),
+        rank: labelPriority({ type: n.data('core_type'), focus: n.id() === focusId, near: emph.has(n.id()), degree: n.data('degree') || 0, marked: n.hasClass('found') || (!!spaceMarks.cls && n.hasClass(spaceMarks.cls)) }),
         degree: n.data('degree') || 0,
         force: n.data('core_type') === 'root', // 지도 중심 이름은 겹쳐도 숨기지 않는다
         box: ok ? { x1: b.x1, y1: b.y1, x2: b.x2, y2: b.y2 } : null,
@@ -355,7 +357,6 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
   };
 
   // 공간별 강조(CR-22 G2): {cls, gids, dim}. 그릴 때마다 다시 적용한다(render가 요소를 새로 만든다)
-  let spaceMarks = { cls: null, gids: [], dim: false };
   const applySpaceMarks = () => {
     cy.nodes().removeClass('mk-issue mk-solo mk-current mk-dim');
     if (!spaceMarks.cls) return;
@@ -476,7 +477,10 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
       animate: false,
       fit: false,
     }).run();
-    const big = cy.nodes().length > LAYOUT_LABEL_MAX_NODES;
+    const count = cy.nodes().length;
+    const big = count > LAYOUT_LABEL_MAX_NODES;
+    // 큰 지도의 높은 온도·긴 반복은 노드 수가 BIG_TUNED_MAX를 넘으면 980개 첫 열기가 2.9초 → 20초로 느려진다(R11 RV11C-4). 그 위는 예전 값
+    const tuned = big && count <= BIG_TUNED_MAX;
     laid.layout({
       name: 'cose',
       randomize: false,
@@ -485,14 +489,14 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
       nodeDimensionsIncludeLabels: !big,
       boundingBox,
       // 작은 지도는 고리 모양을 크게 흐트러뜨리지 않도록 낮은 온도에서 조금만 움직인다. 큰 지도는 기본 온도로 충분히 풀어야 연결이 덜 엇갈린다(150개 지도 교차 1302 → 755)
-      initialTemp: big ? 1000 : 120,
-      coolingFactor: big ? 0.99 : 0.97,
+      initialTemp: tuned ? 1000 : 120,
+      coolingFactor: tuned ? 0.99 : 0.97,
       idealEdgeLength: () => (big ? 50 : 80),
       edgeElasticity: () => 60,
       nodeRepulsion: () => (big ? 4500 : 9000),
       nodeOverlap: 16,
       gravity: big ? 0.8 : 0.4,
-      numIter: big ? 1500 : 1200,
+      numIter: tuned ? 1500 : 1200,
       componentSpacing: 40,
       fit: false,
     }).run();
@@ -717,6 +721,7 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
     setSpaceMarks({ cls = null, gids = [], dim = false } = {}) {
       spaceMarks = { cls, gids, dim };
       applySpaceMarks();
+      applyTinyLabels(); // 강조된 항목은 이름이 숨지 않게 이름 단계를 다시 계산(FU6-8)
     },
 
     // 배치를 처음부터 다시 계산한다("정렬" 버튼)

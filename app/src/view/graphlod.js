@@ -40,10 +40,10 @@ export const labelModelPx = (screenPx, zoom) => screenPx / (zoom > 0 ? zoom : 1)
 
 /**
  * 이름 우선순위(작을수록 먼저 보임). 지도 중심 > 고른 항목·이웃 > 연결 많은 업무 > 업무 > 사람·조직 > 산출물·주제·기타.
- * focus: 고르거나 올린 항목 자신(지도 중심과 같은 0순위), near: 그 이웃.
+ * focus: 고르거나 올린 항목 자신(지도 중심과 같은 0순위), near: 그 이웃, marked: 공간 강조·찾은 항목(0순위).
  */
-export function labelPriority({ type, focus = false, near = false, degree = 0 }, c = LOD) {
-  if (type === 'root' || focus) return 0;
+export function labelPriority({ type, focus = false, near = false, degree = 0, marked = false }, c = LOD) {
+  if (type === 'root' || focus || marked) return 0; // marked: 공간 강조·찾은 항목(FU6-8 — 강조된 것은 이름이 숨지 않게 0순위)
   if (near) return 1;
   if (type === 'work') return degree >= c.HUB_DEGREE ? 2 : 3;
   if (type === 'person' || type === 'org') return 4;
@@ -80,7 +80,7 @@ export function wheelZoomFactor(deltaY, deltaMode = 0, c = LOD) {
   const dy = (Number(deltaY) || 0) * (deltaMode === 1 ? 40 : deltaMode === 2 ? 400 : 1);
   if (dy === 0) return 1;
   const f = Math.abs(dy) >= c.WHEEL_NOTCH_DELTA ? (dy < 0 ? c.WHEEL_STEP : 1 / c.WHEEL_STEP) : Math.exp(-dy * c.WHEEL_SMOOTH);
-  return clamp(f, 1 / 1.5, 1.5);
+  return clamp(f, 1 / c.WHEEL_STEP, c.WHEEL_STEP); // 부드러운 갈래도 한 번에 한 칸(WHEEL_STEP)을 넘지 않는다(R11 RV11C-7: 49에서 ×1.63으로 튀던 것)
 }
 
 /** 배율을 factor만큼 곱하되 [min, max] 안으로 */

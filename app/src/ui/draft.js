@@ -369,11 +369,12 @@ function confirmBox(d, view, o) {
       msg.textContent = confirmError(r.error, moving);
     }
   });
-  const bar = el('div', { class: 'confirm-bar', 'data-testid': 'confirm-bar' }, transferBox, btn, msg);
+  // 읽기 전용이면 누를 수 없는 단추를 두지 않고 이유 한 줄만 보인다(R11 RV11-9)
+  const bar = el('div', { class: 'confirm-bar', 'data-testid': 'confirm-bar' }, transferBox, o.readOnly ? null : btn, msg);
   const info = el('div', { class: 'confirm-box', 'data-testid': 'confirm-box' },
     el('p', { class: 'muted small' }, `내용을 확인했으면 확정하세요. 「${where}」에 인수인계서와 인수인계 이력(${date})이 남고, 다음 인수인계 초안의 「이전 인수인계」 근거가 됩니다.`),
     elsewhere.length ? el('p', { class: 'muted small', 'data-testid': 'confirm-elsewhere' }, `이 화면(「${where}」)에만 저장됩니다. 업무 지도(「${elsewhere.join('」·「')}」)를 단독으로 열면 이 인수인계는 보이지 않습니다. 그 업무 지도에서도 보이게 하려면 그 업무 지도를 열어 업무를 대상으로 확정하세요.`) : null,
-    o.readOnly ? el('p', { class: 'muted small' }, '읽기 전용이라 확정할 수 없습니다.') : null,
+    o.readOnly ? el('p', { class: 'muted small', 'data-testid': 'confirm-readonly' }, '이 화면은 읽기 전용이라 확정할 수 없습니다') : null,
     null);
   return [info, bar];
 }

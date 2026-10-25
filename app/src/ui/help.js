@@ -14,6 +14,8 @@ export const HELP_SPACES = [
   { term: '매주 점검', desc: '인수인계 위험을 보고, 묶은 지도는 점검을 저장해 지난번과 비교합니다.' },
   { term: '지도 관리', desc: '항목 추가·수정, 새 업무 지도 만들기·묶기, 가져오기·내보내기, 편집 되감기를 합니다.' },
 ];
+// 메뉴 옆 숫자 배지의 뜻(R11 FU6-16)
+export const HELP_SPACES_BADGE = '메뉴 옆 숫자: 「기록」은 미해결 건수, 「매주 점검」은 혼자만 아는 일 개수입니다(0이면 숫자가 없습니다).';
 export const HELP_TERMS_TITLE = '용어';
 export const HELP_TERMS = [
   { term: '업무 지도', desc: '업무를 묶은 한 단위입니다.' },
@@ -38,7 +40,7 @@ export const HELP_CLOSE_LABEL = '닫기';
 
 /** 도움말 글에 나오는 「…」 이름 목록(화면에 실제로 있는 이름과 맞는지 단위 테스트가 확인) */
 export function helpTexts() {
-  return [HELP_INTRO, ...HELP_SPACES.map((t) => t.desc), ...HELP_TERMS.map((t) => t.desc), ...HELP_GEN.map((t) => t.desc), ...HELP_SECURITY.map((t) => t.desc), HELP_TOUR_LABEL, HELP_CLOSE_LABEL];
+  return [HELP_INTRO, HELP_SPACES_BADGE, ...HELP_SPACES.map((t) => t.desc), ...HELP_TERMS.map((t) => t.desc), ...HELP_GEN.map((t) => t.desc), ...HELP_SECURITY.map((t) => t.desc), HELP_TOUR_LABEL, HELP_CLOSE_LABEL];
 }
 
 /**
@@ -52,6 +54,7 @@ export function helpPanel(o) {
     el('p', { 'data-testid': 'help-intro' }, HELP_INTRO),
     el('h3', {}, HELP_SPACES_TITLE),
     list(HELP_SPACES, 'help-spaces'),
+    el('p', { class: 'muted small', 'data-testid': 'help-badge' }, HELP_SPACES_BADGE),
     el('h3', {}, HELP_TERMS_TITLE),
     list(HELP_TERMS, 'help-terms'),
     // 문장 생성 방식 3항목은 처음에는 접어 둔다(도움말을 길게 만들지 않으려고)

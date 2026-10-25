@@ -155,7 +155,7 @@ export function filterHistory(rows, f = {}, today = '') {
   const want = f.period === '올해' ? String(year) : f.period === '작년' ? String(year - 1) : '';
   const q = String(f.q || '').trim().toLowerCase();
   return rows.filter((r) => (!group || r.group === group) && (!want || String(r.date).startsWith(want))
-    && (!q || `${r.text} ${r.type_label} ${r.status} ${r.date}`.toLowerCase().includes(q)));
+    && (!q || `${r.text} ${r.type_label} ${r.status} ${r.date} ${r.target || ''}`.toLowerCase().includes(q)));
 }
 
 /**
@@ -214,7 +214,12 @@ export function newestFirst(memos) {
 /** 사용자가 남긴 기록(메모·담당·인수인계·소속 변경) 중 가장 최근 한 줄. 이력이 최신순 rows일 때 */
 export function latestRecord(rows) {
   const r = rows.find((x) => USER_EVENT_TYPES.includes(x.type));
-  return r ? { gid: r.gid, date: r.date, type_label: r.type === 'memo' && r.category ? MEMO_CATEGORIES[r.category] || r.type_label : r.type_label, text: clip(r.text, CARD.TEXT_CLIP) } : null;
+  if (!r) return null;
+  const typeLabel = r.type === 'memo' && r.category ? MEMO_CATEGORIES[r.category] || r.type_label : r.type_label;
+  // 이력 줄 글은 메모 분류를 「[이슈] …」처럼 앞에 달고 있다. 화면이 분류를 따로 보이므로(칩·[ ] 접두어) 글에서는 뗀다 — 꼬리표가 두 번 나오던 결함(R11 FU6-6)
+  const tag = `[${typeLabel}] `;
+  const text = r.type === 'memo' && String(r.text || '').startsWith(tag) ? String(r.text).slice(tag.length) : r.text;
+  return { gid: r.gid, date: r.date, type_label: typeLabel, text: clip(text, CARD.TEXT_CLIP) };
 }
 
 /**

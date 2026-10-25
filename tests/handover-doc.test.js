@@ -47,7 +47,8 @@ test('확정본: 설명 + 본문(이어서 N)을 번호 순서대로 이어 붙�
   assert.equal(confirmedBody(node), 'AAABBBCCCJJJ');
   const h = handoverDocHtml({ kind: 'confirmed', node });
   assert.ok(h.includes('AAABBBCCCJJJ'));
-  assert.ok(h.includes('받는 사람: &lt;윤바다&gt;') && h.includes('확정 시각: 2026-10-03T15:00:00+09:00') && h.includes('초안 생성 방식: 규칙 기반'));
+  // R11 FU6-15: 확정 시각의 ISO 원문(…T15:00:00+09:00) 대신 「YYYY-MM-DD HH:MM」로 보인다(저장값은 그대로)
+  assert.ok(h.includes('받는 사람: &lt;윤바다&gt;') && h.includes('확정 시각: 2026-10-03 15:00') && h.includes('초안 생성 방식: 규칙 기반'));
   assert.ok(h.includes('확인하고 확정한 인수인계서입니다'));
   assert.deepEqual(confirmedNameParts(node), { date: '2026-10-03', target: '대사 확인' });
   assert.deepEqual(confirmedNameParts({ label: '2026-10-03 대사 확인 인수인계서 (2)', attrs: {} }), { date: '2026-10-03', target: '대사 확인' });

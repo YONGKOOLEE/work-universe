@@ -65,7 +65,7 @@ test('처음 온 화면: 미리 보기 도식·세 갈래·더 보기 하나, �
     assert.equal(qa(r, '[data-testid=start-more]').length, 1);
     for (const id of ['start-primary', 'start-create', 'start-samples', 'start-steps']) assert.ok(q(more, id), id);
     assert.equal(q(more, 'start-more'), null);
-    assert.equal(more.querySelector('summary').textContent, '더 보기');
+    assert.equal(more.querySelector('summary').textContent, '더 보기'); // 접힘 제목은 「더 보기」(안에 샘플 바로 열기·새 지도·가져오기·용어·처음 순서·샘플 목록 — 메인 검토로 되돌림)
     assert.equal(q(r, 'start-ways').parentNode.tagName, 'HEADER'); // 세 갈래는 접히지 않은 위쪽
   } finally { uninstallDom(); }
 });

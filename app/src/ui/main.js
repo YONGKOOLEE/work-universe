@@ -15,9 +15,10 @@ import { exposureOf, projectView } from '../view/collapse.js';
 import { parseGid, toGid } from '../view/view.js';
 import { PANEL, clampPanelWidth, maxPanelWidth } from '../view/panel.js';
 import { DRAFT_TARGET_TYPES, MEMO_CATEGORIES, SUBTYPE_HANDOVER_DOC } from '../model/schema.js';
+import { validateDocument } from '../model/validate.js';
 import { BACKUP_NONE_TEXT, backupRows, collabPlan, draftCenterFor } from '../view/quick-input.js';
-import { addNodeOps, extraNames, extraSummary, groupedStrip, memoRecordInput, resolveCloseCount, successNotice, transferBranchPlan, canInlineEmpNo, BRANCH_DOC, BRANCH_LABELS, BRANCH_ONLY } from '../view/record-form.js';
-import { memoParts } from './memo-form.js';
+import { addNodeOps, extraNames, extraSummary, groupedStrip, memoRecordInput, closeTargetWord, resolveCloseCount, successNotice, transferBranchPlan, canInlineEmpNo, BRANCH_DOC, BRANCH_LABELS, BRANCH_ONLY } from '../view/record-form.js';
+import { gateWrap, memoParts } from './memo-form.js';
 import { createNotices } from './notice.js';
 import { confirmedDoc, downloadWithNotice, printHtml } from './doc-output.js';
 import { el } from './dom.js';
@@ -65,7 +66,9 @@ import { LEGEND_COLLAPSED_TEXT, OWNER_REQUIRED_TEXT, assignOps, keepDraftPick, m
 import { FEATURE_WORK_LIMIT, searchFeatures } from '../view/feature-index.js';
 import { spaceMarks } from '../view/space-marks.js';
 import { WORKSPACES, cleanWorkspace, denseRows, followScreens, gapWorkRows, panelParts, planSwitch, recentHandoverDocs, soloRows, spaceBadges } from '../view/workspace.js';
-import { RECENT_RECORDS, recentRecords } from '../view/recent-records.js';
+import { RECENT_RECORDS, RECORD_SEARCH, mapHistoryRows, recentRecords, searchRecords } from '../view/recent-records.js';
+import { createMemoKeep, memoKeepKey } from '../view/memo-keep.js';
+import { DONE_KEY, doneMarkAuto, doneMarkMatches, makeDoneMark } from '../view/done-mark.js';
 import { flash, recentList } from './overview.js';
 import { denseBox, docsBox, gapBox, renderWorkspaceNav, soloBox } from './workspace.js';
 import { featureFind } from './feature-find.js';
@@ -79,7 +82,13 @@ let embedPrefix = '';
 
 // tourId가 있으면 주소 끝에 ~tour=시나리오를 붙인다: 다시 열린 화면이 읽고(takeTourFromHash) 바로 주소에서 지운다(CR-13 A, 저장소를 쓰지 않는다)
 // again: 머리글 「?」에서 고른 것이라 「한 번만」(D-2)에 걸리지 않고 언제나 따라 하기가 뜬다(~again)
-function openUniverse(id, tourId = '', again = false, done = '') {
+function openUniverse(id, tourId = '', again = false, done = '', auto = 0) {
+  if (done) { // 일회용 표지(R11 RV11S-1): 주소의 ~done만 믿지 않게 이 탭의 sessionStorage에도 남긴다. 쓸 수 없으면 남기지 않아 알림이 생략된다
+    try {
+      const mark = makeDoneMark(done, id, Date.now(), auto);
+      if (mark) window.sessionStorage.setItem(DONE_KEY, mark);
+    } catch { /* 저장소를 쓸 수 없으면 알림만 생략 */ }
+  }
   location.hash = embedPrefix + id + (tourId ? `~tour=${tourId}${again ? '~again' : ''}` : '') + (done ? `~done=${done}` : '');
   location.reload();
 }
@@ -242,7 +251,7 @@ function hashId() {
 }
 
 function start() {
-  const doneFlag = takeDoneFromHash();
+  const doneHash = takeDoneFromHash();
   const tourId = takeTourFromHash(); // 시작 화면의 「인수인계를 앞두고 있어요」·「팀 업무를 한눈에…」가 붙인 따라 하기 시나리오(CR-13 A)
   // 내용 포함 HTML로 내려받을 때 쓸 앱 원본: 화면을 그리기 전에 잡는다(CR-13 B)
   const appHtml = captureAppHtml(document);
@@ -438,6 +447,14 @@ function start() {
     if (b) b.focus({ preventScroll: true });
   };
   // 패널 보기 중 열려 있는 것을 닫는다(Esc와 「닫기」 공통, CR-22 F: 미해결·숨긴 항목·인사이트·이력 표·통합 확인·설정·초안). 닫았으면 true
+  // 「인수인계서까지」에서 이름으로 먼저 만든 사람(RV11C-2): 초안을 확정하지 않고 닫으면, 아직 연결이 하나도 없고 이력이 만들 때 것뿐일 때만 숨긴다
+  function dropUnusedPerson(id) {
+    if (!id || app.readOnly || rw) return;
+    const g = toGid(currentId(), id);
+    const linked = view.edges.some((e) => !e.hidden && (e.source === g || e.target === g));
+    const used = view.events.some((e) => e.type !== 'created' && e.node_gids.includes(g));
+    if (!linked && !used) app.hideNode(id);
+  }
   function closeSidePanel() {
     if (histTable) closeHistTable();
     else if (issues) issues = null;
@@ -445,8 +462,10 @@ function start() {
     else if (insight) insight = null;
     else if (merging) merging = false;
     else if (settingsOpen) settingsOpen = false;
-    else if (drafting) drafting = null;
-    else return false;
+    else if (drafting) {
+      dropUnusedPerson(drafting.createdPerson);
+      drafting = null;
+    } else return false;
     renderPanel();
     graph.highlight(selected);
     restoreOpener();
@@ -635,10 +654,6 @@ function start() {
     focus(nodeGid);
     scrollJustAdded();
   }
-  // 기록 알림 줄 끝에 붙이는 「이력에서 보기」. 대상 업무나 새 이벤트를 모르면 붙이지 않는다
-  const historyButton = (nodeGid, gids) => (nodeGid && gids.length
-    ? el('button', { type: 'button', class: 'link', 'data-testid': 'goto-history', title: '그 업무의 이력에서 방금 기록한 줄로 갑니다', onclick: () => showHistory(nodeGid, gids) }, '이력에서 보기')
-    : null);
 
   function draftButton(gid, label = '인수인계 초안 만들기') {
     const node = view.getNode(gid);
@@ -736,22 +751,48 @@ function start() {
   // 분류는 처음엔 고르지 않는다 — 고르지 않으면 「기록」이 막힌다. 기존 이력 추가의 메모와 같은 경로(app.addEvent / 이미 끝난 일은 app.addMemoResolved). 고칠 수 없는 화면에서는 그리지 않는다
   // date·day: 날짜 칸(T4). 주말에 한 주를 몰아 넣을 때 같은 날짜로 이어 넣을 수 있게, 오늘이 아닌 날짜는 같은 날(day) 안에서만 기억한다(다음 날 열면 다시 오늘)
   let weeklyLast = { workId: '', date: '', day: '' };
+  // 쓰던 메모(FU6-3): 업무별 글·분류를 이 탭의 메모리에만 보관한다(저장소에는 쓰지 않음). 「기록」 성공 때 지운다
+  const memoKeep = createMemoKeep();
+  // 「이번 주 기록」 양식을 그릴 수 있는 화면인가(읽기 전용·되감기·업무 없는 지도·묶은 지도는 아님)
+  const canWeekly = () => !app.readOnly && !rw && ownNodes().some((n) => n.core_type === 'work');
   function weeklyBox() {
-    if (app.readOnly || rw) return null;
+    if (!canWeekly()) return null;
     const works = ownNodes().filter((n) => n.core_type === 'work');
-    if (!works.length) return null;
     const workSel = el('select', { 'data-testid': 'weekly-work', 'aria-label': '업무' }, el('option', { value: '' }, '업무를 고르세요'), ...works.map((w) => el('option', { value: w.id, selected: w.id === weeklyLast.workId }, w.label)));
     let addBtn = null;
+    let dateIn = null; // 날짜 칸(아래에서 만든다). 해결됨 미리 알림이 이 날짜로 닫히는 건수를 센다(R11 RV11C-1)
     const parts = memoParts({
       prefix: 'weekly',
       topics: ownNodes().filter((n) => n.core_type === 'topic'),
-      closeCount: () => (workSel.value ? resolveCloseCount(view, toGid(currentId(), workSel.value)) : 0),
+      closeCount: () => (workSel.value ? resolveCloseCount(view, toGid(currentId(), workSel.value), dateIn ? dateIn.value : '') : 0),
       onChange: (ok) => { if (addBtn) addBtn.disabled = !ok; },
     });
-    workSel.addEventListener('change', () => parts.refresh());
     const noteIn = el('input', { type: 'text', maxlength: 2000, autocomplete: 'off', placeholder: '예: 대사 불일치 2건 정리, 다음 주 재확인', 'data-testid': 'weekly-note', 'aria-label': '내용' });
+    // 쓰던 글·분류 보관(FU6-3): 업무마다 따로. 업무를 바꿀 때 그 업무에 쓰던 글이 있으면 채우고, 없으면 지금 칸의 글을 새 업무로 옮긴다(글을 쓴 뒤 업무를 고르는 순서도 지켜진다)
+    const keyFor = (workId) => memoKeepKey('weekly', currentId(), workId);
+    let heldKey = keyFor(workSel.value);
+    const hold = () => memoKeep.set(heldKey, { category: parts.category(), note: noteIn.value });
+    const restore = (d) => { noteIn.value = d ? d.note : ''; parts.setCategory(d ? d.category : ''); };
+    restore(memoKeep.get(heldKey));
+    noteIn.addEventListener('input', hold);
+    parts.select.addEventListener('change', hold);
+    workSel.addEventListener('change', () => {
+      weeklyLast.workId = workSel.value; // 다시 그려도 고른 업무를 유지(쓰던 글 보관의 열쇠)
+      const next = keyFor(workSel.value);
+      const had = memoKeep.get(next);
+      if (had) restore(had);
+      else {
+        memoKeep.clear(heldKey); // 쓰던 글을 새로 고른 업무로 옮긴다
+        heldKey = next;
+        hold();
+      }
+      heldKey = next;
+      parts.refresh();
+    });
     const today = todayLocal();
-    const dateIn = el('input', { type: 'date', value: weeklyLast.day === today && weeklyLast.date && weeklyLast.date <= today ? weeklyLast.date : today, min: WEEKLY_DATE_MIN, max: today, 'data-testid': 'weekly-date', 'aria-label': '날짜(기본 오늘)', title: '기본은 오늘입니다. 주말에 한 주를 몰아 넣을 때는 요일별 날짜를 고르세요(오늘보다 뒤 날짜는 기록할 수 없습니다)' });
+    dateIn = el('input', { type: 'date', value: weeklyLast.day === today && weeklyLast.date && weeklyLast.date <= today ? weeklyLast.date : today, min: WEEKLY_DATE_MIN, max: today, 'data-testid': 'weekly-date', 'aria-label': '날짜(기본 오늘)', title: '기본은 오늘입니다. 주말에 한 주를 몰아 넣을 때는 요일별 날짜를 고르세요(오늘보다 뒤 날짜는 기록할 수 없습니다)' });
+    dateIn.addEventListener('change', () => parts.refresh());
+    parts.refresh();
     const msg = el('span', { class: 'error-text', role: 'alert', 'data-testid': 'weekly-msg' });
     const submit = () => {
       msg.textContent = '';
@@ -779,6 +820,8 @@ function start() {
       }
       const label = (works.find((w) => w.id === workId) || {}).label || '';
       const workGid = toGid(currentId(), workId);
+      memoKeep.clear(keyFor(workId)); // 기록했으니 쓰던 글 보관은 지운다
+      memoKeep.clear(heldKey);
       afterSave(r, selected);
       if (m.alsoResolved) notify('record-past', { workGid, evGids: evGidsOf(r) });
       else notify('record', { label, date: m.input.occurred_at, today: todayLocal(), category: m.input.payload.category, note: m.input.note, workGid, evGids: evGidsOf(r) });
@@ -786,17 +829,18 @@ function start() {
     noteIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
     addBtn = el('button', { type: 'button', 'data-testid': 'weekly-add', onclick: submit }, '기록');
     addBtn.disabled = !parts.category();
+    const addWrap = gateWrap(addBtn, () => parts.needCategory()); // 분류를 안 골라 막힌 「기록」을 눌러도 칩 줄을 짚어 준다(FU6-5)
     const row = (label, ...kids) => el('div', { class: 'memo-row' }, el('span', {}, label), ...kids);
     return el('div', { class: 'weekly-quick', 'data-testid': 'weekly-quick' },
       el('p', { class: 'small' }, el('strong', {}, '이번 주 기록'), ' ', el('span', { class: 'muted' }, '업무 이력에 메모를 남깁니다(날짜는 기본 오늘 — 주말에 몰아 넣을 때는 요일별로 고르세요). 「진행 중」·「이슈」 기록은 「미해결」에 잡히니, 끝나면 「해결로 표시」하세요')),
       row('업무', workSel),
-      row('분류', parts.chipRow, parts.gate, parts.select),
+      row('분류', parts.hint, parts.chipRow, parts.gate, parts.select),
       parts.warn,
       el('div', { class: 'row' }, el('label', { class: 'small' }, '날짜 ', dateIn)),
       row('내용', noteIn),
       parts.topics ? row('관련 주제(선택)', parts.topics) : null,
       parts.pastBox,
-      el('div', { class: 'row' }, addBtn),
+      el('div', { class: 'row' }, addWrap),
       msg);
   }
 
@@ -881,6 +925,8 @@ function start() {
     openInsight('', 'risk');
     const bar = document.querySelector('[data-testid=summary-bar]');
     if (bar && typeof bar.scrollIntoView === 'function') bar.scrollIntoView({ block: 'start' });
+    const pv = bar && bar.querySelector('[data-testid=summary-preview]'); // 「점검 요약 보기」는 요약을 보러 온 길이라 미리 보기를 펼친다(R11 FU6-14)
+    if (pv && !pv.open) pv.open = true;
     const first = bar && bar.querySelector('[data-testid=summary-copy]');
     if (first && typeof first.focus === 'function') first.focus({ preventScroll: true });
   }
@@ -1061,14 +1107,14 @@ function start() {
     const rOnly = el('input', { type: 'radio', name: group, value: BRANCH_ONLY, checked: true, 'data-testid': 'assignee-branch-only' });
     const rDoc = el('input', { type: 'radio', name: group, value: BRANCH_DOC, 'data-testid': 'assignee-branch-doc' });
     const branch = () => (rDoc.checked ? BRANCH_DOC : BRANCH_ONLY);
-    const docNote = el('p', { class: 'muted small', hidden: true, 'data-testid': 'assignee-doc-note' }, '초안 화면에서 이어 갑니다 — 보내는 사람·받는 사람·대상이 채워지고 「담당도 넘기기」가 켜진 채 열립니다. 날짜는 초안 규칙대로 오늘이고, 저장은 초안을 확정할 때 한 번에 됩니다.');
-    const apply = el('button', { type: 'button', 'data-testid': 'assignee-apply' }, '담당 바꾸기');
+    const docNote = el('p', { class: 'muted small', hidden: true, 'data-testid': 'assignee-doc-note' }, '초안 화면에서 이어 갑니다 — 보내는 사람·받는 사람·대상이 채워지고 「담당도 넘기기」가 켜진 채 열립니다. 날짜는 초안 규칙대로 오늘이고, 저장은 초안을 확정할 때 한 번에 됩니다. 단, 목록에 없는 이름을 넣으면 그 사람은 초안을 열기 전에 먼저 만들어 둡니다(연결 없음) — 확정하지 않고 초안을 닫으면 그 사람은 숨깁니다.');
+    const apply = el('button', { type: 'button', 'data-testid': 'assignee-apply' }, '담당 넘기기');
     const syncBranch = () => {
       const doc = branch() === BRANCH_DOC;
       handoverRow.hidden = doc;
       dateIn.disabled = doc;
       docNote.hidden = !doc;
-      apply.textContent = doc ? '인수인계 초안으로' : '담당 바꾸기';
+      apply.textContent = doc ? '인수인계 초안으로' : '담당 넘기기';
     };
     rOnly.addEventListener('change', syncBranch);
     rDoc.addEventListener('change', syncBranch);
@@ -1077,6 +1123,7 @@ function start() {
       const plan = transferBranchPlan({ branch: BRANCH_DOC, workGid: wg, from: { gid: toGid(currentId(), fromSel.value), label: fromNode ? fromNode.label : '' }, toId: toSel.value, toName: name, persons });
       if (!plan.ok) return fail(plan.reason === 'ambiguous' ? '같은 이름의 사람이 둘 이상입니다. 목록에서 고르세요.' : plan.reason === 'same' ? '보내는 사람과 받는 사람이 같습니다.' : '새 담당을 고르거나 이름을 넣으세요.', plan.reason);
       let preset = plan.preset;
+      let createdPerson = '';
       if (plan.createPerson) { // 이 지도에 없는 이름: 사람을 먼저 만든다(연결 없음). 담당 연결은 초안 확정 때 「담당도 넘기기」가 한다
         const b = app.applyBatch([{ op: 'addNode', row: 1, input: { core_type: 'person', label: plan.createPerson }, attachRoot: false }]);
         if (!b.ok) {
@@ -1085,8 +1132,9 @@ function start() {
         }
         afterSave(b, gid);
         preset = { ...preset, to_gid: toGid(currentId(), b.created[0].id) };
+        createdPerson = b.created[0].id; // 확정 없이 초안을 닫으면 정리한다(R11 RV11C-2)
       }
-      openDraft(node.gid, preset, { transfer: true, autoMake: true });
+      openDraft(node.gid, preset, { transfer: true, autoMake: true, createdPerson });
       return undefined;
     };
     const submit = () => {
@@ -1327,6 +1375,20 @@ function start() {
     if (!t.wasWide) setWideKeep(false);
   }
 
+  // 지도 전체의 기록 표(R11 FU6-4): 「기록」 공간 「최근 기록」의 「모두 보기 →」·기능 찾기의 「기록 표에서 모두 보기」. 이력 표 화면(ui/history-table.js)을 지도 범위로 다시 쓴다.
+  // 카드·작업 화면은 먼저 닫고 「기록」 공간에서 연다. q: 찾기 칸에 미리 넣을 낱말
+  function openMapHistTable(q = '') {
+    goSpace('record');
+    panelOpener = 'recent-all';
+    focusPanelClose = true;
+    const wasWide = document.querySelector('main').classList.contains('wide');
+    histTable = { gid: null, scope: 'map', state: { group: '전체', period: '전체', q, page: 1 }, wasWide };
+    setWideKeep(true);
+    renderPanel();
+    const root = $('detail').parentElement;
+    if (root) root.scrollTop = 0;
+  }
+
   function openHistTable() {
     if (!selected) return;
     panelOpener = 'history-all';
@@ -1360,7 +1422,7 @@ function start() {
     const forms = editable ? [assigneeBox(gid), collabBox(gid)].filter(Boolean) : [];
     forms.forEach((f) => { f.hidden = true; });
     return {
-      data, state: cardState, actions: cardActions(gid), forms, notes, layer: layerControls(gid),
+      data, state: cardState, actions: cardActions(gid), forms, notes, layer: layerControls(gid), editable,
       // 다른 업무 지도의 항목: 고칠 수 없고 그 지도를 열어서 한다. 업무는 담당 바꾸기 안내(예전 assignee-other-map)와 같은 말
       afterActions: own || !node || node.hidden ? [] : [node.core_type === 'work' && !app.readOnly && !rw
         ? el('p', { class: 'muted small', 'data-testid': 'assignee-other-map' }, '다른 업무 지도의 업무입니다. 담당을 바꾸려면 그 지도를 열어서 하세요. ',
@@ -1424,7 +1486,8 @@ function start() {
         const handovers = view.events
           .filter((e) => e.universe_id === currentId() && e.type === 'handover')
           .map((e) => ({ id: e.id, occurred_at: e.occurred_at, text: eventText(view, e) }));
-        return eventForm({ node, nodes: ownNodes(), handovers, memoChips: true, closeCount: () => resolveCloseCount(view, gid), onCancel: cancel, onSubmit: (values) => {
+        return eventForm({ node, nodes: ownNodes(), handovers, memoChips: true, closeCount: (date) => resolveCloseCount(view, gid, date), closeWord: closeTargetWord(node && node.core_type),
+          keep: { get: () => memoKeep.get(memoKeepKey('card', currentId(), node.id)), set: (d) => memoKeep.set(memoKeepKey('card', currentId(), node.id), d), clear: () => memoKeep.clear(memoKeepKey('card', currentId(), node.id)) }, onCancel: cancel, onSubmit: (values) => {
           // 「이미 끝난 일(해결됨으로 기록)」(D-12): 이슈 메모 + 해결됨 메모를 한 번의 저장으로
           // 저장 직후 방금 기록한 이력 줄을 강조한다(CR-21 B-1): 이벤트 ID를 표시해 두고 상세를 다시 그린 뒤 그 줄로 스크롤
           const { also_resolved: alsoResolved, ...input } = values;
@@ -1537,7 +1600,8 @@ function start() {
     adminStash.append(...adminButtons); // 「지도 관리」의 단추 3개는 패널을 지우기 전에 보관함으로(없어지지 않게)
     document.querySelector('.aside-tools').append($('wide-toggle')); // 항목 카드가 가져가 둔 「패널 넓게 보기」도 제자리로(CR-22 K)
     // 기록(이력) 표 화면은 그 항목이 그대로 골라져 있고 다른 작업 화면·양식이 없을 때만 남는다
-    if (histTable && (!selected || histTable.gid !== selected || editing || drafting || insight || issues || merging || settingsOpen || hiddenOpen || rw)) closeHistTable();
+    // 지도 전체 표(scope map)는 고른 항목이 없을 때 열려 있다
+    if (histTable && ((histTable.scope === 'map' ? !!selected : (!selected || histTable.gid !== selected)) || editing || drafting || insight || issues || merging || settingsOpen || hiddenOpen || rw)) closeHistTable();
     syncAutoWide();
     if (drafting) keepDraftSelection();
     else draftDomLive = false;
@@ -1657,7 +1721,12 @@ function start() {
           onFocus: showInGraph,
           onClose: closeSidePanel,
           // 「사번 없음」 줄의 사번 넣기: 그 사람이 있는 하위 지도가 이 브라우저 저장소에 있을 때만(CR-22 F)
-          canEmpNo: (p) => { const n = view.rawNode(p.a); return !!n && canInlineEmpNo(p, { readOnly: app.readOnly || !!rw, ownerDoc: n.universe_id === currentId() ? app.doc : app.docOf(n.universe_id) }); },
+          canEmpNo: (p) => {
+            const n = view.rawNode(p.a);
+            if (!n) return false;
+            const ownerDoc = n.universe_id === currentId() ? app.doc : app.docOf(n.universe_id);
+            return canInlineEmpNo(p, { readOnly: app.readOnly || !!rw, ownerDoc, ownerReadOnly: !!ownerDoc && validateDocument(ownerDoc).readOnly });
+          },
           onEmpNo: (p, value) => {
             const n = view.rawNode(p.a);
             const r = n ? app.updateNode(n.universe_id, n.id, { emp_no: value }) : { ok: false, error: { code: 'E-SCHEMA' } };
@@ -1726,6 +1795,18 @@ function start() {
           return saved;
         } }));
       draftDomLive = true;
+      return;
+    }
+    if (!selected && histTable && histTable.scope === 'map') { // 지도 전체의 기록 표(R11 FU6-4)
+      const openGids = new Set(openMemos(view).map((ev) => ev.gid));
+      panel.replaceChildren(historyTablePanel({
+        title: '지도 전체', rows: historyRows(mapHistoryRows(view), openGids), today: todayLocal(), state: histTable.state, readOnly: app.readOnly || !!rw,
+        onClose: closeSidePanel,
+        onResolve: (g) => resolveMemoNow(g),
+        canResolve: (r) => isOwn(r.target_gid),
+        onOpenRow: (r) => { closeHistTable(); showHistory(r.target_gid, [r.gid]); },
+      }));
+      focusClose('history-table-close');
       return;
     }
     if (!selected) {
@@ -1808,7 +1889,11 @@ function start() {
     renderWorkspaceNav($('workspace-nav'), {
       current: space,
       badges: spaceBadges({ issues: issuesFor(view, rootGid, rootGid).length, solo: risk.solo }),
-      onPick: (k) => goSpace(k),
+      onPick: (k) => {
+        if (tour) tour.cancelPendingSpace(); // 직접 고른 공간을 따라 하기가 되돌리지 않게(R11 RV11C-5)
+        if (rw && k === space) return; // 되감기 중 지금 공간을 다시 눌러도 되감기는 끝나지 않는다(R11 RV11C-9)
+        goSpace(k);
+      },
     });
   }
 
@@ -1820,36 +1905,29 @@ function start() {
     document.querySelector('aside').classList.toggle('add-by-btn', space === 'edit' && !selected && !openScreens().length);
   }
 
-  // 카드의 묶음 이름은 ui/card.js의 data-group(history·assign 등). 접혀 있으면 펼친 뒤 그 묶음 머리로 간다(CR-22 K)
-  const SCROLL_TARGETS = {
-    history: ['[data-group=history]'],
-    assign: ['[data-group=assign]', '[data-testid=links]', '[data-testid=card-actions]'],
-    edit: ['[data-testid=card-actions]', '[data-testid=btn-edit]'],
-  };
-  // 항목 카드를 연 채 공간을 바꾸면 그 공간과 관련된 카드 위치로 스크롤한다(기록 → 이력, 인수인계 → 담당 바꾸기·수행 연결, 지도 관리 → 수정 단추)
-  function scrollCard(kind) {
-    for (const sel of SCROLL_TARGETS[kind] || []) {
-      const t = $('detail').querySelector(sel);
-      if (t) {
-        if (t.tagName === 'DETAILS') t.open = true;
-        if (typeof t.scrollIntoView === 'function') t.scrollIntoView({ block: 'start' });
-        return;
-      }
-    }
-  }
-
   /**
-   * 공간을 바꾼다. 열린 작업 화면(초안·인사이트·통합 확인·미해결·설정·숨긴 항목·되감기)은 닫고 그 공간의 첫 화면을 그린다.
-   * 항목 카드가 열려 있으면 그대로 두고 관련 위치로 스크롤한다. opts.tour: 따라 하기가 단계에 맞춰 바꾸는 중(기억하지 않고, 따라 하기를 다시 부르지 않음)
+   * 공간을 바꾼다. 열린 작업 화면(초안·인사이트·통합 확인·미해결·설정·숨긴 항목·되감기)과 항목 카드는 닫고 그 공간의 첫 화면을 그린다
+   * (R11 FU6-1: 카드를 둔 채 강조만 바뀌면 「메뉴가 안 먹는다」로 보였다 — 시작 화면의 「왼쪽에서 고르면 오른쪽이 바뀝니다」와 맞춘다).
+   * opts.keepCard: 카드를 둔 채 공간만 바꾼다(기능 찾기가 고른 항목에 일을 시키는 길·따라 하기 단계 이동). opts.tour: 따라 하기가 단계에 맞춰 바꾸는 중(기억하지 않고, 따라 하기를 다시 부르지 않음)
    */
   function goSpace(key, opts = {}) {
-    const plan = planSwitch({ to: key, hasCard: !!selected, open: openScreens() });
+    const plan = planSwitch({ to: key, open: openScreens() });
     if (histTable) closeHistTable(); // 기록 표 화면도 닫고 카드로
     space = plan.space;
     addPinned = false;
     if (!opts.tour && opts.persist !== false && settings.workspace !== space) {
       settings.workspace = space; // 고른 공간은 이 브라우저에 기억(지도를 바꿔도 유지)
       saveSettings(storage, settings);
+    }
+    if (selected && !opts.keepCard && !opts.tour) {
+      selected = null; // 카드 닫기(select(null)와 같은 정리)
+      editing = null;
+      baselineNote = '';
+      notices.clear();
+      if (exploreNote) {
+        exploreNote = null;
+        renderExploreStatus();
+      }
     }
     if (plan.closeScreens.includes('draft')) drafting = null;
     if (plan.closeScreens.includes('insight')) insight = null;
@@ -1861,7 +1939,7 @@ function start() {
     if (opts.tour) renderPanelQuiet();
     else renderPanel();
     graph.highlight(selected);
-    if (plan.scroll && !opts.tour) scrollCard(plan.scroll);
+    if (!selected) $('detail').parentElement.scrollTop = 0; // 공간 첫 화면은 맨 위부터
   }
 
   // 공간 첫 화면. 공간마다 위에서부터 view/workspace.js의 panelParts가 정한 조각을 그린다(없는 조각·막힌 조각은 빼고)
@@ -1890,7 +1968,8 @@ function start() {
       weekly: () => weeklyBox(),
       recent: () => recentBox(),
       draft: () => el('div', { class: 'row' }, el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft-universe', onclick: () => openDraft(rootGid) }, '인수인계 초안 만들기')),
-      'assignee-hint': () => el('p', { class: 'muted small', 'data-testid': 'handover-assignee-hint' }, '업무 하나의 담당만 바꾸려면 그래프에서 업무를 고른 뒤 「담당 넘기기」'),
+      // 묶은 지도에서는 담당을 넘길 수 없다(업무가 하위 지도에 있다) — 그 지도를 열어서 하라고 안내(R11 RV11-5)
+      'assignee-hint': () => el('p', { class: 'muted small', 'data-testid': 'handover-assignee-hint' }, grouped ? '담당을 넘기려면 그 업무가 있는 팀·업무 지도를 열어서 하세요' : '업무 하나의 담당만 바꾸려면 그래프에서 업무를 고른 뒤 「담당 넘기기」'),
       gaps: () => gapBox(gapWorkRows(view, { asOf: asOfDate, n }), pickGid),
       solo: () => soloBox(soloRows(view, { asOf: asOfDate }), pickGid),
       docs: () => docsBox(recentHandoverDocs(view), pickGid),
@@ -1941,7 +2020,8 @@ function start() {
   }
 
   function select(gid) {
-    if (gid !== selected) { editing = null; baselineNote = ''; notices.clear(); }
+    const changed = gid !== selected;
+    if (changed) { editing = null; baselineNote = ''; notices.clear(); }
     settingsOpen = false;
     merging = false;
     drafting = null;
@@ -1951,6 +2031,8 @@ function start() {
     selected = gid;
     graph.highlight(gid);
     renderPanel();
+    // 새 항목 카드는 늘 맨 위(이름·상태 줄이 보이게)에서 연다(FU6-2). 관련 칸으로 데려가는 길(기능 찾기·거기로 가기)은 이 뒤에 스스로 스크롤한다
+    if (changed && $('detail').parentElement) $('detail').parentElement.scrollTop = 0;
     if (exploreNote) { // 「찾음」·「이어진 항목 없음」 알림은 다른 항목을 고르면 지운다
       exploreNote = null;
       renderExploreStatus();
@@ -1978,7 +2060,7 @@ function start() {
   // ── 길 찾기(CR-21 B·A, CR-22 W): 최근 기록·기능 찾기 ──
   // 개요 「최근 기록」(B-2): 계산은 view/recent-records.js. 「보기」는 알림의 「이력에서 보기」와 같은 이동
   function recentBox() {
-    return recentList(recentRecords(view), (row) => showHistory(row.target_gid, [row.gid]));
+    return recentList(recentRecords(view), (row) => showHistory(row.target_gid, [row.gid]), { onAll: () => openMapHistTable(), canRecord: canWeekly() });
   }
 
   // 화면 아래 「사람·업무·문서 추가」를 펼치고 거기로 간다(개요 「지도 고치기」의 단추)
@@ -1997,6 +2079,12 @@ function start() {
 
   // 기능 찾기(A): 결과의 동작 키(view/feature-index.js의 go)를 푼다. 못 쓰는 기능(blocked)은 목록이 흐리게 보이고 여기까지 오지 않는다
   const featureCtx = () => ({ readOnly: app.readOnly, rewinding: !!rw, grouped: isGroupedView(view), folderOk: !!(folder && folder.state.supported), tourOk: !!tour });
+  const MISSING_TARGET_REASON = {
+    'weekly-quick': '「이번 주 기록」 양식이 없는 화면입니다 — 읽기 전용이거나 업무가 없는 지도(묶은 지도 포함)입니다. 업무가 있는 팀·업무 지도를 열어서 쓰세요',
+    'hidden-count': '숨긴 항목이 없습니다',
+    'merge-hint': '통합 확인은 팀·부서로 묶은 지도에서 씁니다',
+    'team-risk-compare': '지난 점검과 비교하는 매주 점검은 팀·부서로 묶은 지도에서 합니다',
+  };
   // 그 기능이 있는 공간으로 바꾼 뒤, 선택·열린 패널을 풀어 공간 첫 화면을 그리고 그 요소(없으면 공간 제목)를 강조한다
   function showInOverview(testid, toSpace) {
     if (toSpace) goSpace(toSpace);
@@ -2004,6 +2092,10 @@ function start() {
     const root = $('detail');
     const hit = root.querySelector(`[data-testid=${testid}]`);
     const target = hit || root.querySelector('[data-testid=check-ungrouped-note]') || root.querySelector('[data-testid=ws-title]');
+    if (!hit) { // 가려는 자리가 이 화면에 없다: 공간 제목만 강조되면 왜인지 모르므로 이유 한 줄(R11 RV11C-10)
+      exploreNote = { text: MISSING_TARGET_REASON[testid] || '지금 이 화면에는 그 자리가 없습니다', testid: 'feature-missing-note', warn: true };
+      renderExploreStatus();
+    }
     if (!target) return;
     if (typeof target.scrollIntoView === 'function') target.scrollIntoView({ block: 'start' });
     flash(target);
@@ -2049,7 +2141,7 @@ function start() {
     const [kind, arg, arg2] = r.go.split(':');
     if (kind === 'ov') return showInOverview(arg, r.space);
     // 그 기능이 있는 공간으로 먼저 바꾼다(되감기 중 창만 여는 기능은 되감기를 끝내지 않도록 그대로 둔다)
-    if (r.space && !(rw && kind === 'dlg')) goSpace(r.space);
+    if (r.space && !(rw && kind === 'dlg')) goSpace(r.space, { keepCard: true }); // 고른 항목에 일을 시키는 길이라 카드는 둔다(FU6-1)
     if (kind === 'node') return goNodeFeature(r);
     if (kind === 'dlg') return openDialogFeature(arg, arg2);
     if (kind === 'insight') {
@@ -2075,6 +2167,11 @@ function start() {
     search: (q) => searchFeatures(q, featureCtx()),
     onGo: goFeature,
     onPick: (gid, r) => { focus(gid); runNodeFeature(r.go.split(':')[1]); },
+    // 쓴 것 찾기(R11 FU6-4): 기능 결과가 없거나 적으면 아래에 「기록에서 낱말 n건」(읽기만, 최대 8건)
+    records: (q) => searchRecords(view, q),
+    recordFew: RECORD_SEARCH.FEATURE_FEW,
+    onRecord: (row) => showHistory(row.target_gid, [row.gid]),
+    onRecordsAll: (q) => openMapHistTable(q),
   });
 
   // ── 시간 슬라이더(02-design 탐색 화면, R-14) ──
@@ -2200,16 +2297,25 @@ function start() {
   }
 
   function enterNbhd(gid, depth) {
-    const d = neighborhoodDisplay(view, gid, depth, { skipEdges: nbhdSkip() });
+    let d = neighborhoodDisplay(view, gid, depth, { skipEdges: nbhdSkip() });
     if (!d) return;
+    // 지난 담당만 있는 사람처럼 오늘 유효한 연결이 없어 0이 되면 지난 연결까지 포함해 보여 주고 한 줄 알린다(R11 RV11C-3)
+    let all = false;
+    if (d.neighbor_count === 0) {
+      const wide = neighborhoodDisplay(view, gid, depth);
+      if (wide && wide.neighbor_count > 0) {
+        d = wide;
+        all = true;
+      }
+    }
     if (d.neighbor_count === 0) {
       // 이웃이 없으면 화면은 그대로 두고 알린다(R-17 ④)
       exploreNote = { text: `이어진 항목 없음: 「${view.getNode(gid).label}」${josa(view.getNode(gid).label, '은/는')} 연결된 항목이 없어 주변만 보기를 할 수 없습니다.`, warn: true };
       return renderExploreStatus();
     }
-    nbhd = { center: d.center, depth };
+    nbhd = { center: d.center, depth, all };
     selected = d.center;
-    exploreNote = null;
+    exploreNote = all ? { text: '오늘 유효한 연결이 없어 지난 담당까지 보여 줍니다', testid: 'nbhd-past-note' } : null;
     refresh();
     graph.relayout();
   }
@@ -2352,7 +2458,7 @@ function start() {
     if (rw && selected && !view.getNode(selected)) selected = null; // 그 시점에 없던 항목
     renderRewindBand();
     // 주변만 보기 중이면 그 노드와 이웃만. 가운데 노드가 사라졌거나(숨김) 고른 노드가 주변 밖이면(주변 밖에 노드 추가 등) 전체로 돌아가 다시 배치한다
-    let nd = nbhd ? neighborhoodDisplay(view, nbhd.center, nbhd.depth, { skipEdges: nbhdSkip() }) : null;
+    let nd = nbhd ? neighborhoodDisplay(view, nbhd.center, nbhd.depth, { skipEdges: nbhd.all ? null : nbhdSkip() }) : null;
     if (nd && selected && !nd.nodes.some((n) => n.gid === view.canonical(selected))) nd = null;
     if (nd && nd.neighbor_count === 0) { // 이웃을 숨겨 혼자 남으면 들어갈 때(이어진 항목 없음)와 같은 규칙으로 전체로
       nd = null;
@@ -2599,7 +2705,7 @@ function start() {
         r.error.field === 'child_universe_ids' ? '업무 지도를 2개 이상 고르세요.' : messageFor(r.error);
       return;
     }
-    openUniverse(r.doc.universe.id, '', false, 'group');
+    openUniverse(r.doc.universe.id, '', false, 'group', r.auto_linked || 0);
   });
   if (app.readOnly) $('group-open').disabled = true;
 
@@ -2875,9 +2981,20 @@ function start() {
     saveSettings(storage, settings);
   }
   refresh();
-  // 묶은 직후 띠·가져온 직후 알림(CR-22 F): 화면을 다시 열었으므로 주소의 일회용 표시로 안다
+  // 묶은 직후 띠·가져온 직후 알림(CR-22 F): 화면을 다시 열었으므로 주소의 일회용 표시로 안다.
+  // 주소만 믿지 않는다(R11 RV11S-1): 묶기·가져오기를 한 탭이 남긴 sessionStorage 표지(지도 id + 종류)가 주소와 맞을 때만 띄우고, 표지는 어느 경우에도 지운다
+  let doneFlag = '';
+  let doneAuto = 0;
+  try {
+    const raw = window.sessionStorage.getItem(DONE_KEY);
+    window.sessionStorage.removeItem(DONE_KEY);
+    if (doneHash && doneMarkMatches(raw, doneHash, currentId())) {
+      doneFlag = doneHash;
+      doneAuto = doneMarkAuto(raw);
+    }
+  } catch { /* 저장소를 쓸 수 없으면 알림 생략 */ }
   if (doneFlag === 'group') {
-    const strip = groupedStrip(app.mergePlan(), { name: app.doc.universe.name });
+    const strip = groupedStrip(app.mergePlan(), { name: app.doc.universe.name, auto: doneAuto });
     notify('group', { text: strip.text, pending: strip.pending });
   } else if (doneFlag === 'import') {
     notify('import', { name: app.doc.universe.name, nodes: view.nodes.filter((n) => !n.hidden && n.core_type !== 'root').length });

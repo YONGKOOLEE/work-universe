@@ -1,6 +1,8 @@
 // 인수인계서 내려받기·인쇄용 HTML 만들기(R-19 CR-12 A, D-21). DOM·저장소를 쓰지 않는 순수 함수.
 // 파일 하나(외부 파일·스크립트 없음). 사용자 입력 글은 모두 이스케이프한다.
 
+import { stampText } from './stamp.js';
+
 const METHOD_LABELS = { rule: '규칙 기반', pregen: '사전 생성(Claude가 기록만 보고 써 둔 문장)', llm: 'Claude API(실시간)' };
 const ITEM_METHOD = { rule: '규칙 기반', pregen: '사전 생성', llm: 'Claude API' };
 export const DOC_SUFFIX = '인수인계서';
@@ -78,7 +80,7 @@ function draftBody(draft, labelOf) {
 
 function confirmedHtml(node) {
   const a = node.attrs || {};
-  const rows = ['보내는 사람', '받는 사람', '확정자', '확정 시각', '초안 생성 방식'].filter((k) => a[k]).map((k) => `<p class="meta">${escapeHtml(k)}: ${escapeHtml(a[k])}</p>`);
+  const rows = ['보내는 사람', '받는 사람', '확정자', '확정 시각', '초안 생성 방식'].filter((k) => a[k]).map((k) => `<p class="meta">${escapeHtml(k)}: ${escapeHtml(stampText(a[k]))}</p>`);
   const body = [`<h1><span class="badge">확정</span>${escapeHtml(node.label)}</h1>`, ...rows, `<pre>${escapeHtml(confirmedBody(node))}</pre>`,
     '<p class="foot">※ 축적된 이력으로 만든 초안을 담당자가 확인하고 확정한 인수인계서입니다.</p>'].join('\n');
   return { title: node.label, body };

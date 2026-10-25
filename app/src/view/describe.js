@@ -2,6 +2,7 @@
 // ui는 이 결과를 그리기만 한다. 그래야 Node에서 테스트할 수 있다(12.7).
 
 import { EDGE_TYPES, MEMO_CATEGORIES, eventTypeLabel, memoCategoryOf } from '../model/schema.js';
+import { stampText } from './stamp.js';
 import { refGid } from './view.js';
 import { josa } from '../model/josa.js';
 
@@ -250,7 +251,7 @@ export function describeNode(view, gid, { asOf = null, past = false } = {}) {
     if (aff.from) rows.push({ label: '소속(기준일)', value: aff.note && aff.label === '미기재' ? `미기재 — ${aff.note}` : aff.label });
   }
   if (node.description) rows.push({ label: '설명', value: node.description });
-  for (const [k, v] of Object.entries(node.attrs || {})) rows.push({ label: k, value: String(v) });
+  for (const [k, v] of Object.entries(node.attrs || {})) rows.push({ label: k, value: stampText(v) }); // ISO 시각은 보기 좋게(저장값은 그대로, R11 FU6-15)
   if (node.period) rows.push({ label: '기간', value: periodText(node.period, asOf) });
   if (node.tags && node.tags.length) rows.push({ label: '태그', value: node.tags.join(', ') });
   rows.push({

@@ -23,9 +23,9 @@ const F = (id, name, keywords, where, needs, go, extra = {}) => ({ id, name, key
 export const FEATURES = [
   F('weekly', '이번 주 기록', ['기록', '메모', '이슈', '진행', '주간', '이번주', '남기기', '적기', '일지'], '「기록」 공간의 「이번 주 기록」', 'none', 'ov:weekly-quick', { write: true, sec: 'record' , space: 'record' }),
   F('issues', '미해결·해결로 표시', ['미해결', '해결', '해결됨', '이슈', '완료', '끝난', '닫기'], '「기록」 공간의 「미해결 n건」', 'none', 'ov:issue-count', { sec: 'record' , space: 'record' }),
-  F('recent', '최근 기록', ['최근', '기록', '방금', '쓴', '썼던', '어디', '이력', '확인'], '「기록」 공간의 「최근 기록」', 'none', 'ov:recent-records', { sec: 'record' , space: 'record' }),
-  F('draft', '인수인계 초안 만들기', ['인수인계', '인계', '초안', '인수인계서', '문서', '넘기기'], '「인수인계」 공간', 'none', 'ov:btn-draft-universe', { sec: 'handover' , space: 'handover' }),
-  F('assignee', '담당 바꾸기', ['담당', '담당자', '넘기기', '인계', '교체', '변경', '바꾸기', '이동'], '업무를 고른 뒤 → 「담당 넘기기」', 'work', 'node:assignee', { write: true , space: 'handover' }),
+  F('recent', '최근 기록', ['최근', '기록', '방금', '쓴', '썼던', '어디', '이력', '확인', '메모', '쓴 것', '기록 찾기', '찾기', '검색'], '「기록」 공간의 「최근 기록」(「모두 보기」에서 지도 전체 기록을 찾습니다)', 'none', 'ov:recent-records', { sec: 'record' , space: 'record' }),
+  F('draft', '인수인계 초안 만들기', ['인수인계', '인계', '초안', '인수인계서', '문서', '넘기기', '후임', '후임자', '받는 사람'], '「인수인계」 공간', 'none', 'ov:btn-draft-universe', { sec: 'handover' , space: 'handover' }),
+  F('assignee', '담당 넘기기', ['담당', '담당자', '넘기기', '인계', '교체', '변경', '바꾸기', '이동', '후임', '후임자', '받는 사람', '인수인계'], '업무를 고른 뒤 → 「담당 넘기기」', 'work', 'node:assignee', { write: true , space: 'handover' }),
   F('transfer', '담당도 넘기기(초안 확정)', ['담당', '담당자', '넘기기', '인계', '확정', '인수인계서'], '「인수인계」 공간의 「인수인계 초안 만들기」에서 확정할 때 「담당도 넘기기」', 'none', 'ov:btn-draft-universe', { write: true, sec: 'handover' , space: 'handover' }),
   F('event', '기록 남기기', ['이력', '기록', '메모', '담당 시작', '담당 종료', '소속 변경', '인수인계 기록', '이슈'], '항목을 고른 뒤 → 「기록 남기기」', 'node', 'node:event', { write: true , space: 'record' }),
   F('collab', '협업자 추가', ['협업', '협업자', '참조', '연락처', '다른 팀', '사람'], '업무를 고른 뒤 → 「⋯」 → 「협업자 추가」', 'work', 'node:collab', { write: true , space: 'handover' }),
@@ -35,14 +35,14 @@ export const FEATURES = [
   F('table-add', '표로 추가', ['표', '엑셀', '스프레드시트', '붙여넣기', '여러 개', '한꺼번에', '추가'], '「사람·업무·문서 추가」 안 → 「표로 추가」(창이 열림)', 'edit', 'dlg:table-add', { write: true , space: 'edit' }),
   F('text-add', '글로 추가', ['글', '글로', '줄글', '문장', '텍스트', '붙여넣기', '추가', 'AI', '읽기'], '「사람·업무·문서 추가」 안 → 「글로 추가」(창이 열림)', 'edit', 'dlg:text-add', { write: true, noGrouped: true , space: 'edit' }),
   F('table-edit', '표로 고치기', ['표', '고치기', '한꺼번에', '수정', '일괄', '엑셀'], '「사람·업무·문서 추가」 안 → 「표로 고치기」(창이 열림)', 'edit', 'dlg:table-edit', { write: true , space: 'edit' }),
-  F('doc-import', '문서 가져오기(초벌 변환)', ['문서', '가져오기', '업무정의서', '초벌', '변환', '붙여넣기', '불러오기'], '「지도 관리」 공간의 「가져오기·내보내기」 → 「문서 붙여넣기(초벌 변환)」 탭', 'none', 'dlg:import:doc', { space: 'edit' }),
+  F('doc-import', '문서 가져오기(읽어 보기)', ['문서', '가져오기', '업무정의서', '초벌', '변환', '붙여넣기', '불러오기', '읽어 보기'], '「지도 관리」 공간의 「가져오기·내보내기」 → 「문서 붙여넣기(읽어 보기)」 탭', 'none', 'dlg:import:doc', { space: 'edit' }),
   F('json-export', 'JSON 내보내기', ['내보내기', '백업', '저장', '파일', 'json', '다운로드', '내려받기'], '「지도 관리」 공간의 「가져오기·내보내기」 → 「내보내기」 탭', 'none', 'dlg:import:export', { space: 'edit' }),
   F('json-import', 'JSON 가져오기', ['가져오기', '불러오기', '열기', 'json', '파일', '복원'], '「지도 관리」 공간의 「가져오기·내보내기」 → 「JSON 파일」 탭', 'none', 'dlg:import:json', { space: 'edit' }),
   F('html-export', '내용 포함 HTML', ['html', '내용 포함', '공유', '한 파일', '읽기 전용', '내보내기', '내려받기', '보내기'], '「지도 관리」 공간의 「가져오기·내보내기」 → 「내보내기」 탭', 'none', 'dlg:import:export', { space: 'edit' }),
   F('folder', '폴더 연결', ['폴더', '공유', '동료', '함께', '팀', '거울', '연결'], '「지도 관리」 공간의 「가져오기·내보내기」 → 「폴더 연결」 탭', 'none', 'dlg:import:folder', { requires: 'folderOk' , space: 'edit' }),
   F('group', '업무 지도 묶기', ['묶기', '묶음', '팀', '부서', '상위', '합치기', '통합', '하위'], '「지도 관리」 공간의 「업무 지도 묶기」(창이 열림)', 'none', 'dlg:group', { write: true , space: 'edit' }),
   F('create', '새 업무 지도', ['새 지도', '만들기', '생성', '새로', '지도 만들기', '시작'], '「지도 관리」 공간의 「새 업무 지도」(창이 열림)', 'none', 'dlg:create', { write: true , space: 'edit' }),
-  F('merge', '통합 확인 목록', ['통합', '확인', '같은 사람', '동일', '중복', '합치기', '사번'], '「지도 관리」 공간의 「통합 확인 목록」(묶은 지도)', 'grouped', 'ov:merge-hint', { sec: 'edit' , space: 'edit' }),
+  F('merge', '통합 확인 목록', ['통합', '확인', '같은 사람', '동일', '동일인', '중복', '합치기', '사번'], '「지도 관리」 공간의 「통합 확인 목록」(묶은 지도)', 'grouped', 'ov:merge-hint', { sec: 'edit' , space: 'edit' }),
   F('insight', '인사이트 보기(인수인계 위험)', ['인사이트', '위험', '분석', '인수인계 위험', '지식 집중', '준비도', '파급', '혼자'], '「매주 점검」 공간의 「인사이트 보기」', 'none', 'insight:risk', { space: 'check' }),
   F('density', '밀집·공백(일이 몰린 사람, 담당자 없는 업무)', ['밀집', '공백', '몰린', '담당 없음', '빈 업무', '과부하', '일 많은'], '「매주 점검」 공간 → 인사이트 → 「밀집·공백」 탭', 'none', 'insight:density', { space: 'check' }),
   F('repeat', '반복 비효율', ['반복', '비효율', '되풀이', '인수인계 반복'], '「매주 점검」 공간 → 인사이트 → 「반복 비효율」 탭', 'none', 'insight:repeat', { space: 'check' }),
@@ -50,7 +50,7 @@ export const FEATURES = [
   F('flow', '흐름 변화', ['흐름', '변화', '추이', '시간 흐름'], '「매주 점검」 공간 → 인사이트 → 「흐름 변화」 탭', 'none', 'insight:flow', { space: 'check' }),
   F('weekly-check', '매주 점검(이번 점검 저장·지난 점검 대비)', ['점검', '매주', '위험', '저장', '비교', '지난', '대비', '증감', '이번 점검'], '「매주 점검」 공간(묶은 지도)', 'grouped', 'ov:team-risk-compare', { sec: 'check' , space: 'check' }),
   F('summary', '점검 요약(복사·내려받기·인쇄)', ['점검', '요약', '복사', '인쇄', '내려받기', '보고'], '「매주 점검」 공간의 「점검 요약 보기」', 'none', 'summary', { space: 'check' }),
-  F('rewind', '편집 되감기', ['되감기', '되돌리기', '복원', '이전', '옛', '시점', '실수', '취소'], '「지도 관리」 공간의 「편집 되감기」', 'none', 'ov:rewind-entry', { write: true, noGrouped: true, sec: 'edit' , space: 'edit' }),
+  F('rewind', '편집 되감기', ['되감기', '되돌리기', '복원', '이전', '옛', '시점', '실수', '취소'], '「지도 관리」 공간의 「편집 되감기」', 'none', 'ov:rewind-entry', { noGrouped: true, sec: 'edit' , space: 'edit' }), // 읽기 전용에서도 쓸 수 있다 — 되감기는 보기만 한다(R11 RV11-6). 되감기 중·묶은 지도만 막는다
   F('hidden', '숨긴 항목', ['숨긴', '숨김', '되살리기', '삭제', '복구', '다시 보이게'], '「지도 관리」 공간의 「숨긴 항목 n개」', 'none', 'ov:hidden-count', { sec: 'edit' , space: 'edit' }),
   F('time', '시간 보기', ['시간', '과거', '기준일', '날짜', '그때', '달', '옛날'], '그래프 아래 「시간 보기」 막대', 'none', 'time'),
   F('find', '항목 찾기', ['찾기', '검색', '이름', '항목', '노드'], '그래프 위 「항목 찾기」 칸', 'none', 'find'),
@@ -112,8 +112,10 @@ export function searchFeatures(query, ctx = {}, { limit = FEATURE_RESULT_LIMIT, 
     const whereN = norm(f.where);
     let score = 0;
     for (const tok of tokens) score += tokenScore(tok, f, nameN, kws, whereN);
-    // 질문 전체가 이름에 그대로 들어 있으면 보너스(「담당 바꾸기」)
+    // 질문 전체가 이름에 그대로 들어 있으면 보너스(「담당 넘기기」)
     if (tokens.length > 1 && nameN.includes(q)) score += 10;
+    // 질문 전체가 키워드 하나와 똑같으면 보너스(「같은 사람」→ 통합 확인이 「사람」만 걸린 협업자 추가보다 앞, R11 FU6-10)
+    if (tokens.length > 1 && kws.includes(q)) score += 10;
     if (score > 0) out.push({ f, order, score });
   });
   out.sort((a, b) => b.score - a.score || a.order - b.order);

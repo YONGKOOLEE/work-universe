@@ -100,11 +100,16 @@ function workState(c, o) {
 }
 
 // 사람 상태 줄: 소속·사번·연락처 · 지금 맡은 업무 n · 혼자만 아는 일 n(지금 맡은 것 중)
-function personState(c, d) {
+function personState(c, d, o = {}) {
   const row = (label) => (d.rows.find((r) => r.label === label) || {}).value || '';
   const who = [row('소속(기준일)'), row('사번'), c.contact].filter(Boolean).join(' · ');
   const items = [];
   if (who) items.push(el('span', { class: 'muted', 'data-testid': 'card-who' }, who));
+  // 연락처가 비면 비었다고 알린다(R11 FU6-8: 위험 목록에서 사람을 열었는데 연락할 길이 없는 것이 안 보이던 곳). 고칠 수 있는 지도면 어디서 넣는지 한 줄
+  if (!c.contact) {
+    items.push(el('span', { class: 'chip warn', 'data-testid': 'card-no-contact' }, '연락처 없음'));
+    if (o.editable) items.push(el('span', { class: 'muted small', 'data-testid': 'card-no-contact-hint' }, '「⋯」 → 「수정」에서 연락처를 넣을 수 있습니다'));
+  }
   if (c.hasAssignments) {
     items.push(el('span', { 'data-testid': 'card-person-count' }, `${c.past ? `${c.asOf} 기준 ` : '지금 '}맡은 업무 `, el('b', {}, String(c.count))));
     if (c.solo) items.push(el('span', { class: 'st-warn', 'data-testid': 'card-person-solo' }, el('b', {}, `혼자만 아는 일 ${c.solo}`), el('span', { class: 'muted small' }, ' (지금 맡은 것 중)')));
@@ -201,7 +206,7 @@ export function renderCard(panel, d, c, o) {
   // 머리: 이름 + 유형 칩, 상태 줄
   root.append(titleRow(d));
   if (d.hidden) root.append(el('p', { class: 'notice', 'data-testid': 'hidden-note' }, d.deleted ? '완전히 삭제된 항목입니다. 내용은 지워졌고, 이 항목을 언급한 이력만 남아 있습니다.' : '숨김 처리된 항목입니다. 내용과 이력은 유지됩니다.'));
-  const stateItems = !c ? [] : type === 'work' ? workState(c, ctx) : type === 'person' ? personState(c, d) : otherState(d, ctx);
+  const stateItems = !c ? [] : type === 'work' ? workState(c, ctx) : type === 'person' ? personState(c, d, ctx) : otherState(d, ctx);
   if (stateItems.length) root.append(el('div', { class: 'card-state', 'data-testid': 'card-state' }, ...stateItems));
 
   // 고정 동작 줄 하나(+ 숨겨 둔 양식 칸)

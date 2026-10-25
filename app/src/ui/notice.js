@@ -36,8 +36,13 @@ export function createNotices(slot, o) {
     const ms = n.long ? NOTICE_LONG_MS : NOTICE_MS;
     timer = setTimeout(clear, ms);
     // 읽는 중(마우스를 올리거나 초점이 안에 있음)에는 사라지지 않는다
-    card.addEventListener('mouseenter', () => { if (timer) clearTimeout(timer); timer = null; });
-    card.addEventListener('focusin', () => { if (timer) clearTimeout(timer); timer = null; });
+    // 떠나면(마우스가 나가거나 초점이 밖으로) 시간을 다시 건다(R11 RV11C-6: 한 번 올리면 영영 안 사라지던 것)
+    const hold = () => { if (timer) clearTimeout(timer); timer = null; };
+    const rearm = () => { hold(); timer = setTimeout(clear, ms); };
+    card.addEventListener('mouseenter', hold);
+    card.addEventListener('focusin', hold);
+    card.addEventListener('mouseleave', () => { if (!card.contains(document.activeElement)) rearm(); });
+    card.addEventListener('focusout', (e) => { if (!card.contains(e.relatedTarget)) rearm(); });
   };
   return { show, clear };
 }

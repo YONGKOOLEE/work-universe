@@ -11,6 +11,13 @@ export const RECENT_RECORDS = {
   JUST_ADDED_MS: 6000, // 방금 기록한 이력 줄의 강조가 남아 있는 시간
 };
 
+// 쓴 것 찾기(R11 FU6-4): 머리글 「무엇을 할까요?」의 「기록에서 …」 결과. 바꾸기 쉬운 값은 한 곳에
+export const RECORD_SEARCH = {
+  LIMIT: 8, // 한 번에 보이는 건수
+  MIN_CHARS: 2, // 공백을 뺀 낱말이 이 글자 수 미만이면 찾지 않는다(한 글자는 거의 다 맞는다)
+  FEATURE_FEW: 2, // 기능 결과가 이 수 이하일 때만 기록 결과를 아래에 더한다(기능이 충분하면 기능이 먼저)
+};
+
 const instant = (s) => {
   const t = Date.parse(s);
   return Number.isNaN(t) ? 0 : t;
@@ -68,4 +75,68 @@ export function historyFocus(items, gids, { show, collapseOver }) {
   if (index < 0) return { gid: null, index: -1, foldedAway: false };
   const collapsible = items.length > collapseOver;
   return { gid: items[index].gid, index, foldedAway: collapsible && index < items.length - show };
+}
+
+// ── 쓴 것 찾기·지도 전체 기록 표(R11 FU6-4). 읽기만 한다 — 저장·판정을 바꾸지 않는다 ──
+
+/** 대소문자·공백을 무시하고 비교하려고 접은 글 */
+export const foldText = (s) => String(s ?? '').toLowerCase().replace(/\s+/g, '');
+
+/** 사용자가 직접 남긴 기록 이벤트(recentRecords와 같은 기준)와 그 기록이 걸린 대상 */
+function* userRecords(view) {
+  for (const ev of view.events) {
+    if (ev.source !== 'user' || !USER_EVENT_TYPES.includes(ev.type)) continue;
+    const node = recordTarget(view, ev);
+    if (node) yield { ev, node };
+  }
+}
+
+/**
+ * 기록에서 낱말 찾기: 사용자 기록의 메모 내용(note)과 내용 글(eventText)에서 대소문자·공백을 무시하고 부분 일치.
+ * 기록 시각이 늦은 순 최대 limit건. 낱말이 너무 짧으면(MIN_CHARS 미만) 찾지 않는다.
+ * @returns {{query:string, total:number, rows:{gid:string, date:string, recorded_at:string, target_gid:string, target:string, kind:string, text:string}[]}}
+ */
+export function searchRecords(view, query, { limit = RECORD_SEARCH.LIMIT, textMax = RECENT_RECORDS.TEXT_MAX, minChars = RECORD_SEARCH.MIN_CHARS } = {}) {
+  const shown = String(query ?? '').replace(/\s+/g, ' ').trim();
+  const q = foldText(shown);
+  if (q.length < minChars) return { query: shown, total: 0, rows: [] };
+  const hits = [];
+  for (const { ev, node } of userRecords(view)) {
+    const isMemo = ev.type === 'memo';
+    const body = isMemo ? ev.note || '' : eventText(view, ev);
+    if (!foldText(`${ev.note || ''} ${body}`).includes(q)) continue;
+    hits.push({
+      gid: ev.gid,
+      date: ev.occurred_at,
+      recorded_at: ev.recorded_at,
+      target_gid: node.gid,
+      target: displayName(node),
+      kind: isMemo ? MEMO_CATEGORIES[memoCategoryOf(ev.payload)] || eventTypeLabel(ev.type) : eventTypeLabel(ev.type),
+      text: clip(isMemo ? ev.note || '메모' : eventText(view, ev), textMax),
+    });
+  }
+  hits.sort((a, b) => instant(b.recorded_at) - instant(a.recorded_at) || b.gid.localeCompare(a.gid));
+  return { query: shown, total: hits.length, rows: hits.slice(0, limit) };
+}
+
+/**
+ * 지도 전체의 기록 표 줄(이력 표 ui/history-table.js를 지도 범위로 재사용). describeNode의 history 줄과 같은 모양에 target(업무 이름)·target_gid를 더했다.
+ * 오래된 순으로 돌려준다 — view/card.js historyRows가 최신이 위로 정렬하고 범주·상태를 붙인다.
+ */
+export function mapHistoryRows(view) {
+  const rows = [];
+  for (const { ev, node } of userRecords(view)) {
+    rows.push({
+      gid: ev.gid,
+      date: ev.occurred_at,
+      type: ev.type,
+      category: ev.type === 'memo' ? memoCategoryOf(ev.payload) : null,
+      type_label: eventTypeLabel(ev.type),
+      text: eventText(view, ev, { tagIssue: true }),
+      after: false,
+      target: displayName(node),
+      target_gid: node.gid,
+    });
+  }
+  return rows;
 }

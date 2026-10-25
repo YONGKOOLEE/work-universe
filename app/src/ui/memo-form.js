@@ -20,6 +20,8 @@ export function memoParts(o) {
     type: 'button', class: 'chip chip-btn', role: 'radio', 'aria-checked': 'false', 'data-testid': `memo-chip-${k}`, 'data-cat': k,
     onclick: () => { select.value = select.value === k ? '' : k; refresh(); },
   }, MEMO_CATEGORIES[k]));
+  // 분류를 안 고르고 막힌 「기록」을 눌렀을 때(FU6-5): 칩 줄 바로 위에 크게 안내하고 칩 줄을 깜빡인다. 고르면 사라진다
+  const hint = el('p', { class: 'memo-pick-hint', 'data-testid': 'memo-pick-hint', role: 'alert', hidden: true }, CATEGORY_REQUIRED_TEXT);
   const chipRow = el('div', { class: 'memo-chips', role: 'radiogroup', 'aria-label': '분류', 'data-testid': 'memo-chips' }, ...chips);
 
   // 이미 끝난 일(해결됨으로 기록): 분류가 이슈일 때만 보인다. 켜면 이슈 메모와 그것을 닫는 해결됨 메모를 같은 날짜로 한 번에 남긴다
@@ -40,12 +42,13 @@ export function memoParts(o) {
       c.className = `chip chip-btn${on ? ' sel' : ''}`;
     }
     const g = categoryGate(cat);
+    if (g.ok) hint.hidden = true;
     gate.hidden = g.ok;
     gate.textContent = g.text;
     pastBox.hidden = cat !== 'issue';
     if (cat !== 'issue') pastDone.checked = false;
     if (cat === 'resolved' && o.closeCount) {
-      warn.textContent = resolveWarningText(o.closeCount());
+      warn.textContent = resolveWarningText(o.closeCount(), o.closeWord || '업무');
       warn.hidden = false;
     } else warn.hidden = true;
     if (o.onChange) o.onChange(g.ok);
@@ -55,9 +58,31 @@ export function memoParts(o) {
 
   return {
     select, chipRow, gate, warn, pastBox, pastDone, topics, refresh,
+    hint,
     category: () => select.value,
+    /** 보관했던 분류를 되돌린다(허용되지 않는 값이면 비움) */
+    setCategory(cat) { select.value = Object.hasOwn(MEMO_CATEGORIES, cat) ? cat : ''; refresh(); },
+    /** 막힌 「기록」을 눌렀을 때: 안내를 보이고 칩 줄을 깜빡인다 */
+    needCategory() {
+      hint.hidden = false;
+      if (chipRow.classList.remove) chipRow.classList.remove('memo-flash');
+      void chipRow.offsetWidth; // 같은 애니메이션을 다시 시작
+      chipRow.classList.add('memo-flash');
+      setTimeout(() => { if (chipRow.classList.remove) chipRow.classList.remove('memo-flash'); }, 1800);
+    },
     topicIds: () => (topics ? [...topics.querySelectorAll('input:checked')].map((i) => i.value) : []),
     pastChecked: () => pastDone.checked,
     reset() { select.value = ''; pastDone.checked = false; refresh(); },
   };
+}
+
+/**
+ * 막힌(disabled) 「기록」 단추를 눌러도 반응하게 감싼다(FU6-5). 단추의 disabled 값은 그대로 두고, 막혀 있을 때만 단추 위에 투명 덮개(CSS)가 눌림을 받는다.
+ * @param {HTMLButtonElement} btn
+ * @param {()=>void} onBlockedClick
+ * @returns {HTMLElement} btn을 품은 span
+ */
+export function gateWrap(btn, onBlockedClick) {
+  const catcher = el('span', { class: 'gate-catch', 'data-testid': 'gate-catch', 'aria-hidden': 'true', onclick: onBlockedClick });
+  return el('span', { class: 'gate-wrap' }, btn, catcher);
 }

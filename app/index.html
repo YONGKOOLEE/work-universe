@@ -421,6 +421,14 @@
   .weekly-quick .memo-row { display: grid; gap: 4px; margin: 6px 0; }
   .weekly-quick .memo-row > span { color: var(--muted); font-size: 13px; }
   .weekly-quick .memo-row input[type=text] { width: 100%; }
+  /* R11 FU6-5: 분류를 안 고르고 막힌 「기록」을 눌렀을 때 — 칩 바로 위 큰 안내 + 칩 줄 깜빡임 */
+  .memo-pick-hint { margin: 2px 0 4px; font-size: 16px; font-weight: 700; color: #ffd27a; }
+  .memo-pick-hint[hidden] { display: none; }
+  .memo-chips.memo-flash { animation: memo-flash 0.4s ease-in-out 4; border-radius: 10px; }
+  @keyframes memo-flash { 0%, 100% { box-shadow: 0 0 0 2px transparent; } 50% { box-shadow: 0 0 0 3px #ffd27a; background: rgba(255, 210, 122, .15); } }
+  .gate-wrap { position: relative; display: inline-block; }
+  .gate-catch { position: absolute; inset: 0; cursor: not-allowed; display: none; }
+  .gate-wrap > button:disabled + .gate-catch { display: block; }
   .extra-names { display: grid; gap: 6px; padding: 6px 8px; border: 1px dashed var(--line); border-radius: 8px; }
   .extra-names p { margin: 0; }
   /* 초안: 확정 단추는 바닥 고정 줄에(스크롤 없이 보이게) */
@@ -501,6 +509,8 @@
   .feature-hit[aria-disabled=true] .feat-go { display: none; }
   .feature-results .none, .feature-results .pick-head { padding: 8px; color: var(--warn-text); font-size: 13px; }
   .feature-results .pick-list { display: grid; gap: 2px; }
+  .feature-results .rec-head { padding: 8px 8px 2px; color: var(--accent); font-size: 13px; font-weight: bold; border-top: 1px solid var(--line); margin-top: 4px; }
+  .feature-results .rec-more { padding: 4px 8px; font-size: 13px; }
   .feature-results .pick-list button { width: 100%; text-align: left; border-radius: 6px; }
   /* 작업 공간(CR-22 W): 그래프 왼쪽 세로 메뉴 5개(좁은 창은 그래프 위 가로 줄)와 공간별 패널 조각 */
   .ws-nav { flex: none; width: 112px; display: flex; flex-direction: column; gap: 6px; padding: 10px 6px; background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; }
@@ -572,6 +582,8 @@
   .ht-search { width: 200px; max-width: 100%; }
   .ht-foot { align-items: center; justify-content: space-between; margin: 8px 0 0; position: sticky; bottom: -16px; background: var(--panel); padding: 8px 0; }
   .ht-table tr.after { opacity: .6; }
+  .ht-table tr.ht-open-row { cursor: pointer; }
+  .ht-table tr.ht-open-row:hover { background: var(--panel-2); }
   .ht-table .chip { white-space: nowrap; }
   .nowrap { white-space: nowrap; }
   aside.add-by-btn details.add { margin-top: 0; border-top: 0; padding-top: 0; }

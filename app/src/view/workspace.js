@@ -36,21 +36,17 @@ export function spaceForScreen(screen) {
   return Object.prototype.hasOwnProperty.call(SCREEN_SPACE, screen) ? SCREEN_SPACE[screen] : null;
 }
 
-/** 항목 카드가 열려 있을 때 공간별로 스크롤할 위치 이름(없으면 스크롤하지 않음) */
-const CARD_SCROLL = { record: 'history', handover: 'assign', edit: 'edit' };
-
 /**
- * 메뉴로 공간을 고를 때의 계획. 열린 작업 화면은 닫고(closeScreens), 항목 카드는 열려 있으면 그대로 두며 관련 위치로 스크롤한다.
- * @param {{to:string, hasCard:boolean, open:string[]}} o open: 지금 열려 있는 작업 화면 이름들
- * @returns {{space:string, closeScreens:string[], keepCard:boolean, scroll:string|null}}
+ * 메뉴로 공간을 고를 때의 계획. 열린 작업 화면은 닫는다(closeScreens). 항목 카드도 닫고 공간 첫 화면을 보인다 —
+ * R11 FU6-1(2026-10-26): 카드를 둔 채 메뉴 강조만 바뀌면 「메뉴가 안 먹는다」로 보여, 예전의 「카드 유지 + 관련 위치 스크롤」 규칙을 없앴다.
+ * 카드를 둔 채 공간을 바꾸는 호출(기능 찾기·따라 하기)은 부르는 쪽이 keepCard로 따로 정한다.
+ * @param {{to:string, open:string[]}} o open: 지금 열려 있는 작업 화면 이름들
+ * @returns {{space:string, closeScreens:string[]}}
  */
-export function planSwitch({ to, hasCard, open = [] }) {
-  const space = cleanWorkspace(to);
+export function planSwitch({ to, open = [] }) {
   return {
-    space,
+    space: cleanWorkspace(to),
     closeScreens: WORK_SCREENS.filter((s) => open.includes(s)),
-    keepCard: !!hasCard,
-    scroll: hasCard ? CARD_SCROLL[space] || null : null,
   };
 }
 

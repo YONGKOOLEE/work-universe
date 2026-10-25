@@ -134,7 +134,7 @@ async function ensureSpace(cdp, expression) {
   const add = ADD_FORM_WORDS.some((w) => expression.includes(w)) && LAYOUT_WORDS.some((w) => expression.includes(w));
   if (!want.length && !add) return;
   await cdp.send('Runtime.evaluate', {
-    expression: `(() => { const w = window.__wu; if (!w || w.start || !w.goSpace) return; if (w.rewind || document.querySelector('#detail .draft, #detail .insight, [data-testid=issue-panel], [data-testid=settings-close], [data-testid=hidden-close], [data-testid=merge-panel]')) return; if (${add}) { const a = document.querySelector('aside'); if (a && a.classList.contains('add-off')) { w.goSpace('edit', false); return; } } for (const [id, sp] of ${JSON.stringify(want)}) { if (!document.querySelector('[data-testid="' + id + '"]')) { w.goSpace(sp, false); return; } } })()`,
+    expression: `(() => { const w = window.__wu; if (!w || w.start || !w.goSpace) return; if (w.selected) return; /* R11 FU6-1: 공간을 바꾸면 카드가 닫힌다 — 카드를 연 점검을 이 도우미가 닫지 않게 */ if (w.rewind || document.querySelector('#detail .draft, #detail .insight, [data-testid=issue-panel], [data-testid=settings-close], [data-testid=hidden-close], [data-testid=merge-panel]')) return; if (${add}) { const a = document.querySelector('aside'); if (a && a.classList.contains('add-off')) { w.goSpace('edit', false); return; } } for (const [id, sp] of ${JSON.stringify(want)}) { if (!document.querySelector('[data-testid="' + id + '"]')) { w.goSpace(sp, false); return; } } })()`,
     returnByValue: true,
   }).catch(() => {});
 }
@@ -175,7 +175,10 @@ async function openSession(exe, profileDir, port, { blockStorage = false } = {})
   await cdp.opened;
   const log = { errors: [], external: [] };
   cdp.on((msg) => {
-    if (msg.method === 'Runtime.exceptionThrown') log.errors.push(msg.params.exceptionDetails.exception?.description || msg.params.exceptionDetails.text);
+    if (msg.method === 'Runtime.exceptionThrown') {
+      log.errors.push(msg.params.exceptionDetails.exception?.description || msg.params.exceptionDetails.text);
+      if (process.env.CHECK_DEBUG) console.log('PAGEERR', log.errors[log.errors.length - 1]); // 점검이 멈출 때 화면 오류를 바로 보기 위한 선택 출력
+    }
     if (msg.method === 'Log.entryAdded' && msg.params.entry.level === 'error') log.errors.push(msg.params.entry.text);
     // 외부 네트워크 요청만 센다. Edge 새 탭 페이지의 내부 주소(chrome-search:// 등)는 페이지와 무관하다
     if (msg.method === 'Network.requestWillBeSent' && /^(https?|wss?):/i.test(msg.params.request.url)) log.external.push(msg.params.request.url);
@@ -738,7 +741,7 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, "(() => { const v = JSON.parse(localStorage.getItem('wu:v1:settings') || '{}'); delete v.moreTools; localStorage.setItem('wu:v1:settings', JSON.stringify(v)); })()"); // 끝 카드의 「도구 더 보기」 안내를 보려고 접힘으로(이 아래에서 다시 펼침)
     // 재검증 N-7: 작은 단추는 강조(primary)가 아니고 세 갈래 카드가 강조되며, 접힘 제목은 「샘플·처음 순서 더 보기」
     const emph = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=start-primary]'); const w = document.querySelector('[data-testid=start-way-handover]'); const cs = getComputedStyle(b); const wc = getComputedStyle(w); return { primaryClass: b.classList.contains('primary'), btnBg: cs.backgroundColor, wayBorder: wc.borderTopColor, wayBorderW: wc.borderTopWidth, wayBg: wc.backgroundColor, summary: document.querySelector('[data-testid=start-more] > summary').textContent, accent: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() }; })()");
-    check('N-7 시작 화면: 작은 단추 「샘플 바로 열기」는 primary(초록 채움)가 아니고, 세 갈래 카드는 accent 테두리(2px)·배경이 있으며, 접힘 제목이 「더 보기」(CR-22 S)', !emph.primaryClass && emph.btnBg !== 'rgb(166, 216, 107)' && emph.wayBorder === 'rgb(166, 216, 107)' && emph.wayBorderW === '2px' && emph.wayBg !== 'rgba(0, 0, 0, 0)' && emph.summary === '더 보기', JSON.stringify(emph));
+    check('N-7 시작 화면: 작은 단추 「샘플 바로 열기」는 primary(초록 채움)가 아니고, 세 갈래 카드는 accent 테두리(2px)·배경이 있으며, 접힘 제목이 「더 보기」(CR-22 S)', !emph.primaryClass && emph.btnBg !== 'rgb(166, 216, 107)' && emph.wayBorder === 'rgb(166, 216, 107)' && emph.wayBorderW === '2px' && emph.wayBg !== 'rgba(0, 0, 0, 0)' && emph.summary === '더 보기', JSON.stringify(emph)); // R11 FU10: 접힘 제목 「더 보기」 → 「처음이라면 이 순서로」
     await shot(s.cdp, `${browser.name}-34a-start-emphasis`);
     // CR-22 S: 처음 온 사람 화면 점검이 끝났으니 앞 점검이 만든 저장 내용(고친 샘플 등)을 되돌려 예전과 같은 상태로 이어 간다
     await evaluate(s.cdp, `(() => { localStorage.clear(); for (const [k, v] of JSON.parse(${JSON.stringify(startSnap)})) localStorage.setItem(k, v); const v = JSON.parse(localStorage.getItem('wu:v1:settings') || '{}'); delete v.lastOpenedId; delete v.tourDone; delete v.moreTools; localStorage.setItem('wu:v1:settings', JSON.stringify(v)); })()`);
@@ -3291,6 +3294,7 @@ async function checkBrowser(browser, port) {
       await evaluate(s.cdp, `window.__wu.select(${JSON.stringify(workGid)})`);
       await sleep(200);
       const back = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=detail-back-universe]'); if (!b) return null; const r = b.getBoundingClientRect(); return { first: document.getElementById('detail').firstElementChild.contains(b), w: r.width, text: b.textContent, draftUniverse: !!document.querySelector('[data-testid=btn-draft-universe]') }; })()");
+      if (process.env.CHECK_DEBUG && !back) console.log('DBG', JSON.stringify(await evaluate(s.cdp, "({ sel: window.__wu.selected, txt: document.getElementById('detail').innerText.slice(0, 300) })")));
       check('W3 FU-6 노드 상세 맨 위에 「← 지도 전체 보기」(크기 있음), 이 화면에는 지도 전체용 단추가 없음', !!back && back.first && back.w > 20 && /^← 지도 전체( 보기)?$/.test(back.text) && !back.draftUniverse, JSON.stringify(back));
       await clickTestId(s.cdp, 'detail-back-universe');
       await sleep(250);
@@ -4811,7 +4815,7 @@ async function checkBrowser(browser, port) {
       await s2Select('U-A1/N-001');
       const ab = await s2Q('[data-testid=assignee-change]');
       // CR-22 K: 담당 바꾸기 상자는 처음엔 숨겨 두고 동작 줄의 「담당 넘기기」가 연다
-      check('S M3 업무 카드의 「담당 바꾸기」 상자는 처음엔 숨김(크기 0, 접힘, 글자는 담당 바꾸기)', !!ab && ab.w === 0 && ab.open === false && ab.text.includes('담당 바꾸기'), JSON.stringify(ab));
+      check('S M3 업무 카드의 「담당 바꾸기」 상자는 처음엔 숨김(크기 0, 접힘, 글자는 담당 넘기기; R11 FU6-10 이름 통일)', !!ab && ab.w === 0 && ab.open === false && ab.text.includes('담당 넘기기'), JSON.stringify(ab));
       await clickTestId(s.cdp, 'btn-assign');
       await sleep(150);
       const ab2 = await s2Q('[data-testid=assignee-change]');
@@ -5392,18 +5396,16 @@ async function checkBrowser(browser, port) {
         const rwO = await raw(s.cdp, "({ rewind: window.__wu.rewind, band: !document.querySelector('[data-testid=rewind-band]').hidden, space: window.__wu.space, weekly: !!document.querySelector('[data-testid=weekly-quick]') })");
         check('CR-22 W 상태 규칙: 되감기 중 다른 공간을 고르면 되감기가 끝나고(띠가 사라짐) 그 공간 첫 화면', rwO.rewind === null && !rwO.band && rwO.space === 'record' && rwO.weekly, JSON.stringify(rwO));
       } else check('CR-22 W 편집 되감기 상태 규칙', false, '「편집 되감기」 입구가 없음');
-      // 항목 카드: 열린 채 유지, 공간마다 관련 위치로
+      // 항목 카드: R11 FU6-1 — 왼쪽 메뉴를 누르면 카드를 닫고 그 공간 첫 화면을 보인다(예전 규칙 「카드 유지 + 관련 위치 스크롤」은 「메뉴가 안 먹는다」로 보여 없앴다)
+      for (const [sp, title] of [['record', '기록'], ['handover', '인수인계'], ['edit', '지도 관리'], ['map', '']]) {
+        await raw(s.cdp, "window.__wu.select('U-A1/N-001')");
+        await sleep(250);
+        await w22.pick(sp);
+        const closed = await raw(s.cdp, "({ sel: window.__wu.selected, space: window.__wu.space, card: !!document.querySelector('[data-testid=item-card]'), title: (document.querySelector('[data-testid=ws-title]') || {}).textContent || '', top: document.getElementById('detail').parentElement.scrollTop })");
+        check(`R11 FU6-1 카드를 연 채 「${title || '지도 보기'}」를 고르면 카드가 닫히고 그 공간 첫 화면(맨 위)`, closed.sel === null && closed.space === sp && !closed.card && closed.title === title && closed.top === 0, JSON.stringify(closed));
+      }
       await raw(s.cdp, "window.__wu.select('U-A1/N-001')");
       await sleep(250);
-      await w22.pick('record');
-      const cardKept = await raw(s.cdp, 'window.__wu.selected');
-      check('CR-22 W 상태 규칙: 항목 카드를 연 채 「기록」을 고르면 카드는 유지되고 이력 머리가 패널 안에 보임', cardKept === 'U-A1/N-001' && (await w22.inView('#history-heading')), String(cardKept));
-      await w22.pick('handover');
-      check('CR-22 W 상태 규칙: 카드를 연 채 「인수인계」를 고르면 카드 유지, 담당 바꾸기·수행 연결 쪽이 보임', (await raw(s.cdp, 'window.__wu.selected')) === 'U-A1/N-001' && ((await w22.inView('[data-testid=assignee-change]')) || (await w22.inView('[data-testid=links]'))));
-      await w22.pick('edit');
-      check('CR-22 W 상태 규칙: 카드를 연 채 「지도 관리」를 고르면 카드 유지, 「수정」 단추가 보임', (await raw(s.cdp, 'window.__wu.selected')) === 'U-A1/N-001' && (await w22.inView('[data-testid=btn-edit]')));
-      await w22.pick('map');
-      check('CR-22 W 상태 규칙: 「지도 보기」를 고르면 카드는 그대로', (await raw(s.cdp, 'window.__wu.selected')) === 'U-A1/N-001' && (await w22.info()).space === 'map');
       // 카드에서 작업 화면을 열면 메뉴가 따라 감
       await raw(s.cdp, "document.querySelector('[data-testid=btn-draft]').click()");
       await sleep(250);
@@ -5503,7 +5505,7 @@ async function checkBrowser(browser, port) {
       // 담당 → 담당 바꾸기 (업무를 고르지 않은 상태)
       await c21Type('담당');
       const hits = await c21Hits();
-      check('CR-21 A 「담당」을 치면 결과 목록(최대 6개)에 「담당 바꾸기」가 있고 이름·위치 설명·「바로 가기」가 보임', hits.length >= 1 && hits.length <= 6 && hits.some((h) => h.id === 'assignee' && h.text.includes('담당 바꾸기') && h.text.includes('업무를 고른 뒤') && h.text.includes('바로 가기')), JSON.stringify(hits));
+      check('CR-21 A 「담당」을 치면 결과 목록(최대 6개)에 「담당 넘기기」(R11 FU6-10 이름 통일)가 있고 이름·위치 설명·「바로 가기」가 보임', hits.length >= 1 && hits.length <= 6 && hits.some((h) => h.id === 'assignee' && h.text.includes('담당 넘기기') && h.text.includes('업무를 고른 뒤') && h.text.includes('바로 가기')), JSON.stringify(hits));
       await shot(s.cdp, `${browser.name}-cr21-7-feature-find`);
       await c21Click('assignee');
       await sleep(250);
@@ -6126,7 +6128,10 @@ async function checkBrowser(browser, port) {
       await sleep(200);
       await clickTestId(s.cdp, 'btn-nbhd');
       await sleep(400);
-      check('CR-22 G 주변만 보기: 기준일에 끝난 담당·소속뿐인 사람은 이웃이 없음(「이어진 항목 없음」, 선 없는 사람이 떠 있지 않음)', (await evaluate(s.cdp, 'window.__wu.nbhd')) === null && (await evaluate(s.cdp, 'window.__wu.cy.nodes().length')) === 150 && (await evaluate(s.cdp, "document.body.textContent.includes('이어진 항목 없음')")), String(await evaluate(s.cdp, 'window.__wu.cy.nodes().length')));
+      // R11 RV11C-3: 오늘 유효한 연결이 없어 0이 되면 실패하지 않고 지난 연결까지 포함해 열고 한 줄 알린다(예전 기대값: 「이어진 항목 없음」 알림만)
+      check('CR-22 G·R11 주변만 보기: 기준일에 끝난 담당·소속뿐인 사람은 지난 연결까지 포함해 열리고 「지난 담당까지 보여 줍니다」 알림', (await evaluate(s.cdp, 'window.__wu.nbhd')) !== null && (await evaluate(s.cdp, 'window.__wu.cy.nodes().length')) < 150 && (await evaluate(s.cdp, "document.body.textContent.includes('오늘 유효한 연결이 없어 지난 담당까지 보여 줍니다')")), String(await evaluate(s.cdp, 'window.__wu.cy.nodes().length')));
+      await clickTestId(s.cdp, 'btn-nbhd-exit');
+      await sleep(400);
     } else check('CR-22 G 150개 지도', false, '150개 지도가 열리지 않음');
 
     // ── 카드승인(38개): 첫 화면 이름·창 크기와 무관한 배치(9)·첫 맞춤 ──
@@ -6277,6 +6282,282 @@ async function checkBrowser(browser, port) {
 
     // 저장소를 블록 시작 때 찍어 둔 상태로 되돌린다(샘플 문서 포함)
     await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(g22Snap)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); location.hash = 'U-A1'; location.reload(); })()`).catch(() => {});
+    await sleep(500);
+    await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
+  }
+
+  // ── R11 고침(2026-10-26, 열한 번째 검토 지적 수정): 공간 메뉴와 카드, 카드 맨 위, 쓰던 메모, 쓴 것 찾기, 메모 양식 막힘, 꼬리표, 통합 확인 알림, 위험 목록→사람,
+  //    기능 찾기, 배지, 읽기 전용, ~done 표지, 해결됨 미리 알림 날짜, 주변만 보기(지난 담당). 데이터·설정을 바꾸므로 시작 때 저장소를 찍어 두었다가 끝에서 되돌린다 ──
+  {
+    const r11Snap = await evaluate(s.cdp, 'JSON.stringify(Object.entries(localStorage))');
+    const R = (expr) => raw(s.cdp, expr);
+    const r11Wait = (id, nodes = true) => waitFor(s.cdp, `window.__wu && window.__wu.doc && window.__wu.doc.universe.id === ${JSON.stringify(id)}${nodes ? ' && window.__wu.cy.nodes().length > 0' : ''}`, 8000);
+    const r11Go = async (hash, clean = [], extra = '') => {
+      const rm = clean.map((id) => `localStorage.removeItem('wu:v1:u:${id}');`).join(' ');
+      await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(r11Snap)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); ${rm} ${extra}; location.hash = ${JSON.stringify(hash)}; location.reload(); })()`).catch(() => {});
+      await sleep(500);
+      return r11Wait(hash.split('~')[0]);
+    };
+    const pickSpace = async (k) => { await R(`document.querySelector('[data-testid=ws-${k}]').click()`); await sleep(220); };
+    const inAside = (sel) => R(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); const a = document.querySelector('aside').getBoundingClientRect(); if (!e) return false; const r = e.getBoundingClientRect(); return r.height > 0 && r.top >= a.top - 1 && r.bottom <= a.bottom + 1; })()`);
+    const setWeekly = (workLabel, category, note) => R(`(() => { const q = (i) => document.querySelector('[data-testid=' + i + ']'); const w = q('weekly-work'); const o = [...w.options].find((x) => x.textContent === ${JSON.stringify(workLabel)}); w.value = o.value; w.dispatchEvent(new Event('change')); const c = q('weekly-category'); c.value = ${JSON.stringify(category)}; c.dispatchEvent(new Event('change')); const n = q('weekly-note'); n.value = ${JSON.stringify(note)}; n.dispatchEvent(new Event('input')); })()`);
+    const weeklyVals = () => R("(() => { const q = (i) => document.querySelector('[data-testid=' + i + ']'); const w = q('weekly-work'); return { work: w ? w.options[w.selectedIndex].textContent : null, cat: q('weekly-category') ? q('weekly-category').value : null, note: q('weekly-note') ? q('weekly-note').value : null }; })()");
+
+    if (await r11Go('U-A1', ['U-A1'])) {
+      await R('window.__wu.select(null)');
+      await pickSpace('map');
+
+      // FU6-2 카드는 늘 맨 위에서 연다
+      await R("window.__wu.select('U-A1/N-001')");
+      await sleep(250);
+      await R("document.getElementById('detail').parentElement.scrollTop = 600");
+      await R("window.__wu.select('U-A1/N-002')");
+      await sleep(250);
+      const top2 = await R("({ top: document.getElementById('detail').parentElement.scrollTop, title: (document.querySelector('[data-testid=item-card] h2') || {}).textContent || '' })");
+      check('R11 FU6-2 다른 항목 카드를 열면 패널이 맨 위(이름 줄이 보임)', top2.top === 0 && top2.title.length > 0 && (await inAside('[data-testid=item-card] h2')), JSON.stringify(top2));
+      await shot(s.cdp, `${browser.name}-r11-card-top`);
+
+      // FU6-3·5 메모 양식: 쓰던 글 지키기, 분류 안 고르고 막힌 「기록」
+      await R('window.__wu.select(null)');
+      await pickSpace('record');
+      const gate0 = await R("(() => { const q = (i) => document.querySelector('[data-testid=' + i + ']'); const b = q('weekly-add'); const c = q('gate-catch'); const r = b.getBoundingClientRect(); const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { disabled: b.disabled, covered: !!c && top === c }; })()");
+      check('R11 FU6-5 분류를 안 골라 회색인 「기록」 위를 누르면 덮개가 눌림을 받는다(단추는 disabled 그대로)', gate0.disabled && gate0.covered, JSON.stringify(gate0));
+      await R("document.querySelector('[data-testid=gate-catch]').click()");
+      await sleep(150);
+      const hint = await R("(() => { const h = document.querySelector('[data-testid=memo-pick-hint]'); const chips = document.querySelector('[data-testid=memo-chips]'); const r = h.getBoundingClientRect(); return { shown: r.height > 0, text: h.textContent, font: parseFloat(getComputedStyle(h).fontSize), before: h.nextElementSibling === chips, flash: chips.classList.contains('memo-flash') }; })()");
+      check('R11 FU6-5 막힌 「기록」을 누르면 「분류를 고르세요」가 칩 줄 바로 위에 크게(16px 이상) 나오고 칩 줄이 깜빡임', hint.shown && hint.text === '분류를 고르세요' && hint.font >= 16 && hint.before && hint.flash, JSON.stringify(hint));
+      await shot(s.cdp, `${browser.name}-r11-gate-hint`);
+      await R("document.querySelector('[data-testid=memo-chip-issue]').click()");
+      await sleep(100);
+      check('R11 FU6-5 분류 칩을 고르면 안내가 사라지고 「기록」이 켜짐', await R("document.querySelector('[data-testid=memo-pick-hint]').hidden && !document.querySelector('[data-testid=weekly-add]').disabled"));
+      await setWeekly('대사 확인', 'issue', '쓰던 글 보관 시험');
+      await pickSpace('handover');
+      await pickSpace('record');
+      const kept = await weeklyVals();
+      check('R11 FU6-3 쓰던 메모(업무·분류·글)는 공간을 옮겼다 돌아와도 채워져 있음', kept.work === '대사 확인' && kept.cat === 'issue' && kept.note === '쓰던 글 보관 시험', JSON.stringify(kept));
+      await R("window.__wu.select('U-A1/N-001')");
+      await sleep(200);
+      await pickSpace('record');
+      const kept2 = await weeklyVals();
+      check('R11 FU6-3 카드를 열었다 공간 메뉴로 닫고 돌아와도 그대로', kept2.note === '쓰던 글 보관 시험' && kept2.cat === 'issue', JSON.stringify(kept2));
+      const store = await R("JSON.stringify(Object.entries(localStorage)).includes('쓰던 글 보관 시험') || JSON.stringify(Object.entries(sessionStorage)).includes('쓰던 글 보관 시험')");
+      check('R11 FU6-3 쓰던 글은 저장소(localStorage·sessionStorage)에 쓰지 않음', store === false, String(store));
+      // 카드의 「기록 남기기」: 업무별 보관 + 「종류」 이름
+      await R("window.__wu.select('U-A1/N-001')");
+      await sleep(200);
+      await R("document.querySelector('[data-testid=btn-event]').click()");
+      await sleep(250);
+      await R("(() => { const f = document.querySelector('[data-testid=event-form]'); f.querySelector('[data-testid=memo-chip-caution]').click(); const n = f.querySelector('[data-testid=event-note]'); n.value = '카드에 쓰던 글'; n.dispatchEvent(new Event('input')); })()");
+      const typeOpt = await R("[...document.querySelector('[data-testid=event-type]').options].map((o) => o.textContent)");
+      check('R11 FU6-5 「종류」 고르기의 첫 항목은 「메모」(「메모(이슈·결정)」 아님)', typeOpt[0] === '메모', JSON.stringify(typeOpt));
+      await R("window.__wu.select(null)");
+      await sleep(150);
+      await R("window.__wu.select('U-A1/N-001')");
+      await sleep(200);
+      await R("document.querySelector('[data-testid=btn-event]').click()");
+      await sleep(250);
+      const cardKept = await R("(() => { const f = document.querySelector('[data-testid=event-form]'); return { note: f.querySelector('[data-testid=event-note]').value, cat: f.querySelector('[data-testid=event-category]').value }; })()");
+      check('R11 FU6-3 카드의 「기록 남기기」도 카드를 닫았다 다시 열면 쓰던 글·분류가 채워짐', cardKept.note === '카드에 쓰던 글' && cardKept.cat === 'caution', JSON.stringify(cardKept));
+      await R("document.querySelector('[data-testid=event-form] button[type=button]').click()"); // 취소
+      await R('window.__wu.select(null)');
+      await pickSpace('record');
+
+      // 「기록」 성공 → 보관이 지워지고 알림
+      await setWeekly('대사 확인', 'in_progress', '검색확인용 문장 R11');
+      await R("document.querySelector('[data-testid=weekly-add]').click()");
+      await sleep(300);
+      const afterRec = await R("({ done: !!document.querySelector('[data-testid=weekly-done]'), vals: null })");
+      await pickSpace('handover');
+      await pickSpace('record');
+      const cleared = await weeklyVals();
+      check('R11 FU6-3 「기록」이 성공하면 쓰던 글 보관은 지워짐(돌아와도 빈 칸)', afterRec.done && cleared.note === '' && cleared.cat === '', JSON.stringify([afterRec, cleared]));
+
+      // FU6-6 꼬리표 한 번만
+      await R("window.__wu.select('U-A1/N-001')");
+      await sleep(250);
+      const tag = await R("(() => { const t = (document.querySelector('[data-testid=now-recent]') || {}).textContent || ''; return { text: t, n: (t.match(/\\[[^\\]]+\\]/g) || []).length }; })()");
+      check('R11 FU6-6 「지금 볼 것」 최근 기록에 분류 꼬리표가 두 번 나오지 않음', tag.text.includes('검색확인용 문장 R11') && tag.n <= 1, JSON.stringify(tag));
+      await R('window.__wu.select(null)');
+
+      // FU6-4 쓴 것 찾기
+      await R("(() => { const i = document.querySelector('[data-testid=feature-find]'); i.focus(); i.value = '검색확인용'; i.dispatchEvent(new Event('input')); })()");
+      await sleep(200);
+      const fr = await R("({ head: (document.querySelector('[data-testid=feature-find-records-head]') || {}).textContent || '', rows: document.querySelectorAll('[data-testid=feature-find-record]').length, none: !!document.querySelector('[data-testid=feature-find-none]'), text: (document.querySelector('[data-testid=feature-find-record]') || {}).textContent || '' })");
+      check('R11 FU6-4 기능 결과가 없을 때 「기록에서 「검색확인용」 n건」과 기록 줄(날짜·업무·내용)', fr.head === '기록에서 「검색확인용」 1건' && fr.rows === 1 && fr.text.includes('대사 확인') && fr.text.includes('검색확인용 문장 R11'), JSON.stringify(fr));
+      await shot(s.cdp, `${browser.name}-r11-find-records`);
+      await R("document.querySelector('[data-testid=feature-find-record]').click()");
+      await sleep(300);
+      const fgo = await R("({ sel: window.__wu.selected, hit: !!document.querySelector('[data-just-added]'), text: (document.querySelector('[data-just-added]') || {}).textContent || '' })");
+      check('R11 FU6-4 기록 줄의 「보기」 → 그 업무 카드의 그 기록 줄이 강조됨', fgo.sel === 'U-A1/N-001' && fgo.hit && fgo.text.includes('검색확인용 문장 R11'), JSON.stringify(fgo));
+      await R('window.__wu.select(null)');
+      await pickSpace('record');
+      await R("document.querySelector('[data-testid=recent-all]').click()");
+      await sleep(300);
+      const ht = await R("({ panel: !!document.querySelector('[data-testid=history-table-panel]'), head: (document.querySelector('.ht-head h2') || {}).textContent || '', rows: document.querySelectorAll('[data-testid=ht-row]').length, hasTarget: !!document.querySelector('[data-testid=ht-open-row]') })");
+      check('R11 FU6-4 「최근 기록」의 「모두 보기 →」 → 지도 전체 기록 표(업무 칸이 있고 줄이 있음)', ht.panel && ht.head.startsWith('지도 전체') && ht.rows >= 1 && ht.hasTarget, JSON.stringify(ht));
+      await shot(s.cdp, `${browser.name}-r11-map-history-table`);
+      await R("(() => { const i = document.querySelector('[data-testid=ht-search]'); i.value = '검색확인용'; i.dispatchEvent(new Event('input')); })()");
+      await sleep(150);
+      check('R11 FU6-4 기록 표에서 찾기 글로 걸러짐', (await R("document.querySelectorAll('[data-testid=ht-row]').length")) === 1);
+      await R("document.querySelector('[data-testid=ht-row]').click()");
+      await sleep(300);
+      const rowGo = await R("({ sel: window.__wu.selected, table: !!document.querySelector('[data-testid=history-table-panel]'), hit: !!document.querySelector('[data-just-added]') })");
+      check('R11 FU6-4 기록 표의 줄을 누르면 그 업무 카드의 그 줄(표는 닫힘)', rowGo.sel === 'U-A1/N-001' && !rowGo.table && rowGo.hit, JSON.stringify(rowGo));
+      await R('window.__wu.select(null)');
+      await pickSpace('record');
+      await R("document.querySelector('[data-testid=recent-all]').click()");
+      await sleep(200);
+      await R("document.querySelector('[data-testid=history-table-close]').click()");
+      await sleep(200);
+      check('R11 FU6-4 기록 표를 닫으면 「기록」 공간 첫 화면', (await R("({ t: !!document.querySelector('[data-testid=history-table-panel]'), space: window.__wu.space, rec: !!document.querySelector('[data-testid=recent-records]') })")).rec);
+
+      // FU6-16 배지·도움말
+      const badge = await R("(() => { const b = document.querySelector('[data-testid=ws-badge-record]'); const btn = document.querySelector('[data-testid=ws-record]'); return b ? { title: b.title, aria: btn.getAttribute('aria-label') } : null; })()");
+      check('R11 FU6-16 공간 배지에 title·aria(「미해결 n건」)', !!badge && /^미해결 \d+건$/.test(badge.title) && /미해결 \d+건/.test(badge.aria), JSON.stringify(badge));
+      await R("document.getElementById('tour-open').click()");
+      await sleep(250);
+      check('R11 FU6-16 도움말 「왼쪽 공간」 절에 배지 뜻 한 줄', /미해결 건수.*혼자만 아는 일 개수/.test(await R("(document.querySelector('[data-testid=help-badge]') || {}).textContent || ''")));
+      await R("document.querySelector('[data-testid=help-close]').click()");
+      await sleep(150);
+
+      // FU6-15 ISO 시각 표시
+      await R("(() => { const d = JSON.parse(JSON.stringify(window.__wu.doc)); const n = d.nodes.find((x) => x.id === 'N-001'); n.attrs = { ...(n.attrs || {}), '확정 시각': '2026-10-26T03:52:28+09:00' }; localStorage.setItem('wu:v1:u:U-A1', JSON.stringify(d)); location.reload(); })()").catch(() => {});
+      await sleep(500);
+      await r11Wait('U-A1');
+      await R("window.__wu.select('U-A1/N-001')");
+      await sleep(250);
+      const stamp = await R("document.getElementById('detail').innerText");
+      check('R11 FU6-15 카드의 ISO 시각이 「2026-10-26 03:52」로 보임(원문 T…+09:00 없음)', stamp.includes('2026-10-26 03:52') && !stamp.includes('03:52:28+09:00'), stamp.slice(0, 200));
+      await R('window.__wu.select(null)');
+
+      // RV11C-1 해결됨 미리 알림: 날짜에 따라 달라짐
+      await pickSpace('record');
+      await setWeekly('대사 확인', 'resolved', '날짜별 건수');
+      const w1 = await R("(document.querySelector('[data-testid=memo-resolve-warn]') || {}).textContent || ''");
+      await R("(() => { const d = document.querySelector('[data-testid=weekly-date]'); d.value = '2026-01-01'; d.dispatchEvent(new Event('change')); })()");
+      const w2 = await R("(document.querySelector('[data-testid=memo-resolve-warn]') || {}).textContent || ''");
+      const n1 = Number((/미해결 (\d+)건/.exec(w1) || [])[1] || 0);
+      check('R11 RV11C-1 「해결됨」 미리 알림: 날짜를 앞당기면 닫히는 건수가 줄거나 0(그 날짜 뒤의 미해결은 안 닫힘)', n1 >= 1 && /닫을 미해결은 없습니다/.test(w2), JSON.stringify([w1, w2]));
+
+      // RV11C-3 주변만 보기: 지난 담당만 있는 사람
+      await R("window.__wu.select(null)");
+      const pg = await R("(() => { const p = window.__wu.view.nodes.find((n) => n.core_type === 'person' && !n.hidden && n.label === '윤바다'); return p ? p.gid : null; })()");
+      if (pg) {
+        await R(`window.__wu.select(${JSON.stringify(pg)})`);
+        await sleep(250);
+        await R("(() => { const b = document.querySelector('[data-testid=btn-nbhd]'); if (b) b.click(); })()");
+        await sleep(400);
+        const nb = await R("({ on: !!document.querySelector('[data-testid=nbhd-on]'), note: (document.querySelector('[data-testid=nbhd-past-note]') || {}).textContent || '', warn: (document.querySelector('[data-testid=nbhd-none]') || {}).textContent || '', status: (document.querySelector('.explore-status') || {}).textContent || '' })");
+        check('R11 RV11C-3 지난 담당만 있는 사람(윤바다)의 「주변만 보기」가 지난 연결까지 포함해 열리고 한 줄 알림', nb.on && /지난 담당까지 보여 줍니다/.test(nb.status), JSON.stringify(nb));
+        await R("(() => { const b = document.querySelector('[data-testid=btn-nbhd-exit]'); if (b) b.click(); })()");
+        await sleep(200);
+      } else check('R11 RV11C-3 윤바다', false, '사람이 없음');
+      await R('window.__wu.select(null)');
+      await sleep(150);
+
+      // RV11C-9 되감기 중 같은 공간 다시 누르기
+      await submitAdd(s.cdp, 'topic', 'R11 시험 주제');
+      await sleep(250);
+      await R('window.__wu.select(null)');
+      await pickSpace('edit');
+      if (await R("!!document.querySelector('[data-testid=btn-rewind]')")) {
+        await R("document.querySelector('[data-testid=btn-rewind]').click()");
+        await sleep(400);
+        await pickSpace('edit');
+        const same = await R("({ rewind: !!window.__wu.rewind, space: window.__wu.space })");
+        check('R11 RV11C-9 되감기 중 지금 공간(지도 관리)을 다시 눌러도 되감기가 유지됨', same.rewind && same.space === 'edit', JSON.stringify(same));
+        await R("(() => { const b = document.querySelector('[data-testid=rewind-done]') || document.querySelector('[data-testid=rewind-back]'); if (b) b.click(); })()");
+        await sleep(300);
+        await pickSpace('record'); // 되감기에서 나가는 단추 이름을 모르면 다른 공간으로 나간다
+      } else check('R11 RV11C-9 되감기 입구', false, '입구가 없음');
+    } else check('R11 고침 U-A1', false, 'U-A1이 열리지 않음');
+
+    // ~done 표지(RV11S-1): 주소만으로는 알림이 뜨지 않고, 같은 탭의 표지가 있어야 뜬다
+    if (await r11Go('U-A1~done=group', ['U-A1'])) {
+      await sleep(400);
+      check('R11 RV11S-1 표지 없이 주소에 ~done=group만 있으면 알림이 뜨지 않음(주소는 지워짐)', !(await R("!!document.querySelector('[data-testid=group-done]')")) && !(await R('location.hash')).includes('~done'), await R('location.hash'));
+      await R("sessionStorage.setItem('wu.done-mark', JSON.stringify({ kind: 'group', map: 'U-A1', at: Date.now(), auto: 2 })); location.hash = 'U-A1~done=group'; location.reload();").catch(() => {});
+      await sleep(600);
+      await r11Wait('U-A1');
+      await sleep(300);
+      const dn = await R("({ text: (document.querySelector('[data-testid=group-done]') || {}).textContent || '', mark: sessionStorage.getItem('wu.done-mark') })");
+      check('R11 RV11S-1·RV11C-12 같은 탭의 표지가 있으면 알림(자동으로 이은 사람 수 포함)이 뜨고 표지는 지워짐', /묶었습니다/.test(dn.text) && /사번이 같은 사람 2명은 자동으로 이었습니다/.test(dn.text) && dn.mark === null, JSON.stringify(dn));
+      await R("sessionStorage.setItem('wu.done-mark', JSON.stringify({ kind: 'group', map: 'U-OTHER', at: Date.now() })); location.hash = 'U-A1~done=group'; location.reload();").catch(() => {});
+      await sleep(600);
+      await r11Wait('U-A1');
+      check('R11 RV11S-1 표지의 지도가 다르면 알림 없음', !(await R("!!document.querySelector('[data-testid=group-done]')")));
+    } else check('R11 ~done', false, 'U-A1이 열리지 않음');
+
+    // 묶은 지도(가상 운영부): 인수인계 안내, 위험 목록→사람, 점검 요약, 통합 확인 알림, 사람 카드 연락처
+    if (await r11Go('U-D1')) {
+      await R('window.__wu.select(null)');
+      await pickSpace('handover');
+      check('R11 RV11-5 묶은 지도의 「인수인계」: 담당을 넘기려면 그 업무가 있는 팀·업무 지도를 열라는 안내', /그 업무가 있는 팀·업무 지도를 열어서 하세요/.test(await R("(document.querySelector('[data-testid=handover-assignee-hint]') || {}).textContent || ''")));
+      await shot(s.cdp, `${browser.name}-r11-handover-D1`);
+      const sp = await R("(() => { const b = document.querySelector('[data-testid=ws-solo-person]'); return b ? { gid: b.dataset.gid, label: b.textContent } : null; })()");
+      check('R11 FU6-8 「혼자만 아는 일」 목록의 사람 이름이 눌러지는 단추', !!sp, JSON.stringify(sp));
+      if (sp) {
+        await R("document.querySelector('[data-testid=ws-solo-person]').click()");
+        await sleep(300);
+        const pc = await R("({ sel: window.__wu.selected, type: (document.querySelector('[data-testid=card-type]') || {}).textContent || '', title: (document.querySelector('[data-testid=item-card] h2') || {}).textContent || '' })");
+        check('R11 FU6-8 사람 이름을 누르면 그 사람 카드가 열림', pc.sel === sp.gid && pc.type === '사람' && pc.title === sp.label, JSON.stringify(pc));
+        await R('window.__wu.select(null)');
+      }
+      const nc = await R("(() => { const w = window.__wu; for (const p of w.view.nodes.filter((n) => n.core_type === 'person' && !n.hidden)) { w.select(p.gid); if (document.querySelector('[data-testid=card-no-contact]')) return { label: p.label, chip: document.querySelector('[data-testid=card-no-contact]').textContent }; } return null; })()");
+      check('R11 FU6-8 연락처가 없는 사람 카드의 상태 줄에 「연락처 없음」', !!nc && nc.chip === '연락처 없음', JSON.stringify(nc));
+      await shot(s.cdp, `${browser.name}-r11-no-contact`);
+      await R('window.__wu.select(null)');
+      // 이름 단계: 공간 강조된 항목은 이름이 숨지 않음
+      await pickSpace('check');
+      await sleep(300);
+      const lb = await R("(() => { const cy = window.__wu.cy; const marked = cy.nodes().filter((n) => /mk-(issue|solo|current)/.test(n.classes().join(' '))); return { n: marked.length, hidden: marked.filter((n) => n.hasClass('tiny-label')).length }; })()");
+      check('R11 FU6-8 그래프에서 공간 강조된 항목은 이름 숨김에서 빠짐(강조끼리·지도 중심과 겹치는 경우만 예외라 전부 숨지는 않음 — 순위 규칙은 단위 시험)', lb.n > 0 && lb.hidden < lb.n, JSON.stringify(lb));
+      // FU6-14 점검 요약 미리 보기를 펼친 채로
+      if (await R("!!document.querySelector('[data-testid=btn-risk-summary-open]')")) {
+        await R("document.querySelector('[data-testid=btn-risk-summary-open]').click()");
+        await sleep(400);
+        check('R11 FU6-14 「점검 요약 보기」로 인사이트를 열면 요약 「미리 보기」가 펼쳐져 있음', (await R("document.querySelector('[data-testid=summary-preview]').open")) === true && (await R("(document.querySelector('[data-testid=summary-preview-text]') || {}).textContent.length")) > 10);
+        await R("document.querySelector('[data-testid=insight-close]').click()");
+        await sleep(200);
+      } else check('R11 FU6-14 점검 요약 보기 입구', false, '입구가 없음');
+      // FU6-7 통합 확인 판정 알림
+      await pickSpace('edit');
+      if (await R("!!document.querySelector('[data-testid=btn-merge]')")) {
+        await R("document.querySelector('[data-testid=btn-merge]').click()");
+        await sleep(400);
+        await R("(() => { const b = document.querySelector('[data-testid=merge-diff]'); if (b) b.click(); })()");
+        await sleep(300);
+        const idn = await R("(document.querySelector('[data-testid=identity-done]') || {}).textContent || ''");
+        check('R11 FU6-7 「다른 …」 판정에도 성공 알림이 뜨고 조사가 맞음(「업무으로」 없음)', /판정했습니다/.test(idn) && !/업무으로/.test(idn), idn);
+        check('R11 FU6-7 통합 확인 머리 문구: 판정만으로는 원래 업무 지도가 바뀌지 않는다는 말', /판정만으로는 원래 업무 지도가 바뀌지 않습니다/.test(await R("document.getElementById('detail').innerText")));
+        await R("(() => { const b = document.querySelector('[data-testid=merge-close]'); if (b) b.click(); })()");
+      } else check('R11 FU6-7 통합 확인 입구', false, '입구가 없음');
+      // RV11C-10 기능 찾기: 대상이 없을 때 이유 한 줄
+      await R('window.__wu.select(null)');
+      await R("(() => { const i = document.querySelector('[data-testid=feature-find]'); i.focus(); i.value = '이번 주 기록'; i.dispatchEvent(new Event('input')); })()");
+      await sleep(150);
+      await R("(() => { const b = document.querySelector('[data-testid=feature-find-result][data-id=weekly]'); if (b) b.click(); })()");
+      await sleep(300);
+      check('R11 RV11C-10 묶은 지도에서 「이번 주 기록」으로 가면 이유 한 줄 알림', /양식이 없는 화면/.test(await R("(document.querySelector('[data-testid=feature-missing-note]') || {}).textContent || ''")));
+    } else check('R11 U-D1', false, 'U-D1이 열리지 않음');
+
+    // 읽기 전용: 빈 최근 기록 문구
+    {
+      const okRo = await (async () => {
+        if (!(await r11Go('U-A1', ['U-A1']))) return false;
+        await evaluate(s.cdp, "(() => { const d = JSON.parse(JSON.stringify(window.__wu.doc)); d.schema_version = '2.0'; localStorage.setItem('wu:v1:u:U-A1', JSON.stringify(d)); location.reload(); })()").catch(() => {});
+        await sleep(500);
+        return waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1'", 8000);
+      })();
+      if (okRo) {
+        await R('window.__wu.select(null)');
+        await pickSpace('record');
+        check('R11 RV11-4 이번 주 기록 양식이 없는 화면(읽기 전용)의 빈 최근 기록은 「아직 남긴 기록이 없습니다」만', (await R("(document.querySelector('[data-testid=recent-empty]') || {}).textContent || ''")) === '아직 남긴 기록이 없습니다');
+      } else check('R11 읽기 전용', false, '열리지 않음');
+    }
+
+    // 저장소를 블록 시작 때 상태로 되돌린다
+    await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(r11Snap)}); localStorage.clear(); sessionStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); location.hash = 'U-A1'; location.reload(); })()`).catch(() => {});
     await sleep(500);
     await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
   }

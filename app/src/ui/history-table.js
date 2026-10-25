@@ -4,7 +4,9 @@ import { el } from './dom.js';
 import { CARD, HISTORY_GROUPS, HISTORY_PERIODS, filterHistory, pageRows } from '../view/card.js';
 
 /**
- * @param {{title:string, rows:object[], today:string, state:{group:string,period:string,q:string,page:number}, readOnly:boolean, onClose:()=>void, onResolve:(gid:string)=>void}} o
+ * @param {{title:string, rows:object[], today:string, state:{group:string,period:string,q:string,page:number}, readOnly:boolean, onClose:()=>void, onResolve:(gid:string)=>void,
+ *   onOpenRow?:(row:object)=>void, canResolve?:(row:object)=>boolean}} o
+ * onOpenRow가 있으면 지도 전체 표(R11 FU6-4): 줄마다 업무 이름 칸이 생기고, 줄을 누르면 onOpenRow(row)(그 업무 카드의 그 줄). canResolve: 줄마다 「해결로 표시」를 보일지(없으면 readOnly만 본다)
  * rows: 최신이 위인 이력 줄(view/card.js historyRows). state는 부르는 쪽이 들고 있다가 다시 그릴 때 넘긴다(바뀐 값은 여기서 state에 적는다)
  */
 export function historyTablePanel(o) {
@@ -38,14 +40,15 @@ export function historyTablePanel(o) {
     const page = pageRows(f, state.page);
     body.replaceChildren(page.shown.length
       ? el('table', { class: 'ht-table', 'data-testid': 'history-table' },
-        el('thead', {}, el('tr', {}, el('th', {}, '날짜'), el('th', {}, '범주'), el('th', {}, '내용'), el('th', {}, '상태'))),
-        el('tbody', {}, ...page.shown.map((r) => el('tr', { 'data-testid': 'ht-row', 'data-gid': r.gid, class: r.after ? 'after' : '' },
+        el('thead', {}, el('tr', {}, el('th', {}, '날짜'), el('th', {}, '범주'), o.onOpenRow ? el('th', {}, '업무') : null, el('th', {}, '내용'), el('th', {}, '상태'))),
+        el('tbody', {}, ...page.shown.map((r) => el('tr', { 'data-testid': 'ht-row', 'data-gid': r.gid, class: `${r.after ? 'after' : ''}${o.onOpenRow ? ' ht-open-row' : ''}`, onclick: o.onOpenRow ? () => o.onOpenRow(r) : undefined },
           el('td', { class: 'muted small nowrap' }, r.date),
           el('td', {}, el('span', { class: 'chip' }, r.type_label)),
+          o.onOpenRow ? el('td', {}, el('button', { type: 'button', class: 'link', 'data-testid': 'ht-open-row', title: '그 업무 카드의 이 기록 줄로 갑니다', onclick: (e) => { e.stopPropagation(); o.onOpenRow(r); } }, r.target || '보기')) : null,
           el('td', {}, r.text),
           el('td', { class: 'nowrap' },
             r.status === '미해결' ? el('span', { class: 'chip warn', 'data-testid': 'ht-open' }, '미해결') : r.status ? el('span', { class: 'muted small' }, r.status) : null,
-            r.status === '미해결' && !o.readOnly ? el('button', { type: 'button', class: 'small-btn', 'data-testid': 'ht-resolve', onclick: () => o.onResolve(r.gid) }, '해결로 표시') : null)))))
+            r.status === '미해결' && !o.readOnly && (!o.canResolve || o.canResolve(r)) ? el('button', { type: 'button', class: 'small-btn', 'data-testid': 'ht-resolve', onclick: (e) => { e.stopPropagation(); o.onResolve(r.gid); } }, '해결로 표시') : null)))))
       : el('p', { class: 'muted', 'data-testid': 'ht-empty' }, '조건에 맞는 기록이 없습니다.'));
     foot.replaceChildren(...[
       el('span', { class: 'muted small', 'data-testid': 'ht-count' }, `${page.total}건 중 ${page.shownCount}건 표시`),
