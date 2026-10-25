@@ -85,22 +85,28 @@ export function personsIn(display) {
  * @returns {null | {nodes:object[], edges:object[], rootGid:string, collapsed:Map, expandable:Set, center:string, depth:number, neighbor_count:number}}
  *   노드가 없거나 숨겨졌으면 null. 이웃이 없으면 neighbor_count 0(화면은 바꾸지 않는다 — ui 몫)
  */
-export function neighborhoodDisplay(view, gid, depth = 1) {
+export function neighborhoodDisplay(view, gid, depth = 1, opts = {}) {
   const center = view.canonical(gid);
   const node = view.getNode(center);
   if (!node || node.hidden) return null;
   const { nodes, edges } = view.visible();
+  // CR-22 G: 기준일에 유효하지 않은 연결(skipEdges: 연결 gid 집합)은 따라가지 않는다. 그 연결로만 닿는 항목은 주변에 나오지 않는다
+  const skip = opts.skipEdges || null;
   const adj = new Map(nodes.map((n) => [n.gid, []]));
   for (const e of edges) {
     if (!adj.has(e.source) || !adj.has(e.target)) continue;
+    if (skip && skip.has(e.gid)) continue;
     adj.get(e.source).push(e.target);
     adj.get(e.target).push(e.source);
   }
+  // CR-22 G: 지도 중심(꼭지)은 끝점으로만 나온다. 가운데 항목이 아닌 꼭지를 지나 그 너머로 퍼지면 「포함」 연결로 지도 전체가 나온다
+  const isRoot = new Map(nodes.map((n) => [n.gid, n.core_type === 'root']));
   const dist = new Map([[center, 0]]);
   const queue = [center];
   while (queue.length) {
     const g = queue.shift();
     if (dist.get(g) >= depth) continue;
+    if (g !== center && isRoot.get(g)) continue;
     for (const nb of adj.get(g) || []) {
       if (!dist.has(nb)) {
         dist.set(nb, dist.get(g) + 1);
@@ -119,6 +125,20 @@ export function neighborhoodDisplay(view, gid, depth = 1) {
     depth,
     neighbor_count: dist.size - 1,
   };
+}
+
+/**
+ * 기준일에 유효하지 않은 담당·소속 연결의 gid 집합(CR-22 G). 주변만 보기가 따라가지 않을 연결이다.
+ * ui/main.js의 timeOffIds와 같은 기준: performs·belongs_to만, 기간이 있는데 기준일에 current가 아닌 것.
+ * periodStatus(period, date)는 view/describe.js의 것을 넘긴다(순수 함수끼리 의존을 늘리지 않으려고 인자로 받는다).
+ */
+export function offPeriodEdgeIds(edges, date, periodStatus) {
+  const off = new Set();
+  for (const e of edges) {
+    if (!['performs', 'belongs_to'].includes(e.core_type)) continue;
+    if (periodStatus(e.period, date) !== 'current') off.add(e.gid);
+  }
+  return off;
 }
 
 /**

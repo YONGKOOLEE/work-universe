@@ -71,7 +71,19 @@
   #legend li { display: flex; align-items: center; gap: 6px; }
   .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
   .dot.ref { background: transparent; border: 2px dashed var(--muted); }
+  /* 범례의 유형 모양(CR-22 G 3): 그래프의 항목 모양과 같다 */
+  .dot.sh-round-rectangle { border-radius: 3px; }
+  .dot.sh-rectangle { border-radius: 0; }
+  .dot.sh-diamond { border-radius: 0; transform: rotate(45deg) scale(.72); }
+  .dot.sh-hexagon { border-radius: 0; clip-path: polygon(25% 4%, 75% 4%, 100% 50%, 75% 96%, 25% 96%, 0 50%); }
+  .dot.ring { background: transparent; border: 3px double; }
+  /* 그래프 오른쪽 아래 확대·축소·맞춤 단추(CR-22 G 4) */
+  .zoom-tools { position: absolute; right: 12px; bottom: 12px; z-index: 6; display: flex; gap: 4px; }
+  .zoom-tools button { min-width: 36px; height: 34px; padding: 0 10px; border-radius: 8px; font-size: 16px; line-height: 1; background: var(--panel-2); }
+  .zoom-tools button:last-child { font-size: 13px; }
   .legend-note { color: var(--muted); }
+  #legend .legend-visual { flex: 1 1 0; min-width: 160px; }
+  #legend .legend-visual span { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   aside { width: 380px; border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 16px; }
   /* 패널 넓게 보기(여섯 번째 검토 U-5): 초안·인사이트·통합 확인은 좁은 열에서 한 번에 6~8줄만 보인다 */
   main.wide aside { width: min(62vw, 860px); }

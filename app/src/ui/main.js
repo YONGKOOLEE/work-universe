@@ -48,7 +48,7 @@ import { TEXT_GROUPED_NOTE, isGroupedView } from '../rules/text-extract.js';
 import { convertDocument } from '../rules/doc-convert.js';
 import { convertDocumentWith, extractTextAsync, isLive } from '../llm/connector.js';
 import { DOC_EXAMPLE } from '../../data/doc-example.js';
-import { filterDisplay, foldedInside, neighborhoodDisplay, personsIn, searchNodes } from '../view/explore.js';
+import { filterDisplay, foldedInside, neighborhoodDisplay, offPeriodEdgeIds, personsIn, searchNodes } from '../view/explore.js';
 import { EXPLORE, exploreBar } from './explore.js';
 import { createTour } from './tour.js';
 import { helpPanel } from './help.js';
@@ -454,10 +454,16 @@ function start() {
 
   const graph = createGraph($('graph'), { onSelect: select, onToggle: toggle, getFilter: (d) => filterDisplay(d, filterState), onFlow: (on) => $('flowlayout').setAttribute('aria-pressed', String(on)) });
 
+  // 범례에 더할 강조 줄(공간 기능이 채운다: {key, label, color, ring?}). 지금은 없음
+  function legendMarks() {
+    return [];
+  }
+
   function renderLegend() {
     $('legend').replaceChildren(
       ...[
-        ...legendItems(display).map((i) => el('li', {}, el('span', { class: 'dot', style: `background:${i.color}` }), i.label)),
+        // 유형은 색과 모양을 함께(CR-22 G 3). 강조 줄(mark)은 공간 기능이 넘긴다: 색만, 또는 ring이면 겹테두리
+        ...legendItems(display, [], legendMarks()).map((i) => el('li', { 'data-testid': i.mark ? `legend-mark-${i.key}` : `legend-type-${i.key}` }, el('span', { class: `dot sh-${i.shape || 'ellipse'}${i.ring ? ' ring' : ''}`, style: i.ring ? `border-color:${i.color}` : `background:${i.color}` }), i.label)),
         display.collapsed.size
           ? el('li', { class: 'legend-note' }, el('span', { class: 'dot collapsed' }), LEGEND_COLLAPSED_TEXT)
           : null,
@@ -465,7 +471,9 @@ function start() {
         display.nodes.some((n) => n.merged_from && n.merged_from.length)
           ? el('li', { class: 'legend-note', 'data-testid': 'legend-merged' }, '숫자 없는 이중 테두리: 같은 사람으로 합친 항목')
           : null,
-        el('li', { class: 'legend-note', 'data-testid': 'legend-zoom' }, '마우스 휠: 확대·축소 · 빈 곳 끌기: 이동'),
+        // 모양·크기·선 읽는 법(CR-22 G 8)
+        // 한 줄로 두고 모자라면 줄임표(…)로 줄인다: 줄이 늘고 줄면 그래프 칸 높이가 바뀌어 폭을 바꿀 때 보던 가운데가 어긋난다
+        el('li', { class: 'legend-note legend-visual', 'data-testid': 'legend-visual', title: '크기 = 연결 수 · 화살표 = 시작 → 대상 · 흐린 점선 = 기준일에 맡은 일 없음 · 아주 옅은 선 = 지도 중심에 포함 · 휠 확대·축소, 빈 곳 끌기 이동' }, el('span', {}, '크기 = 연결 수 · 화살표 = 시작 → 대상 · 흐린 점선 = 맡은 일 없음')),
       ].filter(Boolean),
     );
   }
@@ -1642,6 +1650,11 @@ function start() {
     return off.filter((id) => shown.has(id) || display.edges.some((e) => e.gid === id));
   }
 
+  // 주변만 보기(CR-22 G)가 따라가지 않을 연결: timeOffIds와 같은 기준(기준일에 유효하지 않은 담당·소속)
+  function nbhdSkip() {
+    return offPeriodEdgeIds(view.visible().edges, viewDate || todayLocal(), periodStatus);
+  }
+
   function applyTime() {
     renderTimebar();
     graph.setTimeOff(timeOffIds());
@@ -1737,7 +1750,7 @@ function start() {
   }
 
   function enterNbhd(gid, depth) {
-    const d = neighborhoodDisplay(view, gid, depth);
+    const d = neighborhoodDisplay(view, gid, depth, { skipEdges: nbhdSkip() });
     if (!d) return;
     if (d.neighbor_count === 0) {
       // 이웃이 없으면 화면은 그대로 두고 알린다(R-17 ④)
@@ -1889,7 +1902,7 @@ function start() {
     if (rw && selected && !view.getNode(selected)) selected = null; // 그 시점에 없던 항목
     renderRewindBand();
     // 주변만 보기 중이면 그 노드와 이웃만. 가운데 노드가 사라졌거나(숨김) 고른 노드가 주변 밖이면(주변 밖에 노드 추가 등) 전체로 돌아가 다시 배치한다
-    let nd = nbhd ? neighborhoodDisplay(view, nbhd.center, nbhd.depth) : null;
+    let nd = nbhd ? neighborhoodDisplay(view, nbhd.center, nbhd.depth, { skipEdges: nbhdSkip() }) : null;
     if (nd && selected && !nd.nodes.some((n) => n.gid === view.canonical(selected))) nd = null;
     if (nd && nd.neighbor_count === 0) { // 이웃을 숨겨 혼자 남으면 들어갈 때(이어진 항목 없음)와 같은 규칙으로 전체로
       nd = null;
@@ -1935,6 +1948,7 @@ function start() {
     }
     refresh();
     graph.relayout();
+    if (opening) graph.showOpened(universeId); // CR-22 G 7: 펼친 항목에 맞춰 화면을 맞추고 잠시 강조
   }
 
   function removeChild(childId, label) {
@@ -2387,6 +2401,8 @@ function start() {
   if (CHECK_MODE) window.__wu = {
     cy: graph.cy,
     firstViewInfo: () => graph.firstViewInfo(),
+    labelStats: () => graph.labelStats(), // CR-22 G 점검용: 이름 계산 결과 {zoom, shown, total}
+    refreshLabels: () => graph.refreshLabels(), // 확대 뒤 지연 계산을 기다리지 않고 지금 계산(시간 재기)
     select,
     toggle,
     get doc() {

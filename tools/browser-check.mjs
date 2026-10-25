@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { killOwnBrowsers, pickBrowsers } from './browsers.mjs';
 import { SAMPLE_A1 } from '../app/data/sample-a1.js';
+import { bigDoc } from './big-map.mjs';
 import { SAMPLES } from '../app/data/index.js';
 import { readEmbedFromHtml, stripEmbed } from '../app/src/view/embed.js';
 
@@ -24,6 +25,20 @@ const BROWSERS = [
 const NODES = SAMPLE_A1.nodes.length;
 const EDGES = SAMPLE_A1.edges.length;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// CR-22 G: 보이는 이름(숨김 아님·지워진 것 제외)끼리 겹친 쌍의 수와 보이는 이름 수. 이름 단계 표시는 겹치면 낮은 순위를 숨기므로 이 값의 겹침은 0이어야 한다
+const NAME_OVERLAP_JS = `(() => {
+  const cy = window.__wu.cy; const boxes = [];
+  cy.nodes().forEach((n) => {
+    if (n.hasClass('tiny-label') || n.hasClass('filtered-out') || n.style('display') === 'none' || !n.pstyle('label').strValue) return;
+    const b = n.renderedBoundingBox({ includeNodes: false, includeEdges: false, includeLabels: true, includeMainLabels: true, includeOverlays: false });
+    if (b && Number.isFinite(b.x1) && b.w > 0) boxes.push({ id: n.id(), b, root: n.data('core_type') === 'root' });
+  });
+  // 지도 중심 이름은 「늘 보임」(C10-6)이라 서로 겹쳐도 숨기지 않는다: 두 지도 중심끼리 겹친 쌍은 rootPairs로 따로 센다
+  let pairs = 0;
+  let rootPairs = 0;
+  for (let i = 0; i < boxes.length; i += 1) for (let j = i + 1; j < boxes.length; j += 1) { const a = boxes[i].b; const c = boxes[j].b; if (a.x1 < c.x2 - 1 && c.x1 < a.x2 - 1 && a.y1 < c.y2 - 1 && c.y1 < a.y2 - 1) { if (boxes[i].root && boxes[j].root) rootPairs += 1; else pairs += 1; } }
+  return { pairs, rootPairs, shown: boxes.length, total: cy.nodes().length };
+})()`;
 
 async function launch(exe, profileDir, port, retry = true) {
   const proc = spawn(exe, [
@@ -1659,7 +1674,9 @@ async function checkBrowser(browser, port) {
     const tinyBack = await evaluate(s.cdp, "window.__wu.cy.nodes('.tiny-label').length");
     // 배율 자체는 「다시 정렬」 결과가 그래프 영역 크기에 따라 달라 첫 화면과 같지 않다(T-18 전부터 그랬음: 첫 화면 0.612 → 다시 정렬 0.668). 판정은 이름이 숨지 않는지와 화면 밖 노드
     const offBack = await evaluate(s.cdp, "(() => { const cy = window.__wu.cy; return cy.nodes().filter((n) => { const p = n.renderedPosition(); return p.x < 0 || p.y < 0 || p.x > cy.width() || p.y > cy.height(); }).length; })()");
-    check('T-18 재검증 R1: 하위 유니버스를 펼쳤다 접으면 숨은 이름 0, 화면 밖 노드 0(배율이 첫 화면과 비슷)', tinyBack === 0 && offBack === 0 && backZoom > firstZoom * 0.75, `${firstZoom.toFixed(3)} → ${backZoom.toFixed(3)}, 숨김 ${tinyBack}, 밖 ${offBack}`);
+    // CR-22 G: 이름은 「작아서 숨김」에서 「겹치면 낮은 순위 숨김」으로 바뀌었다. 숨은 이름이 있어도 보이는 이름끼리 겹치지 않고(0쌍) 대부분(3분의 2 이상)이 보이면 같은 뜻의 점검이다
+    const nameBack = await evaluate(s.cdp, NAME_OVERLAP_JS);
+    check('T-18 재검증 R1: 하위 유니버스를 펼쳤다 접으면 보이는 이름끼리 겹침 0·이름 3분의 2 이상 보임, 화면 밖 노드 0(배율이 첫 화면과 비슷)', nameBack.pairs === 0 && tinyBack * 3 <= nameBack.total && offBack === 0 && backZoom > firstZoom * 0.75, `${firstZoom.toFixed(3)} → ${backZoom.toFixed(3)}, 숨김 ${tinyBack}, 겹침 ${nameBack.pairs}, 밖 ${offBack}`);
     const shownCount = () => evaluate(s.cdp, 'window.__wu.cy.nodes().length');
     // 렌더된 글자 크기(px) = 글자 크기 × 확대 배율
     const renderedPx = (gid) => evaluate(s.cdp, `(() => { const n = window.__wu.cy.getElementById(${JSON.stringify(gid)}); return n.empty() ? -1 : n.pstyle('font-size').pfValue * window.__wu.cy.zoom(); })()`);
@@ -1787,8 +1804,10 @@ async function checkBrowser(browser, port) {
     await sleep(600);
     await evaluate(s.cdp, "document.getElementById('fit').click()");
     await sleep(400);
-    const small = await evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const z = cy.zoom(); const all = cy.nodes(); const tiny = all.filter((n) => n.pstyle('font-size').pfValue * z < 6); const hidden = all.filter((n) => n.hasClass('tiny-label') && Number(n.pstyle('text-opacity').value) === 0); const mismatch = all.filter((n) => (n.pstyle('font-size').pfValue * z < 6) !== n.hasClass('tiny-label')); return { total: all.length, tiny: tiny.length, hidden: hidden.length, mismatch: mismatch.length, zoom: z }; })()");
-    check('R-17 ⑦ 모두 펼친 부서 화면: 화면에서 6px보다 작은 이름은 모두 숨기고, 6px 이상은 보임(판정 불일치 0)', small.total >= 60 && small.tiny > 0 && small.hidden === small.tiny && small.mismatch === 0, JSON.stringify(small));
+    // CR-22 G: 판정 규칙이 「6px 미만 숨김」에서 「이름 글자는 화면 11px 이상 고정, 겹치면 낮은 순위 숨김」으로 바뀌었다(기대값만 바꿈)
+    const small = await evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const z = cy.zoom(); const all = cy.nodes(); const px = all.map((n) => n.pstyle('font-size').pfValue * z); const hidden = all.filter((n) => n.hasClass('tiny-label') && Number(n.pstyle('text-opacity').value) === 0); const bad = all.filter((n) => n.hasClass('tiny-label') !== (Number(n.pstyle('text-opacity').value) === 0)); return { total: all.length, minPx: Math.min(...px), hidden: hidden.length, bad: bad.length, zoom: z }; })()");
+    const smallOv = await evaluate(s.cdp, NAME_OVERLAP_JS);
+    check('R-17 ⑦ 모두 펼친 부서 화면: 이름 글자는 화면 11px 이상, 겹치는 이름은 낮은 순위부터 숨겨 보이는 이름끼리 겹침 0·이름이 20개 이상 보임', small.total >= 60 && small.minPx >= 10.9 && small.hidden > 0 && small.bad === 0 && smallOv.pairs === 0 && smallOv.shown >= 20, JSON.stringify({ ...small, ...smallOv }));
     // T-18 재검증 R1~R3: 키운 이름(꼭지 11px 등)이 배치·맞춤 계산에 들어가 화면 밖으로 넘치거나 「다시 정렬」마다 모양이 달라지면 안 된다
     const geo = () => evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const w = cy.width(), h = cy.height(); const off = cy.nodes().filter((n) => { const p = n.renderedPosition(); return p.x < 0 || p.y < 0 || p.x > w || p.y > h; }).length; const pos = cy.nodes().map((n) => Math.round(n.position('x')) + ',' + Math.round(n.position('y'))).join(';'); return { z: +cy.zoom().toFixed(3), off, pos }; })()");
     await evaluate(s.cdp, "document.getElementById('relayout').click()");
@@ -1803,7 +1822,8 @@ async function checkBrowser(browser, port) {
     await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: hp.x, y: hp.y });
     await sleep(250);
     const hoverPx = await renderedPx(hoverGid);
-    check('R-17 ⑦ 마우스를 올린 노드 이름은 화면에서 15px 이상', hoverPx >= 14.9, `${hoverPx.toFixed(1)}px (배율 ${small.zoom.toFixed(2)})`);
+    // CR-22 G: 올린 노드 이름은 크게(화면 14~16px, 이전 15px 이상)
+    check('R-17 ⑦ 마우스를 올린 노드 이름은 화면에서 14px 이상', hoverPx >= 13.9, `${hoverPx.toFixed(1)}px (배율 ${small.zoom.toFixed(2)})`);
     await shot(s.cdp, `${browser.name}-15-dept-expanded-hover`);
     // 노드에서 그래프 밖(머리글)으로 바로 나가도 원래 크기로(mouseleave)
     await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 5 });
@@ -2311,10 +2331,17 @@ async function checkBrowser(browser, port) {
     for (let i = 0; i < boxes.length; i += 1) for (let j = i + 1; j < boxes.length; j += 1) if (hit(boxes[i], boxes[j])) pairs += 1;
     const others = cy.nodes().filter((x) => !names.includes(x.data('label')));
     let withOthers = 0;
-    for (const b of boxes) for (const o of others) { const p = o.position(); const r = 12; if (b.x1 < p.x + r && b.x2 > p.x - r && b.y1 < p.y + r && b.y2 > p.y - r) withOthers += 1; }
-    return { pairs, withOthers, n: boxes.length };
+    // CR-22 G: 「기존 노드 위에 놓이지 않음」은 새 노드의 몸통(도형)이 기존 노드를 덮지 않는 것으로 잰다(이름 상자는 배율마다 커져 모델 좌표로는 잴 수 없음)
+    const shownBoxes = names.map((n) => cy.nodes().filter((x) => x.data('label') === n)).map((c) => c.boundingBox({ includeLabels: false }));
+    for (const b of shownBoxes) for (const o of others) { const p = o.position(); const r = 12; if (b.x1 < p.x + r && b.x2 > p.x - r && b.y1 < p.y + r && b.y2 > p.y - r) withOthers += 1; }
+    // CR-22 G: 이름 글자가 화면 11px로 고정돼 그래프 좌표의 이름 상자가 배율마다 달라진다(0.3배면 3배). 그래서 「서로 이름이 겹침」은 모델 좌표의 상자가 아니라
+    // 화면에 보이는 이름(숨기지 않은 이름) 기준으로 잰다. 겹치는 이름은 이름 단계 표시가 숨기므로 보이는 이름끼리는 겹치지 않아야 하고, 8개 중 절반 이상은 보여야 한다
+    const rb = names.map((n) => cy.nodes().filter((x) => x.data('label') === n)).filter((c) => !c.hasClass('tiny-label')).map((c) => c.renderedBoundingBox({ includeNodes: false, includeEdges: false, includeLabels: true, includeMainLabels: true, includeOverlays: false }));
+    let shownPairs = 0;
+    for (let i = 0; i < rb.length; i += 1) for (let j = i + 1; j < rb.length; j += 1) if (rb[i].x1 < rb[j].x2 - 1 && rb[j].x1 < rb[i].x2 - 1 && rb[i].y1 < rb[j].y2 - 1 && rb[j].y1 < rb[i].y2 - 1) shownPairs += 1;
+    return { pairs, shownPairs, shown: rb.length, withOthers, n: boxes.length, zoom: +cy.zoom().toFixed(3) };
   })()`);
-  check('B-P4: 긴 이름 노드 8개를 한 번에 넣어도 서로 이름이 겹치지 않고 기존 노드 위에도 놓이지 않음', overlap.n === 8 && overlap.pairs === 0 && overlap.withOthers === 0, JSON.stringify(overlap));
+  check('B-P4: 긴 이름 노드 8개를 한 번에 넣어도 보이는 이름끼리 겹치지 않고(절반 이상 보임) 기존 노드 위에도 놓이지 않음', overlap.n === 8 && overlap.shownPairs === 0 && overlap.shown >= 4 && overlap.withOthers === 0, JSON.stringify(overlap));
   await shot(s.cdp, `${browser.name}-19c-long-names`);
   // ── 담당 이력 ↔ 수행 연결(조력자 의견 2026-10-12) + 이력 많을 때 접기 ──
   await evaluate(s.cdp, "window.__wu.select(null)");
@@ -3666,7 +3693,9 @@ async function checkBrowser(browser, port) {
     if (await waRestore('U-D1')) {
       await evaluate(s.cdp, 'window.confirm = () => true');
       const waFirst = await evaluate(s.cdp, `(() => { const cy = window.__wu.cy; const root = cy.getElementById(window.__wu.display.rootGid); const c = document.getElementById('graph').getBoundingClientRect(); const p = root.renderedPosition(); const name = cy.nodes().filter((n) => n.data('core_type') !== 'root' && n.visible()).first(); return { zoom: cy.zoom(), namePx: name.empty() ? 0 : name.pstyle('font-size').pfValue * cy.zoom(), tiny: cy.nodes('.tiny-label').length, dx: Math.abs(p.x - c.width / 2), dy: Math.abs(p.y - c.height / 2), nodes: cy.nodes().length }; })()`);
-      check('W-A CR-18-1 부서 지도(가상 운영부)를 처음 열면 노드 이름이 화면에서 11px 이상으로 읽히고(작은 이름 숨김 0개) 지도 중심이 그래프 가운데', waFirst.nodes > 12 && waFirst.namePx >= 10.9 && waFirst.tiny === 0 && waFirst.dx < 60 && waFirst.dy < 60, JSON.stringify(waFirst));
+      // CR-22 G: 숨는 이름은 「작은 것」이 아니라 「겹친 것」이다. 보이는 이름끼리 겹침 0이고 이름의 4분의 3 이상이 보이면 같은 뜻
+      const waOv = await evaluate(s.cdp, NAME_OVERLAP_JS);
+      check('W-A CR-18-1 부서 지도(가상 운영부)를 처음 열면 노드 이름이 화면에서 11px 이상으로 읽히고(보이는 이름끼리 겹침 0·4분의 3 이상 보임) 지도 중심이 그래프 가운데', waFirst.nodes > 12 && waFirst.namePx >= 10.9 && waOv.pairs === 0 && waFirst.tiny * 4 <= waFirst.nodes && waFirst.dx < 60 && waFirst.dy < 60, JSON.stringify({ ...waFirst, ...waOv }));
       await shot(s.cdp, `${browser.name}-wa-first-scale`);
       await evaluate(s.cdp, "document.getElementById('fit').click()");
       await sleep(250);
@@ -5300,6 +5329,209 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(c21Snap)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); location.hash = 'U-A1'; location.reload(); })()`).catch(() => {});
     await sleep(500);
     await c21Wait('U-A1');
+  }
+
+  // ── CR-22 G 그래프 가독성(2026-10-26): 150개 지도(tools/big-map.mjs)에서 이름 단계 표시·휠·＋－맞춤·모양·포함 선·주변 2단계·팀 펼침 맞춤·창 크기와 무관한 배치.
+  //    데이터를 바꾸므로 시작 때 저장소를 찍어 두었다가 끝에서 되돌린다(CR-21 블록과 같은 방식) ──
+  {
+    const g22Snap = await evaluate(s.cdp, 'JSON.stringify(Object.entries(localStorage))');
+    const g22Go = async (hash, bigMap = false) => {
+      const put = bigMap ? `localStorage.setItem('wu:v1:u:U-A1', ${JSON.stringify(JSON.stringify(bigDoc()))});` : "localStorage.removeItem('wu:v1:u:U-A1');";
+      await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(g22Snap)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); ${put} location.hash = ${JSON.stringify(hash)}; location.reload(); })()`).catch(() => {});
+      await sleep(600);
+      const ok = await waitFor(s.cdp, `window.__wu && window.__wu.doc && window.__wu.doc.universe.id === ${JSON.stringify(hash)} && window.__wu.cy.nodes().length > 0`, 8000);
+      await sleep(500);
+      return ok;
+    };
+    const g22Zoom = () => evaluate(s.cdp, 'window.__wu.cy.zoom()');
+    const g22Mid = () => evaluate(s.cdp, "(() => { const r = document.getElementById('graph').getBoundingClientRect(); return { x: r.left + r.width / 2 + 7, y: r.top + r.height / 2 + 9 }; })()");
+    const g22Wheel = async (p, dy) => {
+      await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: p.x, y: p.y });
+      await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: p.x, y: p.y, deltaX: 0, deltaY: dy });
+      await sleep(120);
+    };
+    const g22Rect = (id) => evaluate(s.cdp, `(() => { const r = document.querySelector('[data-testid=${id}]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height }; })()`);
+    const g22Click = async (p) => { for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await s.cdp.send('Input.dispatchMouseEvent', { type, x: p.x, y: p.y, button: 'left', clickCount: 1 }); await sleep(150); };
+    // 모든 이름(숨김 여부와 상관없이)의 화면 글자 크기 최솟값·최댓값
+    const g22Px = () => evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const z = cy.zoom(); const px = cy.nodes().map((n) => n.pstyle('font-size').pfValue * z); return { min: Math.min(...px), max: Math.max(...px) }; })()");
+    // 그래프 칸 안에 보이는 이름 상자가 다 들어 있는지(잘림)
+    const g22Clipped = () => evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const W = cy.width(); const H = cy.height(); return cy.nodes().filter((n) => !n.hasClass('tiny-label') && n.pstyle('label').strValue).filter((n) => { const b = n.renderedBoundingBox({ includeNodes: true, includeEdges: false, includeLabels: true, includeOverlays: false }); return b.x1 < -1 || b.y1 < -1 || b.x2 > W + 1 || b.y2 > H + 1; }).length; })()");
+    const g22Pos = () => evaluate(s.cdp, "window.__wu.cy.nodes().map((n) => n.id() + ':' + Math.round(n.position('x')) + ',' + Math.round(n.position('y'))).join(';')");
+
+    if (await g22Go('U-A1', true)) {
+      // ── 이름 단계 표시(1)·글자 11px·겹침 0 ──
+      const first = await evaluate(s.cdp, NAME_OVERLAP_JS);
+      const px = await g22Px();
+      check('CR-22 G 150개 지도 첫 화면: 이름이 30개 이상 보이고(예전 1개) 보이는 이름끼리 겹침 0', (await evaluate(s.cdp, 'window.__wu.cy.nodes().length')) === 150 && first.shown >= 30 && first.pairs === 0, JSON.stringify(first));
+      check('CR-22 G 150개 지도 이름 글자는 화면 11px 이상(배율을 거슬러 고정)', px.min >= 10.9, JSON.stringify(px));
+      check('CR-22 G 150개 지도 첫 화면: 보이는 이름·항목이 칸 밖으로 잘리지 않음', (await g22Clipped()) === 0, String(await g22Clipped()));
+      const t0 = await evaluate(s.cdp, '(() => { const t = performance.now(); window.__wu.refreshLabels(); return performance.now() - t; })()');
+      check('CR-22 G 150개 지도 이름 계산이 가벼움(한 번에 400ms 미만)', t0 < 400, `${t0.toFixed(0)}ms`);
+      const prio = await evaluate(s.cdp, `(() => { const cy = window.__wu.cy; const vis = (t, hub) => cy.nodes('[core_type = "' + t + '"]').filter((n) => !n.hasClass('tiny-label') && (hub === undefined || (n.data('degree') >= 4) === hub)).length; const rootShown = cy.nodes('[core_type = "root"]').every((n) => !n.hasClass('tiny-label')); const tot = (t) => cy.nodes('[core_type = "' + t + '"]').length; return { rootShown, work: vis('work'), workTot: tot('work'), person: vis('person'), personTot: tot('person'), artifact: vis('artifact'), artifactTot: tot('artifact') }; })()`);
+      check('CR-22 G 우선순위: 지도 중심 이름은 보이고, 업무가 산출물보다 먼저(보이는 비율이 같거나 높음)', prio.rootShown && prio.work / prio.workTot >= prio.artifact / prio.artifactTot, JSON.stringify(prio));
+      await shot(s.cdp, `${browser.name}-g22-big-first`);
+
+      // ── 모양(3)·포함 선(2) ──
+      const shapes = await evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const out = {}; for (const t of ['root', 'person', 'work', 'artifact', 'topic', 'org']) { const set = new Set(cy.nodes('[core_type = \"' + t + '\"]').map((n) => n.pstyle('shape').strValue)); out[t] = [...set].join('|'); } return out; })()");
+      check('CR-22 G 모양: 사람 원·업무 둥근 사각·산출물 사각·주제 마름모·조직 육각·지도 중심 원', shapes.root === 'ellipse' && shapes.person === 'ellipse' && shapes.work === 'round-rectangle' && shapes.artifact === 'rectangle' && shapes.topic === 'diamond' && shapes.org === 'hexagon', JSON.stringify(shapes));
+      const cont = await evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const c = cy.edges('[?contains]'); const o = cy.edges().not(c).filter((e) => e.style('display') !== 'none'); return { n: c.length, opacity: [...new Set(c.map((e) => Number(e.pstyle('opacity').value).toFixed(2)))].join('|'), arrow: [...new Set(c.map((e) => e.pstyle('target-arrow-shape').strValue))].join('|'), label: c.filter((e) => e.pstyle('label').strValue !== '').length, otherOpacity: Math.min(...o.map((e) => Number(e.pstyle('opacity').value))), otherArrow: o.filter((e) => e.pstyle('target-arrow-shape').strValue === 'triangle').length, otherN: o.length }; })()");
+      check('CR-22 G 포함 선(지도 중심 → 항목): 투명 0.12·화살표 없음·이름 없음, 다른 연결은 또렷(투명 0.9 이상)·화살표 있음', cont.n >= 60 && cont.opacity === '0.12' && cont.arrow === 'none' && cont.label === 0 && cont.otherOpacity >= 0.9 && cont.otherArrow === cont.otherN, JSON.stringify(cont));
+      const rootPos = await evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const r = cy.nodes('[core_type = \"root\"]'); const others = cy.nodes().not(r); const bb = others.boundingBox({ includeLabels: false }); const p = r.position(); let near = Infinity; others.forEach((n) => { const q = n.position(); near = Math.min(near, Math.hypot(q.x - p.x, q.y - p.y) - n.data('size') / 2 - r.data('size') / 2); }); return { dx: Math.abs(p.x - (bb.x1 + bb.x2) / 2), dy: Math.abs(p.y - (bb.y1 + bb.y2) / 2), gap: near, span: Math.max(bb.w, bb.h) }; })()");
+      check('CR-22 G 지도 중심은 항목들의 한가운데에 놓이고 다른 항목과 겹치지 않음(포함 선은 배치에서 제외)', rootPos.dx < 2 && rootPos.dy < 2 && rootPos.gap >= 0, JSON.stringify(rootPos));
+      check('CR-22 G 연결선 색은 배경과 대비 3:1 이상', await evaluate(s.cdp, "(() => { const lin = (c) => { const s = c / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; }; const lum = (h) => { const v = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); return 0.2126 * lin(v[0]) + 0.7152 * lin(v[1]) + 0.0722 * lin(v[2]); }; const e = window.__wu.cy.edges().filter((x) => !x.data('contains') && !x.data('synthetic'))[0]; const col = e.pstyle('line-color').strValue; const hex = '#' + col.match(/\\d+/g).slice(0, 3).map((n) => Number(n).toString(16).padStart(2, '0')).join(''); const a = lum(hex); const b = lum('#0f1510'); return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) >= 3; })()"));
+
+      // ── 휠(4): 한 칸 ×1.15, 마우스 위치 기준, 터치패드의 작은 값은 연속 ──
+      check('CR-22 G 휠은 라이브러리가 아니라 직접 처리(userZoomingEnabled false)', (await evaluate(s.cdp, 'window.__wu.cy.userZoomingEnabled()')) === false);
+      const mid = await g22Mid();
+      const model = () => evaluate(s.cdp, `(() => { const cy = window.__wu.cy; const r = document.getElementById('graph').getBoundingClientRect(); const z = cy.zoom(); const p = cy.pan(); return { x: (${mid.x} - r.left - p.x) / z, y: (${mid.y} - r.top - p.y) / z }; })()`);
+      const z0 = await g22Zoom();
+      const m0 = await model();
+      await g22Wheel(mid, -100);
+      const z1 = await g22Zoom();
+      const m1 = await model();
+      check('CR-22 G 휠 한 칸(위로) = 배율 ×1.15, 마우스가 가리키던 자리는 그대로(마우스 기준 확대)', Math.abs(z1 / z0 - 1.15) < 0.005 && Math.abs(m1.x - m0.x) < 0.5 && Math.abs(m1.y - m0.y) < 0.5, `${(z1 / z0).toFixed(4)} ${JSON.stringify([m0, m1])}`);
+      await g22Wheel(mid, 100);
+      const z2 = await g22Zoom();
+      check('CR-22 G 휠 한 칸(아래로) = 한 칸 되돌림', Math.abs(z2 / z1 - 1 / 1.15) < 0.005 && Math.abs(z2 - z0) < 0.002, `${z0} → ${z1} → ${z2}`);
+      await g22Wheel(mid, -5);
+      const z3 = await g22Zoom();
+      check('CR-22 G 터치패드처럼 작은 휠 값은 연속 배율(exp(-deltaY × 0.01))', Math.abs(z3 / z2 - Math.exp(0.05)) < 0.003, `${(z3 / z2).toFixed(4)}`);
+      await g22Wheel(mid, 100); // 되돌리지 않고 작게: 아래로 한 칸 = ÷1.15, 위 -5와 합쳐 원래 근처
+      let notches = 0;
+      const zs = await g22Zoom();
+      while (notches < 12 && (await g22Zoom()) < zs * 2) { await g22Wheel(mid, -100); notches += 1; }
+      check('CR-22 G 휠로 배율 2배까지 5~6칸(예전 81칸)', notches >= 4 && notches <= 6, `${notches}칸`);
+      // 확대하면 숨었던 이름이 나온다
+      await evaluate(s.cdp, "document.getElementById('fit').click()");
+      await sleep(500);
+      const hiddenBefore = await evaluate(s.cdp, "window.__wu.cy.nodes().filter((n) => n.hasClass('tiny-label')).map((n) => n.id())");
+      const shownBefore = (await evaluate(s.cdp, NAME_OVERLAP_JS)).shown;
+      const hid = await evaluate(s.cdp, `(() => { const cy = window.__wu.cy; const w = cy.width(); const h = cy.height(); const id = ${JSON.stringify(hiddenBefore)}.map((i) => cy.getElementById(i)).filter((n) => n.data('core_type') === 'work').sort((a, b) => Math.hypot(a.renderedPosition().x - w / 2, a.renderedPosition().y - h / 2) - Math.hypot(b.renderedPosition().x - w / 2, b.renderedPosition().y - h / 2))[0]; const r = document.getElementById('graph').getBoundingClientRect(); const p = id.renderedPosition(); return { id: id.id(), x: r.left + p.x, y: r.top + p.y }; })()`);
+      for (let k = 0; k < 8; k += 1) await g22Wheel(hid, -100);
+      await sleep(250);
+      const afterZoom = await evaluate(s.cdp, `(() => { const n = window.__wu.cy.getElementById(${JSON.stringify(hid.id)}); const c = window.__wu.cy; const p = n.renderedPosition(); return { hidden: n.hasClass('tiny-label'), inView: p.x >= 0 && p.x <= c.width() && p.y >= 0 && p.y <= c.height(), zoom: c.zoom() }; })()`);
+      const ovAfter = await evaluate(s.cdp, NAME_OVERLAP_JS);
+      check('CR-22 G 확대하면 숨었던 이름이 나오고, 확대한 화면에서도 보이는 이름끼리 겹침 0', hiddenBefore.length > 0 && !afterZoom.hidden && afterZoom.inView && ovAfter.pairs === 0, JSON.stringify({ hid: hid.id, ...afterZoom, ...ovAfter, shownBefore }));
+      await shot(s.cdp, `${browser.name}-g22-big-zoomed`);
+
+      // ── ＋ ・ － ・ 맞춤 단추(4) ──
+      await evaluate(s.cdp, "document.getElementById('fit').click()");
+      await sleep(400);
+      const btnIn = await g22Rect('zoom-in');
+      const btnOut = await g22Rect('zoom-out');
+      const btnFit = await g22Rect('zoom-fit');
+      const gb = await evaluate(s.cdp, "(() => { const r = document.getElementById('graph').getBoundingClientRect(); return { right: r.right, bottom: r.bottom, left: r.left, top: r.top }; })()");
+      check('CR-22 G ＋·－·맞춤 단추가 그래프 오른쪽 아래 구석에 있고 크기가 충분(높이 30px 이상)', btnIn.h >= 30 && btnOut.h >= 30 && btnFit.h >= 30 && btnFit.x > gb.left + (gb.right - gb.left) / 2 && btnFit.y > gb.top + (gb.bottom - gb.top) / 2 && btnFit.x < gb.right && btnFit.y < gb.bottom, JSON.stringify([btnIn, btnOut, btnFit, gb]));
+      await evaluate(s.cdp, "window.__wu.select('U-A1/N-500')");
+      await sleep(250);
+      const zb0 = await g22Zoom();
+      await g22Click(btnIn);
+      const zb1 = await g22Zoom();
+      await g22Click(btnOut);
+      const zb2 = await g22Zoom();
+      check('CR-22 G ＋ 한 번 = 배율 ×1.3, － 한 번 = 되돌림, 누르는 동안 고른 항목은 그대로(빈 곳 누름으로 번지지 않음)', Math.abs(zb1 / zb0 - 1.3) < 0.01 && Math.abs(zb2 - zb0) < 0.002 && (await evaluate(s.cdp, 'window.__wu.selected')) === 'U-A1/N-500', `${zb0.toFixed(3)} → ${zb1.toFixed(3)} → ${zb2.toFixed(3)}`);
+      for (let k = 0; k < 3; k += 1) await g22Click(btnIn);
+      await g22Click(btnFit);
+      await sleep(150);
+      const fitZ = await g22Zoom();
+      const inside = await evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const W = cy.width(); const H = cy.height(); return cy.nodes().every((n) => { const b = n.renderedBoundingBox({ includeLabels: false }); return b.x1 >= 0 && b.y1 >= 0 && b.x2 <= W && b.y2 <= H; }); })()");
+      check('CR-22 G 맞춤 단추: 확대한 뒤 눌러도 모든 항목이 칸 안에 들어오고 첫 화면 배율과 같음', inside && Math.abs(fitZ - z0) < 0.01, `${fitZ.toFixed(3)} vs ${z0.toFixed(3)}`);
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+
+      // ── 고르기(5): 이웃 이름도 크게, 관계 글자는 고른 항목의 연결만 11px ──
+      await evaluate(s.cdp, "window.__wu.select('U-A1/N-500')");
+      await sleep(300);
+      const pick = await evaluate(s.cdp, `(() => { const cy = window.__wu.cy; const z = cy.zoom(); const n = cy.getElementById('U-A1/N-500'); const hood = n.closedNeighborhood().nodes(); const nb = hood.not(n); const nbPx = nb.map((x) => x.pstyle('font-size').pfValue * z); const others = cy.nodes().not(hood).filter((x) => x.data('core_type') !== 'root').map((x) => x.pstyle('font-size').pfValue * z); const lab = cy.edges().filter((e) => e.style('display') !== 'none' && e.pstyle('label').strValue !== ''); const mine = n.connectedEdges().filter((e) => !e.data('contains')); const labPx = lab.map((e) => e.pstyle('font-size').pfValue * z); return { nbMin: Math.min(...nbPx), nbN: nb.length, othersMax: Math.max(...others), labelled: lab.length, mine: mine.length, labMin: Math.min(...labPx), labMax: Math.max(...labPx), selfShown: !n.hasClass('tiny-label'), nbShown: nb.filter((x) => !x.hasClass('tiny-label')).length }; })()`);
+      const pickOv = await evaluate(s.cdp, NAME_OVERLAP_JS);
+      check('CR-22 G 고르면 고른 항목과 이웃 이름이 크게(화면 14px 이상, 나머지는 11px), 이름이 보이고 겹침 0', pick.nbN >= 2 && pick.nbMin >= 13.9 && pick.othersMax < 11.5 && pick.selfShown && pick.nbShown >= 1 && pickOv.pairs === 0, JSON.stringify({ ...pick, ...pickOv }));
+      check('CR-22 G 고르면 관계 글자는 고른 항목의 연결에만(그 수와 같음) 화면 11px로 보임', pick.labelled === pick.mine && pick.mine >= 2 && Math.abs(pick.labMin - 11) < 0.2 && Math.abs(pick.labMax - 11) < 0.2, JSON.stringify(pick));
+      await shot(s.cdp, `${browser.name}-g22-big-picked`);
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await sleep(250);
+
+      // ── 주변만 보기(6) ──
+      await evaluate(s.cdp, "window.__wu.select('U-A1/N-600')");
+      await sleep(200);
+      await clickTestId(s.cdp, 'btn-nbhd');
+      await sleep(500);
+      const n1 = await evaluate(s.cdp, 'window.__wu.cy.nodes().length');
+      await clickTestId(s.cdp, 'nbhd-depth');
+      await sleep(600);
+      const n2 = await evaluate(s.cdp, 'window.__wu.cy.nodes().length');
+      check('CR-22 G 주변만 보기 2단계(사람 한 명)가 전체가 되지 않음: 지도 중심은 끝점으로만(전체 150개의 절반 미만)', n1 >= 3 && n2 > n1 && n2 < 75, `${n1} → ${n2} / 150`);
+      await shot(s.cdp, `${browser.name}-g22-big-nbhd2`);
+      await evaluate(s.cdp, "document.getElementById('fit').click()");
+      await sleep(500);
+      // 모든 담당·소속이 끝난 사람(N-622): 끝난 연결을 따라가지 않으므로 이웃이 없음 → 알림만, 화면은 그대로
+      await evaluate(s.cdp, "window.__wu.select('U-A1/N-622')");
+      await sleep(200);
+      await clickTestId(s.cdp, 'btn-nbhd');
+      await sleep(400);
+      check('CR-22 G 주변만 보기: 기준일에 끝난 담당·소속뿐인 사람은 이웃이 없음(「이어진 항목 없음」, 선 없는 사람이 떠 있지 않음)', (await evaluate(s.cdp, 'window.__wu.nbhd')) === null && (await evaluate(s.cdp, 'window.__wu.cy.nodes().length')) === 150 && (await evaluate(s.cdp, "document.body.textContent.includes('이어진 항목 없음')")), String(await evaluate(s.cdp, 'window.__wu.cy.nodes().length')));
+    } else check('CR-22 G 150개 지도', false, '150개 지도가 열리지 않음');
+
+    // ── 카드승인(38개): 첫 화면 이름·창 크기와 무관한 배치(9)·첫 맞춤 ──
+    if (await g22Go('U-K1')) {
+      const k1 = await evaluate(s.cdp, NAME_OVERLAP_JS);
+      check('CR-22 G 카드승인(38개) 첫 화면: 이름 25개 이상(예전 모두 7.5px), 겹침 0, 글자 11px 이상, 잘림 0', k1.total === 38 && k1.shown >= 25 && k1.pairs === 0 && (await g22Px()).min >= 10.9 && (await g22Clipped()) === 0, JSON.stringify(k1));
+      await shot(s.cdp, `${browser.name}-g22-k1-first`);
+      const wasPos = await g22Pos();
+      await evaluate(s.cdp, "document.getElementById('relayout').click()");
+      await sleep(700);
+      const pos1 = await g22Pos();
+      await s.cdp.send('Emulation.setDeviceMetricsOverride', { width: 1000, height: 640, deviceScaleFactor: 1, mobile: false });
+      await sleep(600);
+      await evaluate(s.cdp, "document.getElementById('relayout').click()");
+      await sleep(700);
+      const pos2 = await g22Pos();
+      await s.cdp.send('Emulation.clearDeviceMetricsOverride');
+      await sleep(600);
+      check('CR-22 G 「다시 정렬」 결과(항목 자리)는 창 크기와 무관(1280×800 ↔ 1000×640 같음)·처음 배치와도 같음', pos1 === pos2 && pos1 === wasPos, pos1 === pos2 ? '처음 배치와 다름' : '창 크기에 따라 달라짐');
+      // 고른 항목 이름 선택·마우스 올림: 올린 항목과 이웃이 크게, 떼면 원래대로
+      const hoverGid = await evaluate(s.cdp, "window.__wu.cy.nodes('[core_type = \"work\"]').sort((a, b) => b.degree() - a.degree())[0].id()");
+      const hp = await evaluate(s.cdp, `(() => { const n = window.__wu.cy.getElementById(${JSON.stringify(hoverGid)}); const p = n.renderedPosition(); const r = document.getElementById('graph').getBoundingClientRect(); return { x: r.left + p.x, y: r.top + p.y }; })()`);
+      await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: hp.x, y: hp.y });
+      await sleep(300);
+      const hv = await evaluate(s.cdp, `(() => { const cy = window.__wu.cy; const z = cy.zoom(); const n = cy.getElementById(${JSON.stringify(hoverGid)}); const nb = n.neighborhood('node'); return { self: n.pstyle('font-size').pfValue * z, nb: Math.min(...nb.map((x) => x.pstyle('font-size').pfValue * z)), shown: !n.hasClass('tiny-label'), nbN: nb.length, nbShown: nb.filter((x) => !x.hasClass('tiny-label')).length }; })()`);
+      check('CR-22 G 마우스를 올린 항목과 이웃의 이름은 14px 이상, 올린 항목 이름은 보이고 이웃 이름은 절반 이상 보임', hv.self >= 13.9 && hv.nb >= 13.9 && hv.shown && hv.nbShown * 2 >= hv.nbN, JSON.stringify(hv));
+      await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 5 });
+      await sleep(300);
+      const hv2 = await evaluate(s.cdp, `(() => { const cy = window.__wu.cy; const z = cy.zoom(); const n = cy.getElementById(${JSON.stringify(hoverGid)}); const nb = n.neighborhood('node').filter((x) => x.data('core_type') !== 'root'); return { self: n.pstyle('font-size').pfValue * z, nb: Math.max(...nb.map((x) => x.pstyle('font-size').pfValue * z)) }; })()`);
+      check('CR-22 G 마우스를 떼면 이름 크기가 원래(11px 안팎)로', hv2.self < 12 && hv2.nb < 12, JSON.stringify(hv2));
+    } else check('CR-22 G 카드승인 지도', false, 'U-K1이 열리지 않음');
+
+    // ── 팀 펼치기(7): 펼친 항목에 맞춰 화면 맞춤·강조, 올리기 강조 해제 ──
+    if (await g22Go('U-D1')) {
+      const uid = await evaluate(s.cdp, '[...window.__wu.display.collapsed.entries()].sort((a, b) => b[1].hidden_count - a[1].hidden_count)[0][0]');
+      const rp = await evaluate(s.cdp, `(() => { const n = window.__wu.cy.getElementById(window.__wu.display.collapsed.get(${JSON.stringify(uid)}).root_gid); const p = n.renderedPosition(); const r = document.getElementById('graph').getBoundingClientRect(); return { x: r.left + p.x, y: r.top + p.y }; })()`);
+      await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: rp.x, y: rp.y });
+      await sleep(250);
+      const hoverOn = await evaluate(s.cdp, "window.__wu.cy.nodes('.hover').length");
+      await evaluate(s.cdp, `window.__wu.toggle(${JSON.stringify(uid)})`);
+      await sleep(700);
+      const op = await evaluate(s.cdp, `(() => { const cy = window.__wu.cy; const W = cy.width(); const H = cy.height(); const opened = cy.nodes().filter((n) => n.data('universe_id') === ${JSON.stringify(uid)}); const inside = opened.filter((n) => { const b = n.renderedBoundingBox({ includeLabels: false }); return b.x1 >= 0 && b.y1 >= 0 && b.x2 <= W && b.y2 <= H; }).length; return { opened: opened.length, inside, flashed: cy.nodes('.just-opened').length, hover: cy.nodes('.hover').length, faded: cy.nodes('.faded').length, zoom: cy.zoom() }; })()`);
+      check('CR-22 G 팀을 펼치면 펼친 항목이 모두 화면 안에 들어오게 맞추고 강조, 올려 둔 강조는 풀림', hoverOn >= 0 && op.opened >= 1 && op.inside === op.opened && op.flashed === op.opened && op.hover === 0 && op.faded === 0 && op.zoom <= 1.25, JSON.stringify({ hoverOn, ...op }));
+      // 묶은 지도: 지도 중심(큰 원)끼리, 지도 중심과 항목이 겹치지 않음(지도 중심은 포함 선 없이 자기 항목들의 중심에 놓고 겹치면 벌린다)
+      const rootGap = await evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const roots = cy.nodes('[core_type = \"root\"]'); let bad = 0; roots.forEach((r) => { cy.nodes().not(r).forEach((n) => { const d = Math.hypot(n.position('x') - r.position('x'), n.position('y') - r.position('y')) - n.data('size') / 2 - r.data('size') / 2; if (d < -1) bad += 1; }); }); return { roots: roots.length, bad }; })()");
+      check('CR-22 G 묶은 지도: 지도 중심(큰 원)끼리·지도 중심과 항목이 겹치지 않음', rootGap.roots >= 3 && rootGap.bad === 0, JSON.stringify(rootGap));
+      await shot(s.cdp, `${browser.name}-g22-dept-opened`);
+      await sleep(3800);
+      check('CR-22 G 펼침 강조는 잠시 뒤 사라짐', (await evaluate(s.cdp, "window.__wu.cy.nodes('.just-opened').length")) === 0);
+    } else check('CR-22 G 팀 펼치기', false, 'U-D1이 열리지 않음');
+
+    // ── 작은 지도(10개): 이름이 모두 보이고 모양·범례 ──
+    if (await g22Go('U-A1')) {
+      const small = await evaluate(s.cdp, NAME_OVERLAP_JS);
+      check('CR-22 G 작은 지도(월말 정산 점검 10개): 이름이 모두 보이고 겹침 0, 글자 11px 이상', small.total === 10 && small.shown === 10 && small.pairs === 0 && (await g22Px()).min >= 10.9, JSON.stringify(small));
+      await shot(s.cdp, `${browser.name}-g22-small`);
+      const lg = await evaluate(s.cdp, "(() => { const items = [...document.querySelectorAll('#legend [data-testid^=legend-type-] .dot')].map((d) => d.className.replace('dot ', '')); const note = (document.querySelector('[data-testid=legend-visual]') || {}).textContent || ''; return { items, note }; })()");
+      check('CR-22 G 범례: 유형마다 그래프와 같은 모양 표시(sh-*)와 「크기 = 연결 수 · 화살표 · 흐린 점선」 설명', lg.items.length >= 4 && lg.items.every((c) => c.startsWith('sh-')) && new Set(lg.items).size >= 4 && lg.note.includes('크기 = 연결 수') && lg.note.includes('화살표') && lg.note.includes('흐린 점선'), JSON.stringify(lg));
+    } else check('CR-22 G 작은 지도', false, 'U-A1이 열리지 않음');
+
+    // 저장소를 블록 시작 때 찍어 둔 상태로 되돌린다(샘플 문서 포함)
+    await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(g22Snap)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); location.hash = 'U-A1'; location.reload(); })()`).catch(() => {});
+    await sleep(500);
+    await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
   }
 
   // ── CR-14 A 편집 되감기(R-25, D-30): 이름 수정 → 개요 「편집 되감기」 → 이전 시점 → 읽기 전용 확인 → 지금으로 → 다시 → 되돌리기. 데이터를 바꾸므로 끝부분 ──
