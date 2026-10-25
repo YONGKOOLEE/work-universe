@@ -131,14 +131,15 @@ test("R20 새 줄글 79개: 'existing-only' 처음 체크된 채 잘못 0건(경
   assert.equal(noteMiss, 0, '맥락 함정·기호 줄·잘린 글: 연결이 읽혔으면 「읽지 못한 문장」 안내가 켜진다');
 });
 
-test('R20 새 줄글 79개: 정상 글(A1~A16)의 사실 연결은 읽는다 — 못 읽는 것은 A10(업무 이름 「보고」가 참조 동사와 겹침, R19-11: 안전하게 놓침) 하나뿐', () => {
+// 일상 사용 2회차 T1(2026-10-25): 「지도에 있는 업무 이름 + 결과를 X에게 공유」는 이제 읽는다 — A10(「보고 결과를 한가람에게 공유한다」, 보고는 지도에 있는 업무)도 읽혀 못 읽는 것이 없다(예전 기대: ['A10']). 사실 연결이고 truth에 있다
+test('R20 새 줄글 79개: 정상 글(A1~A16)의 사실 연결은 모두 읽는다(A10은 T1 이후 읽힘)', () => {
   const missed = [];
   for (const c of CORPUS.filter((x) => x.id.startsWith('A'))) {
     const p = extractFromText(c.text, view);
     const got = p.edges.map((e) => edgeKey(p, e));
     if (c.truth.some((k) => !got.includes(k))) missed.push(c.id);
   }
-  assert.deepEqual(missed, ['A10']);
+  assert.deepEqual(missed, []);
 });
 
 // ── 2. Claude 가짜 응답 6개 ────────────────────────────────────────────────────────────────

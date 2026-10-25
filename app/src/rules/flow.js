@@ -3,7 +3,7 @@
 // 데이터 부족(02-design 5.5): 이력 시점 범위가 한 기간 이하이면 결론 없이 부족만 알리고,
 // 마지막 입력 이후 기간은 0건으로 단정하지 않고 "입력 없음"으로 표시한다.
 
-import { periodStatus } from '../view/describe.js';
+import { edgeStatus, periodStatus } from '../view/describe.js';
 import { YEAR_MIN } from '../model/checks.js';
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -53,7 +53,7 @@ export function activeAt(view, at) {
   const works = new Set();
   const people = new Set();
   for (const e of view.edges) {
-    if (e.hidden || e.core_type !== 'performs' || periodStatus(e.period, at) !== 'current') continue;
+    if (e.hidden || e.core_type !== 'performs' || edgeStatus(view, e, at) !== 'current') continue;
     const w = view.getNode(e.target);
     const p = view.getNode(e.source);
     if (!w || w.hidden || w.core_type !== 'work' || periodStatus(w.period, at) !== 'current') continue;

@@ -1,7 +1,7 @@
 // 상세 패널 그리기. 내용은 view/describe.js가 만들고, 여기서는 DOM으로 옮기기만 한다.
 import { el } from './dom.js';
 import { previewContent } from '../rules/starter-steps.js';
-import { NAMES_CUT_NOTE, namesText } from '../rules/daily-use.js';
+import { NAMES_CUT_NOTE, namesText, ownerChangesText } from '../rules/daily-use.js';
 
 // 이력이 많으면(업무당 1년 30~50건, 조력자 의견 2026-10-12) 최근 것만 먼저 보이고 이전 것은 「모두 보기」로 편다
 export const HISTORY_SHOW = 10; // 접었을 때 보이는 최근 이력 수
@@ -102,12 +102,16 @@ export function renderUniverseSummary(panel, s, shown = null, extras = {}) {
     // 지난 점검 대비(CR-18 D-3): 증감 한 줄과 「이번 점검 저장」. 기준은 이 브라우저 설정에만 있고 문서에는 들어가지 않는다
     if (r.compare) {
       panel.append(el('p', { class: 'risk-summary risk-compare', 'data-testid': 'team-risk-compare', 'data-has-baseline': r.compare.has ? 'true' : 'false' }, r.compare.text, ' ',
-        r.compare.canSave ? el('button', { type: 'button', class: 'small-btn', 'data-testid': 'btn-risk-baseline-save', onclick: r.compare.onSave }, '이번 점검 저장') : null));
+        r.compare.canSave ? el('button', { type: 'button', class: 'small-btn', 'data-testid': 'btn-risk-baseline-save', onclick: r.compare.onSave }, '이번 점검 저장') : null,
+        // 「점검 요약 보기」(일상 사용 2회차 M2): 점검 요약(복사·내려받기·인쇄)이 인사이트 안에 있어 못 찾던 것 — 인사이트를 열어 그 줄로 간다
+        r.compare.onSummary ? el('button', { type: 'button', class: 'small-btn', 'data-testid': 'btn-risk-summary-open', title: '인사이트를 열어 위쪽의 점검 요약 줄(복사·내려받기·인쇄)로 갑니다', onclick: r.compare.onSummary }, '점검 요약 보기') : null));
       // 무엇이 바뀌었는지(FU5-1): 저장해 둔 이름 목록이 있고 이름이 바뀐 것이 있을 때만 접힌 상자. 예전 기준(이름 없음)은 숫자만
-      if (r.compare.changes) {
+      if (r.compare.changes || r.compare.ownerChanges) {
         panel.append(el('details', { class: 'risk-changes', 'data-testid': 'team-risk-changes' },
           el('summary', {}, '바뀐 것 보기'),
-          ...r.compare.changes.map((c) => el('div', { class: 'risk-change', 'data-testid': 'risk-change', 'data-key': c.key },
+          // 담당이 바뀐 업무(M6): 저장한 기준의 업무별 담당 이름과 지금 담당이 다른 업무
+          r.compare.ownerChanges ? el('div', { class: 'risk-change', 'data-testid': 'risk-change-owners' }, el('p', { class: 'small', 'data-testid': 'risk-change-owner' }, ownerChangesText(r.compare.ownerChanges))) : null,
+          ...(r.compare.changes || []).map((c) => el('div', { class: 'risk-change', 'data-testid': 'risk-change', 'data-key': c.key },
             el('strong', {}, c.label),
             c.added.length ? el('p', { class: 'small', 'data-testid': 'risk-change-added' }, `늘어남: ${namesText(c.added)}`) : null,
             c.removed.length ? el('p', { class: 'small', 'data-testid': 'risk-change-removed' }, `줄어듦: ${namesText(c.removed)}`) : null,

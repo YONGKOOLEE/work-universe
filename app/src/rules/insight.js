@@ -2,7 +2,7 @@
 // T-08: 유사 경험자. 선택한 업무와 주제·산출물 유형·라벨 토큰을 공유하는 "다른 업무"를 찾아 점수화하고,
 // 그 업무를 수행한 사람을 점수순으로 돌려준다. 현재 담당자는 제외한다. 근거 ID(공유 주제·업무 노드)를 함께 돌려준다.
 
-import { periodStatus, periodText } from '../view/describe.js';
+import { edgeStatus, isCurrentEdge, periodStatus, periodText } from '../view/describe.js';
 import { refGid } from '../view/view.js';
 import { SUBTYPE_HANDOVER_DOC, SUBTYPE_ROLE, normalizeLabel, memoCategoryOf } from '../model/schema.js';
 import { josa } from '../model/josa.js';
@@ -27,7 +27,7 @@ export function tokensOf(label) {
   );
 }
 
-/** 이 날짜에 담당 중인가: 시작 전이 아니고, 끝이 없거나 끝이 그날 이후 */
+/** 이 날짜에 담당 중인가: 시작 전이 아니고, 끝이 없거나 끝이 그날 이후. 기간만 본다 — 수행 연결의 담당 판정은 넘긴 날(M5·M7)을 반영하는 isCurrentEdge(view/describe.js)를 쓴다 */
 export function isCurrent(period, asOf) {
   return periodStatus(period, asOf) === 'current';
 }
@@ -93,7 +93,7 @@ export function similarExperts(view, { works, asOf, exclude = [] }) {
   // 주제·산출물 연결이 없어도 이름 낱말이 같은 다른 업무가 있으면 비교할 수 있다(CR-17 B ③). 기준 업무의 이전 담당이 있어도 직접 해 본 사람을 보일 수 있다(B ①)
   const anyLink = profiles.some((p) => p.hasLink);
   const anyNameMatch = view.nodes.some((n) => n.core_type === 'work' && !n.hidden && !selectedIds.has(n.gid) && [...tokensOf(n.label)].some((t) => basisTokens.has(t)));
-  const anyPast = view.edges.some((e) => live(e) && e.core_type === 'performs' && selectedIds.has(e.target) && periodStatus(e.period, asOf) === 'ended');
+  const anyPast = view.edges.some((e) => live(e) && e.core_type === 'performs' && selectedIds.has(e.target) && edgeStatus(view, e, asOf) === 'ended');
   if (!anyLink && !anyNameMatch && !anyPast) {
     return { status: 'insufficient', reason: '주제나 산출물에 연결된 정보가 없어 비슷한 업무를 찾을 수 없습니다', ...empty, excluded: [], basis };
   }
@@ -102,7 +102,7 @@ export function similarExperts(view, { works, asOf, exclude = [] }) {
   const excludedGids = new Set(exclude.map((g) => view.canonical(g)));
   const excluded = [];
   for (const e of view.edges) {
-    if (!live(e) || e.core_type !== 'performs' || !selectedIds.has(e.target) || !isCurrent(e.period, asOf)) continue;
+    if (!live(e) || e.core_type !== 'performs' || !selectedIds.has(e.target) || !isCurrentEdge(view, e, asOf)) continue;
     excludedGids.add(e.source);
   }
   for (const g of excludedGids) {
@@ -118,7 +118,7 @@ export function similarExperts(view, { works, asOf, exclude = [] }) {
   };
   for (const e of view.edges) {
     if (!live(e) || e.core_type !== 'performs' || !selectedIds.has(e.target) || excludedGids.has(e.source)) continue;
-    if (periodStatus(e.period, asOf) !== 'ended') continue;
+    if (edgeStatus(view, e, asOf) !== 'ended') continue;
     const person = view.getNode(e.source);
     if (!person || person.hidden || person.core_type !== 'person') continue;
     const w = view.getNode(e.target);
@@ -173,7 +173,7 @@ export function similarExperts(view, { works, asOf, exclude = [] }) {
 
     for (const e of view.edges) {
       if (!live(e) || e.core_type !== 'performs' || e.target !== cand.gid || excludedGids.has(e.source)) continue;
-      if (periodStatus(e.period, asOf) === 'scheduled') continue; // 아직 시작하지 않은 담당은 경험이 아니다
+      if (edgeStatus(view, e, asOf) === 'scheduled') continue; // 아직 시작하지 않은 담당은 경험이 아니다
       const person = view.getNode(e.source);
       if (!person || person.hidden || person.core_type !== 'person') continue;
       const entry = entryOf(person);
@@ -184,7 +184,7 @@ export function similarExperts(view, { works, asOf, exclude = [] }) {
         label: cand.label,
         universe_name: cand.universe_name,
         period: periodText(e.period, asOf),
-        current: isCurrent(e.period, asOf),
+        current: isCurrentEdge(view, e, asOf),
         score,
         reasons,
         name_only: nameOnly,
@@ -406,7 +406,7 @@ export function workLoad(view, workGid, { asOf }) {
   const work = view.getNode(view.canonical(workGid));
   if (!work || work.core_type !== 'work' || work.hidden) return null;
   const edges = view.edges.filter((e) => live(e) && e.core_type === 'performs' && e.target === work.gid && view.getNode(e.source)?.core_type === 'person' && !view.getNode(e.source).hidden);
-  const pick = (status) => edges.filter((e) => periodStatus(e.period, asOf) === status);
+  const pick = (status) => edges.filter((e) => edgeStatus(view, e, asOf) === status);
   const current = [];
   for (const e of pick('current')) {
     const p = view.getNode(e.source);
@@ -445,7 +445,7 @@ export function personLoad(view, personGid, { asOf, n = DENSE_DEFAULT_N }) {
   if (!person || person.core_type !== 'person' || person.hidden) return null;
   const works = [];
   for (const e of view.edges) {
-    if (!live(e) || e.core_type !== 'performs' || e.source !== person.gid || !isCurrent(e.period, asOf)) continue;
+    if (!live(e) || e.core_type !== 'performs' || e.source !== person.gid || !isCurrentEdge(view, e, asOf)) continue;
     const w = view.getNode(e.target);
     if (!w || w.core_type !== 'work' || w.hidden || periodStatus(w.period, asOf) !== 'current' || works.some((x) => x.gid === w.gid)) continue;
     works.push({ gid: w.gid, label: w.label });
@@ -478,7 +478,7 @@ export function densityGaps(view, { asOf, n = DENSE_DEFAULT_N }) {
 
   const byWork = new Map(works.map((w) => [w.gid, []]));
   for (const e of performs) if (byWork.has(e.target)) byWork.get(e.target).push(e);
-  const currentOf = (gid) => byWork.get(gid).filter((e) => isCurrent(e.period, asOf));
+  const currentOf = (gid) => byWork.get(gid).filter((e) => isCurrentEdge(view, e, asOf));
   const children = new Map();
   for (const e of view.edges) {
     if (!live(e) || e.core_type !== 'contains' || !byWork.has(e.source) || !byWork.has(e.target)) continue;

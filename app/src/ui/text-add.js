@@ -267,7 +267,10 @@ export function textAddDialog(o) {
       el('td', {}, el('select', { 'data-col': 'type', 'data-testid': `text-add-node-type-${i}`, 'aria-label': `${i + 1}번 항목 유형`, onchange: (e) => onTypeChange(n.key, e.target.value) },
         ...TEXT_NODE_TYPES.map((t) => el('option', { value: t, selected: t === f.type }, TYPE_LABEL(t))))),
       el('td', {}, el('input', { type: 'text', 'data-col': 'label', 'data-testid': `text-add-node-label-${i}`, value: f.label, maxlength: 100, autocomplete: 'off', 'aria-label': `${i + 1}번 항목 이름`, oninput: syncLabel, onchange: (e) => { syncLabel(e); render(); } })),
-      el('td', {}, f.type === 'person'
+      el('td', {}, f.type === 'person' && f.match
+        // T6: 지도에 있는 사람이면 새로 만들지 않고 그 사람에 잇는다 — 글의 사번 칸은 쓰이지 않으므로 빈 자리표시(V-0000) 대신 지도의 사번을 읽기 전용으로 보인다
+        ? el('input', { type: 'text', readonly: true, tabindex: -1, 'data-col': 'emp_no', 'data-testid': `text-add-node-empno-${i}`, 'data-map-emp': f.mapEmpNo ? '1' : '0', value: f.mapEmpNo || '', placeholder: '사번 없음', title: '지도에 있는 사람의 사번(고칠 수 없음)', 'aria-label': `${i + 1}번 항목 사번(지도의 값, 읽기 전용)` })
+        : f.type === 'person'
         ? el('input', { type: 'text', 'data-col': 'emp_no', 'data-testid': `text-add-node-empno-${i}`, value: f.emp_no, placeholder: 'V-0000', maxlength: 100, autocomplete: 'off', 'aria-label': `${i + 1}번 항목 사번`, oninput: syncEmp, onchange: (e) => { syncEmp(e); render(); } })
         : '—'),
       el('td', { class: 'small', 'data-testid': `text-add-node-status-${i}`, 'data-state': status.state }, status.text),

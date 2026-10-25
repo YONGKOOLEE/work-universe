@@ -5,7 +5,7 @@
 // 모든 결과에 근거 노드·이력 ID가 붙는다. 데이터가 모자라면 결론 없이 insufficient와 사유만 돌려준다.
 // 묶은 지도(통합 반영 view)에서도 같은 방식으로 동작한다(canonical은 view가 이미 적용한 끝점을 그대로 쓴다).
 
-import { periodStatus } from '../view/describe.js';
+import { edgeStatus, periodStatus } from '../view/describe.js';
 import { refGid } from '../view/view.js';
 import { SUBTYPE_HANDOVER_DOC, SUBTYPE_ROLE } from '../model/schema.js';
 import { josa } from '../model/josa.js';
@@ -48,7 +48,7 @@ function performers(view, workGid, asOf) {
     const p = view.getNode(e.source);
     if (!p || p.hidden || p.core_type !== 'person') continue;
     any = true;
-    const st = periodStatus(e.period, asOf);
+    const st = edgeStatus(view, e, asOf); // M5·M7: 담당을 넘긴 날 끝나는 쪽은 current가 아니다
     if (st === 'scheduled') continue;
     const cur = people.get(p.gid) || { node: p, current: false, start: undefined };
     if (st === 'current') cur.current = true;

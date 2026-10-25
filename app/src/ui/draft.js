@@ -2,7 +2,7 @@
 // 결과: 11개 항목(CR-6, CR-17 E), 항목별 근거 링크, 생성 방식 표시, "초안" 상태. 확정은 사람이 한다.
 
 import { buildHandoverDraft, scopeWorks } from '../rules/handover.js';
-import { transferPlan } from '../view/transfer.js';
+import { peopleByScope, transferPlan } from '../view/transfer.js';
 import { currentHoldersText } from '../view/describe.js';
 import { similarExperts, similarSentences, workLoad } from '../rules/insight.js';
 import { nowIso, todayLocal } from './time.js';
@@ -48,6 +48,11 @@ export const LIVE_RERUN_NOTE = '자동으로 다시 만든 초안은 Claude를 �
 /** 「새로」 표시(CR-18 D-13)의 글과 설명 */
 export const NEW_MARK_LABEL = '새로';
 export const NEW_MARK_TITLE = '지난번에 이 대상으로 초안을 만든 뒤에 기록된 근거가 붙은 문장입니다';
+/** 「새로」 칩의 설명(T2): 지난번 초안을 만든 시각(날짜 시각)을 함께 보인다. 시각을 읽을 수 없으면 기본 설명 */
+export function newMarkTitle(since) {
+  const m = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/.exec(String(since || ''));
+  return m ? `지난번 초안(${m[1]} ${m[2]}) 뒤에 생긴 기록이 근거` : NEW_MARK_TITLE;
+}
 
 /** 응답으로 문장이 바뀌었을 때 「생성 중…」 자리에 남기는 안내 */
 export const LIVE_REPLACED_NOTE = '문장이 Claude API 문장으로 바뀌었습니다 — 확인 후 확정하세요';
@@ -67,6 +72,20 @@ function options(nodes, placeholder, selected, withUniverse = true) {
   s.append(el('option', { value: '' }, placeholder));
   for (const n of nodes) s.append(el('option', { value: n.gid, selected: n.gid === selected }, withUniverse ? `${n.label} (${n.universe_name})` : n.label));
   return s;
+}
+
+// 보내는·받는 사람 목록의 순서(일상 사용 2회차 T6): 초안 범위를 수행한 사람이 먼저, 그 밖의 사람이 뒤(다른 팀 협업자가 맨 위에 오지 않게).
+// 두 묶음이 모두 있을 때만 묶음 이름(optgroup)을 붙인다. 값(gid)·보기 글은 그대로이고 고른 값은 유지한다(없어졌으면 비움)
+export const PEOPLE_IN_SCOPE_LABEL = '이 범위를 수행한 사람';
+export const PEOPLE_OTHERS_LABEL = '그 밖의 사람';
+function fillPeople(select, scope, placeholder, selected, withUniverse = true) {
+  const opt = (n) => el('option', { value: n.gid, selected: n.gid === selected }, withUniverse ? `${n.label} (${n.universe_name})` : n.label);
+  const kids = [el('option', { value: '' }, placeholder)];
+  if (scope.inScope.length && scope.others.length) {
+    kids.push(el('optgroup', { label: PEOPLE_IN_SCOPE_LABEL, 'data-testid': 'draft-people-in-scope' }, ...scope.inScope.map(opt)), el('optgroup', { label: PEOPLE_OTHERS_LABEL, 'data-testid': 'draft-people-others' }, ...scope.others.map(opt)));
+  } else kids.push(...[...scope.inScope, ...scope.others].map(opt));
+  select.replaceChildren(...kids);
+  select.value = selected && [...select.options].some((o) => o.value === selected) ? selected : '';
 }
 
 // 비교했지만 해당자가 없을 때의 안내. 꼭지(유니버스 전체)가 대상이면 그 유니버스의 업무는 모두 비교 대상 안이라
@@ -150,6 +169,14 @@ export function draftPanel(o) {
     showHolder();
   }
   if (from.value && from.value === to.value) to.value = '';
+  // 목록 순서(T6): 대상(범위)을 수행한 사람 → 그 밖의 사람. 대상을 바꾸면 다시 줄 세운다(고른 사람은 유지). showHolder가 먼저 돌아 보내는 사람을 미리 고른 뒤에 정렬한다
+  const orderPeople = () => {
+    const scope = peopleByScope(view, target.value, people);
+    fillPeople(from, scope, '보내는 사람', from.value, multi);
+    fillPeople(to, scope, '받는 사람', to.value, multi);
+  };
+  orderPeople();
+  target.addEventListener('change', orderPeople);
   // 받는 사람 후보가 없을 때의 안내(FU-7): 후보가 없으면 창을 열 때부터, 그 밖에는 받는 사람 오류가 났을 때 보인다
   // 「＋ 사람 추가」(FU-36): 긴 「노드 추가」 양식 대신 초안 창 안의 작은 칸 두 개(이름 필수·연락처 선택). 「넣기」는 wu:add-node를 label과 함께 보낸다
   // (계약: detail {type:'person', label, attrs?} — label이 있으면 main이 사람 노드를 바로 만들고(연결 없음) 초안 창을 다시 그린다. label이 없으면 기존처럼 노드 추가 창)
@@ -410,7 +437,7 @@ function renderDraft(box, d, view, onFocus, o = {}) {
           : i.insufficient
           ? el('div', {}, el('p', { class: 'muted', 'data-testid': 'insufficient' }, '이력 부족 — 근거가 되는 기록이 없어 내용을 만들지 않았습니다.'),
             fillHintOf(i.key) ? el('p', { class: 'muted small', 'data-testid': 'draft-fill-hint' }, fillHintOf(i.key)) : null)
-          : el('ul', {}, ...i.sentences.map((s) => el('li', {}, el('span', {}, s.text), isNewSentence(view, s, o.newSince) ? el('span', { class: 'chip new-mark', 'data-testid': 'draft-new-mark', title: NEW_MARK_TITLE }, NEW_MARK_LABEL) : null, roleChip(view, i.key, s), el('span', { class: 'evidence-row' }, el('span', { class: 'evidence-label' }, '근거:'), evidenceChips(view, s.evidence_ids, onFocus, { dedupe: false, unknown: true, showText: true }))))),
+          : el('ul', {}, ...i.sentences.map((s) => el('li', {}, el('span', {}, s.text), isNewSentence(view, s, o.newSince) ? el('span', { class: 'chip new-mark', 'data-testid': 'draft-new-mark', title: newMarkTitle(o.newSince) }, NEW_MARK_LABEL) : null, roleChip(view, i.key, s), el('span', { class: 'evidence-row' }, el('span', { class: 'evidence-label' }, '근거:'), evidenceChips(view, s.evidence_ids, onFocus, { dedupe: false, unknown: true, showText: true }))))),
       ),
     ),
     el('p', { class: 'muted small' }, '축적된 이력으로 만든 초안입니다. 근거를 눌러 확인하고, 담당자가 검토해 확정하세요.'),

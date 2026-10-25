@@ -9,7 +9,7 @@ import { displayName, periodText } from '../view/describe.js';
 import { parseGid, refGid } from '../view/view.js';
 import { CODES, DRAFT_TARGET_TYPES, memoCategoryOf } from '../model/schema.js';
 import { josa } from '../model/josa.js';
-import { memoTarget, openMemos } from './issues.js';
+import { memoKey, memoTarget, openMemos } from './issues.js';
 import { densityGaps, personLoad } from './insight.js';
 
 export const HANDOVER_ITEMS = [
@@ -168,6 +168,9 @@ function flowOrder(view, works, workIds) {
 
 /** 받는 범위 항목이 비었을 때(판정은 했는데 해당 업무·공백이 없음) 보이는 이유 */
 export const RANGE_NONE_REASON = '받는 사람이 이 범위에서 지금 맡은 업무는 아직 없고, 범위 안 업무는 모두 지금 담당이 있습니다'; // 재검증 R14-1: 넘겨받기 전의 흔한 경우를 사실대로
+
+/** 이전 인수인계 항목이 비었는데 그 이유가 「오늘 같은 두 사람 사이의 기록을 뺌」일 때 보이는 이유(일상 사용 2회차 M8) */
+export const PREVIOUS_SAME_DAY_REASON = '오늘 같은 두 사람 사이에 기록한 인수인계는 이 인수인계 자체라 빼었습니다';
 
 const sentence = (text, evidence) => ({ text, evidence_ids: [...new Set(evidence)] });
 const name = (view, gid) => {
@@ -363,16 +366,28 @@ export function buildHandoverDraft(view, input) {
     sentence(`${person.label}${person.emp_no ? `(${person.emp_no})` : ''} — ${roles.join(', ')}${attr(person, '연락처') ? `. 연락: ${attr(person, '연락처')}` : ''}`, [person.gid]),
   ), [...collaborators.values()].map(collabLine));
 
-  // 8) 최근 이슈: 범주가 이슈(없으면 이슈)인 메모의 최근 N건
-  items.최근_이슈 = ofCategory('issue').slice(-RECENT_MEMO_COUNT).reverse().map(memoSentence);
+  // 8) 최근 이슈: 범주가 이슈(없으면 이슈)인 메모의 최근 N건. 이미 해결된 이슈(미해결 목록의 닫힘 규칙과 같은 판정, rules/issues.js)에는 「(해결됨 날짜)」를 덧붙이고
+  //    닫은 해결됨 메모도 근거에 더한다(일상 사용 2회차 T3: 해결된 이슈가 해결 안 된 것처럼 읽히지 않게. 「진행 중인 일」의 최근 해결과 겹쳐 보여도 사실 그대로)
+  const openIssues = new Set(openMemos(view, { memos, categories: ['issue'] }));
+  const resolvers = memos.filter((ev) => memoCategoryOf(ev.payload) === 'resolved');
+  const orderOf = new Map(view.events.map((ev, i) => [ev, i]));
+  const closerOf = (ev) => resolvers
+    .filter((r) => orderOf.get(r) > orderOf.get(ev) && (r.payload.resolves_id ? refGid(r.universe_id, r.payload.resolves_id) === ev.gid : memoKey(view, r) === memoKey(view, ev)))
+    .sort((a, b) => orderOf.get(a) - orderOf.get(b))[0] || null;
+  items.최근_이슈 = ofCategory('issue').slice(-RECENT_MEMO_COUNT).reverse().map((ev) => {
+    const base = memoSentence(ev);
+    const closer = openIssues.has(ev) ? null : closerOf(ev);
+    return closer ? sentence(`${base.text} (해결됨 ${closer.occurred_at})`, [...base.evidence_ids, closer.gid]) : base;
+  });
 
   // 9) 이전 인수인계: 범위 업무의 인수인계 이벤트 전부. 같은 두 사람 사이의 과거 인수인계도 받는 사람이 봐야 할 근거다(검토5 I-1).
   //    오늘(asOf) 같은 사람 사이에 이미 확정한 것만 "지금 만드는 인수인계"로 보고 뺀다
   const canonOf = (ev, id) => view.canonical(refGid(ev.universe_id, id));
   const samePair = (ev) => canonOf(ev, ev.payload.from_person_id) === from && canonOf(ev, ev.payload.to_person_id) === to;
-  items.이전_인수인계 = view.events
-    .filter((ev) => ev.type === 'handover' && workIds.has(canonOf(ev, ev.payload.work_id)))
-    .filter((ev) => !(asOf && ev.occurred_at === asOf && samePair(ev)))
+  const scopedHandovers = view.events.filter((ev) => ev.type === 'handover' && workIds.has(canonOf(ev, ev.payload.work_id)));
+  const sameDayPair = (ev) => !!asOf && ev.occurred_at === asOf && samePair(ev);
+  items.이전_인수인계 = scopedHandovers
+    .filter((ev) => !sameDayPair(ev))
     .map((ev) => {
       const art = ev.payload.artifact_id ? canonOf(ev, ev.payload.artifact_id) : null;
       const who = `${name(view, canonOf(ev, ev.payload.from_person_id))} → ${name(view, canonOf(ev, ev.payload.to_person_id))}`;
@@ -401,6 +416,8 @@ export function buildHandoverDraft(view, input) {
         ...(key === '유사_경험자' && items[key].length === 0 && input.similarNone ? { empty_reason: input.similarNone } : {}),
         // 판정은 했지만 받는 사람이 맡을 업무도 담당 공백도 없음(기록이 모자란 것과 다름)
         ...(key === '받는_범위' && items[key].length === 0 && range.noGap ? { empty_reason: RANGE_NONE_REASON } : {}),
+        // 일상 사용 2회차 M8: 이 범위의 인수인계 기록이 있는데 모두 「오늘 같은 두 사람 사이」라 뺐다(그 기록은 이 인수인계 자체) — 「이력 부족」이 아니라 「해당 없음」
+        ...(key === '이전_인수인계' && items[key].length === 0 && scopedHandovers.some(sameDayPair) ? { empty_reason: PREVIOUS_SAME_DAY_REASON } : {}),
       })),
     },
   };

@@ -32,19 +32,64 @@ export function periodText(period, asOf = null) {
 const STATUS_LABEL = { current: '현재', ended: '종료', scheduled: '예정' };
 
 /**
- * 담당을 넘긴 날(FU5-8) — 화면 표시용. 담당 판정(periodStatus·인사이트·초안)은 바꾸지 않는다: 끝 날짜가 기준일인 수행은 그날도 「현재」로 센다.
- * 같은 업무에 기준일에 시작하는 다른 사람의 수행이 있으면, 기준일에 끝나는 수행의 사람은 「오늘까지(넘김)」으로 보인다.
- * @returns {Set<string>} 그날 담당을 넘기는 사람의 gid(없으면 빈 집합)
+ * 담당을 넘긴 날(FU5-8, 일상 사용 2회차 M5·M7로 판정까지 확장) — 같은 업무에서 한 사람의 수행이 기준일에 끝나고 다른 사람의 수행이 기준일에 시작하면 「넘김」이다.
+ * 이 넘김의 끝나는 쪽 수행은 기준일의 「현재 담당」이 아니다(받는 쪽만 현재). 기준일이 오늘이 아닌 날(시간 보기)도 같은 규칙이다.
+ * 현재 담당을 가르는 모든 곳(밀집·공백·혼자만 아는 일·사람 상세·대신할 사람·초안 보내는 사람)은 이 파일의 edgeStatus·handoverEndedEdges 한 곳을 쓴다 — 새 판정을 곳곳에 만들지 않는다.
+ * 넘김으로 보지 않는 경우: 끝나는 사람과 시작하는 사람이 같다(기간을 이어 붙임), 시작하는 수행이 기준일이 아닌 날(공백이 있음), 기준일에 끝나지만 시작하는 사람이 없다(그날까지 현재 — 기존 규칙)
+ */
+
+/** 기준일에 끝나는 수행 연결 중 넘김인 것의 gid 집합. view·기준일마다 한 번만 계산한다 */
+const handoverCache = new WeakMap(); // view → Map(asOf → Set<edge gid>)
+export function handoverEndedEdges(view, asOf) {
+  if (!asOf) return new Set();
+  let byDay = handoverCache.get(view);
+  if (!byDay) {
+    byDay = new Map();
+    handoverCache.set(view, byDay);
+  }
+  const hit = byDay.get(asOf);
+  if (hit && hit.n === view.edges.length) return hit.set;
+  const byWork = new Map(); // 업무 gid → 기간이 있는 수행 연결들
+  for (const e of view.edges) {
+    if (e.hidden || e.synthetic || e.core_type !== 'performs' || !e.period) continue;
+    if (!byWork.has(e.target)) byWork.set(e.target, []);
+    byWork.get(e.target).push(e);
+  }
+  const out = new Set();
+  for (const edges of byWork.values()) {
+    const starters = edges.filter((e) => e.period.start === asOf).map((e) => e.source);
+    if (!starters.length) continue;
+    for (const e of edges) {
+      if (e.period.end === asOf && periodStatus(e.period, asOf) === 'current' && starters.some((p) => p !== e.source)) out.add(e.gid);
+    }
+  }
+  byDay.set(asOf, { n: view.edges.length, set: out });
+  return out;
+}
+
+/**
+ * 수행 연결 하나의 기준일 상태: periodStatus와 같되, 넘김으로 끝나는 쪽은 current가 아니라 ended다.
+ * 수행이 아닌 연결이나 기준일이 없으면 periodStatus 그대로
+ * @returns {'current'|'ended'|'scheduled'}
+ */
+export function edgeStatus(view, edge, asOf) {
+  const st = periodStatus(edge.period, asOf);
+  return st === 'current' && asOf && edge.core_type === 'performs' && handoverEndedEdges(view, asOf).has(edge.gid) ? 'ended' : st;
+}
+
+/** 기준일에 이 수행 연결로 담당 중인가(넘김으로 끝나는 쪽은 아님) */
+export const isCurrentEdge = (view, edge, asOf) => edgeStatus(view, edge, asOf) === 'current';
+
+/**
+ * 같은 업무에서 그날 담당을 넘기는 사람의 gid(표시용 — 「오늘까지(넘김)」). 없으면 빈 집합
+ * @returns {Set<string>}
  */
 export function handingOverToday(view, workGid, asOf) {
   const out = new Set();
   if (!asOf) return out;
   const w = view.canonical(workGid);
-  const edges = view.edges.filter((e) => !e.hidden && !e.synthetic && e.core_type === 'performs' && e.target === w && e.period);
-  const starters = edges.filter((e) => e.period.start === asOf).map((e) => e.source);
-  for (const e of edges) {
-    if (e.period.end === asOf && periodStatus(e.period, asOf) === 'current' && starters.some((p) => p !== e.source)) out.add(e.source);
-  }
+  const ended = handoverEndedEdges(view, asOf);
+  for (const e of view.edges) if (e.target === w && ended.has(e.gid)) out.add(e.source);
   return out;
 }
 
@@ -52,18 +97,18 @@ export function handingOverToday(view, workGid, asOf) {
 export const handoverLabel = (past) => (past ? '그날까지(넘김)' : '오늘까지(넘김)');
 
 /**
- * 「현재 담당: …」 줄의 이름 글(FU5-8). 담당을 넘기는 사람이 있으면 받는 쪽만 현재로 보이고 「(표나래는 오늘까지)」를 덧붙인다.
- * 넘기는 사람만 남으면(받는 사람이 현재 목록에 없는 경우) 그대로 모두 보인다
- * @param {{gid:string,label:string}[]} current workLoad의 current(규칙 결과 그대로)
+ * 「현재 담당: …」 줄의 이름 글(FU5-8). 담당을 넘기는 사람(M5·M7부터 현재 목록에서 이미 빠져 있다)이 있으면 받는 쪽만 현재로 보이고 「(표나래는 오늘까지)」를 덧붙인다.
+ * 현재 목록이 비어 있으면 넘기는 사람만 보인다(받는 사람이 숨김 등으로 빠진 경우)
+ * @param {{gid:string,label:string}[]} current workLoad의 current(규칙 결과 그대로 — 넘기는 사람은 이미 빠져 있다)
  */
 export function currentHoldersText(view, workGid, asOf, current, { past = false } = {}) {
   const handing = handingOverToday(view, workGid, asOf);
-  const going = current.filter((p) => handing.has(p.gid));
-  const staying = current.filter((p) => !handing.has(p.gid));
-  if (!going.length || !staying.length) return current.map((p) => p.label).join(', ');
+  const going = [...handing].map((g) => view.getNode(g)).filter((n) => n && !n.hidden && n.core_type === 'person' && !current.some((p) => p.gid === n.gid)).map((n) => ({ gid: n.gid, label: n.label }));
+  if (!going.length) return current.map((p) => p.label).join(', ');
+  if (!current.length) return going.map((p) => p.label).join(', ');
   const day = past ? '그날' : '오늘';
   const who = going.length > 1 ? `${going.map((p) => p.label).join(', ')} 모두` : `${going[0].label}${josa(going[0].label, '은/는')}`;
-  return `${staying.map((p) => p.label).join(', ')} (${who} ${day}까지)`;
+  return `${current.map((p) => p.label).join(', ')} (${who} ${day}까지)`;
 }
 
 /** 문장·근거 칩에 쓰는 노드 이름. 숨긴 노드는 표시를 붙인다(4절 "숨김 후 참조"). 초안·이력 문장·근거 칩이 모두 이것을 쓴다(검토5 C-2) */
@@ -215,12 +260,8 @@ export function describeNode(view, gid, { asOf = null, past = false } = {}) {
   const others = node.merged_from.map((g) => view.rawNode(g)).filter(Boolean);
   if (others.length) rows.push({ label: '같은 항목', value: `${others.map((n) => n.universe_name).join(', ')}의 항목과 합쳐져 있음` });
 
-  const handingCache = new Map(); // 업무 gid → 그날 담당을 넘기는 사람들
-  const isHandover = (edge) => {
-    if (!asOf || edge.core_type !== 'performs' || edge.synthetic || !edge.period || edge.period.end !== asOf) return false;
-    if (!handingCache.has(edge.target)) handingCache.set(edge.target, handingOverToday(view, edge.target, asOf));
-    return handingCache.get(edge.target).has(edge.source);
-  };
+  const handed = asOf ? handoverEndedEdges(view, asOf) : new Set(); // 기준일에 담당을 넘기는 쪽의 수행 연결(M5·M7: 판정과 표시가 같은 집합)
+  const isHandover = (edge) => !!asOf && edge.core_type === 'performs' && !edge.synthetic && handed.has(edge.gid);
   const links = view
     .neighbors(gid)
     .map(({ edge, direction, other }) => ({

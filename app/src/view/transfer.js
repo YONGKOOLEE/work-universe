@@ -52,3 +52,20 @@ export function transferPlan(view, { target, from, to }, uid) {
   }
   return out;
 }
+
+/**
+ * 인수인계 초안의 보내는·받는 사람 목록 순서(T6): 초안 범위(대상 업무 또는 지도 중심의 범위 업무)를 수행한 사람이 먼저, 그 밖의 사람이 뒤.
+ * 「수행한」은 끝난 담당까지 포함한다(숨기지 않은 수행 연결이 한 번이라도 있음). 각 묶음 안은 받은 순서를 지킨다.
+ * 범위를 알 수 없거나(대상 없음·범위 업무 없음) 수행한 사람이 없으면 inScope가 비고 others가 전부다(순서 그대로).
+ * @param {{nodes:object[], edges:object[]}} view
+ * @param {string} targetGid
+ * @param {{gid:string}[]} people 사람 노드(보이는 것)
+ * @returns {{inScope:object[], others:object[]}}
+ */
+export function peopleByScope(view, targetGid, people) {
+  const works = new Set(targetGid ? scopeWorks(view, targetGid).map((g) => view.canonical(g)) : []);
+  if (!works.size) return { inScope: [], others: [...people] };
+  const performers = new Set();
+  for (const e of view.edges) if (!e.hidden && e.core_type === 'performs' && works.has(e.target)) performers.add(e.source);
+  return { inScope: people.filter((p) => performers.has(p.gid)), others: people.filter((p) => !performers.has(p.gid)) };
+}

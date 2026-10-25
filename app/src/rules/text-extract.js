@@ -77,6 +77,8 @@ export const TEXT_WORDS = Object.freeze({
   startVerb: /^(?:시작(?:된다|됩니다|한다|합니다)|이어진다|이어집니다)$/,
   /** R16-7: 「X에게 공유」의 업무를 앞 문장에서 가져올 때, 문장에 남아도 되는 말(목적어는 이 낱말들뿐) */
   genericObject: /^(?:결과|내용|현황|상황|진행 상황|진행상황|이 건|해당 건|건)(?:을|를|은|는)?$/,
+  /** T1: 「X에게 <지도 업무 이름> 결과를 공유한다」의 끝말(업무 이름 뒤에 오는 이 낱말 + 목적격). 업무 이름은 지도에 있을 때만 쓴다 */
+  workResultTail: /^(.+?)\s+(?:결과|내용|현황|상황|진행\s?상황)(?:을|를|은|는)?$/,
   referenceAdverbs: ['따로', '별도로', '바로', '먼저', '꼭', '반드시', '직접', '함께'],
   /** 서술 꼬리(함·됨·임 …)는 이름이 아니다 */
   nominalTail: /(?:했음|됐음|됨|함|임|있음|없음|올림|드림)$/,
@@ -142,7 +144,7 @@ export const TEXT_PATTERN_DOC = Object.freeze([
   { id: 'precedes_b', relation: 'precedes', shape: 'Y(을/를) 마치면·마친 뒤·하고 나서 Z', example: '대사 확인을 마치면 보고를 한다' },
   { id: 'belongs_a', relation: 'belongs_to', shape: 'X(은/는) T 소속 · T 소속 X(T가 팀·실·부·과·센터·본부로 끝날 때)', example: '도하람은 감사팀 소속이다' },
   { id: 'belongs_b', relation: 'belongs_to', shape: 'T의 X(T가 팀·실·부·과·센터·본부로 끝날 때) — 같은 문장에 다른 모양(맡는다 등)이 함께 있어야 한다', example: '감사팀의 도하람이 보고를 맡는다' },
-  { id: 'reference', relation: 'references', shape: 'X에게 공유·문의·협업·보고·전달 (그 문장의 업무가 하나일 때, 없으면 바로 앞 문장이 읽혔고 업무가 하나일 때)', example: '서하늘이 보고를 맡는다. 도하람에게 결과를 공유한다' },
+  { id: 'reference', relation: 'references', shape: 'X에게 공유·문의·협업·보고·전달 (그 문장의 업무가 하나일 때, 없으면 바로 앞 문장이 읽혔고 업무가 하나일 때, 또는 「X에게 <지도에 있는 업무 이름> 결과·내용·현황을 공유한다」)', example: '서하늘이 보고를 맡는다. 도하람에게 결과를 공유한다' },
   { id: 'emp_no', relation: null, shape: '이름(V-1234) → 사번이 있는 사람', example: '서하늘(V-1003)이 대사 확인을 맡는다' },
 ]);
 
@@ -175,6 +177,8 @@ export const TEXT_UNREAD_WHY = Object.freeze({
 /** 이유 키가 없거나 모르는 값이면 「모양 밖」 */
 export const TEXT_UNREAD_SHAPE_WHY = '읽는 모양에 맞지 않음(아래 「규칙으로 읽는 모양」 참고)';
 export const TEXT_UNREAD_PARTIAL_WHY = '이름은 읽었지만 연결 모양을 다 읽지 못함';
+/** T1(c): 「X에게 결과를 공유한다」의 업무를 정할 수 없을 때(앞 문장 업무가 둘 이상이거나 없음)의 이유. work는 예시에 쓸 업무 이름(없으면 「업무 이름」), who는 대상 이름 */
+export const unreadWhichWorkWhy = (work, who) => `어느 업무의 결과인지 정할 수 없습니다 — 「${work || '업무 이름'} 결과를 ${who}에게 공유한다」처럼 업무 이름을 넣으세요`;
 export const unreadWhyText = (why) => (why && hasKey(TEXT_UNREAD_WHY, why) ? TEXT_UNREAD_WHY[why] : TEXT_UNREAD_SHAPE_WHY);
 
 /** 묶은 지도에서 글로 추가를 쓰지 못한다는 안내(화면 단추 자리의 한 줄과 같은 뜻) */
@@ -796,6 +800,32 @@ function onlyGenericAround(T, i, vi) {
   return phrase === '' || TEXT_WORDS.genericObject.test(phrase);
 }
 
+/**
+ * T1(a): 「X에게 <업무 이름> 결과를 공유한다」·「<업무 이름> 결과를 X에게 공유한다」 — 대상·동사·앞 조직 이름·부사를 뺀 나머지가 「지도에 있는 업무 이름 + 결과·내용·현황」뿐이면 그 업무.
+ * 나머지 낱말은 서로 이어져 있고 대상(X에게)의 한쪽에만 있어야 한다. 업무 이름이 지도에 없으면 읽지 않는다(없는 업무를 지어내지 않는다)
+ * → {label, idxs(쓴 낱말 번호)} | null
+ */
+function namedWorkAround(T, i, vi, known) {
+  if (!known || !known.work || !known.work.size) return null;
+  const idxs = [];
+  for (let j = 0; j < T.length; j += 1) {
+    if (j === i || j === vi) continue;
+    if (j === i - 1 && bare(T[j]) && looksOrg(T[j].core)) continue;
+    if (TEXT_WORDS.referenceAdverbs.includes(T[j].core)) continue;
+    idxs.push(j);
+  }
+  if (idxs.length < 2) return null;
+  if (idxs.some((j, k) => k > 0 && j !== idxs[k - 1] + 1)) return null; // 이어진 낱말만
+  if (idxs[0] < i !== idxs[idxs.length - 1] < i) return null; // 대상(X에게)의 한쪽에만
+  const m = TEXT_WORDS.workResultTail.exec(idxs.map((j) => T[j].core).join(' '));
+  if (!m) return null;
+  const g = m[1].replace(/\s+/g, ' ');
+  for (const c of [g, g.replace(/의$/, ''), stripWorkTail(g), stripWorkTail(g.replace(/의$/, ''))]) {
+    if (c && known.work.has(normalizeLabel(c))) return { label: c, idxs };
+  }
+  return null;
+}
+
 function runReference(sc) {
   const { T } = sc;
   let found = false;
@@ -818,9 +848,21 @@ function runReference(sc) {
     // 업무: 이 문장에서 읽은 업무가 하나뿐이면 그것, 없으면 바로 앞 문장이 읽혔고 그 업무가 하나일 때만(R16-7)
     const works = sc.nodes.filter((n) => n.type === 'work' && !n.carried);
     let work;
+    const named = works.length === 0 ? namedWorkAround(T, i, vi, sc.known) : null;
     if (works.length === 1) [work] = works;
-    else if (works.length === 0 && sc.prev && sc.prev.works.length === 1 && onlyGenericAround(T, i, vi)) work = sc.node({ type: 'work', label: sc.prev.works[0].label, carried: true });
-    else { sc.miss(); continue; }
+    else if (named) {
+      work = sc.node({ type: 'work', label: named.label }); // T1(a): 업무 이름이 문장에 있고 지도에도 있다
+      for (const q of named.idxs) sc.use(q);
+    } else if (works.length === 0 && sc.prev && sc.prev.works.length === 1 && onlyGenericAround(T, i, vi)) work = sc.node({ type: 'work', label: sc.prev.works[0].label, carried: true });
+    else {
+      // T1(c): 업무 이름 없이 「결과를」 같은 일반 목적어만 있고 앞 문장 업무로도 정할 수 없다(둘 이상이거나 없음) → 이유를 알려 준다
+      if (works.length === 0 && onlyGenericAround(T, i, vi) && T.some((t, j) => j !== i && j !== vi && TEXT_WORDS.genericObject.test(t.core))) {
+        sc.reason = unreadWhichWorkWhy(sc.prev && sc.prev.works.length ? sc.prev.works[0].label : '', spec.label);
+      }
+      sc.miss();
+      continue;
+    }
+    // T1(b): 「감사팀 백서진에게」의 앞 조직 낱말은 허용 낱말로만 쓴다(소속 연결·조직 항목은 만들지 않는다 — 예시 글(감사팀 도하람에게 …)의 기존 결과와 같게. CR 후보: docs/decisions-pending)
     sc.edge(work, sc.node(spec), 'references');
     // 쓴 낱말: 대상(과 앞의 조직 이름)·동사, 그 사이의 일반 목적어·부사뿐(대상~동사 사이 전체를 쓴 것으로 치지 않는다)
     sc.use(i > 0 && bare(T[i - 1]) && looksOrg(T[i - 1].core) ? i - 1 : i, i);
@@ -863,7 +905,7 @@ export const TEXT_PATTERNS = Object.freeze([
 /** 문장 하나를 읽는 작업대: 항목·연결을 쌓아 두었다가 문장을 다 읽고 버리지 않을 때만 제안에 더한다 */
 function makeScope(s, T, prev, known) {
   const sc = {
-    s, T, prev, known, nodes: [], edges: [], vetoed: '', missed: false, used: new Set(),
+    s, T, prev, known, nodes: [], edges: [], vetoed: '', missed: false, reason: '', used: new Set(),
     node(spec) {
       let n = sc.nodes.find((x) => x.type === spec.type && normalizeLabel(x.label) === normalizeLabel(spec.label));
       if (!n) {
@@ -1187,12 +1229,12 @@ export function extractFromText(text, view = null, opt = {}) {
       if (sc.vetoed) break;
     }
     if (!sc.vetoed && sc.edges.length && sc.unusedWord()) sc.veto('쓰이지 않은 낱말'); // R18 허용 목록(앞·사이·뒤 어디든 남으면 문장 전체)
-    if (sc.vetoed || !sc.nodes.length) { skip(sc.vetoed ? unreadWhyText(sc.vetoed) : shapeWhy(T)); continue; }
+    if (sc.vetoed || !sc.nodes.length) { skip(sc.vetoed ? unreadWhyText(sc.vetoed) : (sc.reason || shapeWhy(T))); continue; }
     const real = sc.commit(b);
     if (!sc.edges.length || sc.missed) {
       unread.push(s);
       const sw = sc.edges.length ? TEXT_UNREAD_SHAPE_WHY : shapeWhy(T); // 연결이 하나도 없으면 모양 밖의 이유(사람이 만든 산출물 등)가 있는지 본다
-      unreadWhy.push(sw === TEXT_UNREAD_SHAPE_WHY ? TEXT_UNREAD_PARTIAL_WHY : sw);
+      unreadWhy.push(sc.reason || (sw === TEXT_UNREAD_SHAPE_WHY ? TEXT_UNREAD_PARTIAL_WHY : sw));
       partial.push(s);
       prev = null;
     } else prev = { works: real.works };
@@ -1247,7 +1289,7 @@ export const TEXT_NODE_TYPES = Object.freeze(NEW_TYPES);
 
 /**
  * 제안 + 사용자의 선택 → 화면과 명령이 함께 쓰는 최종 값.
- *  nodes[key]: {include, fixed(지도에 있는 항목이라 체크 없이 연결의 끝으로 쓰임), type, label, emp_no, problem:''|'empty'|'too_long', match:{id,gid,label}|null, ambiguous}
+ *  nodes[key]: {include, fixed(지도에 있는 항목이라 체크 없이 연결의 끝으로 쓰임), type, label, emp_no, problem:''|'empty'|'too_long', match:{id,gid,label}|null, mapEmpNo(지도 사람의 사번, 없으면 ''), ambiguous}
  *  edges[key]: {include(실제로 넣을지), wanted(사용자가 체크했는지), type, source, target(방향 반영한 항목 key), reason:''|'pair'|'end_missing'|'same', exists}
  * @param {object} selection {nodes:{key:{include?,type?,label?,emp_no?}}, edges:{key:{include?,type?}}} 빠진 값은 defaultSelection
  * @param {{id:string, core_type:string, label:string, emp_no:string}[]} cands docCandidates(doc) 또는 ownCandidates(view)
@@ -1274,6 +1316,7 @@ export function resolveSelection(proposal, selection, cands, docEdges = null) {
       emp_no,
       problem,
       match: m.hit ? { id: m.hit.id, gid: m.hit.gid, label: m.hit.label } : null,
+      mapEmpNo: m.hit && m.hit.core_type === 'person' ? String(m.hit.emp_no || '') : '', // T6: 지도에 있는 사람의 사번(화면이 읽기 전용으로 보인다 — 글의 사번 칸 값과 다를 수 있다)
       ambiguous: !!m.ambiguous,
     };
   }

@@ -9,7 +9,7 @@ import { METHOD_LABELS, afterQuiet, explainInsight, explainInsightAsync, isLive,
 import { el } from './dom.js';
 import { evidenceChips } from './evidence.js';
 import { summaryBar } from './check-summary.js';
-import { compareRisk, inspectionSummaryText, namesFromInspection } from '../rules/daily-use.js';
+import { compareRisk, currentOwnersByWork, inspectionSummaryText, namesFromInspection } from '../rules/daily-use.js';
 import { inspectionInput } from '../view/risk-summary.js';
 import { todayLocal } from './time.js';
 import { SUBTYPE_ROLE } from '../model/schema.js';
@@ -109,7 +109,8 @@ export function insightPanel(o) {
   const summaryAsOf = () => o.asOf || todayLocal();
   const buildSummary = () => {
     const d = inspectionInput(view, { asOf: summaryAsOf(), n: denseN, mapName: o.mapName || '업무 지도' });
-    return inspectionSummaryText(d, o.baseline ? compareRisk(d, o.baseline, namesFromInspection(d)) : null);
+    // 비교 기준 o.baseline은 오늘보다 앞선 날의 가장 최근 기준(M1), o.baselineToday는 오늘 저장한 점검뿐일 때. 업무별 지금 담당 이름(M6)도 함께 견준다
+    return inspectionSummaryText(d, o.baseline || o.baselineToday ? compareRisk(d, o.baseline || null, { ...namesFromInspection(d), owners: currentOwnersByWork(view, summaryAsOf()) }, { savedToday: !!o.baselineToday }) : null);
   };
   return el('div', { class: 'insight' },
     el('h2', {}, '인사이트'),

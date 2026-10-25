@@ -570,6 +570,63 @@ export function createApp({ store, samples, currentId, now, authorName, locked =
       }
     },
 
+    /**
+     * 「담당 바꾸기」(일상 사용 2회차 M3): 업무 하나의 담당을 한 번의 저장(되감기 한 점)으로 넘긴다 — 보내는 사람의 진행 중 수행을 끝내고(assign_end),
+     * 받는 사람의 수행을 시작하며(assign_start), handover가 true면 인수인계 이력도 남긴다. 새 명령은 없다(addAssignment·addNode·addEvent를 묶음).
+     * 받는 사람은 이 지도의 사람(toId) 또는 이름(toName: 같은 이름의 사람이 있으면 그 사람, 없으면 사람을 새로 만든다).
+     * 거부(아무것도 저장하지 않음): 읽기 전용(guard), 업무·보내는 사람이 이 지도에 없음, 받는 사람 없음·같은 이름 둘 이상(reason 'ambiguous')·보내는 사람과 같음,
+     * 날짜 없음·오늘보다 뒤(field 'occurred_at'), 보내는 사람이 진행 중이 아님(no_active)·받는 사람이 이미 담당 중(already_active) 등 addAssignment의 거부
+     * @param {{workId:string, fromId:string, toId?:string, toName?:string, date:string, handover?:boolean}} input 모두 이 지도 문서 안의 ID
+     * @returns {{ok:true, doc:object, to:object, created:boolean, handover:boolean} | {ok:false, error:object}}
+     */
+    changeAssignee({ workId, fromId, toId, toName, date, handover = false }) {
+      if (guard()) return guard();
+      const person = (id) => doc.nodes.find((n) => n.id === id && n.core_type === 'person' && !n.hidden);
+      const work = doc.nodes.find((n) => n.id === workId && n.core_type === 'work' && !n.hidden);
+      if (!work) return { ok: false, error: { code: CODES.SCHEMA, field: 'work_id' } };
+      if (!person(fromId)) return { ok: false, error: { code: CODES.SCHEMA, field: 'person_id' } };
+      if (!date) return { ok: false, error: { code: CODES.REQUIRED, field: 'occurred_at' } };
+      if (String(date) > String(now()).slice(0, 10)) return { ok: false, error: { code: CODES.SCHEMA, field: 'occurred_at', future: true } };
+      // 받는 사람: 고른 사람 → 이름이 같은 사람 → 새 사람
+      let target = toId ? person(toId) : null;
+      let create = null;
+      if (!target) {
+        const label = String(toName ?? '').trim();
+        if (!label) return { ok: false, error: { code: CODES.REQUIRED, field: 'to_person_id' } };
+        const hits = doc.nodes.filter((n) => n.core_type === 'person' && !n.hidden && normalizeLabel(n.label) === normalizeLabel(label));
+        if (hits.length > 1) return { ok: false, error: { code: CODES.SCHEMA, field: 'to_person_id', reason: 'ambiguous' } };
+        if (hits.length === 1) target = hits[0];
+        else create = label;
+      }
+      if (target && target.id === fromId) return { ok: false, error: { code: CODES.SCHEMA, field: 'to_person_id', same_person: true } };
+      const ctx = { now: now() };
+      const note = '담당 바꾸기';
+      let d = doc;
+      const step = (r) => {
+        if (!r.ok) throw Object.assign(new Error('assignee'), { result: r });
+        d = r.doc;
+        return r;
+      };
+      try {
+        if (create) target = step(addNode(d, { core_type: 'person', label: create }, ctx)).node;
+        step(addAssignment(d, { type: 'assign_end', occurred_at: date, payload: { person_id: fromId, work_id: workId }, note }, ctx));
+        step(addAssignment(d, { type: 'assign_start', occurred_at: date, payload: { person_id: target.id, work_id: workId }, note }, ctx));
+        if (handover) {
+          // 바로 앞 인수인계(이 업무의 마지막 인수인계)를 가리킨다(확정 때와 같은 규칙, D2-6)
+          const prev = d.events.filter((ev) => ev.type === 'handover' && ev.payload && ev.payload.work_id === workId)
+            .sort((a, b) => String(a.occurred_at).localeCompare(String(b.occurred_at)) || String(a.recorded_at).localeCompare(String(b.recorded_at))).pop();
+          step(addEvent(d, { type: 'handover', occurred_at: date, payload: { work_id: workId, from_person_id: fromId, to_person_id: target.id, ...(prev ? { previous_handover_id: prev.id } : {}) }, note: `담당 바꾸기와 함께 남긴 인수인계 기록(기록: ${author()})` }, ctx));
+        }
+        const failed = save(d);
+        if (failed) return failed;
+        doc = d;
+        return { ok: true, doc: d, to: target, created: !!create, handover: !!handover };
+      } catch (err) {
+        if (err.result) return err.result;
+        throw err;
+      }
+    },
+
     // ── 편집 되감기(CR-14 A, R-25, D-30): 기록 시각 기준으로 지도가 고쳐진 시점을 보고 되돌린다 ──
     /** 편집 시점 목록 [{at, count, kinds}] 오래된 순(같은 기록 시각 = 한 판) */
     editPoints() {

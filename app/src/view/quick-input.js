@@ -3,7 +3,8 @@
 // 동작이 갈릴 수 있는 값은 아래 상수 한 곳에 둔다(승인 문서에 수치가 없어 "답이 없으면" 값으로 정함. docs/decisions-pending.md에 쌓음).
 
 import { toGid } from './view.js';
-import { isCurrent, similarExperts, NAME_ONLY_NOTE, personLoad } from '../rules/insight.js';
+import { isCurrentEdge } from './describe.js';
+import { similarExperts, NAME_ONLY_NOTE, personLoad } from '../rules/insight.js';
 import { normalizeLabel, pairAllowed } from '../model/schema.js';
 
 /** D-6: 맡은 업무 하나마다 보이는 대신할 수 있는 후보의 최대 수 */
@@ -35,7 +36,7 @@ export function draftCenterFor(view, personGid, { asOf }) {
   const mine = new Set(load.works.map((w) => w.gid));
   const perUniverse = new Map(); // 유니버스 ID → 업무 gid 집합
   for (const e of view.edges) {
-    if (e.hidden || e.core_type !== 'performs' || e.source !== person.gid || !mine.has(e.target) || !isCurrent(e.period, asOf)) continue;
+    if (e.hidden || e.core_type !== 'performs' || e.source !== person.gid || !mine.has(e.target) || !isCurrentEdge(view, e, asOf)) continue; // M5·M7: 담당을 넘긴 날 끝나는 쪽은 현재가 아니다
     if (!perUniverse.has(e.universe_id)) perUniverse.set(e.universe_id, new Set());
     perUniverse.get(e.universe_id).add(e.target);
   }

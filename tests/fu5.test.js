@@ -148,7 +148,8 @@ test('FU5-1·2 개요 화면: 이름이 바뀌었으면 접힌 「바뀐 것 보
   assert.equal(q(draw(mk({ changes: null })), 'team-risk-changes'), null);
   assert.equal(q(draw(mk({ changes: null })), 'risk-baseline-saved'), null);
   const saved = q(draw(mk({ changes: null, savedNote: baselineSavedNote(AT) })), 'risk-baseline-saved');
-  assert.equal(saved.textContent, '이번 점검을 저장했습니다(2026-10-25) — 다음에 열면 이 숫자와 비교합니다');
+  // 일상 사용 2회차 M1로 문구가 바뀜(기대 변경, 요구 약화 아님): 비교는 저장한 날 다음 점검 날부터라 「다음에 열면」이 틀린 말이 됨(같은 날 다시 열면 비교하지 않는다)
+  assert.equal(saved.textContent, '이번 점검을 저장했습니다(2026-10-25) — 다음 점검 날부터 이 숫자와 비교합니다');
   assert.equal(saved.getAttribute('role'), 'status');
 }));
 
@@ -203,14 +204,15 @@ test('FU5-5 유사 경험자 탭 설명 아래에 사람이 빠질 때 누가 �
 }));
 
 // ── B8: 담당을 넘긴 날 ──
-test('FU5-8 담당을 넘긴 날: 끝 날짜가 기준일이고 같은 업무에 기준일 시작한 다른 담당이 있으면 「오늘까지(넘김)」, 규칙(workLoad)은 둘 다 현재 그대로', () => {
+// 일상 사용 2회차 M5·M7(2026-10-25): 넘긴 날의 판정이 바뀌었다 — 끝나는 사람은 기준일의 「현재 담당」에서 뺀다(예전 기대: workLoad가 가상갑 포함 셋을 모두 현재로). 표시(오늘까지(넘김))·handingOverToday는 그대로. 영향: R-05 밀집·공백, 사람 상세, 대신할 사람, 초안 보내는 사람
+test('FU5-8 담당을 넘긴 날: 끝 날짜가 기준일이고 같은 업무에 기준일 시작한 다른 담당이 있으면 「오늘까지(넘김)」, 규칙(workLoad)의 현재 담당에서는 끝나는 사람이 빠진다(M5·M7)', () => {
   const v = viewOf([n('W1', 'work', '정산'), n('P1', 'person', '가상갑'), n('P2', 'person', '가상을'), n('P3', 'person', '가상병')],
     [perf('P1', 'W1', { start: '2026-01-01', end: ASOF }), perf('P2', 'W1', { start: ASOF }), perf('P3', 'W1', { start: '2026-02-01' })]);
   const w = 'U-R/W1';
   assert.deepEqual([...handingOverToday(v, w, ASOF)], ['U-R/P1']);
   assert.deepEqual([...handingOverToday(v, w, '2026-10-24')], [], '다른 날은 해당 없음');
   const cur = workLoad(v, w, { asOf: ASOF }).current;
-  assert.deepEqual(cur.map((p) => p.label).sort(), ['가상갑', '가상병', '가상을'], '규칙 계산은 그대로');
+  assert.deepEqual(cur.map((p) => p.label).sort(), ['가상병', '가상을'], '넘기는 사람(가상갑)은 현재 담당이 아니다');
   const link = (person) => describeNode(v, person, { asOf: ASOF }).links.find((l) => l.relation_type === 'performs');
   assert.equal(link('U-R/P1').status, '오늘까지(넘김)');
   assert.equal(link('U-R/P1').status_key, 'handover');

@@ -3826,7 +3826,10 @@ async function checkBrowser(browser, port) {
       check('G1 D-11 초안 「진행 중인 일」에 「최근 해결: 적은 글(오늘 날짜)」 한 줄', g1Recent.some((x) => x.text === `최근 해결: ${g1Typed}(${g1Day})`) && g1Recent.length >= 2, JSON.stringify(g1Prog.map((x) => x.text)));
       const g1Again = await g1Marks();
       const g1RecentMarked = g1Recent.filter((x) => x.marks === 1).length;
-      check('G1 D-13 지난번 초안 이후 기록된 근거가 붙은 문장(최근 해결 두 줄)에만 작은 「새로」 표시(크기 있음), 나머지 문장에는 없음', g1Again.n === g1RecentMarked && g1RecentMarked === 2 && g1Again.n < g1Again.li && g1Again.sized && g1Again.text.every((t) => t === '새로'), JSON.stringify({ g1Again, g1Recent }));
+      // 일상 사용 2회차 ①: 방금 해결한 이슈의 「최근 이슈」 줄에는 해결 날짜가 붙고, 그 해결 기록이 근거라 「새로」도 붙는다
+      const g1IssueLines = await g1Item('최근_이슈');
+      const g1IssueMarked = g1IssueLines.filter((x) => x.marks === 1).length;
+      check('G1 D-13 지난번 초안 이후 기록된 근거가 붙은 문장(최근 해결 두 줄, 방금 해결해 해결 날짜가 붙은 최근 이슈 줄)에만 작은 「새로」 표시(크기 있음), 나머지 문장에는 없음', g1Again.n === g1RecentMarked + g1IssueMarked && g1RecentMarked === 2 && g1IssueMarked <= 2 && g1IssueLines.filter((x) => x.marks === 1).every((x) => x.text.includes('해결')) && g1Again.n < g1Again.li && g1Again.sized && g1Again.text.every((t) => t === '새로'), JSON.stringify({ g1Again, g1Recent, g1IssueLines }));
       await shot(s.cdp, `${browser.name}-g1-draft-new-mark`);
       // 그 뒤 새 기록이 없으면 다시 만든 초안에는 표시가 없다
       await makeDraft('U-A1/N-001', 'U-A1/N-011', 'U-A1/N-010');
@@ -4112,11 +4115,11 @@ async function checkBrowser(browser, port) {
       const c1 = await g3Q('[data-testid=team-risk-compare]');
       const st1 = await g3Settings();
       const base1 = (st1.riskBaseline || {})['U-D1'];
-      check('G3 D-3 「이번 점검 저장」 → 「지난 점검(오늘) 대비: 변화 없음」, 기준(숫자·저장 시각)은 설정 riskBaseline[U-D1]에만', !!c1 && /^지난 점검\(\d{4}-\d{2}-\d{2}\) 대비: 변화 없음/.test(c1.text) && !!base1 && typeof base1.at === 'string' && Number.isInteger(base1.solo), JSON.stringify([c1, base1]));
+      check('G3 D-3 「이번 점검 저장」 → 같은 날은 비교하지 않고 「오늘 저장한 점검 — 다음 점검 날부터 비교합니다」(M1), 기준(숫자·저장 시각)은 설정 riskBaseline[U-D1]에만', !!c1 && c1.text.startsWith('오늘 저장한 점검 — 다음 점검 날부터 비교합니다') && !!base1 && typeof base1.at === 'string' && Number.isInteger(base1.solo), JSON.stringify([c1, base1]));
       check('G3 D-3 점검 기준은 지도 문서·내보내기에 들어가지 않음(문서 저장소 값·내보내기 JSON에 riskBaseline 없음)', !(await evaluate(s.cdp, "Object.entries(localStorage).filter(([k]) => k.startsWith('wu:v1:u:')).some(([, v]) => v.includes('riskBaseline'))")) && !(await evaluate(s.cdp, "JSON.stringify(window.__wu.doc).includes('riskBaseline')")));
       await shot(s.cdp, `${browser.name}-g3-risk-compare`);
-      // 기준을 「혼자만 아는 일 한 개 적게, 담당 공백 한 개 많게」로 바꿔 다시 열면 +1 / −1
-      await evaluate(s.cdp, "(() => { const v = JSON.parse(localStorage.getItem('wu:v1:settings')); const b = v.riskBaseline['U-D1']; v.riskBaseline['U-D1'] = { ...b, solo: b.solo - 1, gaps: b.gaps + 1 }; localStorage.setItem('wu:v1:settings', JSON.stringify(v)); location.reload(); })()").catch(() => {});
+      // 기준을 이틀 전에 저장한 「혼자만 아는 일 한 개 적게, 담당 공백 한 개 많게」로 바꿔 다시 열면 +1 / −1(M1: 오늘보다 앞선 날 기준과만 비교)
+      await evaluate(s.cdp, "(() => { const v = JSON.parse(localStorage.getItem('wu:v1:settings')); const b = v.riskBaseline['U-D1']; const d = new Date(Date.now() - 2 * 864e5); const day = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); v.riskBaseline['U-D1'] = { ...b, at: day + 'T09:00:00+09:00', asOf: day, solo: b.solo - 1, gaps: b.gaps + 1 }; localStorage.setItem('wu:v1:settings', JSON.stringify(v)); location.reload(); })()").catch(() => {});
       await sleep(600);
       await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-D1' && window.__wu.cy.nodes().length > 0", 8000);
       await sleep(300);
@@ -4414,7 +4417,7 @@ async function checkBrowser(browser, port) {
       await clickTestId(s.cdp, 'btn-risk-baseline-save');
       await sleep(300);
       const note = await fu5Q('[data-testid=risk-baseline-saved]');
-      check('FU5-2 「이번 점검 저장」을 누르면 「이번 점검을 저장했습니다(날짜) — 다음에 열면 이 숫자와 비교합니다」 알림 한 줄이 보임(크기 있음)', !!note && /^이번 점검을 저장했습니다\(\d{4}-\d{2}-\d{2}\) — 다음에 열면 이 숫자와 비교합니다$/.test(note.text) && note.w > 0 && note.h > 0, JSON.stringify(note));
+      check('FU5-2 「이번 점검 저장」을 누르면 「이번 점검을 저장했습니다(날짜) — 다음 점검 날부터 이 숫자와 비교합니다」 알림 한 줄이 보임(크기 있음, M1)', !!note && /^이번 점검을 저장했습니다\(\d{4}-\d{2}-\d{2}\) — 다음 점검 날부터 이 숫자와 비교합니다$/.test(note.text) && note.w > 0 && note.h > 0, JSON.stringify(note));
       const st = await fu5Settings();
       const b = (st.riskBaseline || {})['U-D1'];
       check('FU5-1 점검 기준에 세 목록(혼자만 아는 일·일 몰린 사람·담당자 빈 일)의 이름이 함께 저장되고(이 브라우저 설정에만), 목록당 30개 이하', !!b && !!b.names && ['solo', 'dense', 'gaps'].every((k) => Array.isArray(b.names[k]) && b.names[k].length <= 30) && !(await evaluate(s.cdp, "Object.entries(localStorage).filter(([k]) => k.startsWith('wu:v1:u:')).some(([, v]) => v.includes('riskBaseline'))")), JSON.stringify(b));
@@ -4424,8 +4427,8 @@ async function checkBrowser(browser, port) {
       await evaluate(s.cdp, "(() => { const w = window.__wu.cy.nodes().filter((n) => n.data('core_type') === 'work')[0]; window.__wu.select(w.id()); window.__wu.select(null); })()");
       await sleep(250);
       check('FU5-2 다른 항목을 고른 뒤 개요로 돌아오면 저장 알림은 사라지고 비교 줄만 남음', (await fu5Q('[data-testid=risk-baseline-saved]')) === null && !!(await fu5Q('[data-testid=team-risk-compare]')));
-      // 저장해 둔 이름을 바꿔(첫 번째 비어 있지 않은 목록에서 하나 빼고, 담당자 빈 일에 없는 이름을 더해) 다시 열면 늘어남·줄어듦
-      const removed = await evaluate(s.cdp, "(() => { const v = JSON.parse(localStorage.getItem('wu:v1:settings')); const b = v.riskBaseline['U-D1']; const k = ['solo', 'dense', 'gaps'].find((x) => b.names[x].length > 0); const gone = k ? b.names[k].shift() : null; b.names.gaps.push('시험용 사라진 업무'); localStorage.setItem('wu:v1:settings', JSON.stringify(v)); return { key: k, gone }; })()");
+      // 저장해 둔 이름을 바꿔(첫 번째 비어 있지 않은 목록에서 하나 빼고, 담당자 빈 일에 없는 이름을 더해) 이틀 전 기준으로 옮겨 다시 열면 늘어남·줄어듦(M1: 같은 날 기준과는 비교하지 않음)
+      const removed = await evaluate(s.cdp, "(() => { const v = JSON.parse(localStorage.getItem('wu:v1:settings')); const b = v.riskBaseline['U-D1']; const d = new Date(Date.now() - 2 * 864e5); const day = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); b.at = day + 'T09:00:00+09:00'; b.asOf = day; const k = ['solo', 'dense', 'gaps'].find((x) => b.names[x].length > 0); const gone = k ? b.names[k].shift() : null; b.names.gaps.push('시험용 사라진 업무'); localStorage.setItem('wu:v1:settings', JSON.stringify(v)); return { key: k, gone }; })()");
       await fu5Reload('U-D1');
       const box = await fu5Q('[data-testid=team-risk-changes]');
       check('FU5-1 이름이 바뀌었으면 비교 줄 아래에 접힌 「바뀐 것 보기」 상자(크기 있음, 기본 접힘)', !!box && box.w > 0 && box.h > 0 && box.open === false && box.text.startsWith('바뀐 것 보기'), JSON.stringify([box, removed]));
@@ -4544,6 +4547,328 @@ async function checkBrowser(browser, port) {
     await sleep(500);
     await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1'", 8000);
     await fu5Go('U-A1', '', fu5Snap); // 저장소를 블록 시작 때 찍어 둔 상태로 되돌린다
+  }
+
+  // ── 일상 사용 2회차 S(2026-10-25, CR-18 범위 안 보완): T4 「이번 주 기록」 날짜, T5 협업자 메모(연결 note), T6 사람 목록 순서·추가 단추 설명,
+  //    M1 점검 기준 최근 둘, M2 「점검 요약 보기」, M3 담당 바꾸기, M4 묶은 지도 마지막 수정일, M6 바뀐 것에 담당 변경. 데이터·설정을 바꾸므로 시작 때 저장소를 찍어 두었다가 끝에서 되돌린다("처음 사용 5회차(FU5)" 블록과 같은 방식) ──
+  {
+    const s2Snap = await evaluate(s.cdp, 'JSON.stringify(Object.entries(localStorage))');
+    // 앞 점검들이 월말 정산 점검(U-A1)을 고쳐 두었을 수 있다: 저장소에서 지우고 다시 열면 앱이 깨끗한 샘플을 다시 채운다. 그 상태를 이 블록의 기준으로 쓴다
+    await evaluate(s.cdp, "(() => { localStorage.removeItem('wu:v1:u:U-A1'); location.reload(); })()").catch(() => {});
+    await sleep(500);
+    await waitFor(s.cdp, 'window.__wu && (window.__wu.start === true || !!window.__wu.doc)', 8000);
+    const s2Base = await evaluate(s.cdp, 'JSON.stringify(Object.entries(localStorage))');
+    const s2Mut = (patch = {}, extra = '') => `{ const v = JSON.parse(localStorage.getItem('wu:v1:settings') || '{}'); delete v.tourDone; delete v.lastOpenedId; delete v.riskBaseline; Object.assign(v, ${JSON.stringify(patch)}); localStorage.setItem('wu:v1:settings', JSON.stringify(v)); } ${extra}`;
+    const s2Go = async (hash, mutate = s2Mut(), base = s2Base) => {
+      const nav = hash ? `location.hash = ${JSON.stringify(hash)}` : "history.replaceState(null, '', location.pathname + location.search)";
+      await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(base)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); ${mutate}; ${nav}; location.reload(); })()`).catch(() => {});
+      await sleep(500);
+      return hash
+        ? waitFor(s.cdp, `window.__wu && window.__wu.doc && window.__wu.doc.universe.id === ${JSON.stringify(hash)} && window.__wu.cy.nodes().length > 0`, 8000)
+        : waitFor(s.cdp, 'window.__wu && window.__wu.start === true', 8000);
+    };
+    const s2Q = (sel) => evaluate(s.cdp, `(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect(); return { text: e.textContent, w: r.width, h: r.height, open: e.open, value: e.value, max: e.max, code: e.dataset ? e.dataset.code : undefined }; })()`);
+    const s2Set = (testid, val) => evaluate(s.cdp, `(() => { const e = document.querySelector('[data-testid=${testid}]'); if (!e) return false; e.value = ${JSON.stringify(val)}; e.dispatchEvent(new Event('input')); e.dispatchEvent(new Event('change')); return true; })()`);
+    const s2Select = async (gid) => { await evaluate(s.cdp, `window.__wu.select(${JSON.stringify(gid)})`); await sleep(250); };
+    const s2Settings = () => evaluate(s.cdp, "JSON.parse(localStorage.getItem('wu:v1:settings') || '{}')");
+    const s2Day = (n) => evaluate(s.cdp, `(() => { const t = new Date(); t.setDate(t.getDate() + (${n})); const p = (x) => String(x).padStart(2, '0'); return t.getFullYear() + '-' + p(t.getMonth() + 1) + '-' + p(t.getDate()); })()`);
+    const s2Counts = () => evaluate(s.cdp, '({ events: window.__wu.doc.events.length, edges: window.__wu.doc.edges.length, nodes: window.__wu.doc.nodes.length })');
+    const s2Reload = async (id) => {
+      await evaluate(s.cdp, 'location.reload()').catch(() => {});
+      await sleep(600);
+      await waitFor(s.cdp, `window.__wu && window.__wu.doc && window.__wu.doc.universe.id === ${JSON.stringify(id)} && window.__wu.cy.nodes().length > 0`, 8000);
+      await sleep(300);
+    };
+
+    // ── T4·T5·M3: 월말 정산 점검(U-A1) ──
+    if (await s2Go('U-A1')) {
+      await evaluate(s.cdp, 'window.confirm = () => true');
+      const today = await s2Day(0);
+      const tomorrow = await s2Day(1);
+      const past = await s2Day(-3);
+      // T4: 지도 중심 상세의 「이번 주 기록」 날짜 칸
+      await s2Select('U-A1/N-000');
+      const wd = await s2Q('[data-testid=weekly-date]');
+      check('S T4 「이번 주 기록」에 날짜 칸(크기 있음): 기본 오늘, 고를 수 있는 가장 늦은 날 = 오늘', !!wd && wd.w > 0 && wd.h > 0 && wd.value === today && wd.max === today, JSON.stringify([wd, today]));
+      const c0 = await s2Counts();
+      await s2Set('weekly-work', 'N-001');
+      await s2Set('weekly-note', 'S 시험 주간 기록');
+      await s2Set('weekly-date', tomorrow);
+      await clickTestId(s.cdp, 'weekly-add');
+      await sleep(200);
+      const wFuture = await s2Q('[data-testid=weekly-msg]');
+      check('S T4 오늘보다 뒤 날짜는 「오늘보다 뒤 날짜는 기록할 수 없습니다…」로 거부하고 저장하지 않음', !!wFuture && wFuture.text.startsWith('오늘보다 뒤 날짜는 기록할 수 없습니다') && wFuture.code === 'date-future' && (await s2Counts()).events === c0.events, JSON.stringify(wFuture));
+      await s2Set('weekly-date', '');
+      await clickTestId(s.cdp, 'weekly-add');
+      await sleep(200);
+      const wEmpty = await s2Q('[data-testid=weekly-msg]');
+      check('S T4 날짜가 비면 「날짜를 넣으세요.」, 저장하지 않음', !!wEmpty && wEmpty.text === '날짜를 넣으세요.' && (await s2Counts()).events === c0.events, JSON.stringify(wEmpty));
+      await s2Set('weekly-date', past);
+      await shot(s.cdp, `${browser.name}-s2-weekly-date`);
+      await clickTestId(s.cdp, 'weekly-add');
+      await sleep(350);
+      const wMemo = await evaluate(s.cdp, 'window.__wu.doc.events[window.__wu.doc.events.length - 1]');
+      const wDone = await s2Q('[data-testid=weekly-done]');
+      check('S T4 지난 날짜로 기록 → 이력 메모의 날짜가 그 날짜, 완료 알림에 날짜가 보임', (await s2Counts()).events === c0.events + 1 && wMemo.type === 'memo' && wMemo.occurred_at === past && wMemo.note === 'S 시험 주간 기록' && !!wDone && wDone.text.includes(`(${past})`), JSON.stringify([wMemo, wDone]));
+      const wd2 = await s2Q('[data-testid=weekly-date]');
+      check('S T4 몰아 넣기: 방금 쓴 날짜가 같은 날 안에서는 칸에 남아 있음(오늘로 되돌아가지 않음)', !!wd2 && wd2.value === past, JSON.stringify(wd2));
+
+      // T5: 협업자 추가의 「주고받는 것」 → 「참조」 연결의 메모
+      await s2Select('U-A1/N-000');
+      await s2Select('U-A1/N-001');
+      const cn = await s2Q('[data-testid=collab-note]');
+      await evaluate(s.cdp, "document.querySelector('[data-testid=collab-quick]').open = true");
+      await sleep(100);
+      const cnBox = await evaluate(s.cdp, "(() => { const e = document.querySelector('[data-testid=collab-note]'); const r = e.getBoundingClientRect(); return { w: r.width, h: r.height, label: e.closest('label').textContent }; })()");
+      check('S T5 「협업자 추가」에 선택 칸 「주고받는 것」(크기 있음)', !!cn && cnBox.w > 0 && cnBox.h > 0 && cnBox.label.includes('주고받는 것'), JSON.stringify([cn, cnBox]));
+      await s2Set('collab-name', 'S 협업자');
+      await s2Set('collab-note', '대사 결과 공유');
+      await clickTestId(s.cdp, 'collab-add');
+      await sleep(350);
+      const refEdge = await evaluate(s.cdp, "(() => { const d = window.__wu.doc; const p = d.nodes.find((n) => n.label === 'S 협업자'); const e = p && d.edges.find((x) => x.core_type === 'references' && x.target === p.id); return e ? { note: e.note, source: e.source } : null; })()");
+      const linkText = await evaluate(s.cdp, "(document.querySelector('[data-testid=links]') || { textContent: '' }).textContent");
+      const cd = await s2Q('[data-testid=collab-done]');
+      check('S T5 추가 → 「참조」 연결의 메모에 「대사 결과 공유」가 저장되고(N-001 → 협업자), 「연결된 항목」과 완료 알림에 보임', !!refEdge && refEdge.note === '대사 결과 공유' && refEdge.source === 'N-001' && linkText.includes('대사 결과 공유') && !!cd && cd.text.includes('대사 결과 공유'), JSON.stringify([refEdge, cd]));
+
+      // M3: 담당 바꾸기(대사 확인: 지금 담당 서하늘)
+      await s2Select('U-A1/N-000');
+      await s2Select('U-A1/N-001');
+      const ab = await s2Q('[data-testid=assignee-change]');
+      check('S M3 업무 상세에 접힌 상자 「담당 바꾸기」(처음엔 접힘, 크기 있음)', !!ab && ab.w > 0 && ab.h > 0 && ab.open === false && ab.text.includes('담당 바꾸기'), JSON.stringify(ab));
+      await evaluate(s.cdp, "document.querySelector('[data-testid=assignee-change]').open = true");
+      await sleep(100);
+      const fromOpts = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=assignee-from] option')].map((o) => o.textContent)");
+      check('S M3 「지금 담당」 목록은 진행 중으로 담당하는 사람(서하늘)', fromOpts.includes('서하늘') && !fromOpts.includes('윤바다'), JSON.stringify(fromOpts));
+      const a0 = await s2Counts();
+      // 오류: 받는 사람 없음 / 둘 다 입력 / 오늘 뒤 날짜 — 아무것도 저장하지 않음
+      await clickTestId(s.cdp, 'assignee-apply');
+      await sleep(150);
+      const aEmpty = await s2Q('[data-testid=assignee-msg]');
+      await s2Set('assignee-to', 'N-011');
+      await s2Set('assignee-to-name', '가상신입');
+      await clickTestId(s.cdp, 'assignee-apply');
+      await sleep(150);
+      const aBoth = await s2Q('[data-testid=assignee-msg]');
+      await s2Set('assignee-to-name', '');
+      await s2Set('assignee-date', tomorrow);
+      await clickTestId(s.cdp, 'assignee-apply');
+      await sleep(150);
+      const aFuture = await s2Q('[data-testid=assignee-msg]');
+      check('S M3 오류: 받는 사람이 없으면·목록과 이름을 둘 다 넣으면·오늘 뒤 날짜면 각각 안내하고 저장하지 않음', !!aEmpty && aEmpty.code === 'to-empty' && !!aBoth && aBoth.code === 'both' && !!aFuture && aFuture.code === 'date-future' && JSON.stringify(await s2Counts()) === JSON.stringify(a0), JSON.stringify([aEmpty, aBoth, aFuture]));
+      // 정상: 서하늘 → 윤바다, 인수인계 기록도
+      await s2Set('assignee-date', today);
+      await evaluate(s.cdp, "(() => { const c = document.querySelector('[data-testid=assignee-handover]'); c.checked = true; c.dispatchEvent(new Event('change')); })()");
+      await shot(s.cdp, `${browser.name}-s2-assignee`);
+      await clickTestId(s.cdp, 'assignee-apply');
+      await sleep(400);
+      const a1 = await s2Counts();
+      const aState = await evaluate(s.cdp, `(() => { const d = window.__wu.doc; const ev = d.events.slice(${a0.events}); const out = d.edges.find((e) => e.source === 'N-012' && e.target === 'N-001' && e.core_type === 'performs'); const inn = d.edges.find((e) => e.source === 'N-011' && e.target === 'N-001' && e.period && e.period.start === ${JSON.stringify(today)}); return { types: ev.filter((e) => e.type === 'assign_end' || e.type === 'assign_start' || e.type === 'handover').map((e) => e.type), stamps: [...new Set(ev.map((e) => e.recorded_at))].length, end: out && out.period && out.period.end, started: !!inn && !inn.period.end, ho: ev.find((e) => e.type === 'handover') }; })()`);
+      const aDone = await s2Q('[data-testid=assignee-done]');
+      const wl = await s2Q('[data-testid=work-load]');
+      check('S M3 「담당 바꾸기」 → 한 번의 기록으로 서하늘의 수행이 오늘 끝나고 윤바다의 수행이 오늘 시작, 인수인계 이력도 같이(담당 종료·시작·인수인계)', JSON.stringify(aState.types) === JSON.stringify(['assign_end', 'assign_start', 'handover']) && aState.stamps === 1 && aState.end === today && aState.started && aState.ho.payload.from_person_id === 'N-012' && aState.ho.payload.to_person_id === 'N-011' && a1.events > a0.events, JSON.stringify([aState, a0, a1]));
+      check('S M3 완료 알림(서하늘 → 윤바다, 날짜)과 「현재 담당: 윤바다 (서하늘은 오늘까지)」(넘긴 날이라 끝나는 사람은 현재 담당에서 빠지고 표시만 — R2-M5와 같은 모양)', !!aDone && aDone.text.includes('서하늘 → 윤바다') && aDone.text.includes(today) && !!wl && wl.text.includes('현재 담당: 윤바다 (서하늘은 오늘까지)'), JSON.stringify([aDone, wl]));
+      // 새 사람 이름 경로
+      await evaluate(s.cdp, "document.querySelector('[data-testid=assignee-change]').open = true");
+      await s2Set('assignee-to-name', 'S 새 담당');
+      await clickTestId(s.cdp, 'assignee-apply');
+      await sleep(400);
+      const aNew = await evaluate(s.cdp, "(() => { const d = window.__wu.doc; const p = d.nodes.find((n) => n.label === 'S 새 담당'); return { person: !!p && p.core_type === 'person', edge: !!p && d.edges.some((e) => e.source === p.id && e.target === 'N-001' && e.core_type === 'performs' && !(e.period && e.period.end)) }; })()");
+      check('S M3 이름을 넣으면 새 사람을 만들어 새 담당으로(윤바다 → S 새 담당)', aNew.person && aNew.edge, JSON.stringify(aNew));
+      await shot(s.cdp, `${browser.name}-s2-assignee-done`);
+
+      // T6: 사람·업무·문서 추가 안의 설명이 눈에 보이는 글로
+      await evaluate(s.cdp, "window.__wu.select(null); document.querySelector('details.add').open = true");
+      await sleep(200);
+      const tn = await s2Q('[data-testid=add-tools-note]');
+      check('S T6 「사람·업무·문서 추가」 단추 아래에 설명 글(말풍선 아님, 크기 있음): 표로 추가·글로 추가·표로 고치기', !!tn && tn.w > 0 && tn.h > 0 && tn.text.includes('글로 추가: 몇 문장짜리 글을 붙여 넣으면') && tn.text.includes('표로 추가') && tn.text.includes('표로 고치기'), JSON.stringify(tn));
+    } else check('S 월말 정산 점검(U-A1) 열기', false, '지도가 열리지 않음');
+
+    // ── M3 안내: 묶은 지도의 하위 지도 항목은 「…」 열기 ──
+    if (await s2Go('U-D1')) {
+      await s2Select('U-A1/N-001');
+      await evaluate(s.cdp, "(() => { const d = document.querySelector('[data-testid=assignee-change]'); if (d) d.open = true; })()");
+      const other = await s2Q('[data-testid=assignee-other-map]');
+      const openBtn = await s2Q('[data-testid=assignee-open-map]');
+      check('S M3 부서 지도에서 하위 지도(월말 정산 점검)의 업무는 「담당 바꾸기」 대신 「「월말 정산 점검」 열기」 안내', !!other && other.text.includes('다른 업무 지도의 업무') && !!openBtn && openBtn.text.includes('열기') && (await s2Q('[data-testid=assignee-apply]')) === null, JSON.stringify([other, openBtn]));
+
+      // ── T6: 초안 사람 목록 순서(대상 업무를 수행한 사람이 먼저) ──
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await sleep(250);
+      await clickTestId(s.cdp, 'btn-draft-universe');
+      await sleep(300);
+      await s2Set('draft-target', 'U-A1/N-001');
+      const ppl = await evaluate(s.cdp, "(() => { const f = document.querySelector('[data-testid=draft-from]'); const gs = [...f.querySelectorAll('optgroup')]; return { labels: gs.map((g) => g.label), first: gs[0] ? [...gs[0].querySelectorAll('option')].map((o) => o.textContent) : [], second: gs[1] ? [...gs[1].querySelectorAll('option')].map((o) => o.textContent) : [] }; })()");
+      check('S T6 초안 창: 대상 업무(대사 확인)를 바꾸면 보내는 사람 목록이 「이 범위를 수행한 사람」(서하늘 등) → 「그 밖의 사람」 순', ppl.labels.join('|') === '이 범위를 수행한 사람|그 밖의 사람' && ppl.first.some((t) => t.includes('서하늘')) && ppl.second.length > 0 && !ppl.second.some((t) => t.includes('서하늘')), JSON.stringify(ppl));
+      await shot(s.cdp, `${browser.name}-s2-draft-people`);
+    } else check('S 부서 지도(U-D1) 열기', false, '지도가 열리지 않음');
+
+    // ── M1·M2·M6: 묶은 지도(가상 운영부) 위험 요약의 점검 기준 ──
+    if (await s2Go('U-D1')) {
+      const c0 = await s2Q('[data-testid=team-risk-compare]');
+      check('S M1 저장한 점검이 없으면 「아직 저장한 점검 없음」', !!c0 && c0.text.startsWith('아직 저장한 점검 없음'), JSON.stringify(c0));
+      await clickTestId(s.cdp, 'btn-risk-baseline-save');
+      await sleep(300);
+      const c1 = await s2Q('[data-testid=team-risk-compare]');
+      const n1 = await s2Q('[data-testid=risk-baseline-saved]');
+      const st1 = await s2Settings();
+      const b1 = (st1.riskBaseline || {})['U-D1'];
+      check('S M1 오늘 처음 저장 → 비교 줄이 「오늘 저장한 점검 — 다음 점검 날부터 비교합니다」(비교 아님), 알림에 「다음 점검 날부터」, 기준은 한 건(객체)이고 업무별 담당 이름(owners)이 함께 저장됨', !!c1 && c1.text.startsWith('오늘 저장한 점검 — 다음 점검 날부터 비교합니다') && !!n1 && /^이번 점검을 저장했습니다\(\d{4}-\d{2}-\d{2}\) — 다음 점검 날부터 이 숫자와 비교합니다$/.test(n1.text) && !!b1 && !Array.isArray(b1) && !!b1.owners && Object.keys(b1.owners).length > 0 && Object.keys(b1.owners).length <= 100, JSON.stringify([c1, n1, b1 && Object.keys(b1)]));
+      await clickTestId(s.cdp, 'btn-risk-baseline-save');
+      await sleep(300);
+      const n2 = await s2Q('[data-testid=risk-baseline-saved]');
+      const b2 = ((await s2Settings()).riskBaseline || {})['U-D1'];
+      check('S M1 같은 날 다시 저장 → 「오늘 저장한 점검을 이번 점검으로 바꿨습니다」, 기준은 그대로 한 건', !!n2 && n2.text.startsWith('오늘 저장한 점검을 이번 점검으로 바꿨습니다') && !Array.isArray(b2), JSON.stringify([n2, Array.isArray(b2)]));
+      // 이전 점검(7일 전, 혼자만 아는 일 하나 적게·한 업무의 담당 이름이 다름)과 오늘 것을 둘 다 가진 상태, 셋째로 14일 전 것도 끼워 넣어 최근 둘만 남는지
+      const d7 = await s2Day(-7);
+      const d14 = await s2Day(-14);
+      await evaluate(s.cdp, `(() => { const v = JSON.parse(localStorage.getItem('wu:v1:settings')); const b = v.riskBaseline['U-D1']; const w = Object.keys(b.owners)[0]; const old = (day, extra) => ({ ...b, at: day + 'T09:00:00+09:00', asOf: day, ...extra, owners: { ...b.owners, [w]: '시험용 이전 담당' } }); v.riskBaseline['U-D1'] = [old(${JSON.stringify(d14)}, { solo: 0 }), old(${JSON.stringify(d7)}, { solo: Math.max(0, b.solo - 1) }), b]; v.__ownerWork = w; localStorage.setItem('wu:v1:settings', JSON.stringify(v)); location.reload(); })()`).catch(() => {});
+      await sleep(600);
+      await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-D1' && window.__wu.cy.nodes().length > 0", 8000);
+      await sleep(300);
+      const ownerWork = (await s2Settings()).__ownerWork;
+      const c3 = await s2Q('[data-testid=team-risk-compare]');
+      check('S M1 비교는 오늘보다 앞선 날의 가장 최근 기준(7일 전)과 한다: 「지난 점검(7일 전 날짜) 대비」', !!c3 && c3.text.startsWith(`지난 점검(${d7}) 대비`), JSON.stringify([c3, d7]));
+      await evaluate(s.cdp, "document.querySelector('[data-testid=team-risk-changes]').open = true");
+      await sleep(150);
+      const ow = await s2Q('[data-testid=risk-change-owner]');
+      check('S M6 「바뀐 것 보기」에 「담당이 바뀐 업무: 「…」 시험용 이전 담당 → 지금 담당」 줄(크기 있음)', !!ow && ow.w > 0 && ow.h > 0 && ow.text.startsWith('담당이 바뀐 업무: ') && ow.text.includes(`「${ownerWork}」 시험용 이전 담당 → `), JSON.stringify([ow, ownerWork]));
+      await shot(s.cdp, `${browser.name}-s2-risk-owners`);
+      // 저장하면(오늘 것을 바꿈) 최근 둘만 남는다: 14일 전 것은 버려지고 7일 전 것은 그대로
+      await clickTestId(s.cdp, 'btn-risk-baseline-save');
+      await sleep(300);
+      const b3 = ((await s2Settings()).riskBaseline || {})['U-D1'];
+      check('S M1 설정에는 최근 둘(7일 전·오늘)만: 14일 전 기준은 버려지고, 오늘 것은 바뀐 것', Array.isArray(b3) && b3.length === 2 && b3[0].asOf === d7 && b3[1].at.slice(0, 10) === (await s2Day(0)), JSON.stringify(b3 && b3.map((x) => x.at)));
+      const c4 = await s2Q('[data-testid=team-risk-compare]');
+      check('S M1 저장한 뒤에도 비교 줄은 7일 전 기준과의 비교 그대로', !!c4 && c4.text.startsWith(`지난 점검(${d7}) 대비`), JSON.stringify(c4));
+      // M2: 점검 요약 보기
+      const sb = await s2Q('[data-testid=btn-risk-summary-open]');
+      check('S M2 위험 요약 줄 「이번 점검 저장」 옆에 「점검 요약 보기」(크기 있음)', !!sb && sb.w > 0 && sb.h > 0 && sb.text === '점검 요약 보기', JSON.stringify(sb));
+      await clickTestId(s.cdp, 'btn-risk-summary-open');
+      await sleep(450);
+      const bar = await s2Q('[data-testid=summary-bar]');
+      const focused = await evaluate(s.cdp, 'document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.testid : null');
+      await evaluate(s.cdp, "(() => { const d = document.querySelector('[data-testid=summary-preview]'); d.open = true; d.dispatchEvent(new Event('toggle')); })()");
+      await sleep(150);
+      const prev = await s2Q('[data-testid=summary-preview-text]');
+      check('S M2 누르면 인사이트가 열리고 위쪽 「점검 요약」 줄(복사·내려받기·인쇄)이 보이며 첫 단추에 초점', !!bar && bar.w > 0 && bar.h > 0 && focused === 'summary-copy' && bar.text.includes('점검 요약'), JSON.stringify([bar && bar.text.slice(0, 40), focused]));
+      check('S M6 점검 요약 글에도 「바뀐 것:」 아래 「담당이 바뀐 업무: 「…」 시험용 이전 담당 → …」', !!prev && prev.text.includes('바뀐 것:') && prev.text.includes(`담당이 바뀐 업무: 「${ownerWork}」 시험용 이전 담당 → `), JSON.stringify(prev && prev.text.slice(0, 600)));
+      await shot(s.cdp, `${browser.name}-s2-summary-open`);
+      // 예전 기준(owners 없음)은 그 줄 없음
+      await evaluate(s.cdp, "(() => { const v = JSON.parse(localStorage.getItem('wu:v1:settings')); const e = v.riskBaseline['U-D1']; for (const b of (Array.isArray(e) ? e : [e])) delete b.owners; localStorage.setItem('wu:v1:settings', JSON.stringify(v)); })()");
+      await s2Reload('U-D1');
+      const c5 = await s2Q('[data-testid=team-risk-compare]');
+      check('S M6 예전 기준(업무별 담당 이름 없음)은 숫자·이름 비교만, 「담당이 바뀐 업무」 줄 없음', !!c5 && c5.text.startsWith('지난 점검(') && (await s2Q('[data-testid=risk-change-owner]')) === null);
+    } else check('S 가상 운영부(U-D1) 점검 기준', false, '지도가 열리지 않음');
+
+    // ── M4: 시작 화면의 묶은 지도 「마지막 수정」이 하위 지도의 수정까지 ──
+    const S2_EDIT_CHILD = "{ const k = 'wu:v1:u:U-A1'; const d = JSON.parse(localStorage.getItem(k)); d.events.push({ id: 'E-S2', type: 'memo', occurred_at: '2026-10-20', recorded_at: '2026-10-20T10:00:00+09:00', source: 'user', payload: { target_id: 'N-001', category: 'in_progress', topic_ids: [] }, note: 'S 시험' }); localStorage.setItem(k, JSON.stringify(d)); }";
+    if (await s2Go('', s2Mut({ lastOpenedId: 'U-D1' }, S2_EDIT_CHILD))) {
+      const card = await s2Q('[data-testid=mine-card-U-D1] [data-testid=map-modified]');
+      check('S M4 시작 화면: 마지막으로 연 묶은 지도(가상 운영부) 카드의 「마지막 수정」이 하위 지도(월말 정산 점검)의 수정일(2026-10-20)', !!card && card.text === '마지막 수정 2026-10-20', JSON.stringify(card));
+    } else check('S M4 시작 화면', false, '시작 화면이 열리지 않음');
+    if (await s2Go('', s2Mut({ lastOpenedId: 'U-D1' }))) {
+      const card = await s2Q('[data-testid=mine-card-U-D1] [data-testid=map-modified]');
+      check('S M4 아무도 고치지 않았으면 예전처럼 「수정한 적 없음」', !!card && card.text === '수정한 적 없음', JSON.stringify(card));
+    } else check('S M4 시작 화면(수정 없음)', false, '시작 화면이 열리지 않음');
+
+    await s2Go('U-A1', '', s2Snap); // 저장소를 블록 시작 때 찍어 둔 상태로 되돌린다
+  }
+
+  // ── 일상 사용 2회차 R(2026-10-25, CR-18·CR-19 범위 안 보완): T1 글로 추가 공유 문장(지도 업무 이름 + 결과)·못 정할 때의 이유, T6 사번 칸에 지도의 사번(읽기 전용),
+  //    T3 최근 이슈의 해결됨 날짜, T2 다시 뽑은 초안의 「새로」(속성 고치기 — 노드 근거)·칩 설명에 지난번 초안 시각, M5·M7 담당을 넘긴 날 끝나는 사람은 현재 담당이 아님(사람 상세·업무 상세·초안 보내는 사람 미리 고름).
+  //    데이터·설정을 바꾸므로 시작 때 저장소를 찍어 두었다가 끝에서 되돌린다("일상 사용 G1" 블록과 같은 방식) ──
+  {
+    const r2Snap = await evaluate(s.cdp, 'JSON.stringify(Object.entries(localStorage))');
+    // 저장소를 시작 때 상태로 되돌리고 월말 정산 점검(U-A1)은 깨끗한 샘플로 다시 채운 뒤(mutate로 고칠 수 있다) 연다
+    const r2Go = async (mutate = '', clean = true) => {
+      await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(r2Snap)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); ${clean ? "localStorage.removeItem('wu:v1:u:U-A1');" : ''} localStorage.removeItem('wu:v1:draft-seen'); ${mutate}; location.hash = 'U-A1'; location.reload(); })()`).catch(() => {});
+      await sleep(500);
+      return waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
+    };
+    const r2Box = (sel) => evaluate(s.cdp, `(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect(); return { text: e.textContent, w: r.width, h: r.height, value: e.value, ro: e.hasAttribute('readonly'), ph: e.getAttribute('placeholder') }; })()`);
+    const r2Read = async (text) => {
+      await evaluate(s.cdp, `(() => { const e = document.querySelector('[data-testid=text-add-input]'); e.value = ${JSON.stringify(text)}; e.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+      await clickTestId(s.cdp, 'text-add-read');
+      await sleep(250);
+    };
+    const r2Draft = async (target, from, to) => {
+      await evaluate(s.cdp, 'window.confirm = () => true; window.__wu.select(null)');
+      await clickTestId(s.cdp, 'btn-draft-universe');
+      await sleep(200);
+      await makeDraft(target, from, to);
+      await sleep(300);
+    };
+    const r2Item = (key) => evaluate(s.cdp, `[...document.querySelectorAll('[data-testid=draft-item-${key}] li')].map((li) => { const m = li.querySelector('[data-testid=draft-new-mark]'); return { text: li.querySelector('span:not(.chip):not(.evidence-row)') ? li.querySelector('span:not(.chip):not(.evidence-row)').textContent : '', marks: li.querySelectorAll('[data-testid=draft-new-mark]').length, title: m ? m.getAttribute('title') : '' }; })`);
+    // 담당을 넘긴 날: 대사 확인(N-001)의 서하늘(N-012) 담당을 오늘로 끝내고 한가람(N-010)이 오늘 시작(FU5-8과 같은 가상 상태)
+    const R2_HANDOVER = "{ const k = 'wu:v1:u:U-A1'; const d = JSON.parse(localStorage.getItem(k)); const t = new Date(); const p = (n) => String(n).padStart(2, '0'); const day = t.getFullYear() + '-' + p(t.getMonth() + 1) + '-' + p(t.getDate()); const e = d.edges.find((x) => x.id === 'L-007'); e.period = { start: '2026-10-01', end: day }; d.edges.push({ id: 'L-r2-1', source: 'N-010', target: 'N-001', core_type: 'performs', period: { start: day }, hidden: false, created_at: '2026-10-12T20:00:00+09:00' }); localStorage.setItem(k, JSON.stringify(d)); }";
+
+    // ── T1·T6 글로 추가: 지도 업무 이름 + 결과 공유, 사번 칸에 지도의 사번 ──
+    if (await r2Go()) {
+      await evaluate(s.cdp, "window.__wu.select(null); document.querySelector('details.add').open = true");
+      await sleep(150);
+      await clickTestId(s.cdp, 'btn-text-add');
+      await sleep(150);
+      await r2Read('서하늘이 대사 확인을 맡는다.\n백서진에게 대사 확인 결과를 공유한다.');
+      const r2P = await evaluate(s.cdp, "({ unread: !!document.querySelector('[data-testid=text-add-unread]'), nodes: document.querySelectorAll('[data-testid=text-add-nodes] tbody tr:not(.row-msg-line)').length, edges: document.querySelectorAll('[data-testid=text-add-edges] tbody tr:not(.row-msg-line)').length, labels: [0, 1, 2].map((i) => (document.querySelector('[data-testid=text-add-node-label-' + i + ']') || {}).value), from1: (document.querySelector('[data-testid=text-add-edge-from-1]') || {}).textContent, to1: (document.querySelector('[data-testid=text-add-edge-to-1]') || {}).textContent })");
+      check('R2-T1 「백서진에게 대사 확인 결과를 공유한다」(대사 확인은 지도에 있는 업무)가 읽혀 항목 3개·연결 2개, 읽지 못한 문장 없음, 두 번째 연결은 대사 확인 → 백서진', r2P.nodes === 3 && r2P.edges === 2 && !r2P.unread && r2P.from1.startsWith('대사 확인') && r2P.to1.startsWith('백서진'), JSON.stringify(r2P));
+      const r2Known = await r2Box(`[data-testid=text-add-node-empno-${r2P.labels.indexOf('서하늘')}]`);
+      const r2Fresh = await r2Box(`[data-testid=text-add-node-empno-${r2P.labels.indexOf('백서진')}]`);
+      check('R2-T6 지도에 있는 사람(서하늘)의 사번 칸에는 지도의 사번 「V-1003」이 읽기 전용으로 보이고(크기 있음), 새 사람(백서진)의 칸은 「V-0000」 자리표시의 입력 칸 그대로', !!r2Known && r2Known.value === 'V-1003' && r2Known.ro && r2Known.w > 20 && r2Known.h > 10 && !!r2Fresh && r2Fresh.value === '' && !r2Fresh.ro && r2Fresh.ph === 'V-0000', JSON.stringify([r2Known, r2Fresh]));
+      await shot(s.cdp, `${browser.name}-r2-text-share`);
+      await r2Read('서하늘이 대사 확인을 맡는다. 대사 확인이 끝나면 보고를 한다. 감사팀 백서진에게 결과를 공유한다.');
+      const r2Why = await r2Box('[data-testid=text-add-unread-why-0]');
+      check('R2-T1 앞 문장 업무가 둘이라 정할 수 없는 「감사팀 백서진에게 결과를 공유한다」는 읽지 못한 문장 목록에 이유 「어느 업무의 결과인지 정할 수 없습니다 — 「대사 확인 결과를 백서진에게 공유한다」처럼 업무 이름을 넣으세요」(크기 있음)', !!r2Why && r2Why.text.includes('어느 업무의 결과인지 정할 수 없습니다 — 「대사 확인 결과를 백서진에게 공유한다」처럼 업무 이름을 넣으세요') && r2Why.w > 20 && r2Why.h > 10, JSON.stringify(r2Why));
+      await evaluate(s.cdp, "document.getElementById('text-add-dialog').open && document.querySelector('[data-testid=text-add-close]').click()");
+      await sleep(100);
+    } else check('R2 월말 정산 점검(U-A1) 열기', false, 'U-A1이 열리지 않음');
+
+    // ── T3 최근 이슈의 해결됨 날짜, T2 다시 뽑은 초안의 「새로」(속성 고치기) ──
+    if (await r2Go()) {
+      await r2Draft('U-A1/N-000', 'U-A1/N-011', 'U-A1/N-012');
+      const r2Issues = await r2Item('최근_이슈');
+      const r2Resolved = r2Issues.find((x) => x.text.includes('2026-07-10') || x.text.includes('점검표 양식'));
+      check('R2-T3 초안 「최근 이슈」: 이미 해결된 이슈(점검표 양식 건)에는 해결 날짜(2026-07-12)가 보이고, 해결 안 된 이슈(2026-09-15 대사 불일치)에는 「해결」이 없음', !!r2Resolved && r2Resolved.text.includes('2026-07-12') && r2Resolved.text.includes('해결') && r2Issues.some((x) => x.text.includes('2026-09-15') && !x.text.includes('해결')), JSON.stringify(r2Issues));
+      await shot(s.cdp, `${browser.name}-r2-issue-resolved`);
+      // 지난번 초안(위) 뒤에 대사 확인의 마감을 고친다(속성 고치기 = updated 이벤트). 기록 시각은 초 단위라 1초 이상 떨어뜨린다
+      await sleep(1200);
+      await evaluate(s.cdp, `(() => { const k = 'wu:v1:u:U-A1'; const d = JSON.parse(localStorage.getItem(k)); const n = d.nodes.find((x) => x.id === 'N-001'); const before = JSON.parse(JSON.stringify(n.attrs)); n.attrs = { ...n.attrs, 마감: '월 마감 후 2영업일 이내(R2 시험)' }; const t = new Date(); const p = (x) => String(x).padStart(2, '0'); const off = -t.getTimezoneOffset(); const iso = t.getFullYear() + '-' + p(t.getMonth() + 1) + '-' + p(t.getDate()) + 'T' + p(t.getHours()) + ':' + p(t.getMinutes()) + ':' + p(t.getSeconds()) + (off >= 0 ? '+' : '-') + p(Math.floor(Math.abs(off) / 60)) + ':' + p(Math.abs(off) % 60); n.updated_at = iso; d.events.push({ id: 'E-r2-1', type: 'updated', occurred_at: iso.slice(0, 10), recorded_at: iso, source: 'user', payload: { target_kind: 'node', target_id: 'N-001', before: { attrs: before }, after: { attrs: n.attrs } } }); localStorage.setItem(k, JSON.stringify(d)); location.reload(); })()`).catch(() => {});
+      await sleep(500);
+      await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.events.some((e) => e.id === 'E-r2-1') && window.__wu.cy.nodes().length > 0", 8000);
+      await r2Draft('U-A1/N-000', 'U-A1/N-011', 'U-A1/N-012');
+      const r2Due = await r2Item('일정_마감');
+      const r2Art = await r2Item('산출물_문서');
+      const r2Mark = r2Due.find((x) => x.text.startsWith('대사 확인'));
+      check('R2-T2 지난번 초안 뒤에 대사 확인의 마감을 고치면 「일정·마감」의 대사 확인 줄에 「새로」, 손대지 않은 「산출물·문서 위치」 줄에는 없음', !!r2Mark && r2Mark.text.includes('R2 시험') && r2Mark.marks === 1 && r2Art.length > 0 && r2Art.every((x) => x.marks === 0), JSON.stringify([r2Due, r2Art]));
+      check('R2-T2 「새로」 칩 설명(title)에 지난번 초안의 날짜·시각: 「지난번 초안(YYYY-MM-DD hh:mm) 뒤에 생긴 기록이 근거」', !!r2Mark && /^지난번 초안\(\d{4}-\d{2}-\d{2} \d{2}:\d{2}\) 뒤에 생긴 기록이 근거$/.test(r2Mark.title), JSON.stringify(r2Mark));
+      await shot(s.cdp, `${browser.name}-r2-draft-new-attr`);
+    }
+
+    // ── M5·M7 담당을 넘긴 날: 끝나는 서하늘은 현재 담당이 아니다 ──
+    // r2Go는 U-A1 키를 지워 앱이 깨끗한 샘플을 다시 채우게 하므로, 채운 뒤에 고치고 다시 연다
+    if ((await r2Go()) && (await (async () => { await evaluate(s.cdp, `(() => { ${R2_HANDOVER}; location.reload(); })()`).catch(() => {}); await sleep(500); return waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.edges.some((e) => e.id === 'L-r2-1') && window.__wu.cy.nodes().length > 0", 8000); })())) {
+      await evaluate(s.cdp, "window.__wu.select('U-A1/N-012')");
+      await sleep(250);
+      const r2Out = await evaluate(s.cdp, "(document.querySelector('[data-testid=person-load]') || {}).textContent || ''");
+      await evaluate(s.cdp, "window.__wu.select('U-A1/N-010')");
+      await sleep(250);
+      const r2In = await evaluate(s.cdp, "(document.querySelector('[data-testid=person-load]') || {}).textContent || ''");
+      check('R2-M5 사람 상세: 오늘 담당을 넘기는 서하늘은 「지금 맡은 업무 없음」, 오늘 받는 한가람은 「지금 맡은 업무 1개」', r2Out.includes('지금 맡은 업무 없음') && r2In.includes('지금 맡은 업무 1개'), JSON.stringify([r2Out, r2In]));
+      await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+      await sleep(250);
+      const r2Work = await evaluate(s.cdp, "(document.querySelector('[data-testid=work-load]') || {}).textContent || ''");
+      check('R2-M5 업무 상세 「현재 담당」은 받는 한가람만, 넘기는 서하늘은 「(서하늘은 오늘까지)」로만(둘 다 현재로 세지 않음)', r2Work.includes('현재 담당: 한가람 (서하늘은 오늘까지)'), r2Work);
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await clickTestId(s.cdp, 'btn-draft-universe');
+      await sleep(200);
+      await evaluate(s.cdp, "(() => { const e = document.querySelector('[data-testid=draft-target]'); e.value = 'U-A1/N-001'; e.dispatchEvent(new Event('change')); })()");
+      await sleep(250);
+      const r2Hold = await evaluate(s.cdp, "({ holder: (document.querySelector('[data-testid=draft-holder]') || {}).textContent || '', from: (document.querySelector('[data-testid=draft-from]') || {}).value })");
+      check('R2-M5 초안 화면: 대상을 대사 확인으로 고르면 현재 담당 한 명(한가람)을 보내는 사람으로 미리 고름(넘기는 서하늘은 현재 아님)', r2Hold.holder.includes('현재 담당: 한가람') && r2Hold.from === 'U-A1/N-010', JSON.stringify(r2Hold));
+    }
+    // 저장소를 블록 시작 때 찍어 둔 상태로 되돌린다(샘플 문서 포함)
+    await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(r2Snap)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); location.hash = 'U-A1'; location.reload(); })()`).catch(() => {});
+    await sleep(500);
+    await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
   }
 
   // ── CR-14 A 편집 되감기(R-25, D-30): 이름 수정 → 개요 「편집 되감기」 → 이전 시점 → 읽기 전용 확인 → 지금으로 → 다시 → 되돌리기. 데이터를 바꾸므로 끝부분 ──
