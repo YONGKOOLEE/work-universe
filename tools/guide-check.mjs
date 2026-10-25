@@ -96,6 +96,8 @@ async function walk(browser, port) {
   await cdp.opened;
   await cdp.send('Runtime.enable');
   await cdp.send('Page.enable');
+  // 내려받기는 점검용 프로필 안으로(사용자의 다운로드 폴더에 파일을 남기지 않음)
+  await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: join(profile, 'downloads') });
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 860, deviceScaleFactor: 1, mobile: false });
   try {
     // 더블클릭으로 연 것처럼 주소에 #이 없이 연다

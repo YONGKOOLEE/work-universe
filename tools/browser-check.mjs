@@ -128,6 +128,8 @@ async function openSession(exe, profileDir, port, { blockStorage = false } = {})
   await cdp.send('Log.enable');
   await cdp.send('Network.enable');
   await cdp.send('Page.enable');
+  // 「내려받기」를 누르는 점검이 사용자의 다운로드 폴더에 파일을 남기지 않게 점검용 프로필 안으로 보낸다
+  await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: join(profileDir, 'downloads') });
   if (blockStorage) {
     // 쿠키·사이트 데이터 차단 시와 같은 동작: localStorage 접근이 SecurityError를 던진다
     await cdp.send('Page.addScriptToEvaluateOnNewDocument', {
