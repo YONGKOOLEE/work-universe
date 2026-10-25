@@ -7,7 +7,7 @@ import { addAssignment, addEvent, addNode, createUniverse, updateNode } from '..
 import { applyStarter } from '../app/src/model/starter.js';
 import { PREVIEW_ITEMS, PREVIEW_SOURCE, PREVIEW_TEXT, previewContent, starterPreview, starterSteps } from '../app/src/rules/starter-steps.js';
 import { TOUR_IDS, emptyState, scenarioOf } from '../app/src/rules/tour-steps.js';
-import { WHY_STEPS, WHY_TITLE } from '../app/src/ui/start.js';
+import { PREVIEW_CAPTION, WHY_LINE, WHY_TITLE } from '../app/src/ui/start.js';
 import { buildView } from '../app/src/view/view.js';
 
 const ctx = { now: '2026-10-23T10:00:00+09:00' };
@@ -111,10 +111,9 @@ test('「처음 할 일」 문구와 샘플 카드 문구에 「유니버스」�
 });
 
 // ── ① 「왜」 덩어리 ──
-test('WHY_STEPS: 세 칸(전 → 기록이 쌓이는 업무 지도 → 후), 제목, 쉬운 말', () => {
+// CR-22 S(2026-10-26): 「왜」 세 칸(WHY_STEPS)은 화면 미리 보기 도식으로 바뀌었다. 제목·한 줄·AI 문장은 그대로 쉬운 말로 확인한다
+test('WHY 제목·한 줄: 제목은 그대로, 한 줄에 AI가 하는 일(FU-4)이 있고 쉬운 말', () => {
   assert.equal(WHY_TITLE, '담당자가 바뀌어도 끊기지 않는 업무 지도');
-  assert.equal(WHY_STEPS.length, 3);
-  assert.deepEqual(WHY_STEPS.map((s) => s.head), ['담당자가 바뀔 때', '기록이 쌓이는 업무 지도', '근거 달린 인수인계 초안 · 혼자만 아는 업무 경고']);
-  assert.deepEqual(WHY_STEPS.map((s) => s.body), ['머릿속에서만 넘어가던 업무', '담당·메모·산출물을 그때그때', 'AI가 기록만 보고 쓰고, 앱이 근거를 검사합니다']); // 셋째 칸: '자동으로' → AI가 하는 일(처음 사용 점검 FU-4, 2026-10-24)
-  for (const s of WHY_STEPS) assert.ok(!/유니버스|노드|꼭지/.test(`${s.head} ${s.body}`), s.head);
+  assert.ok(WHY_LINE.startsWith(WHY_TITLE) && WHY_LINE.includes('AI가 기록만 보고 쓰고, 앱이 근거를 검사합니다'));
+  assert.ok(!/유니버스|노드|꼭지/.test(`${WHY_LINE} ${PREVIEW_CAPTION}`));
 });
