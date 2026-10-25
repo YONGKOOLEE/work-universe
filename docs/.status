@@ -225,7 +225,7 @@ final_check:
   notes: R-09는 P2로 1차 제외되어 T-ID 없음(사용자 결정). 차단 조건 없음
 remaining_nonblocking_assumptions: [A-1, A-2, RA-1, DA-1, 기본안 가상 데이터(T-15 전까지 교체 가능), P-1~P-3(T-01·T-02 실측), 주최 측 공지 미확인 항목]
 first_implementation_task: T-01 (최소 종단 흐름 + P-1·P-3 실측 + 그래프 라이브러리·빌드 방식 확정)
-next_session_first_action: (2026-10-13 저녁) docs/HANDOFF.md 1절을 읽는다. 구현·push 끝(9b56b0c). 사용자가 화면 확인 체크리스트(.tmp/guide/확인-체크리스트-20261013.md) 결과를 가져오면 ✕·의견을 분류해 Sonnet 하위 에이전트로 고치고(메인이 확인·재검증·커밋·push), 조력자 샘플이 오면 변환기(F). 기능 동결 시점을 사용자에게 묻는다.
+next_session_first_action: (2026-10-25 저녁) docs/HANDOFF.md 1절 ★ 줄을 읽는다. 사용자 답(.tmp/guide/전체-검토-가이드-20261025.html 2절 D1~D6·사람 확인)을 받아 반영하고, 동결 시점·영상·소개자료 수치는 사용자 몫. 코드를 고치면 check:submit으로 새 압축
 
 implementation:
   deadline: 1차 제출 마감 2026-10-30(사용자 제공 2026-10-13). 개발·산출물 제출은 1차까지, 2차는 발표만(사용자 "1차에 모든 프로그램을 완료")
@@ -273,6 +273,7 @@ implementation:
       merge_daily2: (2026-10-25 저녁, 사용자 결정 4건 뒤) wip-daily2 0113808을 main에 합침(bc4c97e). 브라우저 점검 기대값 6곳 고침(G3 D-3·FU5-1·FU5-2: 같은 날 비교 없음 → 기준을 이틀 전으로·저장 알림 문구, S M3: 넘긴 날 표시 「(서하늘은 오늘까지)」로 R2-M5와 맞춤, R2-M5: 시험 준비 결함 — 샘플 키를 지운 같은 줄에서 고치려다 예외, G1 D-13: 방금 해결한 최근 이슈 줄의 「새로」). 합친 상태만 꺼내 단위 1946·check:chrome 795 모두 통과. model: 메인 Opus
       cr20: 문구 정리 CR-20(500b6b0, Opus 하위 에이전트 작성·메인 확인) — docs/CR-20-문구정리.md(W-1~28, B-1~4, M-1~9), 01·02(D-38)·03(T-43)·limits(L-61·62)·decisions(24절 C20-1~7)·CR-17/18/19 포인터. 처음 기록한 check:chrome 「1590」은 실시간 줄까지 두 번 센 값 — 실제 795(문서 고침, 커밋 메시지는 그대로)
       rv10_fix: 열 번째 검토 결함 수정(Sonnet 하위 에이전트 4묶음 + 메인 diff 검토) — RV10C-1~12, RV10S-1~12·14, RV10-9 모두. 메인이 고친 것: 설정 합치기 두 번째 저장에서 지운 키 되살아남, 깨진 내장 지도 이름 예외, rewind.js CRLF, 기존 시험 4건 고정 시각, main.js 연결(clearBrowserMemory·변환 now)·messages.js 문구(embed_skipped·too_deep·미래 날짜)·사번 바뀜 안내 문구. 새 시험 rv10-model 16·rv10-app 16·rv10-store 11·rv10-folder 9·rv10-perf 11, 브라우저 점검 RV10 블록 14건. 성능(업무 3000개) handoverReadiness 1026→14ms·formReport 717→2ms·mergePlan 4188→158ms(동등성 시험). 단위 2010, check:chrome 809 모두 통과(메인이 다시 돌림), 비밀값 0건(파일·--history). 기본값 decisions 25절 C21-1~12, 한계 L-63~L-72, tech-record 55절. 제출 문서 4개(실행안내·대본 v0.9·소개자료 v0.6·AI 활용 v0.3) 맞춤, guide-check 점검 이름 5절. 사람 확인: C21-9 인쇄 미리 보기, C21-10 라이선스 2건
+      submit4: check:submit 10/10(2026-10-25 저녁, 8563cc5) — release/업무유니버스-제출본-20261025-8563cc5.zip 475,538바이트(단위 2010, Chrome·Edge 전체 점검, 실행안내 따라가기). 검토 가이드 .tmp/guide/전체-검토-가이드-20261025.html(Git 밖)
       unverified: [실제 사람 대리 관찰(R-08 ④), 실제 사람의 일상 사용 관찰(CR-18-8은 에이전트 역할 점검만), 실제 API 호출(CR-19 Claude로 읽기 포함 — 가짜 응답으로만 검증), 다른 PC·메일 첨부 — 사용자 "나중에"]
     - id: FIX-R10-2026-10-23
       status: 재검증 R10-1~R10-14 수정 + T-38 점검 남은 3건 수정 완료(R10-15는 limits L-53 기록만)
