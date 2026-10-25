@@ -87,17 +87,18 @@ test('D-1 시작 화면: 이어서 보기 단추가 「무엇을 하고 싶어�
   body.append(root);
   const btn = q(root, 'start-resume');
   assert.equal(btn.textContent, '지난번 지도 이어서 보기: 내 지도 A');
-  const hero = root.children[0].children;
-  const idx = (pred) => hero.findIndex(pred);
-  assert.ok(idx((c) => c.querySelector && c.querySelector('[data-testid=start-resume]')) < idx((c) => c.tagName === 'H2'), '이어서 보기가 첫 제목(무엇을 하고 싶어요?)보다 위');
+  // CR-22 S: 이어서 보기 큰 카드가 맨 위, 세 갈래는 아래 「다른 일 하기」
+  const top = root.children;
+  const idx = (pred) => top.findIndex(pred);
+  assert.ok(idx((c) => c.querySelector && c.querySelector('[data-testid=start-resume]')) < idx((c) => c.getAttribute('data-testid') === 'start-other'), '이어서 보기가 「다른 일 하기」(세 갈래)보다 위');
   btn.click();
   assert.deepEqual(opened, ['M-1']);
   const list = q(root, 'start-mine');
-  assert.ok(list.textContent.includes('마지막 수정 2026-10-24'));
+  assert.ok(q(root, 'start-resume-card').textContent.includes('마지막 수정 2026-10-24') && !list.textContent.includes('내 지도 A')); // 이어서 볼 지도는 큰 카드에만(CR-22 S)
   assert.ok(list.textContent.includes('고친 샘플') && list.textContent.includes('마지막 수정 2026-10-20'));
   assert.ok(list.textContent.includes('최근 연 샘플') && list.textContent.includes('수정한 적 없음'));
   // 샘플 카드는 샘플 목록의 카드와 testid가 겹치지 않는다
-  assert.ok(q(root, 'mine-open-S-2') && q(root, 'open-M-1'));
+  assert.ok(q(root, 'mine-open-S-2') && q(root, 'card-M-1') && !q(root, 'open-M-1'));
   q(root, 'mine-open-S-2').click();
   assert.deepEqual(opened, ['M-1', 'S-2']);
   // 지도가 없어졌으면(resume=null) 단추가 없다

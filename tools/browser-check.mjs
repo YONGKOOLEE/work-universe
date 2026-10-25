@@ -634,21 +634,23 @@ async function checkBrowser(browser, port) {
 
   // ── T-14 시작 화면(R-08) ──
   await evaluate(s.cdp, 'window.confirm = () => true');
-  await evaluate(s.cdp, "(() => { const v = JSON.parse(localStorage.getItem('wu:v1:settings') || '{}'); delete v.lastOpenedId; delete v.tourDone; localStorage.setItem('wu:v1:settings', JSON.stringify(v)); })()"); // CR-18 D-1·D-2: 처음 열었을 때의 시작 화면을 재려고 「이어서 보기」·「따라 하기 했음」 기록을 지운다
+  // CR-22 S: 앞 점검이 샘플을 고쳐 놓아 시작 화면이 「다시 온 사람」 얼굴이 된다. 아래 「처음 온 사람」 화면 점검을 위해 저장 내용을 잠시 치워 두고(startSnap), 이 시작 화면 점검 앞부분이 끝나면 되돌린다
+  const startSnap = await evaluate(s.cdp, 'JSON.stringify(Object.entries(localStorage))');
+  await evaluate(s.cdp, "(() => { for (const k of Object.keys(localStorage)) if (k.startsWith('wu:v1:u:')) localStorage.removeItem(k); const v = JSON.parse(localStorage.getItem('wu:v1:settings') || '{}'); delete v.lastOpenedId; delete v.tourDone; localStorage.setItem('wu:v1:settings', JSON.stringify(v)); })()"); // CR-18 D-1·D-2: 처음 열었을 때의 시작 화면을 재려고 「이어서 보기」·「따라 하기 했음」 기록을 지운다
   const onStart = await goBare(s.cdp);
   check('R-08 주소에 유니버스가 없으면(처음 더블클릭) 시작 화면이 열림', onStart);
   if (onStart) {
     const startText = await text(s.cdp, '#start-screen');
     // 눌러지는 것과 눈에 보이는 것은 다르다: 핵심 요소가 실제로 화면에 그려지는지(크기가 있는지) 확인한다
-    check('R-08 시작 화면의 제목·설명·추천 버튼이 실제로 보임', await evaluate(s.cdp, "['.start-hero h1', '[data-testid=why-block]', '[data-testid=start-primary]', '[data-testid=start-create]'].every((q) => { const r = document.querySelector(q).getBoundingClientRect(); return r.width > 0 && r.height > 0; })"));
-    check('R-08 시작 화면에 이게 무엇인지(CR-16 「왜」 덩어리: 전·후 한 줄) 설명과 가상 데이터 안내', startText.includes('담당자가 바뀌어도 끊기지 않는 업무 지도') && startText.includes('머릿속에서만 넘어가던 업무') && startText.includes('근거 달린 인수인계 초안') && startText.includes('모든 이름과 데이터는 가상'));
+    check('R-08 시작 화면의 제목·설명·미리 보기 도식·세 갈래가 실제로 보임(CR-22 S: 작은 단추는 「더 보기」 안)', await evaluate(s.cdp, "['.start-hero h1', '[data-testid=why-block]', '[data-testid=start-preview]', '[data-testid=start-way-mine]'].every((q) => { const r = document.querySelector(q).getBoundingClientRect(); return r.width > 0 && r.height > 0; })"));
+    check('R-08 시작 화면에 이게 무엇인지(CR-16 「왜」 덩어리: 전·후 한 줄) 설명과 가상 데이터 안내', startText.includes('담당자가 바뀌어도 끊기지 않는 업무 지도') && startText.includes('머릿속에만 있던 업무가 기록으로 남습니다') && startText.includes('AI가 기록만 보고 쓰고') && startText.includes('모든 이름과 데이터는 가상'));
     check('R-08 "처음이라면 이 순서로" 4단계 안내', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=start-steps] li').length")) === 4);
-    check(`샘플 카드 ${SAMPLES.length}개(내장 샘플 전부)와 추천(월말 정산) 표시, 내 업무 지도 안내`, (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=start-samples] .card').length")) === SAMPLES.length && (await evaluate(s.cdp, "document.querySelector('[data-testid=card-U-A1]').classList.contains('recommended')")) && !!(await evaluate(s.cdp, "!!document.querySelector('[data-testid=start-mine], [data-testid=start-mine-empty]')")));
+    check(`샘플 카드 ${SAMPLES.length}개(내장 샘플 전부)와 추천(월말 정산) 표시, 내 업무 지도 안내`, (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=start-samples] .card').length")) === SAMPLES.length && (await evaluate(s.cdp, "document.querySelector('[data-testid=card-U-A1]').classList.contains('recommended')")) && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=start-mine]')"))); // CR-22 S: 처음 온 화면에는 내 업무 지도 목록이 없다
     // ── CR-16 ① 「왜」 덩어리(2026-10-23): 크기 있음·칸 3개, 1366×768에서 세 갈래 카드 첫 장이 첫 화면(768px) 안 ──
     const whyInfo = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=why-block]'); if (!b) return null; const r = b.getBoundingClientRect(); const steps = [...document.querySelectorAll('[data-testid=why-step]')].map((e) => { const q = e.getBoundingClientRect(); return { w: q.width, h: q.height, left: q.left, top: q.top }; }); return { w: r.width, h: r.height, n: steps.length, steps, text: b.textContent }; })()");
-    check('CR-16 ① 시작 화면 「왜」 덩어리가 그려지고(크기 있음) 칸(why-step)이 3개이며 각 칸도 크기가 있음', !!whyInfo && whyInfo.w > 0 && whyInfo.h > 0 && whyInfo.n === 3 && whyInfo.steps.every((q) => q.w > 0 && q.h > 0), JSON.stringify(whyInfo));
-    check('CR-16 ① 「왜」 덩어리: 제목과 세 칸 글(전 → 기록이 쌓이는 업무 지도 → 근거 달린 초안·경고)이 있음', !!whyInfo && whyInfo.text.includes('담당자가 바뀌어도 끊기지 않는 업무 지도') && whyInfo.text.includes('담당자가 바뀔 때') && whyInfo.text.includes('기록이 쌓이는 업무 지도') && whyInfo.text.includes('혼자만 아는 업무 경고'), whyInfo && whyInfo.text);
-    check('CR-16 ① 현재 창 너비(900 이상)에서는 세 칸이 한 줄(top이 같음), 왼쪽부터 순서대로', !!whyInfo && ((await evaluate(s.cdp, 'window.innerWidth')) < 900 || (whyInfo.steps.every((q) => Math.abs(q.top - whyInfo.steps[0].top) < 2) && whyInfo.steps[0].left < whyInfo.steps[1].left && whyInfo.steps[1].left < whyInfo.steps[2].left)), JSON.stringify(whyInfo && whyInfo.steps));
+    check('CR-16 ①→CR-22 S 시작 화면 「왜」 덩어리가 그려지고(크기 있음) 예전 세 칸(why-step)은 없음', !!whyInfo && whyInfo.w > 0 && whyInfo.h > 0 && whyInfo.n === 0, JSON.stringify(whyInfo)); // CR-22 S: 세 칸 대신 미리 보기 도식(아래 「CR-22 S」 점검에서 크기·구성 확인), 칸은 없다
+    check('CR-22 S 「왜」 덩어리: 제목과 미리 보기 설명(왼쪽에서 고르면 가운데 지도·오른쪽 카드가 바뀜 · AI 한 줄)이 있음', !!whyInfo && whyInfo.text.includes('담당자가 바뀌어도 끊기지 않는 업무 지도') && whyInfo.text.includes('왼쪽에서 하고 싶은 일을 고르면') && whyInfo.text.includes('AI가 기록만 보고 쓰고'), whyInfo && whyInfo.text);
+    // (CR-16 ① 세 칸 한 줄 점검은 세 칸이 없어져 아래 「CR-22 S」 점검의 도식 구성 확인으로 대체)
     await s.cdp.send('Emulation.setDeviceMetricsOverride', { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false });
     await sleep(300);
     await evaluate(s.cdp, 'window.scrollTo(0, 0)');
@@ -662,8 +664,8 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, 'window.scrollTo(0, 0)');
     await shot(s.cdp, `${browser.name}-0-start`);
     // ── 처음 사용 W2(2026-10-24, FU-4·FU-11 일부): 「왜」 셋째 칸에 AI가 하는 일, 팀 카드 아래 한 줄. 높이는 위 whyFold(1366×768에서 잰 값)로 확인 ──
-    const w2Start = await evaluate(s.cdp, "(() => { const steps = [...document.querySelectorAll('[data-testid=why-step]')]; const n = document.querySelector('[data-testid=start-way-team-note]'); const r = n ? n.getBoundingClientRect() : { width: 0, height: 0 }; return { third: steps[2] ? steps[2].textContent : '', hasAi: steps[2] ? /AI/.test(steps[2].textContent) : false, note: n ? n.textContent : null, noteSize: r.width > 0 && r.height > 0, noteInTeam: !!(n && n.closest('[data-testid=start-way-team]')), noteFont: n ? getComputedStyle(n).fontSize : '' }; })()");
-    check('처음 사용 W2(FU-4) 「왜」 덩어리 셋째 칸에 「AI」 글자: 머리(근거 달린 인수인계 초안 · 혼자만 아는 업무 경고)는 그대로, 본문 「AI가 기록만 보고 쓰고, 앱이 근거를 검사합니다」', w2Start.hasAi && w2Start.third.includes('근거 달린 인수인계 초안 · 혼자만 아는 업무 경고') && w2Start.third.includes('AI가 기록만 보고 쓰고, 앱이 근거를 검사합니다'), w2Start.third);
+    const w2Start = await evaluate(s.cdp, "(() => { const steps = [null, null, document.querySelector('[data-testid=start-preview-caption]')]; const n = document.querySelector('[data-testid=start-way-team-note]'); const r = n ? n.getBoundingClientRect() : { width: 0, height: 0 }; return { third: steps[2] ? steps[2].textContent : '', hasAi: steps[2] ? /AI/.test(steps[2].textContent) : false, note: n ? n.textContent : null, noteSize: r.width > 0 && r.height > 0, noteInTeam: !!(n && n.closest('[data-testid=start-way-team]')), noteFont: n ? getComputedStyle(n).fontSize : '' }; })()");
+    check('처음 사용 W2(FU-4) 미리 보기 설명 줄에 「AI」 글자: 「AI가 기록만 보고 쓰고, 앱이 근거를 검사합니다」(CR-22 S: 예전 셋째 칸 자리)', w2Start.hasAi && w2Start.third.includes('AI가 기록만 보고 쓰고, 앱이 근거를 검사합니다'), w2Start.third);
     check('처음 사용 W2(FU-4) 1366×768에서 「AI」 본문을 넣은 뒤에도 세 갈래 카드 세 장의 아래가 모두 768px 안(CR-16 whyFold와 같은 측정)', whyFold.length === 3 && whyFold.every((c) => c.w > 0 && c.bottom <= 768), JSON.stringify(whyFold));
     check('처음 사용 W2(FU-11) 「팀 업무를 한눈에 보고 싶어요」 카드 안(설명 아래)에 작은 글씨 안내 「팀원 각자 만든 지도는 공유 폴더(「폴더 연결」)나 「가져오기」로 모아 묶습니다」가 보임(크기 있음, 12px)', w2Start.note === '팀원 각자 만든 지도는 공유 폴더(「폴더 연결」)나 「가져오기」로 모아 묶습니다' && w2Start.noteSize && w2Start.noteInTeam && w2Start.noteFont === '12px', JSON.stringify(w2Start));
     // ── CR-13 A(2026-10-18) 시작 화면 세 갈래 + 앱 안 따라 하기 ──
@@ -672,14 +674,17 @@ async function checkBrowser(browser, port) {
     const cardInfo = await evaluate(s.cdp, "(() => { const ids = ['start-way-handover', 'start-way-mine', 'start-way-team']; return ids.map((id) => { const e = document.querySelector('[data-testid=' + id + ']'); if (!e) return null; const r = e.getBoundingClientRect(); return { w: r.width > 0 && r.height > 0, text: e.textContent }; }); })()");
     check('CR-13 A 시작 화면에 「무엇을 하고 싶어요?」 세 갈래 카드(인수인계를 앞두고 있어요·내 업무를 정리해 두고 싶어요·팀 업무를 한눈에 보고 싶어요)가 실제로 보임(크기 있음)', cardInfo.every((c) => c && c.w) && cardInfo[0].text.includes('인수인계를 앞두고 있어요') && cardInfo[0].text.includes('넘기는 쪽도 받는 쪽도 — 예시 업무로 인수인계 초안을 봅니다(3분)') && cardInfo[1].text.includes('내 업무를 정리해 두고 싶어요') && cardInfo[1].text.includes('업무 하나부터 작은 지도를 만듭니다') && cardInfo[2].text.includes('팀 업무를 한눈에 보고 싶어요') && cardInfo[2].text.includes('여러 업무를 묶은 팀·부서 지도를 봅니다'), JSON.stringify(cardInfo));
     const smallInfo = await evaluate(s.cdp, "({ more: document.querySelector('[data-testid=start-more]').open, stepsVisible: document.querySelector('[data-testid=start-steps]').checkVisibility(), samplesVisible: document.querySelector('[data-testid=start-samples]').checkVisibility(), primary: document.querySelector('[data-testid=start-primary]').textContent, mine: !!document.querySelector('[data-testid=start-mine], [data-testid=start-mine-empty]') })");
-    check('CR-13 A 「처음이라면 이 순서로」와 샘플 카드 7개는 「샘플·처음 순서 더 보기」 안에 기본 접힘, 「샘플 바로 열기: 월말 정산 점검」·내 업무 지도는 그대로 보임', smallInfo.more === false && !smallInfo.stepsVisible && !smallInfo.samplesVisible && smallInfo.primary === '샘플 바로 열기: 월말 정산 점검' && smallInfo.mine, JSON.stringify(smallInfo));
+    check('CR-13 A 「처음이라면 이 순서로」와 샘플 카드 7개는 「샘플·처음 순서 더 보기」 안에 기본 접힘, 「샘플 바로 열기: 월말 정산 점검」·내 업무 지도는 그대로 보임', smallInfo.more === false && !smallInfo.stepsVisible && !smallInfo.samplesVisible && smallInfo.primary === '샘플 바로 열기: 월말 정산 점검', JSON.stringify(smallInfo)); // CR-22 S: 작은 단추·샘플·처음 순서는 모두 「더 보기」 안(기본 접힘), 내 업무 지도 목록은 처음 온 화면에 없음
     // 쉬운 말: 세 갈래 카드 문구에 유니버스·노드·꼭지가 없다
     check('CR-13 A 세 갈래 카드에는 어려운 낱말(유니버스·노드·꼭지)을 쓰지 않음', cardInfo.every((c) => !/유니버스|노드|꼭지/.test(c.text)));
     await evaluate(s.cdp, "(() => { const v = JSON.parse(localStorage.getItem('wu:v1:settings') || '{}'); delete v.moreTools; localStorage.setItem('wu:v1:settings', JSON.stringify(v)); })()"); // 끝 카드의 「도구 더 보기」 안내를 보려고 접힘으로(이 아래에서 다시 펼침)
     // 재검증 N-7: 작은 단추는 강조(primary)가 아니고 세 갈래 카드가 강조되며, 접힘 제목은 「샘플·처음 순서 더 보기」
     const emph = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=start-primary]'); const w = document.querySelector('[data-testid=start-way-handover]'); const cs = getComputedStyle(b); const wc = getComputedStyle(w); return { primaryClass: b.classList.contains('primary'), btnBg: cs.backgroundColor, wayBorder: wc.borderTopColor, wayBorderW: wc.borderTopWidth, wayBg: wc.backgroundColor, summary: document.querySelector('[data-testid=start-more] > summary').textContent, accent: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() }; })()");
-    check('N-7 시작 화면: 작은 단추 「샘플 바로 열기」는 primary(초록 채움)가 아니고, 세 갈래 카드는 accent 테두리(2px)·배경이 있으며, 접힘 제목이 「샘플·처음 순서 더 보기」', !emph.primaryClass && emph.btnBg !== 'rgb(166, 216, 107)' && emph.wayBorder === 'rgb(166, 216, 107)' && emph.wayBorderW === '2px' && emph.wayBg !== 'rgba(0, 0, 0, 0)' && emph.summary === '샘플·처음 순서 더 보기', JSON.stringify(emph));
+    check('N-7 시작 화면: 작은 단추 「샘플 바로 열기」는 primary(초록 채움)가 아니고, 세 갈래 카드는 accent 테두리(2px)·배경이 있으며, 접힘 제목이 「더 보기」(CR-22 S)', !emph.primaryClass && emph.btnBg !== 'rgb(166, 216, 107)' && emph.wayBorder === 'rgb(166, 216, 107)' && emph.wayBorderW === '2px' && emph.wayBg !== 'rgba(0, 0, 0, 0)' && emph.summary === '더 보기', JSON.stringify(emph));
     await shot(s.cdp, `${browser.name}-34a-start-emphasis`);
+    // CR-22 S: 처음 온 사람 화면 점검이 끝났으니 앞 점검이 만든 저장 내용(고친 샘플 등)을 되돌려 예전과 같은 상태로 이어 간다
+    await evaluate(s.cdp, `(() => { localStorage.clear(); for (const [k, v] of JSON.parse(${JSON.stringify(startSnap)})) localStorage.setItem(k, v); const v = JSON.parse(localStorage.getItem('wu:v1:settings') || '{}'); delete v.lastOpenedId; delete v.tourDone; delete v.moreTools; localStorage.setItem('wu:v1:settings', JSON.stringify(v)); })()`);
+    await goBare(s.cdp);
     // 재검증 N-3: 「새 업무 지도 만들기」 대화상자는 두 모양. 작은 단추 = 예전 모양, 「내 업무를 정리해 두고 싶어요」 = 「내 업무 지도 만들기」
     const dlgInfo = () => evaluate(s.cdp, `(() => { const d = document.getElementById('create-dialog'); const v = (id) => { const e = document.getElementById(id); const r = e.getBoundingClientRect(); return e.checkVisibility() && r.width > 0 && r.height > 0; }; const pos = (a, b) => !!(document.getElementById(a).compareDocumentPosition(document.getElementById(b)) & Node.DOCUMENT_POSITION_FOLLOWING); const info = document.getElementById('create-info'); return { open: d.open, title: document.getElementById('create-title').textContent, work: v('create-start-work'), name: v('create-name'), level: v('create-level'), owner: v('create-owner'), infoHidden: info.hidden, infoOpen: info.open, summary: info.querySelector('summary').textContent, starterBeforeMeta: pos('create-start-work', 'create-name'), metaInInfo: info.contains(document.getElementById('create-name')), focus: document.activeElement && document.activeElement.id }; })()`);
     await evaluate(s.cdp, "document.querySelector('[data-testid=start-create]').click()");
@@ -4065,16 +4070,16 @@ async function checkBrowser(browser, port) {
       await sleep(500);
       await waitFor(s.cdp, 'window.__wu && window.__wu.start === true', 8000);
       const rs = await g3Q('[data-testid=start-resume]');
-      const h2 = await evaluate(s.cdp, "document.querySelector('.start-hero h2').getBoundingClientRect().top");
-      check('G3 D-1 다시 오면 맨 위(「무엇을 하고 싶어요?」 위)에 「지난번 지도 이어서 보기: 월말 정산 점검」 단추(크기 있음)', !!rs && rs.text === '지난번 지도 이어서 보기: 월말 정산 점검' && rs.w > 0 && rs.h > 0 && rs.bottom <= h2, JSON.stringify([rs, h2]));
-      const mineTxt = await text(s.cdp, '[data-testid=start-mine]');
-      check('G3 D-1 내 업무 지도 목록에 마지막으로 연 샘플이 「최근 연 샘플」·「수정한 적 없음」으로 보임(샘플 목록의 카드와 testid가 겹치지 않음)', mineTxt.includes('월말 정산 점검') && mineTxt.includes('최근 연 샘플') && mineTxt.includes('수정한 적 없음') && !!(await g3Q('[data-testid=mine-open-U-A1]')) && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=open-U-A1]').length")) === 1, mineTxt);
+      const h2 = await evaluate(s.cdp, "document.querySelector('[data-testid=start-other] h2').getBoundingClientRect().top");
+      check('G3 D-1 다시 오면 맨 위(「다른 일 하기」 위)에 「지난번 지도 이어서 보기: 월말 정산 점검」 단추(크기 있음, CR-22 S 이어서 보기 큰 카드)', !!rs && rs.text === '지난번 지도 이어서 보기: 월말 정산 점검' && rs.w > 0 && rs.h > 0 && rs.bottom <= h2, JSON.stringify([rs, h2]));
+      const mineTxt = await text(s.cdp, '[data-testid=start-resume-card]');
+      check('G3 D-1 이어서 보기 큰 카드에 마지막으로 연 샘플이 「최근 연 샘플」·「수정한 적 없음」으로 보임(샘플 목록의 카드와 testid가 겹치지 않음, CR-22 S: 같은 지도를 여는 단추는 카드의 이어서 보기 하나뿐이라 목록의 「열기」는 없음)', mineTxt.includes('월말 정산 점검') && mineTxt.includes('최근 연 샘플') && mineTxt.includes('수정한 적 없음') && !!(await g3Q('[data-testid=mine-card-U-A1]')) && !(await g3Q('[data-testid=mine-open-U-A1]')) && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=open-U-A1]').length")) === 1, mineTxt);
       // 1366×768: 이어서 보기 줄이 있어도 세 갈래 카드 세 장의 아래가 768px 안(CR-16 whyFold와 같은 측정)
       await s.cdp.send('Emulation.setDeviceMetricsOverride', { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false });
       await sleep(300);
       await evaluate(s.cdp, 'window.scrollTo(0, 0)');
-      const g3Fold = await evaluate(s.cdp, "(() => ['start-way-handover', 'start-way-mine', 'start-way-team'].map((id) => { const r = document.querySelector('[data-testid=' + id + ']').getBoundingClientRect(); return { id, bottom: Math.round(r.bottom), w: Math.round(r.width) }; }))()");
-      check('G3 D-1 1366×768에서 이어서 보기 줄이 있어도 세 갈래 카드 세 장의 아래가 모두 768px 안(스크롤 없이 첫 화면)', g3Fold.every((c) => c.w > 0 && c.bottom <= 768), JSON.stringify(g3Fold));
+      const g3Fold = await evaluate(s.cdp, "(() => ['start-resume-card', 'start-other'].map((id) => { const r = document.querySelector('[data-testid=' + id + ']').getBoundingClientRect(); return { id, top: Math.round(r.top), bottom: Math.round(r.bottom), w: Math.round(r.width) }; }))()");
+      check('G3 D-1 1366×768에서 이어서 보기 큰 카드의 아래가 768px 안(스크롤 없이 첫 화면), 「다른 일 하기」도 위쪽이 보임(CR-22 S)', g3Fold[0].w > 0 && g3Fold[0].bottom <= 768 && g3Fold[1].top < 768, JSON.stringify(g3Fold));
       await shot(s.cdp, `${browser.name}-g3-start-resume`);
       await s.cdp.send('Emulation.clearDeviceMetricsOverride');
       await sleep(200);
@@ -4101,10 +4106,49 @@ async function checkBrowser(browser, port) {
       check('G3 D-2 「?」에서 고른 시나리오(주소 ~again)는 이미 끝낸 기록과 상관없이 시작함 · 주소의 표시는 지워짐', !!t4 && t4.mode === 'step' && t4.scenario === 'team' && !(await evaluate(s.cdp, "location.hash.includes('tour')")), JSON.stringify(t4));
     } else check('G3 D-1·D-2 시작 화면', false, '시작 화면이 열리지 않음');
 
+    // ── CR-22 S(2026-10-26): 시작 화면 두 얼굴 ──
+    const s22Q = (js) => evaluate(s.cdp, js);
+    const s22View = async (w, h) => { await s.cdp.send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false }); await sleep(300); await evaluate(s.cdp, 'window.scrollTo(0, 0)'); };
+    // 처음 온 사람: 기준 저장소에 있는 내가 만든 지도(wu:v1:u:*)까지 치운 상태
+    if (await g3Go('', g3Mut({}, "{ for (const k of Object.keys(localStorage)) if (k.startsWith('wu:v1:u:')) localStorage.removeItem(k); }"))) {
+      const f1 = await s22Q("(() => { const R = (q) => { const e = document.querySelector(q); if (!e) return null; const r = e.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height), top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right) }; }; return { face: document.querySelector('.start-inner').dataset.face, pv: R('[data-testid=start-preview]'), side: R('.pv-side'), map: R('.pv-map'), cards: R('.pv-cards'), spaces: [...document.querySelectorAll('[data-testid=start-preview-spaces] span')].map((e) => e.textContent), nodes: document.querySelectorAll('.pv-node').length, lines: document.querySelectorAll('.pv-line').length, cardRows: document.querySelectorAll('.pv-card').length, img: document.querySelectorAll('#start-screen img, #start-screen svg, #start-screen canvas').length, whySteps: document.querySelectorAll('[data-testid=why-step]').length, resume: !!document.querySelector('[data-testid=start-resume]'), mine: !!document.querySelector('[data-testid=start-mine]'), moreOpen: document.querySelector('[data-testid=start-more]').open, moreText: document.querySelector('[data-testid=start-more] > summary').textContent, spaceLines: ['handover', 'mine', 'team'].map((k) => (document.querySelector('[data-testid=start-way-' + k + '-space]') || {}).textContent), moreVisible: document.querySelector('[data-testid=start-primary]').checkVisibility(), ways: document.querySelectorAll('[data-testid=start-ways] .start-way').length }; })()");
+      check('CR-22 S 처음 온 화면: 얼굴이 first, 화면 미리 보기 도식이 그려지고(크기 있음) 예전 「왜」 세 칸은 없음, 이미지·캔버스 없이 HTML로만', f1.face === 'first' && !!f1.pv && f1.pv.w > 200 && f1.pv.h > 80 && f1.whySteps === 0 && f1.img === 0, JSON.stringify(f1));
+      check('CR-22 S 미리 보기 도식 구성: 왼쪽 공간 5개(지도 보기·기록·인수인계·매주 점검·지도 관리), 가운데 지도(점 6·선 6), 오른쪽 카드 3줄이 왼쪽→가운데→오른쪽 순서로 겹치지 않음', JSON.stringify(f1.spaces) === JSON.stringify(['지도 보기', '기록', '인수인계', '매주 점검', '지도 관리']) && f1.nodes === 6 && f1.lines === 6 && f1.cardRows === 3 && !!f1.side && !!f1.map && !!f1.cards && f1.side.right <= f1.map.left + 1 && f1.map.right <= f1.cards.left + 1, JSON.stringify(f1));
+      check('CR-22 S 처음 온 화면: 세 갈래 카드가 공간 이름과 맞음(인수인계 → 「인수인계」, 내 업무 → 「기록」·「지도 관리」, 팀 → 「매주 점검」)', f1.ways === 3 && f1.spaceLines[0].includes('「인수인계」') && f1.spaceLines[1].includes('「기록」') && f1.spaceLines[1].includes('「지도 관리」') && f1.spaceLines[2].includes('「매주 점검」'), JSON.stringify(f1.spaceLines));
+      check('CR-22 S 처음 온 화면: 이어서 보기·내 업무 지도 목록은 없고, 작은 단추 3개·샘플 목록·처음 순서는 「더 보기」 하나(기본 접힘) 안에 있음', !f1.resume && !f1.mine && f1.moreText === '더 보기' && f1.moreOpen === false && f1.moreVisible === false, JSON.stringify(f1));
+      await evaluate(s.cdp, "document.querySelector('[data-testid=start-more] > summary').click()");
+      await sleep(150);
+      const f1b = await s22Q("({ primary: document.querySelector('[data-testid=start-primary]').checkVisibility(), create: document.querySelector('[data-testid=start-create]').checkVisibility(), imp: document.querySelector('[data-testid=start-import]').checkVisibility(), samples: document.querySelector('[data-testid=start-samples]').checkVisibility(), steps: document.querySelector('[data-testid=start-steps]').checkVisibility(), nMore: document.querySelectorAll('details.start-more').length })");
+      check('CR-22 S 「더 보기」를 펼치면 샘플 바로 열기·새 업무 지도 만들기·문서·파일 가져오기·샘플 목록·처음 순서가 보임(더 보기는 하나)', f1b.primary && f1b.create && f1b.imp && f1b.samples && f1b.steps && f1b.nMore === 1, JSON.stringify(f1b));
+      await shot(s.cdp, `${browser.name}-s22-first-more-open`);
+      await evaluate(s.cdp, "document.querySelector('[data-testid=start-more] > summary').click()");
+      for (const [w, h] of [[1280, 800], [1366, 768]]) {
+        await s22View(w, h);
+        const ff = await s22Q("(() => ['start-way-handover', 'start-way-mine', 'start-way-team'].map((id) => { const r = document.querySelector('[data-testid=' + id + ']').getBoundingClientRect(); return { id, bottom: Math.round(r.bottom), w: Math.round(r.width) }; }).concat([{ id: 'preview', bottom: Math.round(document.querySelector('[data-testid=start-preview]').getBoundingClientRect().bottom), w: 1 }]))()");
+        check(`CR-22 S 처음 온 화면 ${w}×${h}: 미리 보기 도식과 세 갈래 카드 세 장이 모두 첫 화면(${h}px) 안`, ff.every((c) => c.w > 0 && c.bottom <= h), JSON.stringify(ff));
+        await shot(s.cdp, `${browser.name}-s22-first-${w}`);
+      }
+      await s.cdp.send('Emulation.clearDeviceMetricsOverride');
+      await sleep(150);
+    } else check('CR-22 S 처음 온 화면', false, '시작 화면이 열리지 않음');
+    if (await g3Go('', g3Mut({ lastOpenedId: 'U-A1' }, G3_EDIT))) {
+      const f2 = await s22Q("(() => { const R = (q) => { const e = document.querySelector(q); if (!e) return null; const r = e.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height), top: Math.round(r.top), bottom: Math.round(r.bottom) }; }; return { face: document.querySelector('.start-inner').dataset.face, why: (document.querySelector('[data-testid=why-block]') || {}).textContent, preview: !!document.querySelector('[data-testid=start-preview]'), resume: R('[data-testid=start-resume]'), card: R('[data-testid=start-resume-card]'), other: R('[data-testid=start-other]'), otherH2: (document.querySelector('[data-testid=start-other] h2') || {}).textContent, waysInOther: document.querySelectorAll('[data-testid=start-other] [data-testid=start-ways] .start-way').length, waysTop: R('[data-testid=start-ways]'), moreOpen: document.querySelector('[data-testid=start-more]').open, openA1: [...document.querySelectorAll('[data-testid=mine-open-U-A1], [data-testid=open-U-A1], [data-testid=start-resume]')].filter((e) => e.checkVisibility()).length }; })()");
+      check('CR-22 S 다시 온 화면: 얼굴이 returning, 「왜」는 한 줄(미리 보기 도식 없음), 이어서 보기 큰 카드가 맨 위이고 그 아래에 「다른 일 하기」(세 갈래 3장)', f2.face === 'returning' && !f2.preview && !!f2.why && f2.why.startsWith('담당자가 바뀌어도 끊기지 않는 업무 지도') && !!f2.resume && f2.resume.w > 0 && !!f2.card && !!f2.other && f2.card.top < f2.other.top && f2.otherH2 === '다른 일 하기' && f2.waysInOther === 3 && f2.waysTop.top >= f2.card.bottom, JSON.stringify(f2));
+      check('CR-22 S 다시 온 화면: 같은 샘플(월말 정산 점검)을 첫 화면에서 여는 길이 이어서 보기 하나뿐(목록의 「열기」·카드 「열기」 없음, 샘플 목록은 「더 보기」 안 접힘)', f2.openA1 === 1 && f2.moreOpen === false, JSON.stringify(f2));
+      for (const [w, h] of [[1280, 800], [1366, 768]]) {
+        await s22View(w, h);
+        const rr = await s22Q("(() => { const r = document.querySelector('[data-testid=start-resume-card]').getBoundingClientRect(); const o = document.querySelector('[data-testid=start-other] h2').getBoundingClientRect(); return { cardBottom: Math.round(r.bottom), otherTop: Math.round(o.top), w: Math.round(r.width) }; })()");
+        check(`CR-22 S 다시 온 화면 ${w}×${h}: 이어서 보기 큰 카드가 첫 화면(${h}px) 안, 「다른 일 하기」 제목도 보임`, rr.w > 0 && rr.cardBottom <= h && rr.otherTop < h, JSON.stringify(rr));
+        await shot(s.cdp, `${browser.name}-s22-returning-${w}`);
+      }
+      await s.cdp.send('Emulation.clearDeviceMetricsOverride');
+      await sleep(150);
+    } else check('CR-22 S 다시 온 화면', false, '시작 화면이 열리지 않음');
+
     // ── D-1: 고친 샘플과 마지막 수정일, 이어서 보기 단추로 열기 ──
     if (await g3Go('', g3Mut({ lastOpenedId: 'U-A1' }, G3_EDIT))) {
-      const mineTxt2 = await text(s.cdp, '[data-testid=start-mine]');
-      check('G3 D-1 사람이 고친 샘플(월말 정산 점검)이 내 업무 지도 목록에 「고친 샘플」·「마지막 수정 2026-10-20」으로 보임', mineTxt2.includes('고친 샘플') && mineTxt2.includes('마지막 수정 2026-10-20') && !!(await g3Q('[data-testid=mine-card-U-A1]')), mineTxt2);
+      const mineTxt2 = await text(s.cdp, '[data-testid=start-resume-card]');
+      check('G3 D-1 사람이 고친 샘플(월말 정산 점검)이 (이어서 볼 지도라) 이어서 보기 큰 카드에 「고친 샘플」·「마지막 수정 2026-10-20」으로 보임', mineTxt2.includes('고친 샘플') && mineTxt2.includes('마지막 수정 2026-10-20') && !!(await g3Q('[data-testid=mine-card-U-A1]')), mineTxt2);
       await shot(s.cdp, `${browser.name}-g3-start-edited`);
       await clickTestId(s.cdp, 'start-resume');
       await sleep(500);

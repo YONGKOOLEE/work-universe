@@ -9,7 +9,7 @@ import { PROVIDERS } from '../app/src/llm/providers.js';
 import {
   HELP_CLOSE_LABEL, HELP_GEN, HELP_INTRO, HELP_TERMS, HELP_TOUR_LABEL, helpPanel, helpTexts,
 } from '../app/src/ui/help.js';
-import { TEAM_NOTE, WHY_AI_BODY, WHY_STEPS, startScreen } from '../app/src/ui/start.js';
+import { TEAM_NOTE, WHY_AI_BODY, startScreen } from '../app/src/ui/start.js';
 import { installDom, uninstallDom } from './dom-stub.js';
 
 const APP = fileURLToPath(new URL('../app/', import.meta.url));
@@ -29,9 +29,7 @@ const quotedNames = (texts) => [...new Set(texts.flatMap((t) => [...String(t).ma
 
 const startOpts = (over = {}) => ({ universes: [], guide: {}, warnings: [], readOnly: false, onOpen() {}, onCreate() {}, onTour() {}, ...over });
 
-test('FU-4 「왜」 셋째 칸: 머리는 그대로, 본문은 AI가 하는 일(과장 없이 기록·근거 검사만 말함)', () => {
-  assert.equal(WHY_STEPS[2].head, '근거 달린 인수인계 초안 · 혼자만 아는 업무 경고');
-  assert.equal(WHY_STEPS[2].body, WHY_AI_BODY);
+test('FU-4 「왜」 AI 문장: 과장 없이 기록·근거 검사만 말함(CR-22 S: 세 칸 대신 미리 보기 설명 줄과 한 줄에 들어감)', () => {
   assert.equal(WHY_AI_BODY, 'AI가 기록만 보고 쓰고, 앱이 근거를 검사합니다');
   assert.ok(/AI/.test(WHY_AI_BODY));
   assert.ok(!/(항상|완벽|정확|자동으로 다)/.test(WHY_AI_BODY));
@@ -43,7 +41,7 @@ test('시작 화면: 셋째 칸에 AI 글자, 팀 카드 안에만 안내 한 �
   try {
     const root = startScreen(startOpts());
     body.append(root);
-    assert.ok(root.querySelectorAll('[data-testid=why-step]')[2].textContent.includes('AI가 기록만 보고 쓰고'));
+    assert.ok(root.querySelector('[data-testid=start-preview-caption]').textContent.includes('AI가 기록만 보고 쓰고'));
     const team = root.querySelector('[data-testid=start-way-team]');
     const note = root.querySelector('[data-testid=start-way-team-note]');
     assert.equal(note.textContent, TEAM_NOTE);

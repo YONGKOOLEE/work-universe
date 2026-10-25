@@ -328,19 +328,38 @@
   .start-hero h1 b { color: var(--accent); }
   .lead { font-size: 17px; margin: 0 0 16px; line-height: 1.6; }
   button.big { padding: 10px 22px; font-size: 16px; }
-  /* CR-16 ①: 「왜」 덩어리 — 세 칸을 화살표로 이은 한 줄(넓을 때) / 세로(좁을 때). 1366×768에서 세 갈래 카드가 첫 화면에 남게 낮게 둔다 */
-  .why-block { margin: 0 0 18px; }
+  /* CR-22 S: 시작 화면 두 얼굴. 처음 = 「왜」 제목 + 화면 미리 보기 도식(왼쪽 공간 5 · 가운데 지도 · 오른쪽 카드) + 한 줄 설명. 다시 = 「왜」 한 줄 + 이어서 보기 큰 카드 */
+  .why-block { margin: 0 0 14px; }
   .why-title { font-size: 17px; font-weight: 700; margin: 0 0 8px; line-height: 1.4; }
-  .why-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr; gap: 22px; }
-  .why-step { position: relative; display: grid; gap: 2px; align-content: start; min-width: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); font-size: 13px; line-height: 1.4; word-break: keep-all; }
-  .why-step strong { font-size: 14px; color: var(--text); }
-  .why-step span { color: var(--muted); }
-  .why-step:last-child { border-color: var(--accent); background: var(--panel-2); background: color-mix(in srgb, var(--accent) 9%, var(--panel)); }
-  .why-step:not(:last-child)::after { content: "↓"; position: absolute; left: 50%; bottom: -20px; transform: translateX(-50%); color: var(--accent); font-size: 18px; font-weight: 700; line-height: 1; }
+  .why-line { font-size: 14px; color: var(--muted); line-height: 1.5; word-break: keep-all; margin: 0 0 12px; }
+  .why-preview { display: grid; gap: 12px; align-items: center; }
+  .why-caption { margin: 0; font-size: 14px; line-height: 1.55; color: var(--text); word-break: keep-all; }
+  .start-preview { display: grid; grid-template-columns: 88px 220px 118px; width: max-content; max-width: 100%; height: 148px; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); pointer-events: none; user-select: none; }
+  .pv-side { display: grid; align-content: start; gap: 3px; padding: 8px 6px; border-right: 1px solid var(--line); background: var(--panel-2); }
+  .pv-space { font-size: 11px; line-height: 1.2; padding: 5px 6px; border-radius: 5px; color: var(--muted); white-space: nowrap; }
+  .pv-space.on { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+  .pv-map { position: relative; margin: 8px 0 0; flex: none; }
+  .pv-line { position: absolute; height: 2px; margin-top: -1px; transform-origin: 0 50%; background: var(--muted); opacity: .55; }
+  .pv-node { position: absolute; transform: translate(-50%, -50%); display: block; }
+  .pv-center { width: 24px; height: 24px; border-radius: 50%; background: var(--accent); }
+  .pv-work { width: 16px; height: 16px; border-radius: 4px; background: #5fa8d3; }
+  .pv-person { width: 13px; height: 13px; border-radius: 50%; background: #e0a458; }
+  .pv-doc { width: 12px; height: 12px; background: var(--muted); }
+  .pv-cards { display: grid; align-content: start; gap: 6px; padding: 8px; border-left: 1px solid var(--line); }
+  .pv-card { display: grid; gap: 4px; padding: 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); }
+  .pv-card b, .pv-card u { display: block; height: 5px; border-radius: 3px; background: var(--muted); opacity: .6; text-decoration: none; }
+  .pv-card b { height: 6px; background: var(--text); opacity: .75; }
   @media (min-width: 900px) {
-    .why-steps { grid-template-columns: repeat(3, 1fr); gap: 28px; }
-    .why-step:not(:last-child)::after { content: "→"; left: auto; right: -22px; bottom: auto; top: 50%; transform: translateY(-50%); }
+    .why-preview { grid-template-columns: max-content 1fr; gap: 18px; }
   }
+  @media (max-width: 560px) {
+    .start-preview { grid-template-columns: 88px 1fr; overflow-x: auto; }
+    .pv-cards { display: none; }
+  }
+  .start-resume-card .resume-card { display: grid; gap: 4px; max-width: 520px; padding: 16px 18px; border: 2px solid var(--accent); border-radius: 14px; background: var(--panel-2); background: color-mix(in srgb, var(--accent) 9%, var(--panel)); }
+  .start-resume-card .resume-card button { justify-self: start; margin-top: 6px; }
+  .start-ways + p, .start-other > p { margin-top: 12px; }
+  .start-way span.way-space { color: var(--accent); font-size: 12px; }
   .start-inner h2 { font-size: 18px; margin: 0 0 10px; color: var(--accent); }
   .steps-list { display: grid; gap: 10px; padding: 0; counter-reset: s; }
   .steps-list li { display: grid; gap: 2px; padding-left: 36px; position: relative; counter-increment: s; }
