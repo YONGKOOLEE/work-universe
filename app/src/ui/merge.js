@@ -148,12 +148,26 @@ function renderMerge(o, plan, aiHead) {
     el('button', { type: 'button', class: 'small-btn', 'data-testid': 'merge-same', onclick: () => o.onDecide(decisionItem(item), 'confirmed') }, sameLabel),
     el('button', { type: 'button', class: 'small-btn', 'data-testid': 'merge-diff', onclick: () => o.onDecide(decisionItem(item), 'rejected') }, diffLabel)));
 
+  // 「사번 없음」 줄의 「사번 넣기」(CR-22 F): 그 사람이 있는 하위 지도가 이 브라우저 저장소에 있고 쓸 수 있을 때만(o.canEmpNo). 아니면 아래 안내
+  const empNoRow = (p) => {
+    const input = el('input', { type: 'text', maxlength: 100, autocomplete: 'off', placeholder: 'V-0000', 'aria-label': `${p.title.replace('사번 없음: ', '')} 사번`, 'data-testid': 'merge-empno' });
+    const msg = el('span', { class: 'error-text', role: 'alert', 'data-testid': 'merge-empno-msg' });
+    const submit = () => {
+      msg.textContent = '';
+      if (!input.value.trim()) { msg.textContent = '사번을 넣으세요.'; return; }
+      const r = o.onEmpNo(p, input.value.trim());
+      if (r && !r.ok) msg.textContent = r.text || '사번을 넣지 못했습니다.';
+    };
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+    return el('div', { class: 'row', 'data-testid': 'merge-empno-row' }, el('label', { class: 'small' }, '사번 넣기 ', input), el('button', { type: 'button', class: 'small-btn', 'data-testid': 'merge-empno-add', onclick: submit }, '넣기'), msg);
+  };
   const personList = plan.persons.length
     ? el('ul', { class: 'patterns', 'data-testid': 'merge-persons' }, ...plan.persons.map((p) => el('li', { 'data-type': p.type },
       el('div', { class: 'who' }, el('strong', {}, p.title), el('span', { class: 'chip' }, p.type === 'conflict' ? '사번 충돌' : p.type === 'stale' ? '사번 바뀜' : '사번 없음')),
       el('div', { class: 'muted small' }, p.reason),
       chips(view, p.evidence_ids, o.onFocus),
       // 같은 사람이 있는지 비교할 상대가 없는 "사번 없음" 카드는 누를 것이 없으므로 고치는 길을 적는다(여섯 번째 검토 U-12)
+      p.type === 'no_empno' && o.canEmpNo && o.canEmpNo(p) ? empNoRow(p) : null,
       p.b ? null : el('div', { class: 'muted small', 'data-testid': 'merge-howto' }, `고치는 방법: 「${(view.rawNode(p.a) || {}).universe_name || '그 사람이 있는'}」 업무 지도를 열어 그 사람을 고르고 「수정」에서 사번을 넣으세요. 다음에 이 목록을 열 때 같은 사번이면 자동으로 잇습니다.`),
       decideButtons(p, '같은 사람', '다른 사람'))))
     : el('p', { class: 'muted small' }, '확인할 사람이 없습니다.');
@@ -181,7 +195,7 @@ function renderMerge(o, plan, aiHead) {
     : el('p', { class: 'muted small' }, '아직 없습니다.');
 
   return el('div', { class: 'insight', 'data-testid': 'merge-panel' },
-    el('h2', {}, '통합 확인'),
+    el('div', { class: 'row panel-head' }, el('h2', {}, '통합 확인'), el('button', { type: 'button', 'data-testid': 'merge-close', onclick: o.onClose }, '닫기')),
     el('p', { class: 'muted small' }, '같은 사번·이름의 사람은 자동으로 하나로 이었습니다. 아래는 사람이 확인할 항목입니다. 확인하지 않아도 이 업무 지도는 그대로 볼 수 있고, 원래 업무 지도는 바뀌지 않습니다.'),
     plan.auto.length && !o.readOnly ? el('p', { class: 'notice', 'data-testid': 'merge-auto' }, `사번·이름이 같은 사람 ${plan.auto.length}명을 아직 잇지 않았습니다. `,
       el('button', { type: 'button', class: 'link', onclick: o.onApplyAuto }, '사번 자동 연결 적용')) : null,
@@ -195,6 +209,5 @@ function renderMerge(o, plan, aiHead) {
     el('h3', {}, `판정 기록 ${decided.length}건`),
     history,
     el('p', { class: 'muted small' }, '같다고 확인하면 그래프에서 한 항목으로 보입니다. 다르다고 판정한 쌍은 다시 묻지 않습니다.'),
-    el('div', { class: 'row' }, el('button', { type: 'button', onclick: o.onClose }, '닫기')),
   );
 }

@@ -113,14 +113,13 @@ export function insightPanel(o) {
     return inspectionSummaryText(d, o.baseline || o.baselineToday ? compareRisk(d, o.baseline || null, { ...namesFromInspection(d), owners: currentOwnersByWork(view, summaryAsOf()) }, { savedToday: !!o.baselineToday }) : null);
   };
   return el('div', { class: 'insight' },
-    el('h2', {}, '인사이트'),
+    el('div', { class: 'row panel-head' }, el('h2', {}, '인사이트'), el('button', { type: 'button', 'data-testid': 'insight-close', onclick: o.onClose }, '닫기')),
     summaryBar({ build: buildSummary, mapName: o.mapName || '업무 지도', asOf: summaryAsOf() }),
     asofNote,
     keylessNote,
     tabs,
     body,
     el('p', { class: 'muted small', 'data-testid': 'insight-note' }, '참고 정보입니다. 해석과 인력 배치는 사람이 정합니다.'),
-    el('div', { class: 'row' }, el('button', { type: 'button', 'data-testid': 'insight-close', onclick: o.onClose }, '닫기')),
   );
 }
 

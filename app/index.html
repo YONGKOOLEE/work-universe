@@ -404,6 +404,29 @@
   /* 따라 하기(CR-13 A): 오른쪽 패널 맨 위에 붙는 카드. 대상은 .tour-target(요소)·cytoscape 클래스 tour-target(노드)으로 짚는다 */
   .tour-slot { position: sticky; top: -16px; z-index: 30; margin: -16px -16px 12px; padding: 10px 16px; background: var(--panel-2); border-bottom: 2px solid var(--accent); }
   .tour-slot + .aside-tools { margin-top: 0; }
+  /* 성공 알림 자리(CR-22 F): 패널 맨 위에 붙어 스크롤과 무관하게 보인다. 따라 하기 카드가 있으면 main.js가 top을 그 아래로 옮긴다 */
+  .notice-slot { position: sticky; top: -16px; z-index: 40; margin: 0 -16px; }
+  .notice-slot:empty { display: none; }
+  .notice-card { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0 0 8px; padding: 8px 16px; border-radius: 0; border-width: 0 0 1px; box-shadow: 0 3px 8px rgba(0, 0, 0, .45); }
+  .notice-card .notice-text { flex: 1 1 220px; min-width: 0; }
+  .notice-card .notice-x { margin-left: auto; }
+  /* 패널 보기의 제목 줄: 닫기는 제목 옆(CR-22 F) */
+  .panel-head { align-items: center; justify-content: space-between; flex-wrap: nowrap; margin: 0 0 8px; }
+  .panel-head h2 { margin: 0; }
+  /* 메모 양식: 분류 칩 4개(처음엔 고르지 않음) */
+  .memo-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0; }
+  .memo-chips .chip-btn { padding: 3px 12px; font-size: 13px; }
+  .memo-gate { margin-left: 2px; }
+  .weekly-quick .memo-row { display: grid; gap: 4px; margin: 6px 0; }
+  .weekly-quick .memo-row > span { color: var(--muted); font-size: 13px; }
+  .weekly-quick .memo-row input[type=text] { width: 100%; }
+  .extra-names { display: grid; gap: 6px; padding: 6px 8px; border: 1px dashed var(--line); border-radius: 8px; }
+  .extra-names p { margin: 0; }
+  /* 초안: 확정 단추는 바닥 고정 줄에(스크롤 없이 보이게) */
+  .draft .confirm-bar { position: sticky; bottom: -16px; z-index: 6; background: var(--panel); border-top: 1px solid var(--line); padding: 8px 0; margin-top: 6px; }
+  .draft .confirm-bar .form-message { margin: 4px 0 0; }
+  .branch-pick { display: grid; gap: 4px; margin: 6px 0; }
+  .branch-pick label { display: flex; gap: 6px; align-items: baseline; }
   .tour-card { display: grid; gap: 6px; font-size: 14px; }
   .tour-card .tour-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .tour-card .tour-count { color: var(--accent); font-weight: bold; font-size: 13px; }
@@ -596,6 +619,7 @@
   <div id="panel-resizer" class="panel-resizer" data-testid="panel-resizer" role="separator" aria-orientation="vertical" aria-label="오른쪽 패널 폭" aria-valuenow="380" tabindex="0" title="끌어서 패널 폭 조절 · 두 번 누르면 기본 폭"></div>
   <aside>
     <div id="tour-slot" class="tour-slot" data-testid="tour-slot" hidden></div>
+    <div id="notice-slot" class="notice-slot" data-testid="notice-slot" aria-live="polite"></div>
     <div class="aside-tools"><button type="button" id="wide-toggle" class="small-btn" aria-pressed="false" title="오른쪽 패널을 넓혀 인수인계 초안·인사이트·통합 확인을 한 번에 더 많이 봅니다">패널 넓게 보기</button></div>
     <section id="detail" aria-live="polite"></section>
     <details class="add">

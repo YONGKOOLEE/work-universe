@@ -256,7 +256,7 @@ export function draftPanel(o) {
     field('받는 사람', to),
     msg,
     personHelp,
-    el('div', { class: 'row' }, el('button', { type: 'submit', class: 'primary' }, '초안 만들기'), el('button', { type: 'button', onclick: o.onClose }, '닫기')),
+    el('div', { class: 'row' }, el('button', { type: 'submit', class: 'primary' }, '초안 만들기')),
   );
 
   // 기록이 바뀌어 초안을 자동으로 다시 만들었다는 한 줄(결과 위). 사람이 「초안 만들기」를 직접 누르면 사라진다
@@ -306,12 +306,12 @@ export function draftPanel(o) {
     makeDraft(false);
   });
   // 기록이 바뀌어 다시 그려진 창(rerun)은 같은 선택으로 바로 초안을 다시 만든다. 대상·보내는·받는 사람 중 하나라도 비면 만들지 않는다(오류 문구도 띄우지 않음)
-  if (o.rerun && target.value && from.value && to.value && from.value !== to.value) {
+  if ((o.rerun || o.autoMake) && target.value && from.value && to.value && from.value !== to.value) {
     makeDraft(true);
-    if (result.childNodes.length && o.rerunNote !== false) rerunNote.hidden = false;
+    if (o.rerun && result.childNodes.length && o.rerunNote !== false) rerunNote.hidden = false;
   }
 
-  return el('div', { class: 'draft' }, el('h2', {}, '인수인계 초안'),
+  return el('div', { class: 'draft' }, el('div', { class: 'row panel-head' }, el('h2', {}, '인수인계 초안'), el('button', { type: 'button', 'data-testid': 'draft-close', onclick: o.onClose }, '닫기')),
     o.viewDate ? el('p', { class: 'notice', 'data-testid': 'draft-today' }, `초안은 오늘(${o.asOf}) 기준으로 만듭니다. 시간 보기의 기준일(${o.viewDate})과 상관없습니다.`) : null,
     form, rerunNote, liveNote, result);
 }
@@ -351,7 +351,8 @@ function confirmBox(d, view, o) {
   const plan = o.readOnly || !t ? null : transferPlan(view, d, t.universe_id);
   const label = (g) => (view.getNode(g) || { label: g }).label;
   const names = (list) => list.map((g) => `「${label(g)}」`).join('·');
-  const transfer = plan ? el('input', { type: 'checkbox', 'data-testid': 'draft-transfer', disabled: !plan.persons_ok || !plan.moves.length }) : null;
+  const transfer = plan ? el('input', { type: 'checkbox', 'data-testid': 'draft-transfer', disabled: !plan.persons_ok || !plan.moves.length, checked: !!o.presetTransfer && plan.persons_ok && plan.moves.length > 0 }) : null;
+  if (transfer && o.onTransferChange) transfer.addEventListener('change', () => o.onTransferChange(transfer.checked));
   const transferBox = plan
     ? el('div', { class: 'transfer-box', 'data-testid': 'draft-transfer-box' },
       el('label', { class: 'check' }, transfer, ` ${TRANSFER_LABEL}`),
@@ -368,11 +369,13 @@ function confirmBox(d, view, o) {
       msg.textContent = confirmError(r.error, moving);
     }
   });
-  return el('div', { class: 'confirm-box', 'data-testid': 'confirm-box' },
+  const bar = el('div', { class: 'confirm-bar', 'data-testid': 'confirm-bar' }, transferBox, btn, msg);
+  const info = el('div', { class: 'confirm-box', 'data-testid': 'confirm-box' },
     el('p', { class: 'muted small' }, `내용을 확인했으면 확정하세요. 「${where}」에 인수인계서와 인수인계 이력(${date})이 남고, 다음 인수인계 초안의 「이전 인수인계」 근거가 됩니다.`),
     elsewhere.length ? el('p', { class: 'muted small', 'data-testid': 'confirm-elsewhere' }, `이 화면(「${where}」)에만 저장됩니다. 업무 지도(「${elsewhere.join('」·「')}」)를 단독으로 열면 이 인수인계는 보이지 않습니다. 그 업무 지도에서도 보이게 하려면 그 업무 지도를 열어 업무를 대상으로 확정하세요.`) : null,
     o.readOnly ? el('p', { class: 'muted small' }, '읽기 전용이라 확정할 수 없습니다.') : null,
-    transferBox, btn, msg);
+    null);
+  return [info, bar];
 }
 
 // 「관계자」「유사 경험자」 문장의 근거에 역할 이름으로 만든 노드(실제 사람이 아님)가 있으면 밝힌다 — 인사이트 화면과 같은 표시(검토9 P-2)
@@ -441,7 +444,7 @@ function renderDraft(box, d, view, onFocus, o = {}) {
       ),
     ),
     el('p', { class: 'muted small' }, '축적된 이력으로 만든 초안입니다. 근거를 눌러 확인하고, 담당자가 검토해 확정하세요.'),
-    confirmBox(d, view, o),
+    ...[confirmBox(d, view, o)].flat(),
     draftNext(),
     // 결과를 다 읽은 뒤 맨 아래에 한 줄. 키가 있으면 없고, 키 없음 안내(draft-fallback)가 이미 같은 말을 하면 중복이라 그리지 않는다
     !isLive(o.provider) && (d.method === 'pregen' || d.method === 'rule') && !(d.fallback && d.fallback.keyless)

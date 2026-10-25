@@ -137,7 +137,7 @@ export function tableDialog(o) {
       el('label', { class: 'field' },
         el('span', {}, '스프레드시트에서 복사한 표 붙여 넣기(탭으로 나뉜 글)'),
         el('textarea', { id: 'table-paste', rows: 4, 'data-testid': 'table-paste', placeholder: '유형\t이름\t설명\n업무\t월말 정산\t카드사 대사와 마감', oninput: (e) => { st.pasteText = e.target.value; } }, st.pasteText)),
-      el('div', { class: 'row' }, el('button', { type: 'button', 'data-testid': 'table-paste-apply', onclick: () => { st.rows = collect(); paste(); render(); } }, '표로 옮기기'))) : null;
+      el('div', { class: 'row' }, el('button', { type: 'button', 'data-testid': 'table-paste-apply', onclick: () => { st.rows = collect(); paste(); render(); } }, '읽어 보기'))) : null;
     const head = el('thead', {}, el('tr', {},
       el('th', {}, '#'), ...TABLE_COLUMNS.filter((c) => !existing || !LINK_KEYS.includes(c.key)).map((c) => el('th', { class: `col-${c.key}` }, c.label)), !existing ? el('th', {}) : null));
     const table = el('div', { class: 'batch-wrap' },

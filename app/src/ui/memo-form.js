@@ -1,0 +1,63 @@
+// 메모 양식 부품(CR-22 F): 「이번 주 기록」(기록 공간)과 카드의 「기록 남기기」(메모)가 같이 쓴다.
+// 분류는 칩 4개(진행 중·이슈·주의사항·해결됨)이고 처음엔 아무것도 고르지 않는다. 고르지 않으면 「기록」 단추가 막히고 한 줄이 보인다.
+// 값은 숨은 select(data-testid = `${prefix}-category`)에 담는다 — 칩을 누르면 select 값이 바뀌고 change가 나가며, select 값을 바꿔도 칩이 따라온다.
+import { MEMO_CATEGORIES } from '../model/schema.js';
+import { CATEGORY_REQUIRED_TEXT, MEMO_CHIP_ORDER, categoryGate, resolveWarningText } from '../view/record-form.js';
+import { el } from './dom.js';
+
+/**
+ * @param {{prefix:string, topics?:{id:string,label:string}[], checkedTopic?:string, closeCount?:()=>number, onChange?:()=>void}} o
+ *   closeCount: 지금 고른 업무에서 「해결됨」 기록이 닫을 미해결 건수(업무가 바뀌면 refresh()로 다시 계산)
+ */
+export function memoParts(o) {
+  const select = el('select', { 'data-testid': `${o.prefix}-category`, 'aria-label': '분류', hidden: true },
+    el('option', { value: '' }, CATEGORY_REQUIRED_TEXT),
+    ...MEMO_CHIP_ORDER.map((k) => el('option', { value: k }, MEMO_CATEGORIES[k])));
+  select.value = '';
+  const gate = el('span', { class: 'muted small memo-gate', 'data-testid': 'memo-gate', role: 'status' }, CATEGORY_REQUIRED_TEXT);
+  const warn = el('p', { class: 'notice small', 'data-testid': 'memo-resolve-warn', role: 'status', hidden: true });
+  const chips = MEMO_CHIP_ORDER.map((k) => el('button', {
+    type: 'button', class: 'chip chip-btn', role: 'radio', 'aria-checked': 'false', 'data-testid': `memo-chip-${k}`, 'data-cat': k,
+    onclick: () => { select.value = select.value === k ? '' : k; refresh(); },
+  }, MEMO_CATEGORIES[k]));
+  const chipRow = el('div', { class: 'memo-chips', role: 'radiogroup', 'aria-label': '분류', 'data-testid': 'memo-chips' }, ...chips);
+
+  // 이미 끝난 일(해결됨으로 기록): 분류가 이슈일 때만 보인다. 켜면 이슈 메모와 그것을 닫는 해결됨 메모를 같은 날짜로 한 번에 남긴다
+  const pastDone = el('input', { type: 'checkbox', 'data-testid': `${o.prefix}-past-resolved` });
+  const pastBox = el('div', { 'data-testid': `${o.prefix}-past-box`, hidden: true },
+    el('label', { class: 'check' }, pastDone, ' 이미 끝난 일(해결됨으로 기록)'),
+    el('p', { class: 'muted small' }, '켜면 이 이슈와 그것을 닫는 「해결됨」 메모를 같은 날짜로 함께 남겨, 지나간 일이 미해결에 쌓이지 않습니다.'));
+
+  const topics = o.topics && o.topics.length
+    ? el('div', { class: 'checks' }, ...o.topics.map((t) => el('label', { class: 'check' }, el('input', { type: 'checkbox', value: t.id, checked: t.id === o.checkedTopic }), ` ${t.label}`)))
+    : null;
+
+  const refresh = () => {
+    const cat = select.value;
+    for (const c of chips) {
+      const on = c.dataset.cat === cat;
+      c.setAttribute('aria-checked', String(on));
+      c.className = `chip chip-btn${on ? ' sel' : ''}`;
+    }
+    const g = categoryGate(cat);
+    gate.hidden = g.ok;
+    gate.textContent = g.text;
+    pastBox.hidden = cat !== 'issue';
+    if (cat !== 'issue') pastDone.checked = false;
+    if (cat === 'resolved' && o.closeCount) {
+      warn.textContent = resolveWarningText(o.closeCount());
+      warn.hidden = false;
+    } else warn.hidden = true;
+    if (o.onChange) o.onChange(g.ok);
+  };
+  select.addEventListener('change', refresh);
+  refresh();
+
+  return {
+    select, chipRow, gate, warn, pastBox, pastDone, topics, refresh,
+    category: () => select.value,
+    topicIds: () => (topics ? [...topics.querySelectorAll('input:checked')].map((i) => i.value) : []),
+    pastChecked: () => pastDone.checked,
+    reset() { select.value = ''; pastDone.checked = false; refresh(); },
+  };
+}

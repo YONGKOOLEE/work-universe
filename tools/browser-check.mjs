@@ -518,16 +518,17 @@ async function checkBrowser(browser, port) {
   await clickTestId(s.cdp, 'btn-event');
   // 여섯 번째 검토 U-2: 내용이 빈 메모는 저장하지 않는다(이력은 지울 수 없다)
   const eventsBefore = await evaluate(s.cdp, 'window.__wu.doc.events.length');
-  await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': '2026-10-02', 'event-note': '   ' });
+  // CR-22 F: 메모 분류는 처음에 고르지 않는다(고르기 전에는 「기록」이 막힘) — 예전 기본값 「이슈」를 칸에 넣어 같은 흐름을 본다
+  await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': '2026-10-02', 'event-category': 'issue', 'event-note': '   ' });
   await sleep(150);
   const emptyMemo = await panelMessage(s.cdp);
   check('U-2: 내용 없는 메모 → 「메모 내용을 입력하세요」, 이력이 늘지 않음', !!emptyMemo && emptyMemo.code === 'E-REQUIRED' && emptyMemo.text.includes('메모 내용을 입력하세요') && (await evaluate(s.cdp, 'window.__wu.doc.events.length')) === eventsBefore, emptyMemo && emptyMemo.text);
   // C-1 연도 오타 날짜는 거부
-  await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': '0202-06-01', 'event-note': '연도 오타' });
+  await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': '0202-06-01', 'event-category': 'issue', 'event-note': '연도 오타' });
   await sleep(150);
   const badYear = await panelMessage(s.cdp);
   check('C-1: 연도 오타 날짜(0202-06-01) → 날짜 오류, 이력이 늘지 않음', !!badYear && badYear.text.includes('1900~2200') && (await evaluate(s.cdp, 'window.__wu.doc.events.length')) === eventsBefore, badYear && badYear.text);
-  await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': '2026-10-02', 'event-note': '점검 기준 변경 논의' });
+  await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': '2026-10-02', 'event-category': 'issue', 'event-note': '점검 기준 변경 논의' });
   await sleep(250);
   // CR-18 D-14: 이력 목록은 이슈 메모에도 「[이슈]」 꼬리표가 붙는다(분류 없는 메모는 이슈로 본다)
   check('이력 추가(메모) → 이력 목록에 날짜·꼬리표와 함께 보임', (await text(s.cdp, '[data-testid=history]')).includes('2026-10-02메모[이슈] 점검 기준 변경 논의'), (await text(s.cdp, '[data-testid=history]')).slice(0, 200));
@@ -613,7 +614,7 @@ async function checkBrowser(browser, port) {
   // 화면 어디에도 'null' 글자가 들어가지 않는다(replaceChildren에 빈 값을 넘긴 실수 검출)
   const nullTexts = await evaluate(s.cdp, "(() => { document.querySelectorAll('details').forEach((d) => (d.open = true)); const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); const out = []; while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') out.push(w.currentNode.parentElement.id || w.currentNode.parentElement.className); return out; })()");
   check('화면에 "null" 글자 없음', nullTexts.length === 0, nullTexts.join(','));
-  await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=draft-form] button')].find((b) => b.textContent === '닫기').click()");
+  await evaluate(s.cdp, "document.querySelector('[data-testid=draft-close]').click() /* CR-22 F: 초안 「닫기」는 제목 옆(draft-close) */");
 
   await pickProvider('pregen'); // 이후 단계는 기본 생성 방식으로
   await s.cdp.send('Page.reload');
@@ -846,14 +847,14 @@ async function checkBrowser(browser, port) {
     ti = await tourInfo();
     check('CR-13 A 「다음」 → 3/5(초안 만들기), 「다음」 단추는 사라짐', ti.index === 2 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 3/5' && !(await hasNext()), JSON.stringify(ti));
     const sn3 = await stepNamesOk();
-    check('CR-13 A 3단계 문구의 「」 이름(인수인계 초안 만들기·초안 만들기)이 실제 화면에 있음', sn3.missing.length === 0 && sn3.names.length >= 2, JSON.stringify(sn3));
+    check('CR-13 A 3단계 문구의 「」 이름(인수인계 초안 만들기·초안 만들기)이 실제 화면에 있음', sn3.missing.length === 0 && sn3.names.length >= 2, JSON.stringify(sn3) + ' ' + JSON.stringify(await evaluate(s.cdp, "({ space: window.__wu.space, sel: window.__wu.selected, head: document.getElementById('detail').innerText.slice(0, 160) })")));
     // 재검증 N-2: 「빈 곳을 누르세요」 단계에서는 그래프 안쪽 아래 가운데에 표지가 보이고(크기 있음, 눌림을 막지 않음), 테두리는 안쪽(음수 오프셋)
     const hintInfo = () => evaluate(s.cdp, "(() => { const h = document.querySelector('[data-testid=tour-blank-hint]'); const g = document.getElementById('graph'); if (!h) return null; const r = h.getBoundingClientRect(); const gr = g.getBoundingClientRect(); const cs = getComputedStyle(h); const gs = getComputedStyle(g); return { text: h.textContent, w: r.width, h: r.height, inside: r.left >= gr.left && r.right <= gr.right && r.top >= gr.top && r.bottom <= gr.bottom, centerOff: Math.abs((r.left + r.right) / 2 - (gr.left + gr.right) / 2), nearBottom: gr.bottom - r.bottom < 60, noPointer: cs.pointerEvents === 'none', anim: cs.animationName, graphInset: g.classList.contains('tour-target') && g.classList.contains('tour-inset') && gs.outlineOffset.startsWith('-'), onTop: document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2) === g || g.contains(document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2)) }; })()");
     // 처음 사용 점검 2회차 FU-26: 3단계는 「빈 곳을 누르고」 없이 오른쪽 상세의 「인수인계 초안 만들기」 단추(btn-draft)를 짚는다. 「빈 곳」 표지(N-2)는 team 5단계·handover 5단계에서 확인한다
     const hi3 = await hintInfo();
-    check('처음 사용 W4(FU-26) handover 3단계(「대사 확인」을 고른 상태): 문구가 「오른쪽의 「인수인계 초안 만들기」를 누른 뒤 「초안 만들기」를 누르세요.」이고 「빈 곳」 표지는 없으며, 깜빡이는 대상은 상세의 「인수인계 초안 만들기」 단추', hi3 === null && (await text(s.cdp, '[data-testid=tour-task]')) === '오른쪽의 「인수인계 초안 만들기」를 누른 뒤 「초안 만들기」를 누르세요.' && (await evaluate(s.cdp, "document.querySelector('[data-testid=btn-draft]').classList.contains('tour-target')")), JSON.stringify(hi3));
+    check('처음 사용 W4(FU-26) handover 3단계(CR-22: 들어설 때 카드를 닫고 「인수인계」 공간): 문구가 「오른쪽의 「인수인계 초안 만들기」를 누른 뒤 「초안 만들기」를 누르세요.」이고 「빈 곳」 표지는 없으며, 깜빡이는 대상은 공간 패널의 「인수인계 초안 만들기」 단추', hi3 === null && (await text(s.cdp, '[data-testid=tour-task]')) === '오른쪽의 「인수인계 초안 만들기」를 누른 뒤 「초안 만들기」를 누르세요.' && (await evaluate(s.cdp, "!!document.querySelector('[data-testid=btn-draft-universe]') && document.querySelector('[data-testid=btn-draft-universe]').classList.contains('tour-target') && !document.querySelector('[data-testid=item-card]')")), JSON.stringify(hi3));
     await shot(s.cdp, `${browser.name}-36b4-tour-draft-button`);
-    await evaluate(s.cdp, "document.querySelector('[data-testid=btn-draft]').click()");
+    await evaluate(s.cdp, "document.querySelector('[data-testid=btn-draft-universe]').click()");
     await sleep(300);
     const preset = await evaluate(s.cdp, "({ target: document.querySelector('[data-testid=draft-target]').selectedOptions[0].textContent, from: document.querySelector('[data-testid=draft-from]').selectedOptions[0].textContent, to: document.querySelector('[data-testid=draft-to]').selectedOptions[0].textContent })");
     check('CR-13 A 3단계 초안 화면: 대상 월말 정산 점검(지도 전체, FU-2)·보내는 사람 윤바다·받는 사람 서하늘이 미리 골라져 있고, 화면만 열어서는 진행하지 않음', preset.target === '월말 정산 점검' && preset.from === '윤바다' && preset.to === '서하늘' && (await tourInfo()).index === 2, JSON.stringify(preset));
@@ -1686,7 +1687,7 @@ async function checkBrowser(browser, port) {
     await sleep(150);
     await clickTestId(s.cdp, 'btn-event');
     await sleep(150);
-    const memoOk = await evaluate(s.cdp, "(() => { const f = document.querySelector('[data-testid=event-form]'); if (!f) return 'no form'; const set = (t, v) => { const e = f.querySelector('[data-testid=' + t + ']'); if (!e) return false; e.value = v; e.dispatchEvent(new Event('change')); return true; }; set('event-type', 'memo'); set('event-date', '2026-10-02'); set('event-note', '10월 강의실 예약 시스템 점검 예정'); f.querySelector('button[type=submit]').click(); return 'ok'; })()");
+    const memoOk = await evaluate(s.cdp, "(() => { const f = document.querySelector('[data-testid=event-form]'); if (!f) return 'no form'; const set = (t, v) => { const e = f.querySelector('[data-testid=' + t + ']'); if (!e) return false; e.value = v; e.dispatchEvent(new Event('change')); return true; }; set('event-type', 'memo'); set('event-date', '2026-10-02'); set('event-category', 'issue'); set('event-note', '10월 강의실 예약 시스템 점검 예정'); f.querySelector('button[type=submit]').click(); return 'ok'; })()");
     await sleep(250);
     await evaluate(s.cdp, "window.__wu.select('U-C/N-101')");
     await sleep(150);
@@ -2463,7 +2464,7 @@ async function checkBrowser(browser, port) {
   await sleep(150);
   for (let i = 0; i < 12; i += 1) {
     await clickTestId(s.cdp, 'btn-event');
-    await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': `2026-10-0${(i % 9) + 1}`, 'event-note': `T19 이력 접기 시험 ${i + 1}` });
+    await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': `2026-10-0${(i % 9) + 1}`, 'event-category': 'issue', 'event-note': `T19 이력 접기 시험 ${i + 1}` });
     await sleep(120);
   }
   // CR-22 K: 이력은 늘 최신 5건만(최신이 위) + 「모두 보기 →」(넓은 표, 20줄씩). 예전의 「15건 초과 → 10건」 접힘은 없어졌다
@@ -2600,7 +2601,7 @@ async function checkBrowser(browser, port) {
   await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
   await sleep(150);
   await clickTestId(s.cdp, 'btn-event');
-  await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': '2026-10-05', 'event-note': 'T25 백업 권유 시험' });
+  await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': '2026-10-05', 'event-category': 'issue', 'event-note': 'T25 백업 권유 시험' });
   await sleep(300);
   const n1 = await nudge();
   check('R-21 ② 내보낸 지 얼마 안 됐고 변경이 1건이면 권유 줄이 없음(7일 기준 전)', n1.hidden, JSON.stringify(n1));
@@ -2722,7 +2723,7 @@ async function checkBrowser(browser, port) {
       await sleep(250);
     };
     const w1CloseDraft = async () => {
-      await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=draft-form] button')].find((b) => b.textContent === '닫기').click()");
+      await evaluate(s.cdp, "document.querySelector('[data-testid=draft-close]').click() /* CR-22 F: 초안 「닫기」는 제목 옆(draft-close) */");
       await sleep(200);
     };
     // 목록의 글자(이름)로 고른다: 새 지도의 gid를 몰라도 되게
@@ -2892,7 +2893,7 @@ async function checkBrowser(browser, port) {
     await openDraft();
     await submitDraft();
     await sleep(100);
-    await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=draft-form] button')].find((b) => b.textContent === '닫기').click()");
+    await evaluate(s.cdp, "document.querySelector('[data-testid=draft-close]').click() /* CR-22 F: 초안 「닫기」는 제목 옆(draft-close) */");
     await sleep(900);
     const left = await evaluate(s.cdp, "({ err: window.__llmErr, draftOpen: !!document.querySelector('[data-testid=draft-form]') })");
     check('CR-15 응답을 기다리다 초안을 닫으면 응답은 버려지고 오류가 나지 않음', left.err.length === 0 && !left.draftOpen, JSON.stringify(left));
@@ -2927,7 +2928,7 @@ async function checkBrowser(browser, port) {
     await sleep(900);
     const afterClear = await evaluate(s.cdp, "({ live: !!document.querySelector('[data-testid=draft-live]'), chips: [...document.querySelectorAll('[data-testid=item-method]')].filter((c) => c.textContent === 'Claude API').length })");
     check('CR-15 키를 지운 뒤 초안: 「생성 중…」도 칩도 호출도 없음', !afterClear.live && afterClear.chips === 0 && (await calls()) === callsBefore, JSON.stringify({ afterClear, callsBefore }));
-    await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=draft-form] button')].find((b) => b.textContent === '닫기').click()");
+    await evaluate(s.cdp, "document.querySelector('[data-testid=draft-close]').click() /* CR-22 F: 초안 「닫기」는 제목 옆(draft-close) */");
     await pickProvider('pregen'); // 이후 단계는 기본 생성 방식으로
     await evaluate(s.cdp, "localStorage.removeItem('wu:v1:llm-cache')");
 
@@ -4081,7 +4082,9 @@ async function checkBrowser(browser, port) {
       const g2Wq = await g2Box('[data-testid=weekly-quick]');
       check('G2 D-10 지도 중심 상세에 「이번 주 기록」 한 줄(업무·분류·내용·기록, 크기 있음)', !!g2Wq && g2Wq.w > 0 && g2Wq.h > 0 && !!(await g2Box('[data-testid=weekly-work]')) && !!(await g2Box('[data-testid=weekly-category]')) && !!(await g2Box('[data-testid=weekly-note]')) && !!(await g2Box('[data-testid=weekly-add]')), JSON.stringify(g2Wq));
       const g2Cat = await evaluate(s.cdp, "(() => { const c = document.querySelector('[data-testid=weekly-category]'); return { value: c.value, options: [...c.options].map((o) => o.textContent).join() }; })()");
-      check('G2 D-10 분류 목록은 이력 추가와 같은 네 가지, 처음 값은 「진행 중」', g2Cat.options === '이슈,주의사항,진행 중,해결됨' && g2Cat.value === 'in_progress', JSON.stringify(g2Cat));
+      // CR-22 F: 분류는 칩 4개이고 처음엔 고르지 않는다(숨은 select의 처음 값은 빈 값). 아래 오류 흐름은 분류를 고른 뒤 본다
+      check('G2 D-10 분류 목록은 이력 추가와 같은 네 가지, 처음 값은 비어 있음(고르지 않음)', g2Cat.options === '분류를 고르세요,진행 중,이슈,주의사항,해결됨' && g2Cat.value === '', JSON.stringify(g2Cat));
+      await g2Set('weekly-category', 'in_progress');
       const g2eW0 = await evaluate(s.cdp, 'window.__wu.doc.events.length');
       await clickTestId(s.cdp, 'weekly-add');
       await sleep(150);
@@ -4113,6 +4116,8 @@ async function checkBrowser(browser, port) {
       check('G2 D-14 업무 이력 목록의 모든 메모 줄이 분류 꼬리표([이슈]·[주의사항]·[진행 중]·[해결됨])로 시작', g2Hist.length > 0 && g2Hist.every((t) => /^\[(이슈|주의사항|진행 중|해결됨)\] /.test(t)) && g2Hist.some((t) => t.startsWith('[이슈] ')), JSON.stringify(g2Hist));
       await clickTestId(s.cdp, 'btn-event');
       await sleep(200);
+      await g2Set('event-category', 'issue'); // CR-22 F: 분류는 처음에 고르지 않으므로 먼저 이슈를 고른다
+      await sleep(100);
       const g2Past = await g2Box('[data-testid=event-past-box]');
       check('G2 D-12 이력 추가(메모·분류 이슈)에 「이미 끝난 일(해결됨으로 기록)」 선택 칸(크기 있음)', !!g2Past && g2Past.w > 0 && g2Past.h > 0 && g2Past.text.includes('이미 끝난 일(해결됨으로 기록)'), JSON.stringify(g2Past));
       await g2Set('event-category', 'caution');
@@ -4762,6 +4767,7 @@ async function checkBrowser(browser, port) {
       check('S T4 「이번 주 기록」에 날짜 칸(크기 있음): 기본 오늘, 고를 수 있는 가장 늦은 날 = 오늘', !!wd && wd.w > 0 && wd.h > 0 && wd.value === today && wd.max === today, JSON.stringify([wd, today]));
       const c0 = await s2Counts();
       await s2Set('weekly-work', 'N-001');
+      await s2Set('weekly-category', 'in_progress'); // CR-22 F: 분류를 고르지 않으면 「기록」이 막힌다
       await s2Set('weekly-note', 'S 시험 주간 기록');
       await s2Set('weekly-date', tomorrow);
       await clickTestId(s.cdp, 'weekly-add');
@@ -5109,7 +5115,7 @@ async function checkBrowser(browser, port) {
       await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
       await sleep(150);
       await clickTestId(s.cdp, 'btn-event');
-      await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': '2026-10-20', 'event-note': 'RV10 되감기 한계 시험 메모' });
+      await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': '2026-10-20', 'event-category': 'issue', 'event-note': 'RV10 되감기 한계 시험 메모' });
       await sleep(300);
       await evaluate(s.cdp, 'window.__wu.select(null)');
       await sleep(150);
@@ -5438,7 +5444,7 @@ async function checkBrowser(browser, port) {
       check('CR-21 B-2 처음(샘플 기록뿐)에는 개요 「최근 기록」이 「아직 남긴 기록이 없습니다 — 「이번 주 기록」에 첫 기록을 남겨 보세요」', emptyText === '아직 남긴 기록이 없습니다 — 「이번 주 기록」에 첫 기록을 남겨 보세요' && !(await c21Box('[data-testid=recent-item]')), emptyText);
       const ev0 = await c21Doc();
       const w1 = await c21Weekly('길찾기 첫 기록');
-      check('CR-21 B-1 「이번 주 기록」 알림 줄 끝에 「이력에서 보기」 단추(goto-history)가 있고 기록이 한 건 늘었다', !!w1 && w1.btn && w1.text.includes('길찾기 첫 기록') && w1.text.endsWith('이력에서 보기') && (await c21Doc()) === ev0 + 1, JSON.stringify(w1));
+      check('CR-21 B-1 「이번 주 기록」 알림 줄 끝에 「이력에서 보기」 단추(goto-history)가 있고 기록이 한 건 늘었다', !!w1 && w1.btn && w1.text.includes('길찾기 첫 기록') && w1.text.includes('거기로 가기') /* CR-22 F: 알림의 가기 단추 이름이 「거기로 가기」(testid goto-history는 그대로) */ && (await c21Doc()) === ev0 + 1, JSON.stringify(w1));
       const r1 = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=recent-item]')].map((li) => li.textContent)");
       check('CR-21 B-2 방금 기록이 「최근 기록」 맨 위에 날짜·업무·종류·내용과 함께 보임(1건)', r1.length === 1 && r1[0].includes('길찾기 첫 기록') && r1[0].includes('진행 중') && /\d{4}-\d{2}-\d{2}/.test(r1[0]) && r1[0].includes('보기'), JSON.stringify(r1));
       await shot(s.cdp, `${browser.name}-cr21-5-recent`);
@@ -5467,7 +5473,7 @@ async function checkBrowser(browser, port) {
       await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
       await sleep(200);
       await clickTestId(s.cdp, 'btn-event');
-      await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': '2026-10-03', 'event-note': '이력 추가 강조 시험' });
+      await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': '2026-10-03', 'event-category': 'issue', 'event-note': '이력 추가 강조 시험' });
       await sleep(350);
       const h3 = await evaluate(s.cdp, "(() => { const li = document.querySelector('#detail [data-just-added=\"1\"]'); return { text: li ? li.textContent : null, n: document.querySelectorAll('#detail [data-just-added]').length, btn: !!document.querySelector('#detail [data-testid=goto-history]') }; })()");
       check('CR-21 B-1 업무 상세 「이력 추가」 저장 직후 방금 기록한 줄이 바로 강조(단추 없이)되고 패널 안에 보임', h3.n === 1 && !!h3.text && h3.text.includes('이력 추가 강조 시험') && !h3.btn && (await c21InView('#detail [data-just-added="1"]')), JSON.stringify(h3));
@@ -5765,6 +5771,217 @@ async function checkBrowser(browser, port) {
         const names = await kQ("(() => ({ head: document.querySelector('[data-testid=card-group-history] .cg-title').textContent, btn: document.querySelector('[data-testid=btn-event]').textContent }))()");
         check('CR-22 K 화면 글: 카드 묶음 머리는 「기록(이력)」, 단추는 「기록 남기기」(예전 「이력 추가」 없음)', names.head === '기록(이력)' && names.btn === '기록 남기기' && !(await kQ("document.querySelector('#detail').textContent.includes('이력 추가')")), JSON.stringify(names));
       } else check('CR-22 K 실업무 규모', false, '월말 정산 점검이 열리지 않음');
+    }
+
+    // ── CR-22 F 알림·동작(2026-10-26): 메모 양식 하나(분류 칩), 담당 넘기기 한 입구, 성공 알림 자리, 닫기 위치·Esc 초점, 「⋯」 닫힘, 초안 넓은 화면,
+    //    하나씩 추가 이름 칸, 묶은 직후 띠, 사번 넣기 ──
+    {
+      const fQ = (expr) => raw(s.cdp, expr);
+      const fSel = async (gid) => { await raw(s.cdp, `window.__wu.select(${JSON.stringify(gid)})`); await sleep(250); };
+      const fSet = (testid, val) => raw(s.cdp, `(() => { const e = document.querySelector('[data-testid=${testid}]'); if (!e) return false; e.value = ${JSON.stringify(val)}; e.dispatchEvent(new Event('input')); e.dispatchEvent(new Event('change')); return true; })()`);
+      const fClick = (testid) => raw(s.cdp, `document.querySelector('[data-testid=${testid}]').click()`);
+      const fEsc = () => raw(s.cdp, "document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
+      // 알림이 패널의 보이는 범위 안에 있는가(스크롤과 무관하게)
+      const noticeIn = (testid) => fQ(`(() => { const n = document.querySelector('#notice-slot [data-testid=${testid}]'); if (!n) return null; const r = n.getBoundingClientRect(); const a = document.querySelector('aside').getBoundingClientRect(); return { w: r.width, h: r.height, inside: r.top >= a.top - 1 && r.bottom <= a.bottom + 1 && r.left >= a.left - 1 && r.right <= a.right + 1, text: n.textContent, go: !!n.querySelector('[data-testid^=goto-]') }; })()`);
+      if (await c21Go('U-A1', { clean: ['U-A1'] })) {
+        // ① 「이번 주 기록」(기록 공간): 분류 칩 4개, 처음엔 고르지 않아 「기록」이 막히고 한 줄이 보임
+        await raw(s.cdp, "window.__wu.select(null); window.__wu.goSpace('record', false)");
+        await sleep(250);
+        const wk0 = await fQ("(() => { const q = (id) => document.querySelector('[data-testid=' + id + ']'); const chips = [...document.querySelectorAll('[data-testid=weekly-quick] [data-testid^=memo-chip-]')]; const gate = q('memo-gate'); return { chips: chips.map((c) => c.textContent).join('|'), pressed: chips.filter((c) => c.getAttribute('aria-checked') === 'true').length, sized: chips.every((c) => c.getBoundingClientRect().width > 0), gate: gate && gate.textContent, gateShown: gate && gate.getBoundingClientRect().width > 0, add: q('weekly-add').disabled, cat: q('weekly-category').value, note: q('weekly-note').getBoundingClientRect().width, quick: q('weekly-quick').getBoundingClientRect().width }; })()");
+        check('CR-22 F 「이번 주 기록」: 분류 칩 4개(진행 중·이슈·주의사항·해결됨), 처음엔 아무것도 고르지 않고 「기록」이 막힘 + 「분류를 고르세요」 한 줄', wk0.chips === '진행 중|이슈|주의사항|해결됨' && wk0.pressed === 0 && wk0.sized && wk0.gate === '분류를 고르세요' && wk0.gateShown && wk0.add && wk0.cat === '', JSON.stringify(wk0));
+        check('CR-22 F 「이번 주 기록」의 내용 칸은 보이는 라벨 「내용」이 있는 한 줄 전체 폭', wk0.note > wk0.quick * 0.8 && /내용/.test(await fQ("document.querySelector('[data-testid=weekly-note]').closest('.memo-row').textContent")), JSON.stringify([wk0.note, wk0.quick]));
+        await shot(s.cdp, `${browser.name}-cr22f-weekly-form`);
+        // 「해결됨」 → 이 업무 미해결 n건이 모두 닫힙니다(n은 그 업무 대상 미해결)
+        await fSet('weekly-work', 'N-001');
+        await fClick('memo-chip-resolved');
+        await sleep(100);
+        const warn = await fQ("(() => { const w = document.querySelector('[data-testid=memo-resolve-warn]'); const m = /미해결 (\\d+)건이 모두 닫힙니다/.exec(w.textContent); return { shown: w.getBoundingClientRect().width > 0, n: m ? Number(m[1]) : -1, add: document.querySelector('[data-testid=weekly-add]').disabled }; })()");
+        check('CR-22 F 「해결됨」 칩을 고르면 「이 업무 미해결 n건이 모두 닫힙니다」 미리 알림(n ≥ 1)이 보이고 「기록」이 풀림', warn.shown && warn.n >= 1 && !warn.add, JSON.stringify(warn));
+        await shot(s.cdp, `${browser.name}-cr22f-weekly-resolved-warn`);
+        // 진행 중으로 기록 → 알림이 패널 안, 「거기로 가기」(goto-history)로 이력 줄
+        await fClick('memo-chip-in_progress');
+        await fSet('weekly-note', 'F 시험 진행 중 기록');
+        const ev0 = await fQ('window.__wu.doc.events.length');
+        await fClick('weekly-add');
+        await sleep(350);
+        const wn = await noticeIn('weekly-done');
+        const lastEv = await fQ('window.__wu.doc.events[window.__wu.doc.events.length - 1]');
+        check('CR-22 F 기록하면 이력 메모 한 건(분류 진행 중)이 늘고, 성공 알림이 패널 맨 위 알림 자리에 보임(크기 있음·패널 범위 안)', (await fQ('window.__wu.doc.events.length')) === ev0 + 1 && lastEv.payload.category === 'in_progress' && !!wn && wn.w > 0 && wn.inside && wn.text.includes('기록했습니다'), JSON.stringify([wn, lastEv && lastEv.payload]));
+        await shot(s.cdp, `${browser.name}-cr22f-notice`);
+        check('CR-22 F 알림에 「거기로 가기」가 있고 누르면 그 업무가 골라지며 방금 기록한 이력 줄이 강조됨', !!wn && wn.go, '');
+        await fClick('goto-history');
+        await sleep(350);
+        const gone = await fQ("({ sel: window.__wu.selected, just: document.querySelectorAll('#detail [data-just-added=\"1\"]').length, notice: !!document.querySelector('#notice-slot [data-testid=weekly-done]') })");
+        check('CR-22 F 「거기로 가기」 → 업무 「대사 확인」이 골라지고 방금 기록한 줄이 강조되며 알림은 닫힘', gone.sel === 'U-A1/N-001' && gone.just >= 1 && !gone.notice, JSON.stringify(gone));
+
+        // ② 카드의 「기록 남기기」도 같은 칩 양식
+        await fSel('U-A1/N-001');
+        await fClick('btn-event');
+        await sleep(200);
+        const cf = await fQ("(() => { const q = (id) => document.querySelector('[data-testid=' + id + ']'); const b = document.querySelector('[data-testid=event-form] button[type=submit]'); return { chips: [...document.querySelectorAll('[data-testid=event-form] [data-testid^=memo-chip-]')].map((c) => c.textContent).join('|'), cat: q('event-category').value, btn: b.disabled, gate: (q('memo-gate') || {}).textContent }; })()");
+        check('CR-22 F 카드의 「기록 남기기」(메모)도 같은 분류 칩, 처음엔 안 고르고 「기록」이 막힘', cf.chips === '진행 중|이슈|주의사항|해결됨' && cf.cat === '' && cf.btn && cf.gate === '분류를 고르세요', JSON.stringify(cf));
+        await shot(s.cdp, `${browser.name}-cr22f-event-form`);
+        await fSet('event-note', 'F 시험 카드 주의사항');
+        await fClick('memo-chip-caution');
+        await raw(s.cdp, "document.querySelector('[data-testid=event-form] button[type=submit]').click()");
+        await sleep(350);
+        const cn = await noticeIn('weekly-done');
+        const lastEv2 = await fQ('window.__wu.doc.events[window.__wu.doc.events.length - 1]');
+        check('CR-22 F 카드에서 분류 「주의사항」으로 기록 → 이력 한 건, 알림 자리에 성공 알림', lastEv2.payload.category === 'caution' && lastEv2.note === 'F 시험 카드 주의사항' && !!cn && cn.inside, JSON.stringify([cn, lastEv2.payload]));
+
+        // ③ 담당 넘기기 한 입구: 갈래(담당만 바꾸기 / 인수인계서까지)
+        await fSel('U-A1/N-001');
+        await fClick('btn-assign');
+        await sleep(200);
+        const as0 = await fQ("(() => { const q = (id) => document.querySelector('[data-testid=' + id + ']'); const r = q('assignee-change').getBoundingClientRect(); return { open: q('assignee-change').open, w: r.width, only: q('assignee-branch-only').checked, doc: q('assignee-branch-doc').checked, text: q('assignee-branch').textContent, handover: q('assignee-handover-row').getBoundingClientRect().width > 0 }; })()");
+        check('CR-22 F 「담당 넘기기」 상자: "무엇을 남길까요?" ○ 담당만 바꾸기(처음 선택) ○ 인수인계서까지, 「인수인계 기록도 남기기」는 담당만 갈래에서 보임', as0.open && as0.w > 0 && as0.only && !as0.doc && /무엇을 남길까요/.test(as0.text) && /담당만 바꾸기/.test(as0.text) && /인수인계서까지/.test(as0.text) && as0.handover, JSON.stringify(as0));
+        await shot(s.cdp, `${browser.name}-cr22f-assign-box`);
+        // 담당만: 스크롤한 채로 눌러도 알림이 패널 안에 보인다
+        await fSet('assignee-to', 'N-011');
+        await raw(s.cdp, "document.querySelector('aside').scrollTop = 300");
+        await fClick('assignee-apply');
+        await sleep(350);
+        const an = await noticeIn('assignee-done');
+        const holder = await fQ("(document.querySelector('[data-testid=card-owner]') || {}).textContent || ''");
+        check('CR-22 F 담당만 바꾸기 → 담당이 윤바다로 바뀌고(카드 담당 줄), 성공 알림이 보이는 범위 안(스크롤한 채여도)·「거기로 가기」 있음', /윤바다/.test(holder) && !!an && an.w > 0 && an.inside && an.text.includes('바꿨습니다') && an.go, JSON.stringify([holder, an]));
+        // 인수인계서까지: 이번엔 윤바다 → 서하늘. 초안이 채워지고 「담당도 넘기기」가 켜짐, 아직 아무것도 저장하지 않음
+        await fSel('U-A1/N-001');
+        await fClick('btn-assign');
+        await sleep(200);
+        await fSet('assignee-to', 'N-012');
+        await fClick('assignee-branch-doc');
+        await sleep(100);
+        const dd = await fQ("(() => { const q = (id) => document.querySelector('[data-testid=' + id + ']'); return { date: q('assignee-date').disabled, note: q('assignee-doc-note').getBoundingClientRect().width > 0, handover: q('assignee-handover-row').getBoundingClientRect().width, label: q('assignee-apply').textContent }; })()");
+        check('CR-22 F 「인수인계서까지」를 고르면 날짜 칸이 잠기고(초안은 오늘) 안내가 보이며 「인수인계 기록도 남기기」는 숨고 단추 이름이 「인수인계 초안으로」', dd.date && dd.note && dd.handover === 0 && dd.label === '인수인계 초안으로', JSON.stringify(dd));
+        const performs0 = await fQ("window.__wu.doc.edges.filter((e) => e.core_type === 'performs').length + '/' + JSON.stringify(window.__wu.doc.edges.filter((e) => e.core_type === 'performs'))");
+        await fClick('assignee-apply');
+        await sleep(500);
+        const dr = await fQ("(() => { const q = (id) => document.querySelector('[data-testid=' + id + ']'); const bar = q('confirm-bar'); const a = document.querySelector('aside').getBoundingClientRect(); const bb = bar ? bar.getBoundingClientRect() : null; const btn = q('draft-confirm'); const br = btn ? btn.getBoundingClientRect() : null; return { target: q('draft-target').value, from: q('draft-from').value, to: q('draft-to').value, transfer: q('draft-transfer') && q('draft-transfer').checked, wide: document.querySelector('main').classList.contains('wide'), result: !!q('draft-result').children.length, btnVisible: !!br && br.width > 0 && br.top >= a.top && br.bottom <= a.bottom + 1, scroll: document.querySelector('aside').scrollTop }; })()");
+        check('CR-22 F 인수인계서까지 → 초안 화면이 채워진 채 열림(대상 대사 확인·보내는 사람 윤바다·받는 사람 서하늘, 초안이 바로 만들어짐)', dr.target === 'U-A1/N-001' && dr.from === 'U-A1/N-011' && dr.to === 'U-A1/N-012' && dr.result, JSON.stringify(dr));
+        check('CR-22 F 「담당도 넘기기」가 켜져 있음, 아직 담당 연결은 그대로(확정 때 한 번에 저장)', dr.transfer === true && (await fQ("window.__wu.doc.edges.filter((e) => e.core_type === 'performs').length + '/' + JSON.stringify(window.__wu.doc.edges.filter((e) => e.core_type === 'performs'))")) === performs0, JSON.stringify(dr));
+        check('CR-22 F 초안을 열면 패널이 자동으로 넓어지고, 「확정해 인수인계서로 저장」이 스크롤 없이 패널 안에 보임(바닥 고정 줄)', dr.wide && dr.btnVisible, JSON.stringify(dr));
+        await shot(s.cdp, `${browser.name}-cr22f-draft-wide`);
+        // 닫기는 제목 옆, Esc로 닫으면 연 단추(없어졌으면 제목)로 초점, 폭은 원래대로
+        const dclose = await fQ("(() => { const b = document.querySelector('[data-testid=draft-close]'); const h = document.querySelector('.draft h2'); if (!b || !h) return null; const rb = b.getBoundingClientRect(); const rh = h.getBoundingClientRect(); return { sameRow: Math.abs(rb.top + rb.height / 2 - (rh.top + rh.height / 2)) < 20, right: rb.left > rh.left }; })()");
+        check('CR-22 F 초안의 「닫기」는 제목 옆(같은 줄)', !!dclose && dclose.sameRow && dclose.right, JSON.stringify(dclose));
+        await fEsc();
+        await sleep(250);
+        const dEsc = await fQ("({ draft: !!document.querySelector('[data-testid=draft-form]'), wide: document.querySelector('main').classList.contains('wide'), inPanel: document.getElementById('detail').contains(document.activeElement), tag: document.activeElement.tagName })");
+        check('CR-22 F Esc로 초안을 닫으면 패널 폭이 원래대로, 초점은 패널 안(연 단추가 없어졌으면 제목)', !dEsc.draft && !dEsc.wide && dEsc.inPanel, JSON.stringify(dEsc));
+
+        // ④ 닫기 위치·Esc 초점: 인사이트·설정·미해결
+        await raw(s.cdp, "window.__wu.select(null); window.__wu.goSpace('check', false)");
+        await sleep(250);
+        const closes = {};
+        for (const [open, close, h2sel] of [['btn-insight-universe', 'insight-close', '.insight h2']]) {
+          await raw(s.cdp, `(() => { const b = document.querySelector('[data-testid=${open}]'); if (b) { b.focus(); b.click(); } })()`);
+          await sleep(300);
+          closes[close] = await fQ(`(() => { const b = document.querySelector('[data-testid=${close}]'); const h = document.querySelector(${JSON.stringify(h2sel)}); if (!b || !h) return null; const rb = b.getBoundingClientRect(); const rh = h.getBoundingClientRect(); return { sameRow: Math.abs(rb.top + rb.height / 2 - (rh.top + rh.height / 2)) < 20, wide: document.querySelector('main').classList.contains('wide') }; })()`);
+          await fEsc();
+          await sleep(250);
+          closes[`${close}-back`] = await fQ('(document.activeElement.dataset || {}).testid || document.activeElement.tagName');
+          closes[`${close}-wide`] = await fQ("document.querySelector('main').classList.contains('wide')");
+        }
+        check('CR-22 F 인사이트: 「닫기」가 제목 옆, 열면 패널이 넓어지고, Esc로 닫으면 연 단추(인사이트 보기)로 초점·폭 원래대로', !!closes['insight-close'] && closes['insight-close'].sameRow && closes['insight-close'].wide && closes['insight-close-back'] === 'btn-insight-universe' && closes['insight-close-wide'] === false, JSON.stringify(closes));
+        await raw(s.cdp, "(() => { const b = document.getElementById('settings-open'); b.focus(); b.click(); })()");
+        await sleep(250);
+        const sc = await fQ("(() => { const b = document.querySelector('[data-testid=settings-close]'); const h = document.querySelector('[data-testid=settings] h2'); const rb = b.getBoundingClientRect(); const rh = h.getBoundingClientRect(); return Math.abs(rb.top + rb.height / 2 - (rh.top + rh.height / 2)) < 20; })()");
+        await fEsc();
+        await sleep(250);
+        const sBack = await fQ('document.activeElement.id');
+        check('CR-22 F 설정: 「닫기」가 제목 옆, Esc로 닫으면 머리글 「설정」 단추로 초점', sc === true && sBack === 'settings-open', JSON.stringify([sc, sBack]));
+        await fSel('U-A1/N-001');
+        await raw(s.cdp, "(() => { const b = document.querySelector('[data-testid=btn-issues]'); b.focus(); b.click(); })()");
+        await sleep(250);
+        const ic = await fQ("(() => { const b = document.querySelector('[data-testid=issue-close]'); const h = document.querySelector('[data-testid=issue-panel] h2'); const rb = b.getBoundingClientRect(); const rh = h.getBoundingClientRect(); return Math.abs(rb.top + rb.height / 2 - (rh.top + rh.height / 2)) < 20; })()");
+        check('CR-22 F 미해결 목록: 「닫기」가 제목 옆', ic === true, String(ic));
+        await fEsc();
+        await sleep(200);
+
+        // ⑤ 카드 「⋯」 메뉴: 바깥을 눌러도, Esc로도 닫힘
+        await fSel('U-A1/N-001');
+        await raw(s.cdp, "document.querySelector('[data-testid=card-actions] details.more-tools summary').click()");
+        await sleep(100);
+        const m1 = await fQ("document.querySelector('[data-testid=card-actions] details.more-tools').open");
+        await raw(s.cdp, "document.querySelector('[data-testid=card-group-content] summary, #detail h2').click()");
+        await sleep(100);
+        const m2 = await fQ("document.querySelector('[data-testid=card-actions] details.more-tools').open");
+        await raw(s.cdp, "document.querySelector('[data-testid=card-actions] details.more-tools summary').click()");
+        await sleep(100);
+        await fEsc();
+        await sleep(100);
+        const m3 = await fQ("({ open: document.querySelector('[data-testid=card-actions] details.more-tools').open, sel: window.__wu.selected, focus: document.activeElement.tagName })");
+        check('CR-22 F 「⋯」 메뉴: 열린 뒤 바깥을 누르면 닫히고, Esc로도 닫히며(항목 선택은 그대로) 초점은 「⋯」로', m1 === true && m2 === false && m3.open === false && m3.sel === 'U-A1/N-001' && m3.focus === 'SUMMARY', JSON.stringify([m1, m2, m3]));
+
+        // ⑥ 하나씩 추가 양식: 담당자·산출물·다음 업무 이름 칸 → 한 번에
+        await raw(s.cdp, "window.__wu.select(null); window.__wu.goSpace('edit', false)");
+        await sleep(250);
+        await fClick('goal-add-open');
+        await sleep(200);
+        const ex0 = await fQ("(() => { const q = (id) => document.querySelector('[data-testid=' + id + ']'); const box = q('node-extra'); return { shown: !!box && box.getBoundingClientRect().width > 0, inputs: ['assignee', 'outputs', 'next'].map((k) => !!q('node-extra-' + k)).join() }; })()");
+        check('CR-22 F 하나씩 추가(업무)에 「담당자」「산출물」「다음 업무」 이름 칸이 보임', ex0.shown && ex0.inputs === 'true,true,true', JSON.stringify(ex0));
+        await shot(s.cdp, `${browser.name}-cr22f-add-form`);
+        const c0 = await fQ("({ n: window.__wu.doc.nodes.length, e: window.__wu.doc.edges.length })");
+        await fSet('node-label', 'F 시험 새 업무');
+        await fSet('node-extra-assignee', 'F 시험 새 담당');
+        await fSet('node-extra-outputs', 'F 시험 새 산출물');
+        await fSet('node-extra-next', 'F 시험 다음 업무');
+        await raw(s.cdp, "document.querySelector('[data-testid=node-form-add] button[type=submit]').click()");
+        await sleep(450);
+        const c1 = await fQ("(() => { const d = window.__wu.doc; const w = d.nodes.find((n) => n.label === 'F 시험 새 업무'); const lab = (l) => d.nodes.find((n) => n.label === l); const has = (t, s, g) => d.edges.some((e) => e.core_type === t && e.source === s && e.target === g && !e.hidden); const p = lab('F 시험 새 담당'); const a = lab('F 시험 새 산출물'); const x = lab('F 시험 다음 업무'); return { n: d.nodes.length, e: d.edges.length, perform: !!w && !!p && has('performs', p.id, w.id), produce: !!w && !!a && has('produces', w.id, a.id), next: !!w && !!x && has('precedes', w.id, x.id), personType: p && p.core_type, artType: a && a.core_type, nextType: x && x.core_type, sel: window.__wu.selected, wid: w && w.id }; })()");
+        check('CR-22 F 이름 칸을 채워 추가 → 업무 + 새 사람(담당) + 새 산출물 + 다음 업무가 한 번에 만들어지고 수행·산출·선후 연결이 이어짐', c1.n === c0.n + 4 && c1.perform && c1.produce && c1.next && c1.personType === 'person' && c1.artType === 'artifact' && c1.nextType === 'work', JSON.stringify([c0, c1]));
+        const an2 = await noticeIn('add-one-done');
+        check('CR-22 F 추가 뒤 「n개 추가 · …」 알림이 패널 안에 보이고 「업무 보기」로 새 업무를 고름', !!an2 && an2.inside && /4개 추가/.test(an2.text) && /업무 보기/.test(an2.text), JSON.stringify(an2));
+        await fClick('goto-notice');
+        await sleep(300);
+        check('CR-22 F 「업무 보기」 → 새 업무 카드가 열림', (await fQ('window.__wu.selected')) === `U-A1/${c1.wid}`, String(await fQ('window.__wu.selected')));
+        // 동사 통일: 붙여 넣는 창의 단추 이름
+        await raw(s.cdp, "document.getElementById('import-open').click()");
+        await sleep(200);
+        const verb = await fQ("({ conv: document.querySelector('[data-testid=import-convert]').textContent })");
+        await raw(s.cdp, "document.querySelector('[data-testid=import-close]').click()");
+        await raw(s.cdp, "window.__wu.goSpace('edit', false)");
+        await fClick('btn-table-add').catch(() => {});
+        await sleep(150);
+        const verb2 = await fQ("(document.querySelector('[data-testid=table-paste-apply]') || {}).textContent");
+        await raw(s.cdp, "document.querySelector('[data-testid=table-close]').click()");
+        check('CR-22 F 동사 통일: 붙여 넣는 창의 단추가 모두 「읽어 보기」(문서·표)', verb.conv === '읽어 보기' && verb2 === '읽어 보기', JSON.stringify([verb, verb2]));
+      } else check('CR-22 F', false, '월말 정산 점검이 열리지 않음');
+
+      // ⑦ 묶은 직후 띠 + 사번 넣기: 「업무 지도 묶기」(F 시험 묶음 = U-T1 + U-B + U-C: 사번 충돌·사번 없음이 있는 조합) → 화면이 다시 열리며 알림 자리에 띠
+      if (await c21Go('U-A1', { clean: ['U-A1'] })) {
+        await raw(s.cdp, "window.__wu.goSpace('edit', false)");
+        await sleep(200);
+        await raw(s.cdp, "document.getElementById('group-open').click()");
+        await sleep(150);
+        await raw(s.cdp, "document.getElementById('group-name').value = 'F 시험 묶음'; document.getElementById('group-owner').value = '가상 운영부'; document.querySelectorAll('#group-children input').forEach((i) => { if (['U-T1', 'U-B', 'U-C'].includes(i.value)) i.checked = true; }); document.querySelector('#group-form button[type=submit]').click()");
+        await sleep(900);
+        await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.refs && window.__wu.doc.refs.length > 0 && window.__wu.cy.nodes().length > 0", 8000);
+        await sleep(300);
+        const gs = await noticeIn('group-done');
+        const mp = await fQ("(window.__wu.doc.refs || []).length");
+        check('CR-22 F 묶은 직후 띠: 알림 자리에 「묶었습니다 — 같은 사람·업무 확인 n건 → 통합 확인」(패널 범위 안)과 「통합 확인」 단추', mp >= 3 && !!gs && gs.inside && /묶었습니다/.test(gs.text) && /확인 \d+건 → 통합 확인/.test(gs.text) && gs.go, JSON.stringify([mp, gs]));
+        check('CR-22 F 묶은 직후 주소의 일회용 표시(~done)는 지워짐', !(await fQ('location.hash')).includes('~done'), String(await fQ('location.hash')));
+        await shot(s.cdp, `${browser.name}-cr22f-group-strip`);
+        await fClick('goto-notice');
+        await sleep(350);
+        const mg = await fQ("({ merge: !!document.querySelector('[data-testid=merge-panel]'), wide: document.querySelector('main').classList.contains('wide'), close: !!document.querySelector('[data-testid=merge-close]'), empno: document.querySelectorAll('[data-testid=merge-empno-row]').length, space: window.__wu.space })");
+        check('CR-22 F 띠의 「통합 확인」 → 통합 확인이 열리고(지도 관리 공간, 패널 넓게) 「닫기」가 제목 옆 단추(merge-close)', mg.merge && mg.wide && mg.close && mg.space === 'edit', JSON.stringify(mg));
+        await shot(s.cdp, `${browser.name}-cr22f-merge`);
+        if (mg.empno > 0) {
+          const before = await fQ("JSON.stringify(Object.entries(localStorage).filter(([k]) => k.startsWith('wu:v1:u:')).map(([k, v]) => [k, (JSON.parse(v).nodes || []).filter((n) => n.emp_no).length]))");
+          await fSet('merge-empno', 'V-7777');
+          await fClick('merge-empno-add');
+          await sleep(400);
+          const after = await fQ("JSON.stringify(Object.entries(localStorage).filter(([k]) => k.startsWith('wu:v1:u:')).map(([k, v]) => [k, (JSON.parse(v).nodes || []).filter((n) => n.emp_no).length]))");
+          const en = await noticeIn('empno-done');
+          check('CR-22 F 「사번 없음」 줄의 「사번 넣기」 → 그 사람이 있는 하위 지도 문서에 사번이 저장되고 알림이 보임', before !== after && !!en && en.inside, JSON.stringify([before, after, en]));
+        } else check('CR-22 F 「사번 넣기」 칸: 이 묶음 통합 확인에 사번 없음 줄이 없어 확인하지 못함(미확인)', true, '');
+        await fEsc();
+        await sleep(200);
+        const mEsc = await fQ("({ merge: !!document.querySelector('[data-testid=merge-panel]'), wide: document.querySelector('main').classList.contains('wide') })");
+        check('CR-22 F Esc로 통합 확인을 닫으면 패널 폭이 원래대로', !mEsc.merge && !mEsc.wide, JSON.stringify(mEsc));
+      } else check('CR-22 F 묶은 직후 띠', false, '월말 정산 점검이 열리지 않음');
     }
 
     // 저장소를 블록 시작 때 찍어 둔 상태로 되돌린다(샘플 문서 포함)

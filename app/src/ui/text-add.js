@@ -12,7 +12,7 @@ export const TEXT_ADD = Object.freeze({
   title: '글로 추가',
   placeholder: '예) 서하늘(V-1003)이 대사 확인을 맡는다. 대사 확인이 끝나면 보고를 한다. 보고에서 월말 정산 보고서를 만든다.',
   inputLabel: '붙여 넣을 글',
-  read: '규칙으로 읽기',
+  read: '읽어 보기',
   ai: 'Claude로 읽기',
   noKey: '「설정」에서 키를 넣으면 Claude가 읽습니다', // R21: 키를 어디에 넣는지
   aiBusy: 'Claude가 읽는 중… (최대 60초)', // 글로 추가의 호출 제한 llm/providers.js LLM_EXTRACT_TIMEOUT_MS(60초)와 같은 값

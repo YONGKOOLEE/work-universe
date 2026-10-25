@@ -191,7 +191,7 @@ export function createTour(o) {
     const key = `${sc.id}:${index}`;
     if (st.space && o.onSpace && spacedFor !== key) {
       spacedFor = key;
-      pendingSpace = o.onSpace(st.space, { home: !!st.home }) === false ? st.space : '';
+      pendingSpace = o.onSpace(st.space, { home: !!st.home, deselect: !!st.deselect }) === false ? st.space : '';
     }
     subEl = st.sub ? el('p', { class: 'tour-sub', 'data-testid': 'tour-sub', role: 'status' }) : null;
     o.slot.replaceChildren(card(

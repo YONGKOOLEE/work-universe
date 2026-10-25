@@ -6,6 +6,7 @@ import { EDGE_TYPES, MEMO_CATEGORIES, NODE_TYPES, allowedRelations, pairAllowed 
 import { el } from './dom.js';
 import { josa, messageFor } from './messages.js';
 import { todayLocal } from './time.js';
+import { memoParts } from './memo-form.js';
 
 // 하위 유형 선택 칸: 목록에서 고르거나 "새 하위 유형"을 입력한다(1.3 ②).
 // getType()은 지금 고른 핵심 유형(노드 유형 또는 관계)을 돌려준다. refresh()로 유형이 바뀔 때 목록을 다시 채운다.
@@ -275,6 +276,14 @@ export function nodeForm(o) {
   const attachField = el('label', { class: 'check' }, attach, ' 지도 중심(연두색 큰 동그라미)에 바로 연결하기');
   if (o.mode === 'add') type.addEventListener('change', () => { attach.checked = type.value === 'work'; });
 
+  // 추가할 때만(선택, CR-22 F): 업무면 담당자·산출물·다음 업무 이름 칸. 표로 추가의 연결 칸과 같은 한 행 처리로 한 번에 만든다
+  const extraIn = (key, ph) => el('input', { type: 'text', maxlength: 100, autocomplete: 'off', placeholder: ph, 'data-testid': `node-extra-${key}`, 'aria-label': ph });
+  const extras = o.mode === 'add' ? { assignee: extraIn('assignee', '예: 김가상'), outputs: extraIn('outputs', '예: 정산 점검표'), next: extraIn('next', '예: 보고서 작성') } : null;
+  const extraBox = extras ? el('div', { class: 'extra-names', 'data-testid': 'node-extra', hidden: type.value !== 'work' },
+    el('p', { class: 'muted small' }, '이 업무와 이을 이름(선택) — 이미 있는 이름이면 잇고, 없으면 새로 만듭니다. 여러 개는 쉼표로 나눕니다.'),
+    field('담당자', extras.assignee), field('산출물', extras.outputs), field('다음 업무', extras.next)) : null;
+  if (extraBox) type.addEventListener('change', () => { extraBox.hidden = type.value !== 'work'; });
+
   // 추가할 때만(선택): 상대 노드를 골라 노드와 연결을 한 번에 저장한다. 비워 두면 연결 없이 노드만 추가한다
   const link = o.mode === 'add' && o.getCandidates ? linkFields() : null;
   function linkFields() {
@@ -325,6 +334,7 @@ export function nodeForm(o) {
     field('속성', attrs.el),
     field('기간(선택)', period.el),
     o.mode === 'add' ? attachField : null,
+    extraBox,
     link ? link.el : null,
     msg.box,
     actions(o.mode === 'add' ? '추가' : '저장', o.onCancel),
@@ -353,6 +363,7 @@ export function nodeForm(o) {
     };
     if (isRoot) delete values.label;
     if (o.mode === 'add') values.attach_root = attach.checked;
+    if (extras && type.value === 'work') values.extra_names = { assignee: extras.assignee.value, outputs: extras.outputs.value, next: extras.next.value };
     let ctx = { kind: 'node' };
     if (link && link.other.value) {
       const out = link.direction.value === 'out';
@@ -544,11 +555,16 @@ export function eventForm(o) {
   const previous = select([['', '(없음) 참조하지 않음'], ...o.handovers.map((h) => [h.id, `${h.occurred_at} ${h.text}`])], '');
   const fromOrg = select(nodeOptions(byType('org'), { empty: '(미기재)' }), '');
   const toOrg = select(nodeOptions(byType('org'), { empty: '(미기재)' }), '');
-  const category = select(Object.entries(MEMO_CATEGORIES), 'issue', { 'data-testid': 'event-category' });
-  const topics = el('div', { class: 'checks' }, ...byType('topic').map((t) => el('label', { class: 'check' }, el('input', { type: 'checkbox', value: t.id, checked: t.id === o.node.id }), ` ${t.label}`)));
+  // 메모 양식 하나(CR-22 F): o.memoChips면 「이번 주 기록」과 같은 부품(분류 칩, 처음엔 고르지 않음). 아니면 예전 select(기본 이슈)
+  let submitBtn = null;
+  let parts = null;
+  const syncGate = () => { if (submitBtn && parts) submitBtn.disabled = type.value === 'memo' && !parts.category(); };
+  parts = o.memoChips ? memoParts({ prefix: 'event', topics: byType('topic'), checkedTopic: o.node.id, closeCount: o.closeCount, onChange: () => syncGate() }) : null;
+  const category = parts ? parts.select : select(Object.entries(MEMO_CATEGORIES), 'issue', { 'data-testid': 'event-category' });
+  const topics = parts ? null : el('div', { class: 'checks' }, ...byType('topic').map((t) => el('label', { class: 'check' }, el('input', { type: 'checkbox', value: t.id, checked: t.id === o.node.id }), ` ${t.label}`)));
   // 「이미 끝난 일(해결됨으로 기록)」(CR-18 D-12): 분류가 이슈일 때만 보인다. 켜면 이슈 메모와 그것을 닫는 해결됨 메모를 같은 날짜로 한 번에 남긴다(저장은 부르는 쪽: input.also_resolved)
-  const pastDone = el('input', { type: 'checkbox', 'data-testid': 'event-past-resolved' });
-  const pastBox = el('div', { 'data-testid': 'event-past-box', hidden: true },
+  const pastDone = parts ? parts.pastDone : el('input', { type: 'checkbox', 'data-testid': 'event-past-resolved' });
+  const pastBox = parts ? parts.pastBox : el('div', { 'data-testid': 'event-past-box', hidden: true },
     el('label', { class: 'check' }, pastDone, ' 이미 끝난 일(해결됨으로 기록)'),
     el('p', { class: 'muted small' }, '켜면 이 이슈와 그것을 닫는 「해결됨」 메모를 같은 날짜로 함께 남겨, 지나간 일이 미해결에 쌓이지 않습니다.'));
   const syncPast = () => { pastBox.hidden = type.value !== 'memo' || category.value !== 'issue'; };
@@ -557,7 +573,9 @@ export function eventForm(o) {
   // 같은 입력 칸(업무·사람)을 여러 종류가 함께 쓰므로, 종류를 바꿀 때마다 칸을 새로 감싼다
   // (DOM 요소는 한 곳에만 붙을 수 있다)
   const groups = {
-    memo: () => [field('분류', category), el('p', { class: 'muted small', 'data-testid': 'category-hint' }, CATEGORY_HINT), field('관련 주제(선택)', topics), pastBox],
+    memo: () => (parts
+      ? [el('div', { class: 'field' }, el('span', {}, '분류'), parts.chipRow, parts.gate, category), parts.warn, el('p', { class: 'muted small', 'data-testid': 'category-hint' }, CATEGORY_HINT), parts.topics ? field('관련 주제(선택)', parts.topics) : null, pastBox].filter(Boolean)
+      : [field('분류', category), el('p', { class: 'muted small', 'data-testid': 'category-hint' }, CATEGORY_HINT), field('관련 주제(선택)', topics), pastBox]),
     handover: () => [field('업무', work), field('보내는 사람', from), field('받는 사람', to), field('인수인계서(선택)', artifact), field('이전 인수인계 참조(선택)', previous)],
     assign_start: () => [
       field('사람', person),
@@ -569,7 +587,7 @@ export function eventForm(o) {
     affiliation_change: () => [field('사람', person), field('이전 소속(선택)', fromOrg), field('새 소속(선택)', toOrg)],
   };
   const slot = el('div', { class: 'event-fields' });
-  const sync = () => { slot.replaceChildren(...groups[type.value]()); syncPast(); };
+  const sync = () => { slot.replaceChildren(...groups[type.value]()); syncPast(); syncGate(); };
   type.addEventListener('change', sync);
   sync();
 
@@ -585,16 +603,19 @@ export function eventForm(o) {
     msg.box,
     actions('기록', o.onCancel),
   );
+  submitBtn = parts ? [...form.querySelectorAll('button')].find((b) => b.getAttribute('type') === 'submit') || null : null;
+  syncGate();
   form.addEventListener('submit', (evt) => {
     evt.preventDefault();
     const v = (s) => s.value || undefined;
     const payloads = {
-      memo: () => ({ target_id: o.node.id, category: category.value, topic_ids: [...topics.querySelectorAll('input:checked')].map((i) => i.value) }),
+      memo: () => ({ target_id: o.node.id, category: category.value, topic_ids: parts ? parts.topicIds() : [...topics.querySelectorAll('input:checked')].map((i) => i.value) }),
       handover: () => ({ work_id: v(work), from_person_id: v(from), to_person_id: v(to), artifact_id: v(artifact), previous_handover_id: v(previous) }),
       assign_start: () => ({ person_id: v(person), work_id: v(work) }),
       assign_end: () => ({ person_id: v(person), work_id: v(work) }),
       affiliation_change: () => ({ person_id: v(person), from_org_id: v(fromOrg) || null, to_org_id: v(toOrg) || null }),
     };
+    if (parts && type.value === 'memo' && !category.value) return msg.show({ ok: false, error: { code: 'E-REQUIRED', field: 'category' } }, { kind: 'event' });
     // 메모는 내용이 있어야 한다: 이력은 지울 수 없어 빈 메모가 영구히 남고 근거·흐름 표의 건수에 들어간다(여섯 번째 검토 U-2)
     if (type.value === 'memo' && !note.value.trim()) return msg.show({ ok: false, error: { code: 'E-REQUIRED', field: 'note' } }, { kind: 'event' });
     const payload = Object.fromEntries(Object.entries(payloads[type.value]()).filter(([, x]) => x !== undefined));

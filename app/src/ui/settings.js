@@ -65,7 +65,7 @@ export function settingsPanel(o) {
     }
   };
   const root = el('div', { class: 'settings', 'data-testid': 'settings' },
-    el('h2', {}, '설정'),
+    el('div', { class: 'row panel-head' }, el('h2', {}, '설정'), el('button', { type: 'button', onclick: o.onClose, 'data-testid': 'settings-close' }, '닫기')),
     el('h3', {}, '생성 방식'),
     el('p', { class: 'muted small' }, '인수인계 초안 문장과 인사이트 설명을 어떻게 만들지 고릅니다. 어느 방식이든 계산(근거 찾기)은 규칙으로 하고, 근거가 확인되지 않는 문장은 쓰지 않습니다.'),
     list,
@@ -73,7 +73,6 @@ export function settingsPanel(o) {
     el('p', { class: 'muted small' }, '인수인계 확정자와 통합 확인 목록에서 「같음/다름」을 정한 기록에 이 이름이 쓰입니다. 비워 두면 「사용자(이 브라우저)」로 기록합니다. 로그인이 아니며 이 브라우저에만 저장됩니다(누구나 바꿀 수 있음).'),
     authorInput,
     o.persisted ? null : el('p', { class: 'notice' }, '브라우저 저장소를 쓸 수 없어 이 설정은 새로고침하면 사라집니다.'),
-    el('div', { class: 'row' }, el('button', { type: 'button', onclick: o.onClose, 'data-testid': 'settings-close' }, '닫기')),
   );
   syncKeyBox(o.current);
   return root;
