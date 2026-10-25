@@ -60,6 +60,7 @@ import { scenarioOf } from '../rules/tour-steps.js';
 import { createFieldId, fillMineDefaults } from '../rules/new-universe.js';
 import { LEGEND_COLLAPSED_TEXT, OWNER_REQUIRED_TEXT, assignOps, keepDraftPick, mergePendingText, sameMark } from './flow-helpers.js';
 import { FEATURE_WORK_LIMIT, searchFeatures } from '../view/feature-index.js';
+import { spaceMarks } from '../view/space-marks.js';
 import { WORKSPACES, cleanWorkspace, denseRows, followScreens, gapWorkRows, panelParts, planSwitch, recentHandoverDocs, soloRows, spaceBadges } from '../view/workspace.js';
 import { RECENT_RECORDS, recentRecords } from '../view/recent-records.js';
 import { flash, recentList } from './overview.js';
@@ -476,16 +477,24 @@ function start() {
 
   const graph = createGraph($('graph'), { onSelect: select, onToggle: toggle, getFilter: (d) => filterDisplay(d, filterState), onFlow: (on) => $('flowlayout').setAttribute('aria-pressed', String(on)) });
 
-  // 범례에 더할 강조 줄(공간 기능이 채운다: {key, label, color, ring?}). 지금은 없음
+  // 범례에 더할 강조 줄({key, label, color, ring?}): 지금 공간의 그래프 강조 뜻(view/space-marks.js, CR-22 G2). 강조 없는 공간은 빈 배열
+  let curMarks = [];
   function legendMarks() {
-    return [];
+    return curMarks;
+  }
+  // 공간·기준일·그려진 항목이 바뀔 때마다 그래프 강조를 다시 계산한다(주변만 보기에서는 접힌 팀 안 개수를 붙이지 않음)
+  function syncSpaceMarks() {
+    const m = spaceMarks(space, view, { asOf: asOf(), shown: new Set(display.nodes.map((n) => n.gid)), note: !nbhd });
+    graph.setSpaceMarks({ cls: m.cls, gids: m.gids, dim: space === 'handover' });
+    curMarks = m.marks;
+    renderLegend();
   }
 
   function renderLegend() {
     $('legend').replaceChildren(
       ...[
         // 유형은 색과 모양을 함께(CR-22 G 3). 강조 줄(mark)은 공간 기능이 넘긴다: 색만, 또는 ring이면 겹테두리
-        ...legendItems(display, [], legendMarks()).map((i) => el('li', { 'data-testid': i.mark ? `legend-mark-${i.key}` : `legend-type-${i.key}` }, el('span', { class: `dot sh-${i.shape || 'ellipse'}${i.ring ? ' ring' : ''}`, style: i.ring ? `border-color:${i.color}` : `background:${i.color}` }), i.label)),
+        ...legendItems(display, [], legendMarks()).map((i) => el('li', { 'data-testid': i.mark ? `legend-mark-${i.key}` : `legend-type-${i.key}` }, el('span', { class: `dot sh-${i.shape || 'ellipse'}${i.ring ? ' ring' : ''}${i.ring === 'solid' ? ' solid' : ''}`, style: i.ring ? `border-color:${i.color}` : `background:${i.color}` }), i.label)),
         display.collapsed.size
           ? el('li', { class: 'legend-note' }, el('span', { class: 'dot collapsed' }), LEGEND_COLLAPSED_TEXT)
           : null,
@@ -1662,6 +1671,7 @@ function start() {
 
   // 메뉴 배지: 기록 = 미해결 수, 매주 점검 = 혼자만 아는 일 수(둘 다 기존 계산, 셀 수 없거나 0이면 배지 없음)
   function renderNav() {
+    syncSpaceMarks(); // 공간이 바뀌었을 수 있다(그래프 강조·범례)
     const rootGid = app.rootGid();
     const risk = teamRiskSummary(view, { asOf: asOf(), n: currentDenseN() });
     renderWorkspaceNav($('workspace-nav'), {
@@ -1956,6 +1966,7 @@ function start() {
   function applyTime() {
     renderTimebar();
     graph.setTimeOff(timeOffIds());
+    syncSpaceMarks(); // 기준일이 바뀌면 지금 담당·혼자만 아는 일이 달라진다
   }
 
   function setViewDate(date) {
