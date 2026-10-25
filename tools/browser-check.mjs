@@ -1354,8 +1354,8 @@ async function checkBrowser(browser, port) {
     await setMonth('2025-06');
     await sleep(200);
     check('슬라이더를 2025-06으로 → "2025-06-30 기준"', (await text(s.cdp, '[data-testid=time-when]')) === '2025-06-30 기준');
-    const offOf = (src) => evaluate(s.cdp, `window.__wu.cy.edges().filter((e) => e.source().id() === '${src}' && e.target().id() === 'U-A1/N-001').every((e) => e.hasClass('time-off'))`);
-    check('2025-06: 윤바다·서하늘의 대사 확인 담당 연결은 흐림, 한가람은 또렷', (await offOf('U-A1/N-011')) && (await offOf('U-A1/N-012')) && !(await offOf('U-A1/N-010')));
+    const offOf = (src) => evaluate(s.cdp, `window.__wu.cy.edges().filter((e) => e.source().id() === '${src}' && e.target().id() === 'U-A1/N-001').every((e) => e.hasClass('time-off') && !e.visible())`);
+    check('2025-06: 윤바다·서하늘의 대사 확인 담당 선은 그래프에서 빠짐(D7 — 흐림이 아니라 안 보임), 한가람 선은 보임', (await offOf('U-A1/N-011')) && (await offOf('U-A1/N-012')) && !(await offOf('U-A1/N-010')));
     check('2025-06: 그때 맡은 일이 없는 윤바다 노드는 흐림, 한가람은 또렷', await evaluate(s.cdp, "window.__wu.cy.getElementById('U-A1/N-011').hasClass('time-off') && !window.__wu.cy.getElementById('U-A1/N-010').hasClass('time-off')"));
     await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
     await sleep(150);
@@ -1388,7 +1388,9 @@ async function checkBrowser(browser, port) {
     check('분기 단위로 바꾸면 2026-Q1 행', (await text(s.cdp, '[data-testid=flow-table]')).includes('2026-Q1'));
     await clickTestId(s.cdp, 'time-today');
     await sleep(200);
-    check('「오늘로」 → 오늘 기준, 흐림 해제', (await text(s.cdp, '[data-testid=time-when]')).startsWith('오늘(') && (await evaluate(s.cdp, "window.__wu.cy.elements('.time-off').length")) === 0);
+    // D7(2026-10-25 "진행"): 오늘 기준에서도 이미 끝난 담당 선은 빠지고(한가람 2025-03-01~2026-05-31), 지금 담당 선은 보인다(서하늘 2026-10-01~)
+    const todayEdges = await evaluate(s.cdp, "(() => { const e = (src) => window.__wu.cy.edges().filter((x) => x.source().id() === src && x.target().id() === 'U-A1/N-001'); return { ended: e('U-A1/N-010').map((x) => x.visible()), current: e('U-A1/N-012').map((x) => x.visible()) }; })()");
+    check('「오늘로」 → 오늘 기준: 이미 끝난 담당 선(한가람 → 대사 확인)은 빠지고 지금 담당 선(서하늘 → 대사 확인)은 보임(D7)', (await text(s.cdp, '[data-testid=time-when]')).startsWith('오늘(') && todayEdges.ended.length > 0 && todayEdges.ended.every((v) => !v) && todayEdges.current.length > 0 && todayEdges.current.every((v) => v), JSON.stringify(todayEdges));
   }
 
   // ── T-08 유사 경험자(R-05) ──

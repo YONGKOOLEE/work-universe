@@ -195,7 +195,7 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
       { selector: 'node[?collapsed]', style: { 'border-width': 5, 'border-style': 'double', 'text-wrap': 'wrap' } },
       { selector: '.faded', style: { opacity: 0.15 } },
       { selector: 'node.time-off', style: { opacity: 0.25, 'border-style': 'dotted' } },
-      { selector: 'edge.time-off', style: { opacity: 0.2, 'line-style': 'dotted' } },
+      { selector: 'edge.time-off', style: { display: 'none' } }, // 기준일에 유효하지 않은 담당·소속 선은 빼고 노드만 흐리게(D7, 2026-10-25)
       { selector: 'edge.hood', style: { 'line-color': ACCENT, 'target-arrow-color': ACCENT, width: 2.4, color: TEXT, opacity: 1 } },
       // 거르기에서 빠진 요소(R-17 ③, D-17): 기본은 아주 흐리게(위치는 그대로 두어 전체 모양을 잃지 않게), 'hide'면 숨김
       EXPLORE.FILTER_MODE === 'hide'

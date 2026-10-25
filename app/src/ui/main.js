@@ -1448,11 +1448,11 @@ function start() {
   }
 
   // ── 시간 슬라이더(02-design 탐색 화면, R-14) ──
-  // 고른 달의 마지막 날(이번 달이면 오늘)을 기준일로, 그때 유효하지 않은 담당·소속 연결과
-  // 기간 밖의 노드, 그때 맡은 일이 없는 사람을 흐리게 한다. 상세·인사이트·초안도 같은 기준일을 쓴다.
+  // 고른 달의 마지막 날(이번 달이면 오늘, 고르지 않으면 오늘)을 기준일로, 그때 유효하지 않은 담당·소속 연결은 그래프에서 빼고
+  // 기간 밖의 노드, 그때 맡은 일이 없는 사람은 흐리게 한다(D7, 사용자 2026-10-25 "진행" — 끝난 선이 남아 정신없음).
+  // 선만 빼고 이력·연결 데이터는 그대로다(상세의 연결 목록·이력에 기간과 함께 보인다). 상세·인사이트·초안도 같은 기준일을 쓴다.
   function timeOffIds() {
-    if (!viewDate) return [];
-    const D = viewDate;
+    const D = viewDate || todayLocal();
     const off = [];
     const shown = new Set(display.nodes.map((n) => n.gid));
     for (const e of display.edges) {
@@ -1502,7 +1502,7 @@ function start() {
         last: el('span', { class: 'muted small' }),
         when: el('span', { class: 'when', 'data-testid': 'time-when' }),
         today: el('button', { type: 'button', class: 'small-btn', 'data-testid': 'time-today', onclick: () => setViewDate(null) }, '오늘로'),
-        note: el('span', { class: 'small' }, '흐린 연결·사람·조직은 이 날짜에 유효하지 않음. 상세·인사이트도 이 날짜 기준(초안은 오늘 기준)'),
+        note: el('span', { class: 'small' }, '이 날짜에 유효하지 않은 담당·소속 선은 빠지고 사람·조직은 흐리게 보입니다. 상세·인사이트도 이 날짜 기준(초안은 오늘 기준)'),
       };
       bar.replaceChildren(el('span', {}, '시간 보기'), tb.first, tb.range, tb.last, tb.when, tb.today, tb.note);
     }
