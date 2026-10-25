@@ -8,7 +8,7 @@ import { labelBox, placeNewNodes } from '../view/place.js';
 import { flowLayout } from '../view/lanes.js';
 import { EXPLORE } from './explore.js';
 import { firstViewZoom } from '../view/explore.js';
-import { GRAPH_COLORS, LOD, chooseVisibleLabels, labelModelPx, labelPriority, labelScreenPx, layoutSpan, nextZoom, pushOutOfCenter, separateCircles, shapeOf, wheelZoomFactor, TYPE_SHAPES } from '../view/graphlod.js';
+import { GRAPH_COLORS, LOD, chooseVisibleLabels, labelModelPx, labelPriority, labelScreenPx, layoutSpan, nextZoom, pushOutOfBox, pushOutOfCenter, rootLabelSize, separateLabeled, shapeOf, wheelZoomFactor, TYPE_SHAPES } from '../view/graphlod.js';
 import { el } from './dom.js';
 
 // 노드 유형별 색(어두운 배경용 파스텔). 범례도 이 표를 쓴다
@@ -175,6 +175,11 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
       // 다른 유니버스에서 참조한 노드는 점선 테두리, 합쳐진 노드는 이중 테두리(02-design 2절)
       { selector: 'node[?mixed][origin = "ref"]', style: { 'border-style': 'dashed' } },
       { selector: 'node[?merged]', style: { 'border-width': 5, 'border-style': 'double' } },
+      // 공간별 강조(CR-22 G2): 기록 = 노랑 실선 / 매주 점검 = 빨강 겹테두리(무늬로도 구분) / 인수인계 = 지금 담당이 있는 항목 또렷, 나머지 업무·사람 흐리게
+      { selector: 'node.mk-issue', style: { 'border-color': '#ffd84d', 'border-width': 6, 'border-style': 'solid' } },
+      { selector: 'node.mk-solo', style: { 'border-color': '#ff6b6b', 'border-width': 7, 'border-style': 'double' } },
+      { selector: 'node.mk-current', style: { 'border-color': '#e6ecdf', 'border-width': 4.5, 'background-opacity': 0.65 } },
+      { selector: 'node.mk-dim', style: { opacity: 0.45 } },
       { selector: 'node:selected', style: { 'border-width': 4, 'border-color': '#ffffff', 'background-opacity': 0.75 } },
       { selector: 'node.hover', style: { 'border-color': '#ffffff', 'background-opacity': 0.6 } },
       {
@@ -220,7 +225,8 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
       { selector: 'edge[?contains].hood', style: { opacity: 0.35, 'line-color': EDGE, 'target-arrow-color': EDGE, width: 1.2, label: '' } },
       // 찾기로 고른 노드: 노란 테두리(잠시)
       // 따라 하기가 짚는 노드(CR-13 A, ui/tour.js가 깜빡이거나 고정으로 켠다)
-      { selector: 'node.tour-target', style: { 'border-color': '#ffd84d', 'border-width': 8, 'border-style': 'solid' } },
+      // 흰 점선: 공간 강조의 노랑 실선(mk-issue)과 겹쳐 헷갈리지 않게(CR-22 G2)
+      { selector: 'node.tour-target', style: { 'border-color': '#ffffff', 'border-width': 8, 'border-style': 'dashed' } },
       { selector: 'node.rw-changed', style: { 'border-color': '#ff9f43', 'border-width': 6, 'border-style': 'solid' } }, // 편집 되감기: 지금과 달라진 항목
       { selector: 'node.found', style: { 'border-color': '#ffd84d', 'border-width': 6 } },
       // 거르기에서 빠졌어도 고른·찾은·마우스를 올린 노드는 보인다(R-17 ①⑦: 거르기 중 찾기로 고르거나 새로 추가한 노드). 'hide'여도 같다
@@ -346,6 +352,18 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
   const applyTimeOff = () => {
     cy.elements().removeClass('time-off');
     for (const id of timeOff) cy.getElementById(id).addClass('time-off');
+  };
+
+  // 공간별 강조(CR-22 G2): {cls, gids, dim}. 그릴 때마다 다시 적용한다(render가 요소를 새로 만든다)
+  let spaceMarks = { cls: null, gids: [], dim: false };
+  const applySpaceMarks = () => {
+    cy.nodes().removeClass('mk-issue mk-solo mk-current mk-dim');
+    if (!spaceMarks.cls) return;
+    const set = new Set(spaceMarks.gids);
+    cy.nodes().forEach((n) => {
+      if (set.has(n.id())) n.addClass(spaceMarks.cls);
+      else if (spaceMarks.dim && set.size && ['work', 'person'].includes(n.data('core_type'))) n.addClass('mk-dim');
+    });
   };
 
   // 노드를 고르면 그 노드와 이웃만 또렷하게 보인다(클릭 펼침)
@@ -482,6 +500,12 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
     // 배치가 끝난 뒤 새 확대 배율로 이름 크기를 다시 정한다
     cy.fit(undefined, 30);
     applyLabels();
+    // 묶은 지도: 실제 이름 상자로 지도 중심끼리 겹침을 풀고(벌리면 배율이 바뀌므로 다시 맞춤) 이름 크기를 다시 정한다
+    for (let i = 0; i < 4 && spreadRootLabels(rootsOut); i += 1) {
+      cy.fit(undefined, 30);
+      applyLabels();
+    }
+    if (rootsOut.length > 1) applyLabels(); // spreadRootLabels가 숨은 이름을 풀어 두었으니 다시 정한다
   }
 
   // 지도 중심 놓기: 하나뿐이면 나머지 항목 상자의 한가운데, 묶은 지도의 지도 중심들은 각자 포함한 항목들의 중심. 겹친 항목은 바깥으로 민다
@@ -497,24 +521,88 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
         const kb = kids.boundingBox({ includeLabels: false });
         p = { x: (kb.x1 + kb.x2) / 2, y: (kb.y1 + kb.y2) / 2 };
       }
-      return { id: r.id(), x: p.x, y: p.y, r: r.data('size') / 2 };
+      return { id: r.id(), x: p.x, y: p.y, r: r.data('size') / 2, ...rootLabelSize(r.data('label')) };
     });
-    // 지도 중심끼리 겹치면 서로 벌린 뒤(묶은 지도), 둘레의 항목(접힌 묶음의 꼭지 포함)을 바깥으로 민다
-    const apart = separateCircles(spots, LOD.ROOT_GAP_PX);
+    // 지도 중심끼리 이름 상자까지 겹치면 서로 벌린 뒤(묶은 지도), 둘레의 항목(접힌 묶음의 꼭지 포함)을 바깥으로 민다
+    const apart = separateLabeled(spots, LOD.ROOT_GAP_PX);
     roots.forEach((r) => r.position(apart.get(r.id())));
-    // 한 지도 중심 둘레를 비우면 다른 지도 중심 둘레로 밀려 들어갈 수 있어 두 바퀴 돈다
+    clearAroundRoots(roots, others, estimatedLabelBox);
+  }
+
+  // 한 지도 중심 둘레를 비운다. 다른 지도 중심 둘레로 밀려 들어갈 수 있어 두 바퀴 돈다
+  // labelBoxOf(r): 그 지도 중심의 이름 상자(원 아래, 모델 좌표). 이름 아래에 항목이 깔려 이름을 가리지 않게 상자도 비운다(CR-22 G2)
+  function clearAroundRoots(roots, others, labelBoxOf) {
     for (let round = 0; round < 2; round += 1) {
       roots.forEach((r) => {
-        const p = apart.get(r.id());
+        const p = r.position();
         const radii = {};
         const pos = new Map();
         others.forEach((n) => {
           radii[n.id()] = n.data('size') / 2 + 8;
           pos.set(n.id(), { ...n.position() });
         });
-        pushOutOfCenter(pos, p, r.data('size') / 2, radii).forEach((q, id) => cy.getElementById(id).position(q));
+        let moved = pushOutOfCenter(pos, p, r.data('size') / 2, radii);
+        moved = pushOutOfBox(moved, labelBoxOf(r), radii, 2);
+        moved.forEach((q, id) => cy.getElementById(id).position(q));
       });
     }
+  }
+  // 추정(rootLabelSize)으로 잰 이름 상자
+  const estimatedLabelBox = (r) => {
+    const p = r.position();
+    const rad = r.data('size') / 2;
+    const { w, h } = rootLabelSize(r.data('label'));
+    return { x1: p.x - Math.max(rad, w / 2), x2: p.x + Math.max(rad, w / 2), y1: p.y + rad, y2: p.y + rad + h };
+  };
+  // 실제(현재 이름 크기)로 잰 이름 상자
+  const measuredLabelBox = (r) => {
+    const b = r.boundingBox({ includeNodes: true, includeEdges: false, includeLabels: true, includeMainLabels: true, includeOverlays: false });
+    return { x1: b.x1, x2: b.x2, y1: r.position('y') + r.data('size') / 2, y2: b.y2 };
+  };
+
+  // 지도 중심 이름 겹침 풀기(CR-22 G2): 이름은 화면 크기가 고정이라 축소된 화면에서는 그래프 좌표의 이름이 커진다. 처음 놓을 때의 추정(rootLabelSize)이 모자랄 수 있어,
+  // 맞춤·이름 크기 계산이 끝난 뒤 실제 이름 상자를 재서 한 번 더 벌린다(벌리면 배율이 바뀌므로 최대 4번). 움직였으면 true
+  function spreadRootLabels(roots) {
+    if (roots.length < 2) return false;
+    const z = cy.zoom();
+    const items = roots.map((r) => {
+      const b = r.boundingBox({ includeNodes: true, includeEdges: false, includeLabels: true, includeMainLabels: true, includeOverlays: false });
+      const p = r.position();
+      const rad = r.data('size') / 2;
+      return { id: r.id(), x: p.x, y: p.y, r: rad, w: b.w, h: Math.max(0, b.y2 - (p.y + rad)) };
+    });
+    const apart = separateLabeled(items, LOD.ROOT_GAP_SCREEN_PX / z);
+    let moved = 0;
+    roots.forEach((r) => {
+      const q = apart.get(r.id());
+      const p = r.position();
+      moved = Math.max(moved, Math.hypot(q.x - p.x, q.y - p.y));
+      r.position(q);
+    });
+    if (moved > 0.5) clearAroundRoots(roots, cy.nodes().not(roots), measuredLabelBox);
+    // 지도 중심(원+이름) 상자에 걸친 항목은 이름 상자까지 포함해 가장 가까운 바깥으로 민다: 지도 중심 이름이 항목 이름을 숨기는 것을 줄인다
+    const pad = 3 / z;
+    let shifted = 0;
+    const others = cy.nodes().not(roots);
+    others.removeClass('tiny-label'); // 숨은 이름은 상자가 없다: 재기 위해 모두 보이게 두고, 호출한 쪽이 applyLabels로 다시 정한다
+    for (let round = 0; round < 2; round += 1) {
+      roots.forEach((r) => {
+        const rb = r.boundingBox({ includeNodes: true, includeEdges: false, includeLabels: true, includeMainLabels: true, includeOverlays: false });
+        others.forEach((n) => {
+          const nb = n.boundingBox({ includeNodes: true, includeEdges: false, includeLabels: true, includeMainLabels: true, includeOverlays: false });
+          const ox = Math.min(rb.x2, nb.x2) - Math.max(rb.x1, nb.x1) + pad;
+          const oy = Math.min(rb.y2, nb.y2) - Math.max(rb.y1, nb.y1) + pad;
+          if (ox <= 0 || oy <= 0) return;
+          const p = n.position();
+          const cxr = (rb.x1 + rb.x2) / 2;
+          const cyr = (rb.y1 + rb.y2) / 2;
+          if (ox <= oy) n.position({ x: p.x + ((nb.x1 + nb.x2) / 2 >= cxr ? ox : -ox), y: p.y });
+          else n.position({ x: p.x, y: p.y + ((nb.y1 + nb.y2) / 2 >= cyr ? oy : -oy) });
+          shifted += Math.min(ox, oy);
+        });
+      });
+    }
+    return moved > 0.5 || shifted > 0.5;
   }
 
   // 묶은 지도(CR-18-1): 처음 그릴 때 fit 결과에서 이름이 EXPLORE.FIRST_READ_PX보다 작게 보이면, 지도 중심을 가운데 두고 배율을 올려 시작한다.
@@ -584,6 +672,7 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
         if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => requestAnimationFrame(syncSize));
       }
       applyTimeOff();
+      applySpaceMarks();
       lastDisplay = display;
       nbhdCenter = display.center || null;
       applyTinyLabels(); // 새로 만든 요소에는 판정이 없다(확대가 그대로면 zoom 이벤트도 오지 않음)
@@ -622,6 +711,12 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
     setTimeOff(ids) {
       timeOff = new Set(ids);
       applyTimeOff();
+    },
+
+    /** 공간별 강조(CR-22 G2): cls를 gids의 항목에 단다. dim이면 강조되지 않은 업무·사람을 흐리게. cls가 null이면 해제 */
+    setSpaceMarks({ cls = null, gids = [], dim = false } = {}) {
+      spaceMarks = { cls, gids, dim };
+      applySpaceMarks();
     },
 
     // 배치를 처음부터 다시 계산한다("정렬" 버튼)

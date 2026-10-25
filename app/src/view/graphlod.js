@@ -17,7 +17,11 @@ export const LOD = {
   BUTTON_STEP: 1.3, // ＋·－ 단추 한 번의 배율
   CONTAINS_OPACITY: 0.12, // 지도 중심 → 항목 「포함」 선의 투명도
   CENTER_GAP_PX: 14, // 지도 중심 둘레에 비워 두는 여유(배치 단위)
-  ROOT_GAP_PX: 34, // 묶은 지도에서 지도 중심(큰 원)끼리 벌리는 간격(이름이 원 아래에 붙으므로 넉넉히)
+  ROOT_GAP_PX: 24, // 묶은 지도에서 지도 중심(큰 원 + 아래 이름 상자)끼리 비워 두는 간격(CR-22 G2: 원끼리만 재던 34에서 이름 상자까지 재는 방식으로)
+  ROOT_GAP_SCREEN_PX: 12, // 실제 이름 상자로 다시 벌릴 때 화면에서 비워 두는 간격(px)
+  ROOT_LABEL_PX: 16, // 지도 중심 이름 글자 크기 추정(굵게 16px)
+  ROOT_LABEL_WRAP_EM: 8.6, // 이름이 줄바꿈되는 폭(em, ui/graph.js의 text-max-width와 같게)
+  ROOT_LABEL_SCALE: 1.25, // 축소된 화면에서 이름이 모델 좌표로 더 커지는 것을 넉넉히 반영
 };
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -120,6 +124,84 @@ export function separateCircles(items, gap = LOD.CENTER_GAP_PX) {
         const push = (need - d) / 2 + 0.01;
         p[i].x -= (dx / d) * push; p[i].y -= (dy / d) * push;
         p[j].x += (dx / d) * push; p[j].y += (dy / d) * push;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  return new Map(p.map((i) => [i.id, { x: i.x, y: i.y }]));
+}
+
+/**
+ * 지도 중심 이름 상자 비우기(CR-22 G2): 이름 상자(box = {x1,y1,x2,y2}, 원 아래)에 들어온 항목을 겹침이 가장 작은 쪽(위·아래·왼·오른)으로 밀어낸다.
+ * 항목의 반지름(radii[id])과 gap만큼 상자를 부풀려 본다. positions는 바꾸지 않고 새 Map을 돌려준다.
+ */
+export function pushOutOfBox(positions, box, radii = {}, gap = 4) {
+  const out = new Map();
+  const pushed = []; // 이미 밀려 나온 항목: 같은 자리에 겹쳐 놓이지 않게 같은 방향으로 더 민다
+  for (const [id, p] of positions) {
+    const m = (radii[id] || 0) + gap;
+    const left = p.x - (box.x1 - m);
+    const right = box.x2 + m - p.x;
+    const up = p.y - (box.y1 - m);
+    const down = box.y2 + m - p.y;
+    if (left <= 0 || right <= 0 || up <= 0 || down <= 0) { out.set(id, { ...p }); continue; }
+    const least = Math.min(left, right, up, down);
+    const dir = least === left ? [-1, 0] : least === right ? [1, 0] : least === up ? [0, -1] : [0, 1];
+    let q = { x: dir[0] === 0 ? p.x : dir[0] < 0 ? box.x1 - m : box.x2 + m, y: dir[1] === 0 ? p.y : dir[1] < 0 ? box.y1 - m : box.y2 + m };
+    for (let k = 0; k < 8; k += 1) {
+      const hit = pushed.find((o) => Math.hypot(o.x - q.x, o.y - q.y) < (radii[id] || 0) + o.r + gap);
+      if (!hit) break;
+      q = { x: q.x + dir[0] * ((radii[id] || 0) + hit.r + gap), y: q.y + dir[1] * ((radii[id] || 0) + hit.r + gap) };
+    }
+    pushed.push({ x: q.x, y: q.y, r: radii[id] || 0 });
+    out.set(id, q);
+  }
+  return out;
+}
+
+/**
+ * 지도 중심의 이름 상자 크기 추정(모델 좌표). 이름은 원 아래에 붙고(굵게 16px 안팎, 8.6em에서 줄바꿈), 접힌 팀은 「＋n」 줄이 더해진다.
+ * 이름 글자 크기는 배율을 거슬러 화면 14px 밑으로 내려가지 않으므로 축소된 화면에서 모델 좌표의 이름은 더 커진다: ROOT_LABEL_SCALE로 넉넉히 잡는다.
+ * @returns {{w:number, h:number}} w: 이름 폭, h: 원 아래 이름의 높이
+ */
+export function rootLabelSize(label, c = LOD) {
+  const lines = String(label ?? '').split('\n');
+  const wrapW = c.ROOT_LABEL_WRAP_EM * c.ROOT_LABEL_PX;
+  let w = 0;
+  let n = 0;
+  for (const line of lines) {
+    const lw = [...line].length * c.ROOT_LABEL_PX * 0.95;
+    w = Math.max(w, Math.min(lw, wrapW));
+    n += Math.max(1, Math.ceil(lw / wrapW));
+  }
+  return { w: w * c.ROOT_LABEL_SCALE, h: (n * c.ROOT_LABEL_PX * 1.25 + 6) * c.ROOT_LABEL_SCALE };
+}
+
+/**
+ * 이름 상자까지 겹치지 않게 지도 중심들을 벌린다(CR-22 G2: 팀을 펼친 뒤 지도 중심들이 가운데 세로로 붙어 이름이 맞닿던 것).
+ * items: {id, x, y, r, w, h}(w·h: rootLabelSize). 상자 = 원과 그 아래 이름을 감싼 사각형. 겹친 쌍은 겹침이 작은 축으로 반씩 민다. 최대 80번 되풀이.
+ * 입력은 바꾸지 않고 id → {x, y}를 돌려준다.
+ */
+export function separateLabeled(items, gap = LOD.ROOT_GAP_PX) {
+  const p = items.map((i) => ({ ...i }));
+  const box = (i) => ({ x1: i.x - Math.max(i.r, i.w / 2), x2: i.x + Math.max(i.r, i.w / 2), y1: i.y - i.r, y2: i.y + i.r + i.h });
+  for (let round = 0; round < 80; round += 1) {
+    let moved = false;
+    for (let i = 0; i < p.length; i += 1) {
+      for (let j = i + 1; j < p.length; j += 1) {
+        const a = box(p[i]);
+        const b = box(p[j]);
+        const ox = Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1) + gap; // 가로로 겹친(또는 gap보다 가까운) 양
+        const oy = Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1) + gap;
+        if (ox <= 0 || oy <= 0) continue;
+        if (ox <= oy) {
+          const s = p[i].x === p[j].x ? ((i + j) % 2 ? 1 : -1) : Math.sign(p[j].x - p[i].x);
+          p[i].x -= (s * ox) / 2; p[j].x += (s * ox) / 2;
+        } else {
+          const s = p[i].y === p[j].y ? ((i + j) % 2 ? 1 : -1) : Math.sign(p[j].y - p[i].y);
+          p[i].y -= (s * oy) / 2; p[j].y += (s * oy) / 2;
+        }
         moved = true;
       }
     }

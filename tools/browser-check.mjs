@@ -6187,6 +6187,94 @@ async function checkBrowser(browser, port) {
       check('CR-22 G 범례: 유형마다 그래프와 같은 모양 표시(sh-*)와 「크기 = 연결 수 · 화살표 · 흐린 점선」 설명', lg.items.length >= 4 && lg.items.every((c) => c.startsWith('sh-')) && new Set(lg.items).size >= 4 && lg.note.includes('크기 = 연결 수') && lg.note.includes('화살표') && lg.note.includes('흐린 점선'), JSON.stringify(lg));
     } else check('CR-22 G 작은 지도', false, 'U-A1이 열리지 않음');
 
+    // ── CR-22 G2 공간별 그래프 강조·따라 하기 흰 점선·지도 중심 간격(2026-10-26) ──
+    // 공간 강조 읽기: 클래스별 항목 수와 범례 줄 글
+    const g2Marks = () => evaluate(s.cdp, "(() => { const cy = window.__wu.cy; const n = (c) => cy.nodes('.' + c).length; const lg = (k) => { const e = document.querySelector('[data-testid=legend-mark-' + k + ']'); return e ? e.textContent : null; }; return { space: window.__wu.space, issue: n('mk-issue'), solo: n('mk-solo'), current: n('mk-current'), dim: n('mk-dim'), lgIssue: lg('issue'), lgSolo: lg('solo'), lgCurrent: lg('current'), legendMarks: document.querySelectorAll('#legend [data-testid^=legend-mark-]').length }; })()");
+    const g2Border = (cls) => evaluate(s.cdp, `(() => { const n = window.__wu.cy.nodes('.${cls}')[0]; if (!n) return null; return { style: n.pstyle('border-style').strValue, color: n.pstyle('border-color').strValue.replace(/\\s/g, ''), width: n.pstyle('border-width').pfValue }; })()`);
+    if (await g22Go('U-A1')) {
+      await evaluate(s.cdp, "window.__wu.goSpace('map', false)");
+      await sleep(400);
+      const mMap = await g2Marks();
+      check('CR-22 G2 지도 보기: 그래프에 공간 강조 없음(범례 줄도 없음)', mMap.space === 'map' && mMap.issue === 0 && mMap.solo === 0 && mMap.current === 0 && mMap.dim === 0 && mMap.legendMarks === 0, JSON.stringify(mMap));
+      await evaluate(s.cdp, "window.__wu.goSpace('record', false)");
+      await sleep(400);
+      const mRec = await g2Marks();
+      const bIssue = await g2Border('mk-issue');
+      check('CR-22 G2 기록: 미해결이 있는 업무에만 노랑 실선 테두리, 범례 「노랑 테두리 = 미해결이 있는 업무」', mRec.space === 'record' && mRec.issue >= 1 && mRec.solo === 0 && mRec.current === 0 && (mRec.lgIssue || '').includes('노랑 테두리 = 미해결이 있는 업무') && bIssue && bIssue.style === 'solid' && bIssue.color === 'rgb(255,216,77)', JSON.stringify({ mRec, bIssue }));
+      const issueOnlyWork = await evaluate(s.cdp, "window.__wu.cy.nodes('.mk-issue').every((n) => n.data('core_type') === 'work')");
+      check('CR-22 G2 기록: 노랑 테두리는 업무에만', issueOnlyWork === true);
+      await shot(s.cdp, `${browser.name}-g2-record-A1`);
+      await evaluate(s.cdp, "window.__wu.goSpace('check', false)");
+      await sleep(400);
+      const mChk = await g2Marks();
+      const bSolo = await g2Border('mk-solo');
+      const badge = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=ws-check] .badge, [data-testid=ws-check] [data-testid=ws-badge]'); return b ? Number(b.textContent) : null; })()");
+      check('CR-22 G2 매주 점검: 혼자만 아는 일에 빨강 겹테두리(double, 색만이 아니라 무늬로도 구분), 범례 줄, 기록의 노랑은 사라짐', mChk.space === 'check' && mChk.solo >= 1 && mChk.issue === 0 && (mChk.lgSolo || '').includes('빨강 겹테두리 = 혼자만 아는 일') && bSolo && bSolo.style === 'double' && bSolo.color === 'rgb(255,107,107)' && bSolo.width > 5, JSON.stringify({ mChk, bSolo, badge }));
+      check('CR-22 G2 매주 점검: 빨강 겹테두리 수가 메뉴 배지(혼자만 아는 일 수)와 같음(전부 그려진 작은 지도)', badge === null || badge === mChk.solo, JSON.stringify({ badge, solo: mChk.solo }));
+      await shot(s.cdp, `${browser.name}-g2-check-A1`);
+      await evaluate(s.cdp, "window.__wu.goSpace('handover', false)");
+      await sleep(400);
+      const mHand = await g2Marks();
+      check('CR-22 G2 인수인계: 지금 담당이 있는 업무·담당자가 또렷(mk-current), 나머지 업무·사람은 흐리게, 범례 줄', mHand.space === 'handover' && mHand.current >= 2 && mHand.issue === 0 && mHand.solo === 0 && (mHand.lgCurrent || '').includes('지금 담당') && mHand.legendMarks === 1, JSON.stringify(mHand));
+      await shot(s.cdp, `${browser.name}-g2-handover-A1`);
+      await evaluate(s.cdp, "window.__wu.goSpace('edit', false)");
+      await sleep(400);
+      const mEdit = await g2Marks();
+      check('CR-22 G2 지도 관리: 강조 없음(전환하면 이전 공간의 강조가 남지 않음)', mEdit.space === 'edit' && mEdit.issue === 0 && mEdit.solo === 0 && mEdit.current === 0 && mEdit.dim === 0 && mEdit.legendMarks === 0, JSON.stringify(mEdit));
+      // 기준일을 과거로 옮기면 다시 계산(인수인계의 지금 담당)
+      await evaluate(s.cdp, "window.__wu.goSpace('handover', false)");
+      await sleep(300);
+      const curNow = (await g2Marks()).current;
+      await evaluate(s.cdp, "(() => { const r = document.querySelector('[data-testid=timebar-range], #timebar input[type=range]'); if (r) { r.value = r.min; r.dispatchEvent(new Event('input', { bubbles: true })); r.dispatchEvent(new Event('change', { bubbles: true })); } })()");
+      await sleep(500);
+      const curPast = (await g2Marks()).current;
+      check('CR-22 G2 기준일을 가장 옛날로 옮기면 인수인계 강조를 다시 계산(오류 없이 숫자가 정해짐)', Number.isFinite(curNow) && Number.isFinite(curPast), `${curNow} → ${curPast}`);
+      await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=timebar-today], #timebar-today'); if (b) b.click(); })()");
+      await sleep(200);
+      await evaluate(s.cdp, "window.__wu.goSpace('map', false)");
+      await sleep(300);
+      // 따라 하기가 짚는 항목: 흰 점선(공간 강조의 노랑 실선과 겹치지 않음)
+      await evaluate(s.cdp, "(window.__wu.cy.nodes()[1].addClass('tour-target'), 0)");
+      const bTour = await evaluate(s.cdp, "(() => { const n = window.__wu.cy.nodes('.tour-target')[0]; return { style: n.pstyle('border-style').strValue, color: n.pstyle('border-color').strValue.replace(/\\s/g, ''), width: n.pstyle('border-width').pfValue }; })()");
+      await evaluate(s.cdp, "(window.__wu.cy.nodes('.tour-target').removeClass('tour-target'), 0)");
+      check('CR-22 G2 따라 하기 짚기: 그래프 항목은 흰 점선 테두리(노랑 아님)', bTour.style === 'dashed' && bTour.color === 'rgb(255,255,255)' && bTour.width >= 6, JSON.stringify(bTour));
+    } else check('CR-22 G2 공간 강조', false, 'U-A1이 열리지 않음');
+
+    // 부서 지도(가상 운영부): 공간 강조 + 팀 펼침 직후 지도 중심 이름이 겹치거나 맞닿지 않음
+    if (await g22Go('U-D1')) {
+      await evaluate(s.cdp, "window.__wu.goSpace('map', false)");
+      await sleep(300);
+      // 지도 중심 이름 상자(원 + 아래 이름)끼리의 틈. 음수 = 겹침, 4px 미만 = 맞닿음
+      const rootGapJs = "(() => { const cy = window.__wu.cy; const roots = cy.nodes('[core_type = \"root\"]'); const bb = roots.map((r) => { const b = r.renderedBoundingBox({ includeNodes: true, includeEdges: false, includeLabels: true, includeMainLabels: true, includeOverlays: false }); return { id: r.id(), x1: b.x1, y1: b.y1, x2: b.x2, y2: b.y2 }; }); let min = Infinity; let overlap = 0; for (let i = 0; i < bb.length; i += 1) for (let j = i + 1; j < bb.length; j += 1) { const a = bb[i]; const b = bb[j]; const gx = Math.max(a.x1 - b.x2, b.x1 - a.x2); const gy = Math.max(a.y1 - b.y2, b.y1 - a.y2); const gap = Math.max(gx, gy); min = Math.min(min, gap); if (gap < 0) overlap += 1; } return { roots: bb.length, minGap: Math.round(min * 10) / 10, overlap }; })()";
+      const gap0 = await evaluate(s.cdp, rootGapJs);
+      check('CR-22 G2 가상 운영부 처음(팀 접힘): 지도 중심 이름이 겹치거나 맞닿지 않음(틈 4px 이상)', gap0.roots >= 1 && gap0.overlap === 0 && gap0.minGap >= 4, JSON.stringify(gap0));
+      const jeongsan = await evaluate(s.cdp, "(() => { const c = [...window.__wu.display.collapsed.entries()].find(([, v]) => (window.__wu.view.getNode(v.root_gid) || {}).label === '가상정산팀'); return c ? c[0] : null; })()");
+      const uid = jeongsan || (await evaluate(s.cdp, '[...window.__wu.display.collapsed.entries()].sort((a, b) => b[1].hidden_count - a[1].hidden_count)[0][0]'));
+      await evaluate(s.cdp, `window.__wu.toggle(${JSON.stringify(uid)})`);
+      await sleep(900);
+      const gap1 = await evaluate(s.cdp, rootGapJs);
+      check('CR-22 G2 가상 운영부에서 팀 하나를 펼친 직후: 지도 중심 이름이 겹치거나 맞닿지 않음(틈 4px 이상)', gap1.roots >= 2 && gap1.overlap === 0 && gap1.minGap >= 4, JSON.stringify(gap1));
+      await shot(s.cdp, `${browser.name}-g2-dept-opened-one`);
+      for (let i = 0; i < 6; i += 1) {
+        const next = await evaluate(s.cdp, '[...window.__wu.display.collapsed.keys()][0] || null');
+        if (!next) break;
+        await evaluate(s.cdp, `window.__wu.toggle(${JSON.stringify(next)})`);
+        await sleep(500);
+      }
+      await sleep(600);
+      const gap2 = await evaluate(s.cdp, rootGapJs);
+      check('CR-22 G2 가상 운영부 전부 펼침: 지도 중심 이름이 겹치거나 맞닿지 않음(틈 4px 이상)', gap2.roots >= 3 && gap2.overlap === 0 && gap2.minGap >= 4, JSON.stringify(gap2));
+      await shot(s.cdp, `${browser.name}-g2-dept-opened-all`);
+      for (const sp of ['record', 'check', 'handover']) {
+        await evaluate(s.cdp, `window.__wu.goSpace(${JSON.stringify(sp)}, false)`);
+        await sleep(400);
+        await shot(s.cdp, `${browser.name}-g2-${sp}-D1`);
+      }
+      // 접힌 팀 안에 강조할 항목이 있으면 범례에 개수를 붙임(전부 펼친 상태면 0이라 붙지 않음)
+      const lgAll = await g2Marks();
+      check('CR-22 G2 전부 펼친 부서 지도: 범례에 「접힌 팀 안」 표시가 붙지 않음(숨은 강조 0)', !String(lgAll.lgCurrent || '').includes('접힌 팀 안'), JSON.stringify(lgAll));
+    } else check('CR-22 G2 부서 지도', false, 'U-D1이 열리지 않음');
+
     // 저장소를 블록 시작 때 찍어 둔 상태로 되돌린다(샘플 문서 포함)
     await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(g22Snap)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); location.hash = 'U-A1'; location.reload(); })()`).catch(() => {});
     await sleep(500);
