@@ -96,7 +96,7 @@ const HANDOVER = {
         const panelBusy = s.draftOpen || s.insightOpen; // 초안·인사이트가 열려 있으면 빈 곳을 눌러 개요로 돌아가야 한다
         if (s.saved) return s.selected || panelBusy ? [blank] : [{ sel: '[data-testid=btn-rewind]' }, blank];
         if (s.editing) return [{ sel: '[data-testid=node-form-edit] button[type=submit]' }];
-        if (s.selected && !panelBusy) return [{ sel: '[data-testid=btn-edit]' }, { cy: 'node[label = "대사 확인"]' }];
+        if (s.selected && !panelBusy) return [{ sel: '[data-testid=btn-edit]' }, { sel: '[data-testid=more-tools] summary' }, { cy: 'node[label = "대사 확인"]' }]; // CR-22 K: 「수정」은 카드의 「⋯」 메뉴 안(닫혀 있으면 「⋯」를 짚는다)
         return [{ cy: 'node[label = "대사 확인"]' }];
       },
       done: (s) => s.rewinding || s.readOnly,

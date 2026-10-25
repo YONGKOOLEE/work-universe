@@ -4,7 +4,7 @@
 // 항목 모양: { id, name, keywords[], where, needs, go, ... }
 //   needs: 'none'  — 고른 항목 없이 간다
 //          'work'  — 업무를 먼저 골라야 한다(담당 바꾸기·협업자 추가)
-//          'node'  — 항목(사람·업무·문서 등)을 먼저 골라야 한다(수정·연결 추가·이력 추가). 고를 목록에는 업무를 보인다
+//          'node'  — 항목(사람·업무·문서 등)을 먼저 골라야 한다(수정·연결 추가·기록 남기기). 고를 목록에는 업무를 보인다
 //          'edit'  — 고칠 수 있는 화면이어야 한다(추가류)
 //          'grouped' — 묶은 지도에서 뜻이 있다(매주 점검·통합 확인). 아닌 지도에서는 이유를 알려 주는 자리로 간다
 //   write: true      — 읽기 전용·되감기 중에는 쓸 수 없다
@@ -25,12 +25,12 @@ export const FEATURES = [
   F('issues', '미해결·해결로 표시', ['미해결', '해결', '해결됨', '이슈', '완료', '끝난', '닫기'], '「기록」 공간의 「미해결 n건」', 'none', 'ov:issue-count', { sec: 'record' , space: 'record' }),
   F('recent', '최근 기록', ['최근', '기록', '방금', '쓴', '썼던', '어디', '이력', '확인'], '「기록」 공간의 「최근 기록」', 'none', 'ov:recent-records', { sec: 'record' , space: 'record' }),
   F('draft', '인수인계 초안 만들기', ['인수인계', '인계', '초안', '인수인계서', '문서', '넘기기'], '「인수인계」 공간', 'none', 'ov:btn-draft-universe', { sec: 'handover' , space: 'handover' }),
-  F('assignee', '담당 바꾸기', ['담당', '담당자', '넘기기', '인계', '교체', '변경', '바꾸기', '이동'], '업무를 고른 뒤 → 「담당 바꾸기」', 'work', 'node:assignee', { write: true , space: 'handover' }),
+  F('assignee', '담당 바꾸기', ['담당', '담당자', '넘기기', '인계', '교체', '변경', '바꾸기', '이동'], '업무를 고른 뒤 → 「담당 넘기기」', 'work', 'node:assignee', { write: true , space: 'handover' }),
   F('transfer', '담당도 넘기기(초안 확정)', ['담당', '담당자', '넘기기', '인계', '확정', '인수인계서'], '「인수인계」 공간의 「인수인계 초안 만들기」에서 확정할 때 「담당도 넘기기」', 'none', 'ov:btn-draft-universe', { write: true, sec: 'handover' , space: 'handover' }),
-  F('event', '이력 추가', ['이력', '기록', '메모', '담당 시작', '담당 종료', '소속 변경', '인수인계 기록', '이슈'], '항목을 고른 뒤 → 「이력 추가」', 'node', 'node:event', { write: true , space: 'record' }),
-  F('collab', '협업자 추가', ['협업', '협업자', '참조', '연락처', '다른 팀', '사람'], '업무를 고른 뒤 → 「협업자 추가」', 'work', 'node:collab', { write: true , space: 'handover' }),
-  F('edit', '항목 수정', ['수정', '고치기', '편집', '이름', '설명', '속성', '기간', '바꾸기'], '항목을 고른 뒤 → 「수정」', 'node', 'node:edit', { write: true , space: 'edit' }),
-  F('edge', '연결 추가', ['연결', '이어', '이음', '관계', '수행', '산출', '잇기'], '항목을 고른 뒤 → 「연결 추가」', 'node', 'node:edge', { write: true , space: 'edit' }),
+  F('event', '기록 남기기', ['이력', '기록', '메모', '담당 시작', '담당 종료', '소속 변경', '인수인계 기록', '이슈'], '항목을 고른 뒤 → 「기록 남기기」', 'node', 'node:event', { write: true , space: 'record' }),
+  F('collab', '협업자 추가', ['협업', '협업자', '참조', '연락처', '다른 팀', '사람'], '업무를 고른 뒤 → 「⋯」 → 「협업자 추가」', 'work', 'node:collab', { write: true , space: 'handover' }),
+  F('edit', '항목 수정', ['수정', '고치기', '편집', '이름', '설명', '속성', '기간', '바꾸기'], '항목을 고른 뒤 → 「⋯」 → 「수정」', 'node', 'node:edit', { write: true , space: 'edit' }),
+  F('edge', '연결 추가', ['연결', '이어', '이음', '관계', '수행', '산출', '잇기'], '항목을 고른 뒤 → 「⋯」 → 「연결 추가」', 'node', 'node:edge', { write: true , space: 'edit' }),
   F('add', '사람·업무·문서 추가(하나씩)', ['추가', '새 항목', '사람', '업무', '문서', '산출물', '만들기', '넣기'], '「지도 관리」 공간의 「사람·업무·문서 추가」', 'edit', 'ov:goal-add-open', { write: true, sec: 'edit' , space: 'edit' }),
   F('table-add', '표로 추가', ['표', '엑셀', '스프레드시트', '붙여넣기', '여러 개', '한꺼번에', '추가'], '「사람·업무·문서 추가」 안 → 「표로 추가」(창이 열림)', 'edit', 'dlg:table-add', { write: true , space: 'edit' }),
   F('text-add', '글로 추가', ['글', '글로', '줄글', '문장', '텍스트', '붙여넣기', '추가', 'AI', '읽기'], '「사람·업무·문서 추가」 안 → 「글로 추가」(창이 열림)', 'edit', 'dlg:text-add', { write: true, noGrouped: true , space: 'edit' }),

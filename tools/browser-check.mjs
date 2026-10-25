@@ -132,6 +132,18 @@ async function evaluate(cdp, expression) {
   await ensureSpace(cdp, expression);
   return raw(cdp, expression);
 }
+// CR-22 K: 카드의 「기록(이력)」 묶음은 최신 5건만 보인다. 전체가 필요한 점검은 「모두 보기 →」의 표를 끝까지 펴서 줄 글을 읽고 닫는다(5건 이하면 카드의 줄을 그대로 읽는다)
+async function allHistoryRows(cdp) {
+  const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
+  const has = await raw(cdp, "!!document.querySelector('[data-testid=history-all]')");
+  if (!has) return raw(cdp, "[...document.querySelectorAll('[data-testid=history] li')].map((li) => li.textContent)");
+  await raw(cdp, "document.querySelector('[data-testid=history-all]').click()");
+  await sleepMs(150);
+  const rows = await raw(cdp, "(() => { let g = 0; while (document.querySelector('[data-testid=ht-more]') && g++ < 80) document.querySelector('[data-testid=ht-more]').click(); return [...document.querySelectorAll('[data-testid=ht-row]')].map((tr) => tr.textContent); })()");
+  await raw(cdp, "(() => { const c = document.querySelector('[data-testid=history-table-close]'); if (c) c.click(); })()");
+  await sleepMs(150);
+  return rows;
+}
 
 async function waitFor(cdp, expression, timeout = 5000) {
   const t0 = Date.now();
@@ -398,8 +410,9 @@ async function checkBrowser(browser, port) {
   check('R-01 ① 노드 클릭 → 속성(설명·주기)', detail.includes('대사 확인') && detail.includes('매월') && detail.includes('원천 자료와 대조'), detail.slice(0, 80));
   const links = await text(s.cdp, '[data-testid=links]');
   check('R-01 ① 연결된 노드(관계·담당 기간)', ['월말 정산 점검', '서하늘', '윤바다', '한가람', '대사 불일치', '2026-10-01 ~ 진행 중'].every((t) => links.includes(t)), links.slice(0, 80));
-  const history = await text(s.cdp, '[data-testid=history]');
-  check('R-14 이력이 시간순 문장으로 보임', history.includes('한가람 → 윤바다 인수인계') && history.includes('윤바다 → 서하늘 인수인계') && history.indexOf('2025-03-01') < history.indexOf('2026-09-30'), history.slice(0, 60));
+  // CR-22 K: 카드는 최신 5건(최신이 위)만 보여 주므로 전체는 「모두 보기 →」의 표로 읽는다. 순서도 최신이 위(예전: 오래된 순)
+  const history = (await allHistoryRows(s.cdp)).join('\n');
+  check('R-14 이력이 날짜 순 문장으로 보임(최신이 위)', history.includes('한가람 → 윤바다 인수인계') && history.includes('윤바다 → 서하늘 인수인계') && history.indexOf('2025-03-01') > history.indexOf('2026-09-30'), history.slice(0, 60));
   check('선택한 노드 밖은 흐리게(이웃 강조)', (await evaluate(s.cdp, "window.__wu.cy.elements('.faded').length")) > 0);
   // 검토5 U-1: 자기 유니버스 노드를 고른 상세 패널(드러내기 상자 포함)에 "null" 글자가 없다
   check('노드를 고른 화면 전체(상세 패널 포함)에 "null" 글자 없음', (await nullTextSpots(s.cdp)).length === 0, (await nullTextSpots(s.cdp)).join(','));
@@ -849,7 +862,7 @@ async function checkBrowser(browser, port) {
     check('R9-1 근거 칩을 누르면 5/5(직접 고쳐 보고 되감기), 끝 카드는 아직', ti.mode !== 'end' && ti.index === 4 && (await text(s.cdp, '[data-testid=tour-count]')) === '따라 하기 5/5', JSON.stringify(ti));
     // 처음 사용 3회차(W6): 5/5 본문은 한두 줄, 세부 순서는 보조 문구로
     const w6Tour = { task: await text(s.cdp, '[data-testid=tour-task]'), sub: await text(s.cdp, '[data-testid=tour-sub]') };
-    check('처음 사용 W6 따라 하기 5/5 본문이 짧다: 「(연습, 건너뛰어도 됩니다) 「대사 확인」의 설명을 조금 고쳐 저장한 뒤, 「편집 되감기」로 고치기 전 지도를 봅니다.」, 세부 순서(수정·글자 하나·저장·빈 곳)는 보조 문구', w6Tour.task === '(연습, 건너뛰어도 됩니다) 「대사 확인」의 설명을 조금 고쳐 저장한 뒤, 「편집 되감기」로 고치기 전 지도를 봅니다.' && w6Tour.task.length <= 80 && w6Tour.sub.startsWith('순서:') && w6Tour.sub.includes('글자 하나') && w6Tour.sub.includes('「수정」') && w6Tour.sub.includes('「저장」') && w6Tour.sub.includes('빈 곳'), JSON.stringify(w6Tour));
+    check('처음 사용 W6 따라 하기 5/5 본문이 짧다: 「(연습, 건너뛰어도 됩니다) 「대사 확인」의 설명을 조금 고쳐 저장한 뒤, 「편집 되감기」로 고치기 전 지도를 봅니다.」, 세부 순서(수정·글자 하나·저장·「지도 관리」)는 보조 문구(CR-22: 되감기는 「지도 관리」 공간)', w6Tour.task === '(연습, 건너뛰어도 됩니다) 「대사 확인」의 설명을 조금 고쳐 저장한 뒤, 「편집 되감기」로 고치기 전 지도를 봅니다.' && w6Tour.task.length <= 80 && w6Tour.sub.startsWith('순서:') && w6Tour.sub.includes('글자 하나') && w6Tour.sub.includes('「수정」') && w6Tour.sub.includes('「저장」') && w6Tour.sub.includes('지도 관리'), JSON.stringify(w6Tour));
     // 처음 사용 점검 2회차 FU-24·FU-29(처음 사용 W4): 키가 없는 사전 생성 초안 위 안내 한 줄, 방금 누른 근거 칩 아래 근거 글 한 줄
     const w4Hint = await evaluate(s.cdp, "(() => { const h = document.querySelector('[data-testid=draft-live-hint]'); const first = document.querySelector('.draft [data-testid^=draft-item-]'); const note = document.querySelector('[data-testid=draft-method-note]'); const r = h ? h.getBoundingClientRect() : { width: 0, height: 0 }; return { text: h ? h.textContent : null, size: r.width > 0 && r.height > 0, last: !!(h && h.parentElement && h.parentElement.lastElementChild === h), below: !!(h && first && (h.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_PRECEDING)), next: !!document.querySelector('[data-testid=draft-next]'), note: note ? note.textContent : null, oldWord: document.querySelector('.draft').textContent.includes('개발 중') }; })()");
     // 처음 사용 3회차(W6): 한 줄이 항목들 아래 맨 끝으로 옮겨졌고 말투가 바뀌었다. 사전 생성 안내는 「예시 지도의 기록을 앱을 만들 때 Claude에 넣어 미리 받아 둔 문장입니다(받은 날짜)」
@@ -863,7 +876,8 @@ async function checkBrowser(browser, port) {
     // 5단계: 「대사 확인」 → 「수정」 → 설명 끝에 글자 하나 → 「저장」 → 「지도 관리」 공간 → 「편집 되감기」
     await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
     await sleep(200);
-    check('R9-1 5단계에서 노드를 고르면 짚는 대상이 「수정」 단추', await evaluate(s.cdp, "!!document.querySelector('[data-testid=btn-edit].tour-target')"));
+    // CR-22 K: 「수정」은 카드의 「⋯」 메뉴 안이라, 메뉴가 닫혀 있으면 따라 하기는 「⋯」를 짚는다(보이는 첫 후보)
+    check('R9-1 5단계에서 노드를 고르면 짚는 대상이 「수정」 단추(메뉴가 닫혀 있으면 「⋯」)', await evaluate(s.cdp, "!!document.querySelector('[data-testid=btn-edit].tour-target') || !!document.querySelector('[data-testid=more-tools] summary.tour-target')"));
     {
       const wsH5 = await wsNow();
       check('CR-22 W handover 5단계: 초안이 닫히면 따라 하기가 메뉴를 「지도 관리」로 바꿈(편집 되감기 입구가 있는 공간)', wsH5.space === 'edit' && wsH5.pressed.join() === 'edit', JSON.stringify(wsH5));
@@ -2022,9 +2036,10 @@ async function checkBrowser(browser, port) {
   await evaluate(s.cdp, "window.__wu.select(window.__wu.view.nodes.find((n) => n.core_type === 'work' && !n.hidden).gid)");
   await sleep(200);
   const topBtns = await evaluate(s.cdp, "[...document.querySelectorAll('#detail .toolbar > button')].map((b) => b.textContent).join('|')");
-  check('R7-2: 업무 상세에는 수정·연결 추가·이력 추가·인수인계 초안 만들기·이력으로만 한 줄에 보임', topBtns === '수정|연결 추가|이력 추가|인수인계 초안 만들기|이력으로', topBtns);
+  // CR-22 K: 동작 줄은 한 줄 고정(기록 남기기·담당 넘기기·인수인계 초안·「⋯」). 수정·연결 추가·협업자 추가·기록(이력)으로 등은 「⋯」 메뉴 안
+  check('R7-2: 업무 카드의 동작 줄에는 기록 남기기·담당 넘기기·인수인계 초안만 단추로 보이고 나머지는 「⋯」 안(줄은 하나)', topBtns === '기록 남기기|담당 넘기기|인수인계 초안' && (await evaluate(s.cdp, "document.querySelectorAll('#detail [data-testid=card-actions]').length")) === 1, topBtns);
   const moreInfo = await evaluate(s.cdp, "(() => { const d = document.querySelector('details.more-tools'); return d && { open: d.open, btns: [...d.querySelectorAll('button')].map((b) => b.dataset.testid) }; })()");
-  check('R7-2: 「더 보기」는 닫혀 있고 숨기기·유사 경험자·인사이트 보기·주변만 보기·주변 2단계가 들어 있음', !!moreInfo && !moreInfo.open && ['btn-hide', 'btn-similar', 'btn-insight', 'btn-nbhd', 'btn-nbhd2'].every((t) => moreInfo.btns.includes(t)), JSON.stringify(moreInfo));
+  check('R7-2: 「⋯」는 닫혀 있고 수정·연결 추가·협업자 추가·기록(이력)으로·숨기기·유사 경험자·인사이트 보기·주변만 보기·주변 2단계가 들어 있음', !!moreInfo && !moreInfo.open && ['btn-edit', 'btn-edge', 'btn-collab', 'btn-history-jump', 'btn-hide', 'btn-similar', 'btn-insight', 'btn-nbhd', 'btn-nbhd2'].every((t) => moreInfo.btns.includes(t)), JSON.stringify(moreInfo));
   check('D8-3: 월말 정산(노드 15개 이하)에서는 「주변만 보기」가 첫 줄에 없고 「더 보기」 안에 있음', await evaluate(s.cdp, "!document.querySelector('#detail .toolbar > [data-testid=btn-nbhd]') && !!document.querySelector('#detail details.more-tools [data-testid=btn-nbhd]')"));
   await shot(s.cdp, `${browser.name}-27a-detail-more-closed`);
   await evaluate(s.cdp, "document.querySelector('details.more-tools summary').focus()");
@@ -2038,7 +2053,7 @@ async function checkBrowser(browser, port) {
   check('R7-2: 「이력으로」를 누르면 「이력」 제목에 포커스가 가고 보이는 영역 안에 옴', await evaluate(s.cdp, "(() => { const h = document.querySelector('[data-testid=history-heading]'); if (!h) return false; const r = h.getBoundingClientRect(); return document.activeElement === h && r.top >= 0 && r.top < innerHeight; })()"));
   await evaluate(s.cdp, "window.__wu.select(window.__wu.view.nodes.find((n) => n.core_type === 'person' && !n.hidden).gid)");
   await sleep(200);
-  check('R7-2: 사람 노드도 수정·연결 추가·이력 추가·이력으로 + 접힌 「더 보기」', (await evaluate(s.cdp, "[...document.querySelectorAll('#detail .toolbar > button')].map((b) => b.textContent).join('|')")) === '수정|연결 추가|이력 추가|이력으로' && !!(await evaluate(s.cdp, "document.querySelector('details.more-tools')")));
+  check('R7-2: 사람 카드의 동작 줄은 기록 남기기·이 사람 일 인수인계 초안 + 「⋯」(담당 넘기기는 없음)', (await evaluate(s.cdp, "[...document.querySelectorAll('#detail .toolbar > button')].map((b) => b.textContent).join('|')")) === '기록 남기기|이 사람 일 인수인계 초안' && !!(await evaluate(s.cdp, "document.querySelector('details.more-tools')")));
   check('R7-4: 머리글에 「설정」은 있고 「가상 데이터 초기화」는 없음', (await text(s.cdp, '#settings-open')) === '설정' && !(await evaluate(s.cdp, "[...document.querySelectorAll('header button')].some((b) => b.textContent.includes('가상 데이터 초기화'))")));
   await evaluate(s.cdp, "document.getElementById('import-open').click()");
   await sleep(300);
@@ -2424,12 +2439,17 @@ async function checkBrowser(browser, port) {
     await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': `2026-10-0${(i % 9) + 1}`, 'event-note': `T19 이력 접기 시험 ${i + 1}` });
     await sleep(120);
   }
-  const hist = await evaluate(s.cdp, "({ li: document.querySelectorAll('[data-testid=history] li').length, count: (document.querySelector('[data-testid=history-count]') || {}).textContent || '' })");
-  check('이력 15건 초과 → 최근 10건만 보이고 「모두 보기(이전 N건)」 안내', hist.li === 10 && hist.count.includes('최근 10건') && hist.count.includes('모두 보기'), JSON.stringify(hist));
-  await clickTestId(s.cdp, 'history-toggle');
-  await sleep(100);
-  const histAll = await evaluate(s.cdp, "document.querySelectorAll('[data-testid=history] li').length");
-  check('「모두 보기」 → 전체 이력(10건보다 많음)이 보임', histAll > 15, String(histAll));
+  // CR-22 K: 이력은 늘 최신 5건만(최신이 위) + 「모두 보기 →」(넓은 표, 20줄씩). 예전의 「15건 초과 → 10건」 접힘은 없어졌다
+  await evaluate(s.cdp, "(() => { const g = document.querySelector('[data-group=history]'); if (g) g.open = true; })()");
+  const hist = await evaluate(s.cdp, "({ li: document.querySelectorAll('[data-testid=history] li').length, count: (document.querySelector('[data-testid=history-count]') || {}).textContent || '', dates: [...document.querySelectorAll('[data-testid=history] li time')].map((t) => t.textContent) })");
+  check('이력 5건 초과 → 최신 5건만 최신이 위로 보이고 「모두 보기 →」 안내', hist.li === 5 && hist.count.includes('모두 보기 →') && hist.dates.every((d, i) => i === 0 || hist.dates[i - 1] >= d), JSON.stringify(hist));
+  await clickTestId(s.cdp, 'history-all');
+  await sleep(200);
+  const histAll = await evaluate(s.cdp, "({ rows: document.querySelectorAll('[data-testid=ht-row]').length, count: (document.querySelector('[data-testid=ht-count]') || {}).textContent || '', wide: document.querySelector('main').classList.contains('wide') })");
+  check('「모두 보기 →」 → 넓은 표 화면에 20줄이 먼저 보이고(전체는 「다음 20」으로)', histAll.rows === 20 && /건 중 20건 표시/.test(histAll.count) && histAll.wide, JSON.stringify(histAll));
+  await clickTestId(s.cdp, 'history-table-close');
+  await sleep(150);
+  check('표 화면을 닫으면 카드로 돌아오고 패널 폭도 원래대로', await evaluate(s.cdp, "!!document.querySelector('[data-testid=item-card]') && !document.querySelector('main').classList.contains('wide')"));
 
   // R-16 ①②: 상세 패널의 표준 양식 한 줄
   await evaluate(s.cdp, 'window.__wu.select(' + JSON.stringify('U-A1/N-003') + ')');
@@ -2451,7 +2471,7 @@ async function checkBrowser(browser, port) {
   await evaluate(s.cdp, `window.__wu.select(${JSON.stringify(r21Gid)})`);
   await sleep(150);
   const r21Links0 = await evaluate(s.cdp, "document.querySelectorAll('[data-testid=links] li').length");
-  const r21Hist0 = await evaluate(s.cdp, "document.querySelectorAll('[data-testid=history] li').length");
+  const r21Hist0 = (await allHistoryRows(s.cdp)).length; // CR-22 K: 카드는 최신 5건만 보이므로 표로 센다
   await clickTestId(s.cdp, 'btn-hide');
   await sleep(300);
   const r21Count = await evaluate(s.cdp, "(() => { const e = document.querySelector('[data-testid=hidden-count]'); if (!e) return null; const r = e.getBoundingClientRect(); return { count: e.dataset.count, text: e.textContent, w: r.width, h: r.height }; })()");
@@ -2465,7 +2485,8 @@ async function checkBrowser(browser, port) {
   await clickTestId(s.cdp, 'btn-restore');
   await sleep(400);
   check('R-21 ① 되살리면 그래프에 다시 보이고 노드·연결 수가 숨기기 전과 같음', (await nodeCount(s.cdp)) === r21.nodes && (await edgeCount(s.cdp)) === r21.edges && (await hasLabel(s.cdp, r21Label)), JSON.stringify([await nodeCount(s.cdp), await edgeCount(s.cdp), r21]));
-  const r21After = await evaluate(s.cdp, "({ selected: window.__wu.selected, links: document.querySelectorAll('[data-testid=links] li').length, hist: [...document.querySelectorAll('[data-testid=history] li')].map((li) => li.textContent), note: !!document.querySelector('[data-testid=hidden-note]') })");
+  const r21After = await evaluate(s.cdp, "({ selected: window.__wu.selected, links: document.querySelectorAll('[data-testid=links] li').length, note: !!document.querySelector('[data-testid=hidden-note]') })");
+  r21After.hist = await allHistoryRows(s.cdp);
   check('R-21 ① 되살린 노드가 선택되어 연결 수가 그대로이고 숨김 안내가 없으며 이력에 「되살림」이 정확히 1건', r21After.selected === r21Gid && r21After.links === r21Links0 && !r21After.note && r21After.hist.filter((t) => t.includes('되살림')).length === 1 && r21After.hist.length === r21Hist0 + 2, JSON.stringify([r21After, r21Links0, r21Hist0]));
   check('R-21 문서에 updated(hidden true → false) 이벤트와 hidden false로 남음', await evaluate(s.cdp, "(() => { const d = window.__wu.doc; const e = d.events[d.events.length - 1]; return d.nodes.find((n) => n.id === 'N-003').hidden === false && e.type === 'updated' && e.payload.target_id === 'N-003' && e.payload.before.hidden === true && e.payload.after.hidden === false; })()"));
   await evaluate(s.cdp, "window.__wu.select(null)");
@@ -3242,7 +3263,7 @@ async function checkBrowser(browser, port) {
       await evaluate(s.cdp, `window.__wu.select(${JSON.stringify(workGid)})`);
       await sleep(200);
       const back = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=detail-back-universe]'); if (!b) return null; const r = b.getBoundingClientRect(); return { first: document.getElementById('detail').firstElementChild.contains(b), w: r.width, text: b.textContent, draftUniverse: !!document.querySelector('[data-testid=btn-draft-universe]') }; })()");
-      check('W3 FU-6 노드 상세 맨 위에 「← 지도 전체 보기」(크기 있음), 이 화면에는 지도 전체용 단추가 없음', !!back && back.first && back.w > 20 && back.text === '← 지도 전체 보기' && !back.draftUniverse, JSON.stringify(back));
+      check('W3 FU-6 노드 상세 맨 위에 「← 지도 전체 보기」(크기 있음), 이 화면에는 지도 전체용 단추가 없음', !!back && back.first && back.w > 20 && /^← 지도 전체( 보기)?$/.test(back.text) && !back.draftUniverse, JSON.stringify(back));
       await clickTestId(s.cdp, 'detail-back-universe');
       await sleep(250);
       // CR-22 W: 꼭지 상세가 공간 5개로 나뉘어 「인수인계 초안 만들기」는 「인수인계」, 「인사이트 보기」·위험 요약은 「매주 점검」 공간에 있다(공간 이동은 점검 도우미가 한다)
@@ -3270,9 +3291,7 @@ async function checkBrowser(browser, port) {
       // FU-15 이력의 속성 수정 글
       await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
       await sleep(200);
-      await evaluate(s.cdp, "(() => { const t = document.querySelector('[data-testid=history-toggle]'); if (t && !/최근 것만/.test(t.textContent)) t.click(); })()");
-      await sleep(100);
-      const hist = await text(s.cdp, '[data-testid=history]');
+      const hist = (await allHistoryRows(s.cdp)).join('\n'); // CR-22 K: 카드는 최신 5건만 보이므로 표로 전체를 읽는다
       check('W3 FU-15 이력의 「수정 — 속성」이 원문 JSON 없이 바뀐 값만(마감: 월 마감 후 5영업일 이내 → 월 마감 후 3영업일 이내)', hist.includes('수정 — 속성: 마감: 월 마감 후 5영업일 이내 → 월 마감 후 3영업일 이내') && !hist.includes('{'), hist.slice(-300));
       // FU-6 + 따라 하기: 노드를 기다리는 단계에서 「← 지도 전체 보기」를 눌러도 따라 하기 상태가 깨지지 않는다
       await openTourViaHelp(s.cdp);
@@ -3990,9 +4009,12 @@ async function checkBrowser(browser, port) {
       const g2n0 = await evaluate(s.cdp, 'window.__wu.doc.nodes.length');
       const g2e0 = await evaluate(s.cdp, 'window.__wu.doc.events.length');
       const g2Cq = await g2Box('[data-testid=collab-quick]');
-      check('G2 D-8 업무 상세에 접힌 「협업자 추가」(처음엔 접힘, 크기 있음)', !!g2Cq && g2Cq.w > 0 && g2Cq.h > 0 && g2Cq.open === false, JSON.stringify(g2Cq));
-      await evaluate(s.cdp, "document.querySelector('[data-testid=collab-quick]').open = true");
-      await sleep(100);
+      // CR-22 K: 「협업자 추가」 상자는 처음엔 숨겨 두고(카드의 「⋯」 메뉴 「협업자 추가」 단추가 연다)
+      check('G2 D-8 업무 카드에서 「협업자 추가」 상자는 처음엔 숨김(크기 0, 접힘)', !!g2Cq && g2Cq.w === 0 && g2Cq.open === false, JSON.stringify(g2Cq));
+      await clickTestId(s.cdp, 'btn-collab');
+      await sleep(150);
+      const g2Cq2 = await g2Box('[data-testid=collab-quick]');
+      check('G2 D-8 「⋯」의 「협업자 추가」 단추 → 상자가 열려 보임(크기 있음)', !!g2Cq2 && g2Cq2.w > 0 && g2Cq2.h > 0 && g2Cq2.open === true, JSON.stringify(g2Cq2));
       await clickTestId(s.cdp, 'collab-add');
       await sleep(150);
       const g2Empty = await g2Box('[data-testid=collab-msg]');
@@ -4007,7 +4029,7 @@ async function checkBrowser(browser, port) {
       const g2Done = await g2Box('[data-testid=collab-done]');
       check('G2 D-8 「추가」 → 사람 노드(속성 소속·연락처)와 업무(대사 확인) → 사람 「참조」 연결 한 번에, 노드 +1', !!g2Added.n && g2Added.n.type === 'person' && g2Added.n.attrs && g2Added.n.attrs['소속'] === '가상감사실' && g2Added.n.attrs['연락처'] === '내선 0000' && !!g2Added.e && g2Added.e.source === 'N-001' && g2Added.nodes === g2n0 + 1, JSON.stringify(g2Added));
       check('G2 D-8·D-15 완료 안내(크기 있음)에 새 사람임과 「다른 팀 사람이면 사번 없이 두어도 됩니다」', !!g2Done && g2Done.w > 0 && g2Done.text.includes('새 사람으로 만들었습니다') && g2Done.text.includes('다른 팀 사람이면 사번 없이 두어도 됩니다'), JSON.stringify(g2Done));
-      const g2Link = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=links] li')].some((li) => li.textContent.includes('G2 시험 협업자') && li.textContent.includes('참조'))");
+      const g2Link = await evaluate(s.cdp, "(() => { for (const b of document.querySelectorAll('[data-testid=links] [data-testid=group-all]')) b.click(); return true; })() && [...document.querySelectorAll('[data-testid=links] li')].some((li) => li.textContent.includes('G2 시험 협업자') && li.textContent.includes('참조'))");
       check('G2 D-8 업무 상세의 「연결된 노드」에 협업자가 「참조」로 보임', g2Link === true);
       // 같은 이름 → 연결만(다른 업무), 같은 업무에 또 → 중복 안내
       await g2Select('U-A1/N-002');
@@ -4057,7 +4079,8 @@ async function checkBrowser(browser, port) {
       // D-14 이력 목록의 [이슈] 꼬리표 + D-12 이미 끝난 일
       await g2Select('U-A1/N-001');
       const g2Cnt0 = await evaluate(s.cdp, "(() => { const c = document.querySelector('[data-testid=issue-count]'); return c ? c.dataset.count : null; })()");
-      const g2Hist = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=history] li')].filter((li) => li.querySelector('.chip').textContent === '메모').map((li) => li.querySelector('.text').textContent)");
+      // CR-22 K: 카드는 최신 5건만 보이므로 표(모두 보기 →)의 메모 줄로 확인한다. 줄 글은 「날짜 + 메모 + 내용」으로 이어진다
+      const g2Hist = (await allHistoryRows(s.cdp)).filter((t) => /^\d{4}-\d{2}-\d{2}메모/.test(t)).map((t) => t.replace(/^\d{4}-\d{2}-\d{2}메모/, ''));
       check('G2 D-14 업무 이력 목록의 모든 메모 줄이 분류 꼬리표([이슈]·[주의사항]·[진행 중]·[해결됨])로 시작', g2Hist.length > 0 && g2Hist.every((t) => /^\[(이슈|주의사항|진행 중|해결됨)\] /.test(t)) && g2Hist.some((t) => t.startsWith('[이슈] ')), JSON.stringify(g2Hist));
       await clickTestId(s.cdp, 'btn-event');
       await sleep(200);
@@ -4079,11 +4102,9 @@ async function checkBrowser(browser, port) {
       const g2Notice = await g2Box('[data-testid=past-resolved-done]');
       check('G2 D-12 켜고 기록 → 이슈 메모와 해결됨 메모(resolves_id = 방금 이슈)가 같은 날짜·같은 기록 시각으로 두 건 늘어남', (await evaluate(s.cdp, 'window.__wu.doc.events.length')) === g2e1 + 2 && g2Pair[0].payload.category === 'issue' && g2Pair[1].payload.category === 'resolved' && g2Pair[1].payload.resolves_id === g2Pair[0].id && g2Pair[0].occurred_at === '2026-09-15' && g2Pair[1].occurred_at === '2026-09-15' && g2Pair[0].recorded_at === g2Pair[1].recorded_at && !!g2Notice, JSON.stringify([g2Pair, g2Notice]));
       const g2Cnt1 = await evaluate(s.cdp, "(() => { const c = document.querySelector('[data-testid=issue-count]'); return c ? c.dataset.count : null; })()");
-      // 이력 목록은 최근 것만 보인다: 지난달 날짜 줄은 「모두 보기」를 펼쳐야 보인다
-      await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=history-toggle]'); if (b && b.textContent.startsWith('모두 보기')) b.click(); })()");
-      await sleep(150);
-      const g2Texts = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=history] li .text')].map((t) => t.textContent).filter((t) => t.includes('G2 시험 지난달') || t.startsWith('[해결됨] 해결: G2 시험'))");
-      check('G2 D-12 이력 목록에 [이슈] 줄과 [해결됨] 줄이 보이고, 업무의 미해결 건수는 그대로', g2Texts.length === 2 && g2Texts[0].startsWith('[이슈] ') && g2Texts[1].startsWith('[해결됨] ') && g2Cnt0 !== null && g2Cnt0 === g2Cnt1, JSON.stringify([g2Cnt0, g2Cnt1, g2Texts]));
+      // 이력 카드는 최신 5건만 보인다: 지난달 날짜 줄은 「모두 보기 →」 표에서 읽는다(CR-22 K). 같은 날이면 나중에 기록한 [해결됨]이 위
+      const g2Texts = (await allHistoryRows(s.cdp)).filter((t) => t.includes('G2 시험 지난달') || t.includes('[해결됨] 해결: G2 시험'));
+      check('G2 D-12 이력 목록에 [이슈] 줄과 [해결됨] 줄이 보이고, 업무의 미해결 건수는 그대로', g2Texts.length === 2 && g2Texts[0].includes('[해결됨] ') && g2Texts[1].includes('[이슈] ') && g2Cnt0 !== null && g2Cnt0 === g2Cnt1, JSON.stringify([g2Cnt0, g2Cnt1, g2Texts]));
       await g2Restore('U-A1');
     } else {
       check('G2 월말 정산 점검(U-A1) 열기', false, 'U-A1이 열리지 않음');
@@ -4737,8 +4758,8 @@ async function checkBrowser(browser, port) {
       await s2Select('U-A1/N-000');
       await s2Select('U-A1/N-001');
       const cn = await s2Q('[data-testid=collab-note]');
-      await evaluate(s.cdp, "document.querySelector('[data-testid=collab-quick]').open = true");
-      await sleep(100);
+      await clickTestId(s.cdp, 'btn-collab'); // CR-22 K: 숨겨 둔 상자를 「⋯」의 「협업자 추가」가 연다
+      await sleep(150);
       const cnBox = await evaluate(s.cdp, "(() => { const e = document.querySelector('[data-testid=collab-note]'); const r = e.getBoundingClientRect(); return { w: r.width, h: r.height, label: e.closest('label').textContent }; })()");
       check('S T5 「협업자 추가」에 선택 칸 「주고받는 것」(크기 있음)', !!cn && cnBox.w > 0 && cnBox.h > 0 && cnBox.label.includes('주고받는 것'), JSON.stringify([cn, cnBox]));
       await s2Set('collab-name', 'S 협업자');
@@ -4746,7 +4767,7 @@ async function checkBrowser(browser, port) {
       await clickTestId(s.cdp, 'collab-add');
       await sleep(350);
       const refEdge = await evaluate(s.cdp, "(() => { const d = window.__wu.doc; const p = d.nodes.find((n) => n.label === 'S 협업자'); const e = p && d.edges.find((x) => x.core_type === 'references' && x.target === p.id); return e ? { note: e.note, source: e.source } : null; })()");
-      const linkText = await evaluate(s.cdp, "(document.querySelector('[data-testid=links]') || { textContent: '' }).textContent");
+      const linkText = await evaluate(s.cdp, "(() => { for (const b of document.querySelectorAll('[data-testid=links] [data-testid=group-all]')) b.click(); return (document.querySelector('[data-testid=links]') || { textContent: '' }).textContent; })()"); // CR-22 K: 연결은 묶음마다 5줄 + 「모두 n개」
       const cd = await s2Q('[data-testid=collab-done]');
       check('S T5 추가 → 「참조」 연결의 메모에 「대사 결과 공유」가 저장되고(N-001 → 협업자), 「연결된 항목」과 완료 알림에 보임', !!refEdge && refEdge.note === '대사 결과 공유' && refEdge.source === 'N-001' && linkText.includes('대사 결과 공유') && !!cd && cd.text.includes('대사 결과 공유'), JSON.stringify([refEdge, cd]));
 
@@ -4754,9 +4775,12 @@ async function checkBrowser(browser, port) {
       await s2Select('U-A1/N-000');
       await s2Select('U-A1/N-001');
       const ab = await s2Q('[data-testid=assignee-change]');
-      check('S M3 업무 상세에 접힌 상자 「담당 바꾸기」(처음엔 접힘, 크기 있음)', !!ab && ab.w > 0 && ab.h > 0 && ab.open === false && ab.text.includes('담당 바꾸기'), JSON.stringify(ab));
-      await evaluate(s.cdp, "document.querySelector('[data-testid=assignee-change]').open = true");
-      await sleep(100);
+      // CR-22 K: 담당 바꾸기 상자는 처음엔 숨겨 두고 동작 줄의 「담당 넘기기」가 연다
+      check('S M3 업무 카드의 「담당 바꾸기」 상자는 처음엔 숨김(크기 0, 접힘, 글자는 담당 바꾸기)', !!ab && ab.w === 0 && ab.open === false && ab.text.includes('담당 바꾸기'), JSON.stringify(ab));
+      await clickTestId(s.cdp, 'btn-assign');
+      await sleep(150);
+      const ab2 = await s2Q('[data-testid=assignee-change]');
+      check('S M3 동작 줄 「담당 넘기기」 → 담당 바꾸기 상자가 열려 보임(크기 있음)', !!ab2 && ab2.w > 0 && ab2.h > 0 && ab2.open === true, JSON.stringify(ab2));
       const fromOpts = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=assignee-from] option')].map((o) => o.textContent)");
       check('S M3 「지금 담당」 목록은 진행 중으로 담당하는 사람(서하늘)', fromOpts.includes('서하늘') && !fromOpts.includes('윤바다'), JSON.stringify(fromOpts));
       const a0 = await s2Counts();
@@ -5245,8 +5269,8 @@ async function checkBrowser(browser, port) {
       await w22.pick('edit');
       const ed = await w22.info();
       const admin = await raw(s.cdp, "(() => { const a = document.querySelector('[data-testid=ws-admin]'); const bs = a ? ['create-open', 'group-open', 'import-open'].map((id) => { const b = document.getElementById(id); const r = b.getBoundingClientRect(); return { id, inAdmin: a.contains(b), w: r.width, h: r.height, text: b.textContent }; }) : []; const add = document.querySelector('details.add').getBoundingClientRect(); return { bs, addH: Math.round(add.height) }; })()");
-      check('CR-22 W 「지도 관리」 공간: 제목 「지도 관리」, 「새 업무 지도」「업무 지도 묶기」「가져오기·내보내기」 단추(id 그대로)가 이 공간 안에 크기를 갖고 보임, 추가 열기·편집 되감기 입구가 있고 아래 「사람·업무·문서 추가」 칸이 보임',
-        ed.space === 'edit' && ed.title === '지도 관리' && admin.bs.map((b) => b.text).join('|') === '새 업무 지도|업무 지도 묶기|가져오기·내보내기' && admin.bs.every((b) => b.inAdmin && b.w > 40 && b.h > 10) && (await w22.inSec('edit', '[data-testid=goal-add-open]')) && ((await w22.inSec('edit', '[data-testid=btn-rewind]')) || (await w22.inSec('edit', '[data-testid=rewind-grouped-note]'))) && admin.addH > 20, JSON.stringify({ ed, admin }));
+      check('CR-22 W 「지도 관리」 공간: 제목 「지도 관리」, 「새 업무 지도」「업무 지도 묶기」「가져오기·내보내기」 단추(id 그대로)가 이 공간 안에 크기를 갖고 보임, 추가 열기·편집 되감기 입구가 있고 「사람·업무·문서 추가」 입구는 단추 하나(아래 상자 제목줄 없음)',
+        ed.space === 'edit' && ed.title === '지도 관리' && admin.bs.map((b) => b.text).join('|') === '새 업무 지도|업무 지도 묶기|가져오기·내보내기' && admin.bs.every((b) => b.inAdmin && b.w > 40 && b.h > 10) && (await w22.inSec('edit', '[data-testid=goal-add-open]')) && ((await w22.inSec('edit', '[data-testid=btn-rewind]')) || (await w22.inSec('edit', '[data-testid=rewind-grouped-note]'))) && admin.addH === 0, JSON.stringify({ ed, admin })); // CR-22 K: 「사람·업무·문서 추가」는 단추 하나가 입구(아래 접힌 상자의 제목줄은 숨겨 두 번 보이지 않음)
       await shot(s.cdp, `${browser.name}-cr22-5-edit`);
       // 이동한 단추는 하던 일 그대로
       const dlg = async (btn, dlgId) => {
@@ -5257,7 +5281,7 @@ async function checkBrowser(browser, port) {
         return open;
       };
       check('CR-22 W 이동한 단추는 하던 일 그대로: 「새 업무 지도」→만들기 창, 「업무 지도 묶기」→묶기 창, 「가져오기·내보내기」→가져오기 창', (await dlg('create-open', 'create-dialog')) && (await dlg('group-open', 'group-dialog')) && (await dlg('import-open', 'import-dialog')));
-      check('CR-22 W 「사람·업무·문서 추가」 단추(goal-add-open) → 아래 추가 칸이 펼쳐지고 보임', await (async () => { await raw(s.cdp, "document.querySelector('details.add').open = false"); await raw(s.cdp, "document.querySelector('[data-testid=goal-add-open]').click()"); await sleep(150); return (await raw(s.cdp, "document.querySelector('details.add').open")) && (await w22.inView('details.add summary')); })());
+      check('CR-22 W 「사람·업무·문서 추가」 단추(goal-add-open) → 아래 추가 칸이 펼쳐지고 보임', await (async () => { await raw(s.cdp, "document.querySelector('details.add').open = false"); await raw(s.cdp, "document.querySelector('[data-testid=goal-add-open]').click()"); await sleep(150); return (await raw(s.cdp, "document.querySelector('details.add').open")) && (await w22.vis('details.add #add-slot')); })()); // CR-22 K: 펼친 칸은 단추 아래(제목줄은 숨김)
       // 기억: 다시 열어도, 다른 지도를 열어도 유지
       check('CR-22 W 고른 공간은 이 브라우저 설정에 기억(workspace=edit)', (await w22.saved()) === 'edit');
       await raw(s.cdp, 'location.reload()').catch(() => {});
@@ -5537,6 +5561,182 @@ async function checkBrowser(browser, port) {
       check('CR-21 A 묶은 지도: 매주 점검 → 지난 점검 대비 줄(team-risk-compare)로 가서 강조', (await c21Flash('[data-testid=team-risk-compare]')) && (await c21InView('[data-testid=team-risk-compare]')));
       await c21Type('');
     } else check('CR-21 A 묶은 지도', false, '가상 운영부가 열리지 않음');
+
+    // ── CR-22 K 항목 카드(2026-10-26): 이름+유형 칩 → 상태 줄 → 고정 동작 줄 하나 → 지금 볼 것 → 접는 묶음, 이력 최신이 위·「모두 보기 →」 표, 사람 카드 표, 산출물 카드, 실업무 규모에서 카드 높이.
+    //    이 블록은 공간·열린 칸이 저절로 바뀌지 않아야 확인되는 것들이라 raw()로 읽는다. 실업무 규모 문서(연결 30·이력 200)는 시험 안에서 만들어 저장소에 넣고, 블록이 끝나면 저장소를 되돌린다 ──
+    {
+      const kSelect = async (gid) => { await raw(s.cdp, `window.__wu.select(${JSON.stringify(gid)})`); await sleep(250); };
+      const kQ = (expr) => raw(s.cdp, expr);
+      const kFirstScreen = (ids) => kQ(`(() => { const a = document.querySelector('aside').getBoundingClientRect(); const out = {}; for (const id of ${JSON.stringify(ids)}) { const e = document.querySelector('[data-testid=' + id + ']'); if (!e) { out[id] = 'none'; continue; } const r = e.getBoundingClientRect(); out[id] = r.height > 0 && r.bottom - a.top <= 665 ? 'ok' : 'out(' + Math.round(r.bottom - a.top) + ')'; } return out; })()`);
+      const kAllOk = (o) => Object.values(o).every((v) => v === 'ok');
+      // 실업무 규모 문서(스트레스): 연결 30개 넘음(담당 15·산출물 10·주제 6·앞뒤 4)·이력 200. 사람 서하늘은 업무 8개
+      const kStressDoc = `(() => { const d = JSON.parse(JSON.stringify(window.__wu.doc)); const T = '2026-10-20T09:00:00+09:00';
+        const node = (id, core_type, label, extra = {}) => d.nodes.push({ id, core_type, label, hidden: false, created_at: T, updated_at: T, ...extra });
+        const edge = (id, source, target, core_type, extra = {}) => d.edges.push({ id, source, target, core_type, hidden: false, created_at: T, ...extra });
+        const ppl = ['강하늘','고은별','구름결','권바다','김새벽','나무솔','노을빛','도윤슬','류한결','마루별','문하람','박서리'];
+        ppl.forEach((p, i) => { node('N-9' + String(i).padStart(2, '0'), 'person', '가상 ' + p, { emp_no: 'V-8' + String(i).padStart(3, '0'), attrs: { 연락처: '내선 ' + (1100 + i) } }); const y = 2023 + Math.floor(i / 4); const m = (i % 4) * 3 + 1; edge('L-9' + String(i).padStart(2, '0'), 'N-9' + String(i).padStart(2, '0'), 'N-001', 'performs', { period: { start: y + '-' + String(m).padStart(2, '0') + '-01', end: y + '-' + String(m + 2).padStart(2, '0') + '-28' } }); });
+        for (let i = 0; i < 10; i++) { node('N-92' + i, 'artifact', '대사 결과 보고서 ' + (2024 + Math.floor(i / 4)) + '-' + String(i % 4 * 3 + 1).padStart(2, '0')); edge('L-92' + i, 'N-001', 'N-92' + i, 'produces'); }
+        for (let i = 0; i < 6; i++) { node('N-93' + i, 'topic', ['환불 반영','월 경계','원천 지연','수수료 차이','재처리','가맹점 해지'][i]); edge('L-93' + i, 'N-001', 'N-93' + i, 'relates_to'); }
+        for (let i = 0; i < 4; i++) { node('N-94' + i, 'work', '연관 업무 ' + (i + 1)); edge('L-94' + i, i < 2 ? 'N-94' + i : 'N-001', i < 2 ? 'N-001' : 'N-94' + i, 'precedes'); }
+        for (let i = 0; i < 7; i++) { node('N-95' + i, 'work', '서하늘 업무 ' + (i + 1), { attrs: { 마감: '매월 ' + (i + 1) + '일' } }); edge('L-95' + i, 'N-012', 'N-95' + i, 'performs', { period: { start: '2026-01-01' } }); edge('L-96' + i, 'N-000', 'N-95' + i, 'contains'); }
+        for (let i = 0; i < 200; i++) { const day = new Date(Date.UTC(2023, 0, 1) + i * 5 * 864e5).toISOString().slice(0, 10); d.events.push({ id: 'E-9' + String(i).padStart(3, '0'), type: 'memo', occurred_at: day, recorded_at: '2026-10-21T' + String(Math.floor(i / 60) + 9).padStart(2, '0') + ':' + String(i % 60).padStart(2, '0') + ':00+09:00', source: 'user', payload: { category: ['in_progress','issue','caution'][i % 3], target_id: 'N-001' }, note: day + ' 대사 진행 메모 ' + (i + 1) + ' — 원천 자료 회신·불일치 건 정리' }); }
+        for (let i = 0; i < 3; i++) d.events.push({ id: 'E-8' + i, type: 'memo', occurred_at: '2026-10-1' + i, recorded_at: '2026-10-22T09:0' + i + ':00+09:00', source: 'user', payload: { category: 'issue', target_id: 'N-940', topic_ids: ['N-930'] }, note: '같은 주제(환불 반영)를 단 다른 업무의 이슈 ' + (i + 1) });
+        d.events.sort((a, b) => a.recorded_at.localeCompare(b.recorded_at));
+        localStorage.setItem('wu:v1:u:U-A1', JSON.stringify(d)); location.reload(); })()`;
+      // 실업무 규모에서 카드 높이: 접은 상태(기본값)에서 이 값의 절반 이하여야 한다. 3227px = CR-22 K 전(커밋 5220785)의 같은 문서·같은 창(1366×768)에서 aside 전체 높이(.tmp/k/shot.mjs, 2026-10-26)
+      const K_LEGACY_STRESS_HEIGHT = 3227;
+
+      // ── 작은 지도(월말 정산 점검 「대사 확인」) ──
+      if (await c21Go('U-A1', { clean: ['U-A1'] })) {
+        await kSelect('U-A1/N-001');
+        const first = await kFirstScreen(['card-owner', 'issue-count', 'card-deadline', 'card-now', 'card-actions']);
+        check('CR-22 K 업무 카드 첫 화면: 담당·미해결·마감·지금 볼 것·동작 줄이 패널 위 665px 안에(스크롤 0)', kAllOk(first), JSON.stringify(first));
+        const head = await kQ("(() => { const q = (id) => document.querySelector('[data-testid=' + id + ']'); const h2 = document.querySelector('#detail h2'); const o = q('owner-link'); return { h2: h2.textContent, type: q('card-type') && q('card-type').textContent, owner: o && o.textContent, tag: o && o.tagName, contact: q('owner-contact') && q('owner-contact').textContent, issue: q('issue-count') && q('issue-count').textContent, count: q('issue-count') && q('issue-count').dataset.count, split: q('issue-split') && q('issue-split').textContent, deadline: q('card-deadline') && q('card-deadline').textContent, chips: [...document.querySelectorAll('[data-testid=state-chip]')].map((c) => c.textContent), back: q('detail-back-universe').textContent, wideIn: !!document.querySelector('.detail-back #wide-toggle') }; })()");
+        check('CR-22 K 상태 줄: 이름만 든 제목(h2)+유형 칩, 담당 이름은 단추(연락처 붙음), 「미해결 n건」과 나눈 수, 경고 칩, 마감, 위 띠에 「← 지도 전체」·「패널 넓게 보기」', head.h2 === '대사 확인' && head.type === '업무' && head.owner === '서하늘' && head.tag === 'BUTTON' && /내선 1003/.test(head.contact || '') && /^미해결 \d+건/.test(head.issue || '') && Number(head.count) > 0 && (head.split === null || /^ \(이 업무 \d+ · 같은 주제 \d+\)$/.test(head.split)) && head.chips.some((t) => t.includes('반복 비효율')) && /^마감 /.test(head.deadline || '') && head.back === '← 지도 전체' && head.wideIn, JSON.stringify(head));
+        await raw(s.cdp, "document.querySelector('[data-testid=owner-link]').click()");
+        await sleep(250);
+        check('CR-22 K 담당 이름을 누르면 그 사람 카드로(연락처가 상태 줄에 보임)', (await kQ('window.__wu.selected')) === 'U-A1/N-012' && /내선 1003/.test((await kQ("(document.querySelector('[data-testid=card-who]') || {}).textContent || ''"))), String(await kQ('window.__wu.selected')));
+        await kSelect('U-A1/N-001');
+        const bar = await kQ("(() => { const bars = document.querySelectorAll('#detail [data-testid=card-actions]'); const rows = document.querySelectorAll('#detail .toolbar'); const b = bars[0]; const r = b.getBoundingClientRect(); return { bars: bars.length, rows: rows.length, buttons: [...b.querySelectorAll(':scope > button')].map((x) => x.textContent), oneLine: r.height < 60, sticky: getComputedStyle(b).position, dupBtn: ['btn-event', 'btn-edit', 'btn-draft'].map((id) => document.querySelectorAll('#detail [data-testid=' + id + ']').length) }; })()");
+        check('CR-22 K 동작 줄은 하나(.toolbar 1개, 높이 한 줄)이고 같은 단추가 두 번 나오지 않음(기록 남기기·수정·인수인계 초안 각 1개)', bar.bars === 1 && bar.rows === 1 && bar.oneLine && bar.dupBtn.every((n) => n === 1) && bar.buttons.join('|') === '기록 남기기|담당 넘기기|인수인계 초안', JSON.stringify(bar));
+        const stick = await kQ("(() => { const a = document.querySelector('aside'); a.scrollTop = 400; const b = document.querySelector('[data-testid=card-actions]').getBoundingClientRect(); const ar = a.getBoundingClientRect(); const out = { scrolled: a.scrollTop, gap: Math.round(b.top - ar.top), h: Math.round(b.height) }; a.scrollTop = 0; return out; })()");
+        check('CR-22 K 동작 줄은 스크롤해도 패널 맨 위에 고정(sticky)', stick.scrolled > 100 && stick.gap >= -1 && stick.gap <= 3 && stick.h > 0, JSON.stringify(stick));
+        // 「⋯」 메뉴
+        const menu0 = await kQ("(() => { const d = document.querySelector('[data-testid=card-actions] details.more-tools'); return { open: d.open, btns: [...d.querySelectorAll('button')].map((b) => b.dataset.testid) }; })()");
+        await raw(s.cdp, "document.querySelector('[data-testid=card-actions] details.more-tools summary').click()");
+        await sleep(100);
+        const menu1 = await kQ("(() => { const b = document.querySelector('[data-testid=btn-edit]'); const r = b.getBoundingClientRect(); const a = document.querySelector('aside').getBoundingClientRect(); return { w: r.width, h: r.height, inside: r.right <= a.right + 1 && r.left >= a.left - 1 }; })()");
+        check('CR-22 K 「⋯」 메뉴: 닫혀 있다가 눌러 열면 수정·연결 추가·협업자 추가·기록(이력)으로·유사 경험자·인사이트·주변만 보기·숨기기 단추가 패널 안에 보임', !menu0.open && ['btn-edit', 'btn-edge', 'btn-collab', 'btn-history-jump', 'btn-similar', 'btn-insight', 'btn-nbhd', 'btn-hide'].every((t) => menu0.btns.includes(t)) && menu1.w > 0 && menu1.h > 0 && menu1.inside, JSON.stringify({ menu0, menu1 }));
+        await raw(s.cdp, "document.querySelector('[data-testid=card-actions] details.more-tools').open = false");
+        // 「담당 넘기기」는 숨겨 둔 담당 바꾸기 상자를 연다
+        await raw(s.cdp, "document.querySelector('[data-testid=btn-assign]').click()");
+        await sleep(150);
+        const asg = await kQ("(() => { const b = document.querySelector('[data-testid=assignee-change]'); const r = b.getBoundingClientRect(); return { open: b.open, w: r.width, h: r.height, forms: document.querySelector('[data-testid=card-forms]').hidden, focus: document.activeElement && document.activeElement.dataset.testid }; })()");
+        check('CR-22 K 「담당 넘기기」 → 담당 바꾸기 상자가 열려 보이고 첫 칸에 초점(처음엔 숨김)', asg.open && asg.w > 0 && asg.h > 0 && !asg.forms && asg.focus === 'assignee-from', JSON.stringify(asg));
+        await kSelect('U-A1/N-001');
+        // 묶음: 5줄 이하는 기본 펼침, 연결이 같은 줄 모양, 시험 이름 유지
+        const grp = await kQ("(() => [...document.querySelectorAll('#detail .card-group')].map((g) => g.dataset.group + (g.open ? '+' : '-')).join(' '))()");
+        const assignOrder = await kQ("[...document.querySelectorAll('[data-testid=card-group-assign] [data-testid=link-status]')].map((x) => x.textContent).join()");
+        check('CR-22 K 작은 지도는 작은 묶음이 기본 펼침(내용·담당·산출물), 이력은 5건을 넘어 접힘, 관리는 접힘', /content\+/.test(grp) && /assign\+/.test(grp) && /outputs\+/.test(grp) && /history-/.test(grp) && /manage-/.test(grp), grp);
+        check('CR-22 K 담당 묶음 순서: 지금 → 지난(끝난 날 최신 먼저), 상태 칩 순서가 현재 → 종료', assignOrder.indexOf('현재') >= 0 && assignOrder.indexOf('현재') < assignOrder.indexOf('종료'), assignOrder);
+        const hist = await kQ("[...document.querySelectorAll('[data-testid=history] li time')].map((t) => t.textContent)");
+        check('CR-22 K 이력은 최신이 위(날짜가 내려가는 순서)', hist.length > 0 && hist.length <= 5 && hist.every((d, i) => i === 0 || hist[i - 1] >= d), JSON.stringify(hist));
+        // 산출물 카드(확정 인수인계서)
+        await kSelect('U-A1/N-020');
+        const art = await kQ("(() => { const b = document.querySelector('[data-testid=card-actions]'); return { buttons: [...b.querySelectorAll(':scope > button')].map((x) => x.textContent), made: (document.querySelector('[data-testid=card-state]') || {}).textContent || '', groups: [...document.querySelectorAll('#detail .card-group')].map((g) => g.dataset.group).join(), sizes: ['doc-download', 'doc-print'].map((t) => { const r = document.querySelector('[data-testid=' + t + ']').getBoundingClientRect(); return r.width > 0 && r.height > 0; }) }; })()");
+        check('CR-22 K 확정 인수인계서 카드: 동작 줄에 내려받기·인쇄·기록 남기기(크기 있음), 상태 줄에 만든 업무, 담당 넘기기·인수인계 초안은 없음', art.buttons.join('|') === '내려받기|인쇄|기록 남기기' && art.sizes.every(Boolean) && art.made.includes('만든 업무') && art.made.includes('대사 확인'), JSON.stringify(art));
+        await kSelect('U-A1/N-030');
+        const topic = await kQ("(() => ({ buttons: [...document.querySelectorAll('[data-testid=card-actions] > button')].map((x) => x.textContent), state: (document.querySelector('[data-testid=card-state]') || {}).textContent || '' }))()");
+        check('CR-22 K 주제 카드: 동작 줄은 기록 남기기만, 상태 줄에 관련 업무 수', topic.buttons.join('|') === '기록 남기기' && /관련 업무 \d+/.test(topic.state), JSON.stringify(topic));
+      } else check('CR-22 K 작은 지도', false, '월말 정산 점검이 열리지 않음');
+
+      // ── 실업무 규모(연결 30개 넘음·이력 200건) ──
+      if (await c21Go('U-A1', { clean: ['U-A1'] })) {
+        await evaluate(s.cdp, kStressDoc).catch(() => {});
+        await sleep(600);
+        await c21Wait('U-A1');
+        await kSelect('U-A1/N-001');
+        const big = await kQ("(() => { const a = document.querySelector('aside'); return { total: a.scrollHeight, links: window.__wu.view.neighbors('U-A1/N-001').length, hist: window.__wu.view.index.eventsByNode.get('U-A1/N-001').length }; })()");
+        check('CR-22 K 실업무 규모 시험 문서: 업무 「대사 확인」의 연결 30개 넘음·이력 200건 넘음', big.links > 30 && big.hist > 200, JSON.stringify(big));
+        check(`CR-22 K 실업무 규모 카드 높이(접은 상태 기본값)가 예전 카드(${K_LEGACY_STRESS_HEIGHT}px)의 절반 이하`, big.total <= K_LEGACY_STRESS_HEIGHT / 2, `${big.total}px`);
+        const first2 = await kFirstScreen(['card-owner', 'issue-count', 'card-deadline', 'card-now']);
+        check('CR-22 K 실업무 규모에서도 담당·미해결·마감·지금 볼 것이 패널 위 665px 안에(스크롤 0)', kAllOk(first2), JSON.stringify(first2));
+        const split2 = await kQ("(document.querySelector('[data-testid=issue-split]') || {}).textContent || ''");
+        check('CR-22 K 「미해결 n건」 옆에 이 업무·같은 주제 수가 나뉘어 보임(같은 주제 3건)', /이 업무 \d+ · 같은 주제 3\)/.test(split2), split2);
+        const grp2 = await kQ("(() => [...document.querySelectorAll('#detail .card-group')].map((g) => g.dataset.group + (g.open ? '+' : '-') + (g.querySelector('.cg-count') ? g.querySelector('.cg-count').textContent : '')).join(' '))()");
+        check('CR-22 K 큰 묶음은 접힌 채 머리에 개수(담당 15·산출물 11·앞뒤 업무·관련 주제·기타 14·이력 200건 넘음)', /assign-15/.test(grp2) && /outputs-11/.test(grp2) && /around-14/.test(grp2) && /history-2\d\d/.test(grp2) && /content\+/.test(grp2), grp2);
+        const prev = await kQ("(() => [...document.querySelectorAll('[data-testid=card-group-assign] .cg-preview, [data-testid=card-group-around] .cg-preview')].map((e) => e.textContent).join(' / '))()");
+        check('CR-22 K 묶음 머리 미리보기: 담당은 「지금 n · 지난 n」, 앞뒤 업무·관련 주제는 개수', /지금 1/.test(prev) && /지난 14/.test(prev) && /앞뒤 업무 6/.test(prev) && /관련 주제 7/.test(prev), prev);
+        // 담당 묶음 펼치기: 5줄 + 「모두 15개」, 지금이 먼저, 모두 누르면 15줄
+        await raw(s.cdp, "document.querySelector('[data-testid=card-group-assign] summary').click()");
+        await sleep(100);
+        const a5 = await kQ("(() => { const g = document.querySelector('[data-testid=card-group-assign]'); const lis = g.querySelectorAll('li'); const st = [...g.querySelectorAll('[data-testid=link-status]')].map((x) => x.textContent); const ends = [...g.querySelectorAll('li')].map((li) => (li.querySelector('.muted.small:last-child') || {}).textContent || ''); return { open: g.open, lis: lis.length, first: st[0], more: (g.querySelector('[data-testid=group-all]') || {}).textContent || '', st }; })()");
+        check('CR-22 K 담당 묶음 펼침: 위 5줄 + 「모두 15개」, 첫 줄이 현재', a5.open && a5.lis === 5 && a5.first === '현재' && a5.more === '모두 15개', JSON.stringify(a5));
+        await raw(s.cdp, "document.querySelector('[data-testid=card-group-assign] [data-testid=group-all]').click()");
+        await sleep(100);
+        const a15 = await kQ("(() => { const g = document.querySelector('[data-testid=card-group-assign]'); const periods = [...g.querySelectorAll('li')].map((li) => (li.querySelector('.status-other') ? li.querySelector('div.muted.small') : null)).filter(Boolean).map((e) => e.textContent.split(' ~ ')[1] || ''); return { lis: g.querySelectorAll('li').length, more: !!g.querySelector('[data-testid=group-all]'), ends: periods }; })()");
+        check('CR-22 K 「모두 15개」 → 15줄, 지난 담당은 끝난 날이 최신인 것부터', a15.lis === 15 && !a15.more && a15.ends.length >= 10 && a15.ends.every((e, i) => i === 0 || a15.ends[i - 1] >= e), JSON.stringify(a15));
+        // 이력: 접힘 → 펼침 → 최신 5건, 날짜 내림차순, 「모두 보기 →」
+        await raw(s.cdp, "document.querySelector('[data-testid=card-group-history] summary').click()");
+        await sleep(100);
+        const h5 = await kQ("(() => { const dates = [...document.querySelectorAll('[data-testid=history] li time')].map((t) => t.textContent); return { n: dates.length, dates, all: !!document.querySelector('[data-testid=history-all]'), count: document.querySelector('[data-testid=history-count]').textContent }; })()");
+        check('CR-22 K 이력 묶음 펼침: 최신 5건이 날짜 내림차순으로 + 「모두 보기 →」, 「최신이 위 · n건」', h5.n === 5 && h5.dates.every((d, i) => i === 0 || h5.dates[i - 1] >= d) && h5.all && /최신이 위 · 2\d\d건/.test(h5.count), JSON.stringify(h5));
+        // 이력 표
+        await raw(s.cdp, "document.querySelector('[data-testid=history-all]').click()");
+        await sleep(250);
+        const t0 = await kQ("(() => ({ wide: document.querySelector('main').classList.contains('wide'), rows: document.querySelectorAll('[data-testid=ht-row]').length, count: document.querySelector('[data-testid=ht-count]').textContent, close: !!document.querySelector('[data-testid=history-table-close]'), focus: document.activeElement && document.activeElement.dataset.testid, card: !!document.querySelector('[data-testid=item-card]'), title: document.querySelector('.history-table h2').textContent }))()");
+        check('CR-22 K 이력 표 열기: 넓은 작업 화면(패널 넓게), 제목 옆 「닫기」에 초점, 20줄 + 「n건 중 20건 표시」, 카드는 가려짐', t0.wide && t0.rows === 20 && /건 중 20건 표시/.test(t0.count) && t0.close && t0.focus === 'history-table-close' && !t0.card && /대사 확인/.test(t0.title), JSON.stringify(t0));
+        const tdates = await kQ("[...document.querySelectorAll('[data-testid=ht-row] td:first-child')].map((x) => x.textContent)");
+        check('CR-22 K 이력 표 줄은 최신이 위', tdates.length === 20 && tdates.every((d, i) => i === 0 || tdates[i - 1] >= d), JSON.stringify(tdates.slice(0, 4)));
+        await raw(s.cdp, "document.querySelector('[data-testid=ht-more]').click()");
+        await sleep(100);
+        check('CR-22 K 「다음 20」 → 40줄', (await kQ("document.querySelectorAll('[data-testid=ht-row]').length")) === 40);
+        await raw(s.cdp, "document.querySelector('[data-testid=ht-group-담당]').click()");
+        await sleep(100);
+        const tg = await kQ("(() => ({ rows: [...document.querySelectorAll('[data-testid=ht-row]')].map((r) => r.children[1].textContent), pressed: document.querySelector('[data-testid=ht-group-담당]').getAttribute('aria-pressed'), count: document.querySelector('[data-testid=ht-count]').textContent }))()");
+        check('CR-22 K 이력 표 범주 거르기(담당): 담당 시작·종료 줄만, 칩이 눌린 표시, 건수 갱신', tg.rows.length > 0 && tg.rows.every((t) => t.startsWith('담당')) && tg.pressed === 'true' && /^\d+건 중 \d+건 표시/.test(tg.count), JSON.stringify(tg));
+        await raw(s.cdp, "document.querySelector('[data-testid=ht-group-all]').click()");
+        await raw(s.cdp, "document.querySelector('[data-testid=ht-period-작년]').click()");
+        await sleep(100);
+        const tp = await kQ("[...document.querySelectorAll('[data-testid=ht-row]')].map((r) => r.children[0].textContent.slice(0, 4))");
+        const thisYear = Number((await kQ('new Date().getFullYear()')));
+        check('CR-22 K 이력 표 기간 거르기(작년): 작년 날짜 줄만', tp.every((y) => Number(y) === thisYear - 1), JSON.stringify([...new Set(tp)]));
+        await raw(s.cdp, "document.querySelector('[data-testid=ht-period-전체]').click()");
+        await raw(s.cdp, "(() => { const i = document.querySelector('[data-testid=ht-search]'); i.value = '메모 17 —'; i.dispatchEvent(new Event('input')); })()");
+        await sleep(100);
+        const ts = await kQ("(() => ({ n: document.querySelectorAll('[data-testid=ht-row]').length, all: [...document.querySelectorAll('[data-testid=ht-row]')].every((r) => r.textContent.includes('메모 17 —')) }))()");
+        check('CR-22 K 이력 표 찾기: 글을 넣으면 맞는 줄만(1줄) 보임', ts.n === 1 && ts.all, JSON.stringify(ts));
+        await raw(s.cdp, "(() => { const i = document.querySelector('[data-testid=ht-search]'); i.value = '없는내용없는내용'; i.dispatchEvent(new Event('input')); })()");
+        await sleep(100);
+        check('CR-22 K 이력 표 찾기: 맞는 줄이 없으면 안내 한 줄', !!(await kQ("document.querySelector('[data-testid=ht-empty]')")) && (await kQ("document.querySelectorAll('[data-testid=ht-row]').length")) === 0);
+        await shot(s.cdp, `${browser.name}-cr22k-history-table`);
+        // Esc → 카드로, 연 단추에 초점, 패널 폭 원래대로
+        await raw(s.cdp, "(() => { const i = document.querySelector('[data-testid=ht-search]'); i.value = ''; i.dispatchEvent(new Event('input')); i.blur(); })()");
+        await raw(s.cdp, "document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
+        await sleep(200);
+        const tc = await kQ("(() => ({ card: !!document.querySelector('[data-testid=item-card]'), table: !!document.querySelector('[data-testid=history-table-panel]'), wide: document.querySelector('main').classList.contains('wide'), focus: document.activeElement && document.activeElement.dataset.testid, sel: window.__wu.selected }))()");
+        check('CR-22 K 이력 표에서 Esc → 카드로 돌아오고 연 「모두 보기 →」 단추에 초점, 패널 폭도 원래대로, 고른 항목은 그대로', tc.card && !tc.table && !tc.wide && tc.focus === 'history-all' && tc.sel === 'U-A1/N-001', JSON.stringify(tc));
+        // 이력 표의 「해결로 표시」
+        await raw(s.cdp, "document.querySelector('[data-testid=history-all]').click()");
+        await sleep(200);
+        const nOpen0 = await kQ("document.querySelectorAll('[data-testid=ht-resolve]').length");
+        const issue0 = await kQ("window.__wu.view.events.length");
+        await raw(s.cdp, "document.querySelector('[data-testid=ht-resolve]').click()");
+        await sleep(300);
+        const issue1 = await kQ("window.__wu.view.events.length");
+        check('CR-22 K 이력 표의 「해결로 표시」 → 해결됨 메모가 이력에 한 건 더해지고 알림이 보임(표는 그대로 열려 있음)', nOpen0 > 0 && issue1 === issue0 + 1 && !!(await kQ("document.querySelector('[data-testid=resolve-done]')")) && !!(await kQ("document.querySelector('[data-testid=history-table-panel]')")), JSON.stringify({ nOpen0, issue0, issue1 }));
+        await raw(s.cdp, "document.querySelector('[data-testid=history-table-close]').click()");
+        await sleep(150);
+        // 「지금 볼 것」의 「해결」
+        const nowN0 = await kQ("window.__wu.view.events.length");
+        await raw(s.cdp, "document.querySelector('[data-testid=now-resolve]').click()");
+        await sleep(300);
+        check('CR-22 K 「지금 볼 것」의 「해결」 → 그 메모 한 건이 해결됨으로 더해지고 알림이 보임', (await kQ("window.__wu.view.events.length")) === nowN0 + 1 && !!(await kQ("document.querySelector('[data-testid=resolve-done]')")), '');
+        // 같은 항목 다시 그릴 때(저장 뒤) 열어 둔 묶음이 남고, 다른 항목을 고르면 기본값으로
+        const keep = await kQ("(() => { const g = document.querySelector('[data-testid=card-group-assign]'); return g.open; })()");
+        await kSelect('U-A1/N-002');
+        await kSelect('U-A1/N-001');
+        const reset = await kQ("(() => document.querySelector('[data-testid=card-group-assign]').open)()");
+        check('CR-22 K 펼친 묶음은 같은 항목을 다시 그릴 때 남고(저장 뒤에도), 다른 항목을 고르고 돌아오면 기본값(15줄이라 접힘)으로', keep === true && reset === false, JSON.stringify({ keep, reset }));
+
+        // 사람 카드: 서하늘(업무 8개)
+        await kSelect('U-A1/N-012');
+        const pc = await kQ("(() => { const q = (id) => document.querySelector('[data-testid=' + id + ']'); const rows = [...document.querySelectorAll('[data-testid=person-work-row]')]; const a = document.querySelector('aside').getBoundingClientRect(); const t = q('person-works').getBoundingClientRect(); return { who: q('card-who').textContent, count: q('card-person-count').textContent, solo: q('card-person-solo') ? q('card-person-solo').textContent : '', rows: rows.length, head: [...q('person-works').querySelectorAll('th')].map((x) => x.textContent).join('|'), more: (document.querySelector('[data-testid=card-group-person-works] [data-testid=group-all]') || {}).textContent || '', buttons: [...document.querySelectorAll('[data-testid=card-actions] > button')].map((x) => x.textContent), past: (q('card-group-person-past') || {}).open, backup: !!q('person-backup'), inFirst: t.bottom - a.top <= 665 }; })()");
+        check('CR-22 K 사람 카드: 상태 줄(사번·연락처·지금 맡은 업무 n·혼자만 아는 일 n), 지금 맡은 업무 표(업무|미해결|위험|마감, 5줄 + 「모두 8개」)가 첫 화면 안, 동작 줄은 기록 남기기·이 사람 일 인수인계 초안, 지난 업무는 접힘(지난 업무가 없으면 묶음 없음)', /V-1003/.test(pc.who) && /내선 1003/.test(pc.who) && /맡은 업무 8/.test(pc.count) && /혼자만 아는 일 \d+/.test(pc.solo) && pc.rows === 5 && pc.head === '업무|미해결|위험|마감' && pc.more === '모두 8개' && pc.buttons.join('|') === '기록 남기기|이 사람 일 인수인계 초안' && !pc.past && pc.backup && pc.inFirst, JSON.stringify(pc));
+        await shot(s.cdp, `${browser.name}-cr22k-person`);
+        await raw(s.cdp, "document.querySelector('[data-testid=card-group-person-works] [data-testid=group-all]').click()");
+        await sleep(100);
+        check('CR-22 K 사람 카드 「모두 8개」 → 업무 8줄', (await kQ("document.querySelectorAll('[data-testid=person-work-row]').length")) === 8);
+        await raw(s.cdp, "document.querySelector('[data-testid=person-work-row] button').click()");
+        await sleep(250);
+        check('CR-22 K 사람 카드의 업무 이름을 누르면 그 업무 카드로', (await kQ('window.__wu.selected')).startsWith('U-A1/N-95'), String(await kQ('window.__wu.selected')));
+        await kSelect('U-A1/N-001');
+        await shot(s.cdp, `${browser.name}-cr22k-work-stress`);
+        // 스트레스 문서에서 올라간 이름 규칙: 「기록(이력)」 머리·「기록 남기기」 단추 이름
+        const names = await kQ("(() => ({ head: document.querySelector('[data-testid=card-group-history] .cg-title').textContent, btn: document.querySelector('[data-testid=btn-event]').textContent }))()");
+        check('CR-22 K 화면 글: 카드 묶음 머리는 「기록(이력)」, 단추는 「기록 남기기」(예전 「이력 추가」 없음)', names.head === '기록(이력)' && names.btn === '기록 남기기' && !(await kQ("document.querySelector('#detail').textContent.includes('이력 추가')")), JSON.stringify(names));
+      } else check('CR-22 K 실업무 규모', false, '월말 정산 점검이 열리지 않음');
+    }
 
     // 저장소를 블록 시작 때 찍어 둔 상태로 되돌린다(샘플 문서 포함)
     await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(c21Snap)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); location.hash = 'U-A1'; location.reload(); })()`).catch(() => {});

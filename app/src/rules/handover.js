@@ -53,7 +53,7 @@ const attr = (node, key) => {
 };
 
 /** 협업자의 연락처(D-9): CONTACT_ATTR_KEYS 속성의 값을 모아 ', '로 잇는다. 없으면 null */
-function contactOf(node) {
+export function contactOf(node) {
   const values = [...new Set(CONTACT_ATTR_KEYS.map((k) => attr(node, k)).filter(Boolean))];
   return values.length ? values.join(', ') : null;
 }

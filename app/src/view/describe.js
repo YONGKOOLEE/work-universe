@@ -271,6 +271,8 @@ export function describeNode(view, gid, { asOf = null, past = false } = {}) {
       relation: edge.synthetic ? '포함(참조)' : edge.type_label + (edge.subtype ? ` > ${edge.subtype}` : ''),
       relation_type: edge.core_type,
       period: periodText(edge.period, asOf),
+      period_start: (edge.period && edge.period.start) || null, // 카드가 지금→예정→지난으로 줄 세울 때 쓴다(CR-22 K)
+      period_end: (edge.period && edge.period.end) || null,
       // 수행 연결은 기준일 기준 현재·종료·예정을 붙인다(사람·업무 상세에서 지금 담당을 구분하도록)
       // 담당을 넘긴 날(FU5-8): 표시만 「오늘까지(넘김)」(status_key 'handover')으로. 담당 판정은 그대로 current다
       status_key: asOf && edge.core_type === 'performs' && !edge.synthetic ? (isHandover(edge) ? 'handover' : periodStatus(edge.period, asOf)) : null,
@@ -283,6 +285,8 @@ export function describeNode(view, gid, { asOf = null, past = false } = {}) {
   const history = (view.index.eventsByNode.get(node.gid) || []).map((ev) => ({
     gid: ev.gid,
     date: ev.occurred_at,
+    type: ev.type, // 카드 이력 표의 범주 거르기(CR-22 K)
+    category: ev.type === 'memo' ? memoCategoryOf(ev.payload) : null,
     type_label: eventTypeLabel(ev.type),
     text: eventText(view, ev, { tagIssue: true }),
     // 시간 슬라이더로 과거를 볼 때 기준일 이후 이력은 흐리게 보인다

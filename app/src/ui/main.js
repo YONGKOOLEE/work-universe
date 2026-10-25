@@ -20,10 +20,14 @@ import { confirmedDoc, downloadWithNotice, printHtml } from './doc-output.js';
 import { el } from './dom.js';
 import { createGraph, legendItems } from './graph.js';
 import { renderNodeDetail, renderUniverseSummary } from './detail.js';
+import { ALERT_LABEL } from './card.js';
+import { historyTablePanel } from './history-table.js';
+import { actionPlan, cardData, historyRows } from '../view/card.js';
 import { edgeEditForm, edgeForm, eventForm, nodeForm } from './editor.js';
 import { draftPanel } from './draft.js';
 import { currentDenseN, insightPanel } from './insight.js';
 import { issueEntry, issuePanel, issuesFor } from './issues.js';
+import { openMemos } from '../rules/issues.js';
 import { hiddenEntry, hiddenPanel } from './hidden.js';
 import { confirmText, doneText, failText, fillBand, hideBand, nodeChangeNote, pointLabeler, revertBlock, rewindEntry, rewindPanel } from './rewind.js';
 import { renderBackupNudge } from './backup.js';
@@ -360,6 +364,14 @@ function start() {
   let drafting = null; // 인수인계 초안 화면: {target}
   let insight = null; // 인사이트 화면: {work, kind}
   let issues = null; // 미해결 이슈 목록 화면(R-20): {target}
+  let histTable = null; // 기록(이력) 표 화면(CR-22 K): {gid, state:{group,period,q,page}, wasWide} — 카드의 「모두 보기 →」로 연다
+  // 항목 카드의 접힘·「모두 n개」 기억(CR-22 K). 같은 항목을 다시 그릴 때만 남고 다른 항목을 고르면 지운다. 기본값과 다르게 바꾼 것만 담는다
+  const cardState = { gid: null, open: new Map(), all: new Set(),
+    isOpen(key, dflt) { return this.open.has(key) ? this.open.get(key) : dflt; },
+    setOpen(key, open, dflt) { if (open === dflt) this.open.delete(key); else this.open.set(key, open); },
+    isAll(key) { return this.all.has(key); },
+    setAll(key) { this.all.add(key); },
+    reset(gid) { if (this.gid !== gid) { this.gid = gid; this.open.clear(); this.all.clear(); } } };
   let hiddenOpen = false; // 숨긴 항목 목록 화면(R-21)
   let rwGraphSnap = null; // 편집 되감기에 들어가기 전 그래프 배치·배율(FU5-7)
   let rw = null; // 편집 되감기 중이면 {at}(CR-14 A). 옛 지도를 읽기 전용으로 본다. 저장하지 않는다
@@ -398,7 +410,8 @@ function start() {
   };
   // 세 패널 중 열려 있는 것을 닫는다(Esc와 「닫기」 공통). 닫았으면 true
   function closeSidePanel() {
-    if (issues) issues = null;
+    if (histTable) closeHistTable();
+    else if (issues) issues = null;
     else if (hiddenOpen) hiddenOpen = false;
     else if (insight) insight = null;
     else return false;
@@ -578,15 +591,15 @@ function start() {
     ? el('button', { type: 'button', class: 'link', 'data-testid': 'goto-history', title: '그 업무의 이력에서 방금 기록한 줄로 갑니다', onclick: () => showHistory(nodeGid, gids) }, '이력에서 보기')
     : null);
 
-  function draftButton(gid) {
+  function draftButton(gid, label = '인수인계 초안 만들기') {
     const node = view.getNode(gid);
     if (!node || !DRAFT_TARGET_TYPES.includes(node.core_type)) return null;
-    return el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft', onclick: () => openDraft(node.gid) }, '인수인계 초안 만들기');
+    return el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft', onclick: () => openDraft(node.gid) }, label);
   }
 
   // 사람 상세의 「이 사람 일 인수인계 초안」(FU-30, CR-18 D-5): 대상 = 이 사람이 진행 중으로 맡은 업무가 있는 지도의 지도 중심(묶은 지도에서는 맡은 업무가 가장 많은 하위 지도, 같으면 화면 순서 앞쪽).
   // 맡은 업무가 없으면 예전처럼 지금 지도 전체. 보내는 사람 = 이 사람, 받는 사람은 비워 둔다. 읽기 전용이면 그리지 않는다
-  function personDraftButton(node) {
+  function personDraftButton(node, asButton = false) {
     if (!node || node.core_type !== 'person' || app.readOnly) return null;
     const mapRoot = app.rootGid();
     const center = draftCenterFor(view, node.gid, { asOf: todayLocal() });
@@ -595,7 +608,7 @@ function start() {
     const title = centerName
       ? `이 사람이 진행 중으로 맡은 업무가 있는 「${centerName}」 지도를 대상으로, 이 사람을 보내는 사람으로 미리 골라 초안 창을 엽니다`
       : '이 지도 전체를 대상으로, 이 사람을 보내는 사람으로 미리 골라 초안 창을 엽니다';
-    return el('button', { type: 'button', class: 'link', 'data-testid': 'btn-person-draft', 'data-target': targetGid, title, onclick: () => openDraft(targetGid, { target: targetGid, from: node.label, from_gid: view.canonical(node.gid), to: '' }) }, '이 사람 일 인수인계 초안');
+    return el('button', { type: 'button', class: asButton ? '' : 'link', 'data-testid': 'btn-person-draft', 'data-target': targetGid, title, onclick: () => openDraft(targetGid, { target: targetGid, from: node.label, from_gid: view.canonical(node.gid), to: '' }) }, '이 사람 일 인수인계 초안');
   }
 
   // 사람 상세의 「이 사람 일, 누가 대신할 수 있나」(CR-18 D-6): 이 사람이 진행 중으로 맡은 업무마다 유사 경험자 계산(rules/insight.js similarExperts)의 상위 후보를 한 표로. 기본 접힘
@@ -960,7 +973,7 @@ function start() {
     const summary = el('summary', { title: '지금 담당을 끝내고 새 담당을 시작하는 두 기록을 한 번에 남깁니다' }, '담당 바꾸기');
     if (!holders.length) {
       return el('details', { class: 'assignee-change', 'data-testid': 'assignee-change' }, summary,
-        el('p', { class: 'muted small', 'data-testid': 'assignee-none' }, '지금 담당 중인(진행 중인 수행 연결이 있는) 사람이 없습니다. 담당을 넣으려면 「이력 추가」의 「담당 시작」을 쓰세요.'));
+        el('p', { class: 'muted small', 'data-testid': 'assignee-none' }, '지금 담당 중인(진행 중인 수행 연결이 있는) 사람이 없습니다. 담당을 넣으려면 「기록 남기기」의 「담당 시작」을 쓰세요.'));
     }
     const persons = ownNodes().filter((n) => n.core_type === 'person');
     const fromSel = el('select', { 'data-testid': 'assignee-from', 'aria-label': '지금 담당' }, ...holders.map((h) => el('option', { value: h.id }, h.label)));
@@ -1032,12 +1045,10 @@ function start() {
     const node = view.getNode(gid);
     if (!node || node.hidden || node.core_type !== 'person') return null;
     const text = soloWorksText(soloWorksOf(view, gid, asOf()));
-    // 「이 사람 일 인수인계 초안」은 도구줄(R7-2: 수정·연결 추가·이력 추가·이력으로)이 아니라 이 줄에 둔다 — "이 사람이 빠지면"의 맥락
-    const draftLink = personDraftButton(node);
-    if (!text) return draftLink ? el('p', { class: 'muted small', 'data-testid': 'person-draft-line' }, draftLink) : null;
+    // 「이 사람 일 인수인계 초안」은 사람 카드의 동작 줄(cardActions)에 있다(CR-22 K)
+    if (!text) return null;
     return el('p', { class: 'notice', 'data-testid': 'person-solo-works' }, text, ' ',
-      el('button', { type: 'button', class: 'link', 'data-testid': 'btn-person-solo', onclick: () => openInsight('', 'risk') }, '인수인계 위험 보기'),
-      draftLink ? ' · ' : null, draftLink);
+      el('button', { type: 'button', class: 'link', 'data-testid': 'btn-person-solo', onclick: () => openInsight('', 'risk') }, '인수인계 위험 보기'));
   }
 
   // 하위 유니버스를 묶은 유니버스의 개요: 통합 확인 목록으로 가는 버튼(대기 건수)
@@ -1063,12 +1074,16 @@ function start() {
 
   // 자주 쓰는 단추만 한 줄에 두고 나머지는 「더 보기」(details)로 접는다(R7-2). details는 키보드(Tab·Enter·Space)로 열린다
   function historyJumpButton() {
-    return el('button', { type: 'button', 'data-testid': 'btn-history-jump', title: '이 항목의 이력 목록으로 내려갑니다', onclick: () => {
+    return el('button', { type: 'button', 'data-testid': 'btn-history-jump', title: '이 항목의 기록(이력) 목록으로 내려갑니다', onclick: (e) => {
       const h = document.querySelector('[data-testid="history-heading"]');
       if (!h) return;
+      const box = h.closest('details');
+      if (box) box.open = true; // 접혀 있으면 펼쳐서 보인다
+      const menu = e.currentTarget.closest('details.more-tools');
+      if (menu) menu.open = false;
       h.scrollIntoView({ block: 'start' });
       h.focus({ preventScroll: true });
-    } }, '이력으로');
+    } }, '기록(이력)으로');
   }
 
   function moreTools(items) {
@@ -1104,7 +1119,7 @@ function start() {
       el('div', { class: 'row toolbar' },
         btn('수정', 'node', 'btn-edit'),
         btn('연결 추가', 'edge', 'btn-edge'),
-        btn('이력 추가', 'event', 'btn-event'),
+        btn('기록 남기기', 'event', 'btn-event'),
         draftButton(gid),
         historyJumpButton(),
         ...first),
@@ -1117,8 +1132,135 @@ function start() {
       ]));
   }
 
+  // ── 항목 카드(CR-22 K): 고정 동작 줄 하나·접는 묶음. 값은 view/card.js, 그리기는 ui/card.js ──
+  // 카드 안에 숨겨 둔 양식 칸(담당 넘기기=담당 바꾸기 상자, 협업자 추가)을 연다. 칸이 없으면 null
+  function openFormBox(testid) {
+    const slot = $('detail').querySelector('[data-testid=card-forms]');
+    if (!slot) return null;
+    slot.hidden = false;
+    let hit = null;
+    for (const box of slot.children) {
+      const on = box.getAttribute('data-testid') === testid;
+      box.hidden = !on;
+      if (on) hit = box;
+    }
+    const menu = $('detail').querySelector('details.more-tools');
+    if (menu) menu.open = false;
+    if (hit) {
+      hit.open = true;
+      if (typeof hit.scrollIntoView === 'function') hit.scrollIntoView({ block: 'nearest' });
+      const first = hit.querySelector('select, input');
+      if (first) first.focus({ preventScroll: true });
+    }
+    return hit;
+  }
+
+  // 유형에 맞는 동작 단추만 만든다(view/card.js actionPlan이 정한 것). primary는 고정 줄, more는 「⋯」 메뉴
+  function cardActions(gid) {
+    const node = view.getNode(gid);
+    if (!node) return { primary: [], more: [] };
+    const own = isOwn(gid);
+    const editable = own && !app.readOnly && !rw;
+    const plan = actionPlan({
+      coreType: node.core_type, own, readOnly: app.readOnly || !!rw, hidden: !!node.hidden,
+      handoverDoc: node.core_type === 'artifact' && node.subtype === SUBTYPE_HANDOVER_DOC,
+      canDelete: editable && node.core_type !== 'root' && app.canDeleteNow(node.id).ok,
+    });
+    const edit = (label, kind, testid, cls = '') => el('button', { type: 'button', class: cls, 'data-testid': testid, onclick: () => { editing = { kind }; renderPanel(); } }, label);
+    const docs = node.core_type === 'artifact' ? docButtons(node) : [];
+    const draft = draftButton(gid, '인수인계 초안');
+    if (draft) draft.classList.remove('primary');
+    const make = {
+      record: () => edit('기록 남기기', 'event', 'btn-event', 'primary'),
+      assign: () => el('button', { type: 'button', 'data-testid': 'btn-assign', onclick: () => openFormBox('assignee-change') }, '담당 넘기기'),
+      draft: () => draft,
+      personDraft: () => personDraftButton(node, true),
+      download: () => docs[0],
+      print: () => docs[1],
+      edit: () => edit('수정', 'node', 'btn-edit'),
+      edge: () => edit('연결 추가', 'edge', 'btn-edge'),
+      collab: () => el('button', { type: 'button', 'data-testid': 'btn-collab', onclick: () => openFormBox('collab-quick') }, '협업자 추가'),
+      history: () => historyJumpButton(),
+      similar: () => insightButton(gid),
+      insight: () => insightAllButton(),
+      nbhd: () => nbhdButtons(gid),
+      hide: () => el('button', { type: 'button', class: 'danger', 'data-testid': 'btn-hide', onclick: () => hideSelected(node) }, '숨기기'),
+      delete: () => el('button', { type: 'button', class: 'danger', 'data-testid': 'btn-delete', onclick: () => deleteSelected(node) }, '삭제'),
+    };
+    const build = (keys) => keys.flatMap((k) => [make[k]()]).flat().filter(Boolean);
+    return { primary: build(plan.primary), more: build(plan.more) };
+  }
+
+  // 「해결」/「해결로 표시」: 메모 한 건을 해결로 표시하고 알림 한 줄(CR-21 B-1)을 남긴다. 미해결 목록·카드의 「지금 볼 것」·이력 표가 같이 쓴다
+  function resolveMemoNow(gid, note = '') {
+    const ev = view.events.find((x) => x.gid === gid);
+    const r = app.resolveMemo(gid, todayLocal(), note);
+    if (r.ok || (r.error && r.error.already_resolved)) refresh();
+    if (r.ok && ev) {
+      const target = ev.payload.target_id ? view.canonical(toGid(ev.universe_id, ev.payload.target_id)) : null;
+      const name = target && view.getNode(target) ? `「${displayName(view.getNode(target))}」의 ` : '';
+      $('detail').prepend(el('p', { class: 'ok-notice', role: 'status', 'data-testid': 'resolve-done' }, `${name}미해결 1건을 해결로 표시했습니다. `, historyButton(target, evGidsOf(r, ev.universe_id))));
+    }
+    return r;
+  }
+
+  // 기록(이력) 표 화면을 닫는다. 연 뒤 패널을 넓혔으면 원래 폭으로
+  function closeHistTable() {
+    if (!histTable) return;
+    const t = histTable;
+    histTable = null;
+    if (!t.wasWide) setWideKeep(false);
+  }
+
+  function openHistTable() {
+    if (!selected) return;
+    panelOpener = 'history-all';
+    focusPanelClose = true;
+    const wasWide = document.querySelector('main').classList.contains('wide');
+    histTable = { gid: selected, state: { group: '전체', period: '전체', q: '', page: 1 }, wasWide };
+    setWideKeep(true);
+    renderPanel();
+    const root = $('detail').parentElement;
+    if (root) root.scrollTop = 0;
+  }
+
+  // 카드 하나를 그리는 데 필요한 값·요소(ui/card.js의 renderCard로 넘어간다)
+  function cardOptions(gid, d) {
+    cardState.reset(gid);
+    const node = view.getNode(gid);
+    const own = isOwn(gid);
+    const editable = own && !app.readOnly && !rw;
+    const data = cardData(view, gid, { asOf: asOf(), past: !!viewDate, rootGid: app.rootGid(), n: currentDenseN(), history: d.history });
+    const alerts = [];
+    const addAlert = (testid, elmt, chip = false) => { if (elmt) alerts.push({ testid, label: ALERT_LABEL[testid], el: elmt, chip }); };
+    const workEl = workNote(gid);
+    const loadEl = loadNote(gid);
+    const notes = { backup: backupNote(gid), form: formNote(gid) };
+    if (workEl) { if (data && data.gap) addAlert('work-load', workEl); else notes.workLoad = workEl; }
+    if (loadEl) { if (data && data.dense) addAlert('person-load', loadEl); else notes.personLoad = loadEl; }
+    addAlert('person-solo-works', soloWorksNote(gid));
+    addAlert('repeat-note', repeatNote(gid), true);
+    addAlert('risk-note', riskNote(gid), true);
+    notes.alerts = alerts;
+    const forms = editable ? [assigneeBox(gid), collabBox(gid)].filter(Boolean) : [];
+    forms.forEach((f) => { f.hidden = true; });
+    return {
+      data, state: cardState, actions: cardActions(gid), forms, notes, layer: layerControls(gid),
+      // 다른 업무 지도의 항목: 고칠 수 없고 그 지도를 열어서 한다. 업무는 담당 바꾸기 안내(예전 assignee-other-map)와 같은 말
+      afterActions: own || !node || node.hidden ? [] : [node.core_type === 'work' && !app.readOnly && !rw
+        ? el('p', { class: 'muted small', 'data-testid': 'assignee-other-map' }, '다른 업무 지도의 업무입니다. 담당을 바꾸려면 그 지도를 열어서 하세요. ',
+          el('button', { type: 'button', class: 'link', 'data-testid': 'assignee-open-map', onclick: () => openUniverse(node.universe_id) }, `「${node.universe_name}」 열기`))
+        : el('p', { class: 'muted small', 'data-testid': 'foreign-note' }, '다른 업무 지도의 항목입니다. 고치려면 ',
+          el('button', { type: 'button', class: 'link', onclick: () => openUniverse(node.universe_id) }, `「${node.universe_name}」 열기`), '.')],
+      canResolve: editable,
+      onResolve: (g) => resolveMemoNow(g),
+      onOpenIssues: () => openIssues(gid),
+      onHistoryAll: () => openHistTable(),
+    };
+  }
+
   function hideSelected(node) {
-    if (!window.confirm(`「${node.label}」${josa(node.label, '을/를')} 숨깁니다. 그래프에서 사라지지만 이력과 근거로서의 내용은 남습니다. 다시 보이게 하려면 업무 지도 개요(아무것도 고르지 않은 화면)의 「숨긴 항목」에서 「되살리기」를 누르세요.`)) return;
+    if (!window.confirm(`「${node.label}」${josa(node.label, '을/를')} 숨깁니다. 그래프에서 사라지지만 이력과 근거로서의 내용은 남습니다. 다시 보이게 하려면 「지도 관리」 공간의 「숨긴 항목」에서 「되살리기」를 누르세요.`)) return;
     const r = app.hideNode(node.id);
     if (!r.ok) return window.alert(messageFor(r.error));
     afterSave(r, null);
@@ -1259,6 +1401,9 @@ function start() {
   function renderPanelBody() {
     const panel = $('detail');
     adminStash.append(...adminButtons); // 「지도 관리」의 단추 3개는 패널을 지우기 전에 보관함으로(없어지지 않게)
+    document.querySelector('.aside-tools').append($('wide-toggle')); // 항목 카드가 가져가 둔 「패널 넓게 보기」도 제자리로(CR-22 K)
+    // 기록(이력) 표 화면은 그 항목이 그대로 골라져 있고 다른 작업 화면·양식이 없을 때만 남는다
+    if (histTable && (!selected || histTable.gid !== selected || editing || drafting || insight || issues || merging || settingsOpen || hiddenOpen || rw)) closeHistTable();
     if (drafting) keepDraftSelection();
     else draftDomLive = false;
     if (rw && rwPast && !selected) { // 편집 되감기: 시점 막대·목록
@@ -1384,18 +1529,7 @@ function start() {
         onFocus: showInGraph,
         onClose: closeSidePanel,
         // 해결 표시는 메모가 있는 유니버스 문서에 저장한다(묶음 화면의 하위 유니버스 메모 포함). 이미 닫힌 메모면 아무것도 더하지 않는다
-        onResolve: (gid, note) => {
-          const ev = view.events.find((x) => x.gid === gid);
-          const r = app.resolveMemo(gid, todayLocal(), note);
-          if (r.ok || (r.error && r.error.already_resolved)) refresh();
-          // 해결로 표시한 뒤 알림 한 줄과 「이력에서 보기」(CR-21 B-1). 업무에 걸린 메모일 때만 이력으로 데려갈 곳이 있다
-          if (r.ok && ev) {
-            const target = ev.payload.target_id ? view.canonical(toGid(ev.universe_id, ev.payload.target_id)) : null;
-            const name = target && view.getNode(target) ? `「${displayName(view.getNode(target))}」의 ` : '';
-            $('detail').prepend(el('p', { class: 'ok-notice', role: 'status', 'data-testid': 'resolve-done' }, `${name}미해결 1건을 해결로 표시했습니다. `, historyButton(target, evGidsOf(r, ev.universe_id))));
-          }
-          return r;
-        },
+        onResolve: resolveMemoNow,
       }));
       focusClose('issue-close');
       return;
@@ -1450,6 +1584,17 @@ function start() {
       renderSpaceHome(panel);
       return;
     }
+    if (histTable) { // 기록(이력) 표(CR-22 K P1): 카드 대신 넓은 표 화면. 닫기·Esc로 카드로 돌아간다
+      const d = describeNode(view, selected, { asOf: asOf(), past: !!viewDate });
+      const openGids = new Set(openMemos(view).map((ev) => ev.gid));
+      panel.replaceChildren(historyTablePanel({
+        title: d.title, rows: historyRows(d.history, openGids), today: todayLocal(), state: histTable.state, readOnly: app.readOnly || !!rw || !isOwn(selected),
+        onClose: closeSidePanel,
+        onResolve: (g) => resolveMemoNow(g),
+      }));
+      focusClose('history-table-close');
+      return;
+    }
     if (editing && isOwn(selected) && localNode(selected)) {
       const form = editorFor(selected);
       panel.replaceChildren(el('h2', {}, localNode(selected).label), form);
@@ -1457,16 +1602,24 @@ function start() {
       return;
     }
     const selNode = view.getNode(selected);
-    const rootWeekly = selNode && selNode.core_type === 'root' && isOwn(selected) ? weeklyBox() : null; // 지도 중심 상세의 「이번 주 기록」(D-10)
-    const notes = [loadNote(selected), soloWorksNote(selected), backupNote(selected), workNote(selected), issueNote(selected), formNote(selected), collabBox(selected), assigneeBox(selected), repeatNote(selected), riskNote(selected), rootWeekly].filter(Boolean);
-    const tools = toolbar(selected);
-    const detail = renderNodeDetail(panel, describeNode(view, selected, { asOf: asOf(), past: !!viewDate }), {
-      onFocus: focus,
-      extra: layerControls(selected),
-      toolbar: notes.length || tools ? el('div', {}, ...[...notes, tools].filter(Boolean)) : null,
-      linkTools,
-      justAdded: justAdded ? justAdded.gids : null,
-    });
+    const d = describeNode(view, selected, { asOf: asOf(), past: !!viewDate });
+    let detail;
+    if (selNode && selNode.core_type !== 'root') {
+      // 항목 카드(CR-22 K): 사람·업무·산출물·주제·조직
+      detail = renderNodeDetail(panel, d, { onFocus: focus, linkTools, justAdded: justAdded ? justAdded.gids : null, card: cardOptions(selected, d) });
+    } else {
+      // 지도 중심(과 다른 지도의 꼭지)은 예전 모양 그대로(공간 패널과 겹치는 부분이라 이번에 건드리지 않는다)
+      const rootWeekly = selNode && selNode.core_type === 'root' && isOwn(selected) ? weeklyBox() : null; // 지도 중심 상세의 「이번 주 기록」(D-10)
+      const notes = [loadNote(selected), soloWorksNote(selected), backupNote(selected), workNote(selected), issueNote(selected), formNote(selected), collabBox(selected), assigneeBox(selected), repeatNote(selected), riskNote(selected), rootWeekly].filter(Boolean);
+      const tools = toolbar(selected);
+      detail = renderNodeDetail(panel, d, {
+        onFocus: focus,
+        extra: layerControls(selected),
+        toolbar: notes.length || tools ? el('div', {}, ...[...notes, tools].filter(Boolean)) : null,
+        linkTools,
+        justAdded: justAdded ? justAdded.gids : null,
+      });
+    }
     if (rw && rwPast) { // 편집 되감기: 그때 값임을 알리고, 지금과 다른 칸을 보인다
       const local = isOwn(selected) ? parseGid(selected).local_id : null;
       const change = local ? rwPast.diff.changed.find((c) => c.id === local && c.kind === 'node') || (rwPast.diff.hidden.includes(local) ? { fields: ['hidden'] } : null) : null;
@@ -1474,7 +1627,14 @@ function start() {
       panel.prepend(...[el('button', { type: 'button', class: 'small-btn', 'data-testid': 'btn-rewind-list', onclick: () => select(null) }, '← 시점 목록으로'), note].filter(Boolean));
     } else {
       // 노드를 고르면 지도 전체 화면(「인수인계 초안 만들기」·「인사이트 보기」)이 사라지므로 맨 위에서 돌아갈 수 있게 한다(FU-6). Esc와 같은 동작: 선택만 푼다
-      panel.prepend(el('div', { class: 'detail-back' }, el('button', { type: 'button', class: 'small-btn', 'data-testid': 'detail-back-universe', title: '항목 선택을 풀고 지도 전체 화면으로 돌아갑니다(Esc와 같음)', onclick: () => select(null) }, '← 지도 전체 보기')));
+      // 항목 카드에서는 같은 줄 오른쪽에 「패널 넓게 보기」를 옮겨 둔다(위쪽 한 줄을 아끼려고). 다른 화면으로 가면 다시 제자리로 돌려놓는다
+      const isCard = !!(selNode && selNode.core_type !== 'root');
+      const back = el('div', { class: 'detail-back' }, el('button', { type: 'button', class: 'small-btn', 'data-testid': 'detail-back-universe', title: '항목 선택을 풀고 지도 전체 화면으로 돌아갑니다(Esc와 같음)', onclick: () => select(null) }, isCard ? '← 지도 전체' : '← 지도 전체 보기'));
+      if (isCard) {
+        back.classList.add('card-top');
+        back.append($('wide-toggle'));
+      }
+      panel.prepend(back);
     }
     return detail;
   }
@@ -1507,18 +1667,22 @@ function start() {
   function syncAdd() {
     const emptyMap = space === 'map' && !selected && lastNodeTotal <= 1 && !openScreens().length;
     document.querySelector('aside').classList.toggle('add-off', !(space === 'edit' || addPinned || emptyMap));
+    // 「지도 관리」 첫 화면에서는 위의 「사람·업무·문서 추가」 단추가 입구이고 아래 접힌 상자의 제목줄은 숨긴다(두 번 보이지 않게, CR-22 K). 단추를 다시 누르면 접힌다
+    document.querySelector('aside').classList.toggle('add-by-btn', space === 'edit' && !selected && !openScreens().length);
   }
 
+  // 카드의 묶음 이름은 ui/card.js의 data-group(history·assign 등). 접혀 있으면 펼친 뒤 그 묶음 머리로 간다(CR-22 K)
   const SCROLL_TARGETS = {
-    history: ['#history-heading'],
-    assign: ['[data-testid=assignee-change]', '[data-testid=links]'],
-    edit: ['[data-testid=btn-edit]'],
+    history: ['[data-group=history]'],
+    assign: ['[data-group=assign]', '[data-testid=links]', '[data-testid=card-actions]'],
+    edit: ['[data-testid=card-actions]', '[data-testid=btn-edit]'],
   };
   // 항목 카드를 연 채 공간을 바꾸면 그 공간과 관련된 카드 위치로 스크롤한다(기록 → 이력, 인수인계 → 담당 바꾸기·수행 연결, 지도 관리 → 수정 단추)
   function scrollCard(kind) {
     for (const sel of SCROLL_TARGETS[kind] || []) {
       const t = $('detail').querySelector(sel);
       if (t) {
+        if (t.tagName === 'DETAILS') t.open = true;
         if (typeof t.scrollIntoView === 'function') t.scrollIntoView({ block: 'start' });
         return;
       }
@@ -1531,6 +1695,7 @@ function start() {
    */
   function goSpace(key, opts = {}) {
     const plan = planSwitch({ to: key, hasCard: !!selected, open: openScreens() });
+    if (histTable) closeHistTable(); // 기록 표 화면도 닫고 카드로
     space = plan.space;
     addPinned = false;
     if (!opts.tour && opts.persist !== false && settings.workspace !== space) {
@@ -1618,6 +1783,7 @@ function start() {
   // 「처음 할 일」 줄을 누르면 그 일을 하는 공간으로 가서 해당 자리를 잠깐 강조한다
   function goStep(st) {
     goSpace(st.space);
+    if (st.space === 'edit') document.querySelector('details.add').open = true; // 「지도 관리」의 추가 칸은 단추가 입구라 닫혀 있다 — 처음 할 일에서 왔으면 바로 펼친다(CR-22 K)
     const t = $('detail').querySelector(st.space === 'record' ? '[data-testid=weekly-quick]' : '[data-testid=goal-add-open]');
     if (t) {
       if (typeof t.scrollIntoView === 'function') t.scrollIntoView({ block: 'start' });
@@ -1659,6 +1825,10 @@ function start() {
   // 화면 아래 「사람·업무·문서 추가」를 펼치고 거기로 간다(개요 「지도 고치기」의 단추)
   function openAddForm() {
     const details = document.querySelector('details.add');
+    if (details.open && document.querySelector('aside').classList.contains('add-by-btn')) {
+      details.open = false;
+      return;
+    }
     details.open = true;
     if (typeof details.scrollIntoView === 'function') details.scrollIntoView({ block: 'start' });
     flash(details.querySelector('summary'));
@@ -1681,7 +1851,7 @@ function start() {
   }
   // 고른 항목의 상세에서 접힌 상자(담당 바꾸기·협업자 추가)를 펼쳐 강조한다
   function openDetailBox(testid) {
-    const box = $('detail').querySelector(`[data-testid=${testid}]`);
+    const box = openFormBox(testid) || $('detail').querySelector(`[data-testid=${testid}]`);
     if (!box) return;
     box.open = true;
     if (typeof box.scrollIntoView === 'function') box.scrollIntoView({ block: 'center' });
@@ -2168,6 +2338,12 @@ function start() {
     graph.fit();
     lastGraphW = graph.cy.container().clientWidth;
   });
+  // 코드에서 폭을 바꿀 때(기록 표 화면): 단추를 눌렀을 때와 같되 그래프 보던 자리는 그대로 둔다
+  const setWideKeep = (on) => {
+    setWide(on);
+    applyPanelWidth();
+    resizeGraphKeepCenter();
+  };
   resizer.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || narrowMq.matches) return;
     e.preventDefault();

@@ -577,7 +577,7 @@ export function eventForm(o) {
   const form = el(
     'form',
     { class: 'editor', novalidate: true, 'data-testid': 'event-form' },
-    el('h3', {}, '이력 추가'),
+    el('h3', {}, '기록 남기기'),
     field('종류', type),
     field('날짜', date),
     slot,

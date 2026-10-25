@@ -4,6 +4,7 @@ import { previewContent } from '../rules/starter-steps.js';
 import { NAMES_CUT_NOTE, namesText, ownerChangesText } from '../rules/daily-use.js';
 import { historyFocus } from '../view/recent-records.js';
 import { cleanWorkspace, workspaceOf } from '../view/workspace.js';
+import { renderCard } from './card.js';
 
 // 이력이 많으면(업무당 1년 30~50건, 조력자 의견 2026-10-12) 최근 것만 먼저 보이고 이전 것은 「모두 보기」로 편다
 export const HISTORY_SHOW = 10; // 접었을 때 보이는 최근 이력 수
@@ -38,14 +39,19 @@ function historyList(items, justAdded = null) {
 }
 
 /**
- * 노드 상세: 속성, 연결된 노드(클릭하면 이동), 이력. onFocus(gid)는 다른 노드로 이동한다.
+ * 노드 상세: card가 있으면 항목 카드(ui/card.js), 없으면(지도 중심) 속성, 연결된 노드(클릭하면 이동), 이력. onFocus(gid)는 다른 노드로 이동한다.
  * extra가 있으면 속성 아래에 붙인다(층별 보기 조작 등). toolbar는 제목 아래 편집 버튼,
  * linkTools(link)는 연결마다 붙일 버튼(없으면 null)이다(T-06). justAdded는 방금 기록한 이력 줄(이벤트 전역 ID들)의 강조(CR-21 B-1).
  */
-export function renderNodeDetail(panel, d, { onFocus, extra = null, toolbar = null, linkTools = () => null, justAdded = null }) {
+export function renderNodeDetail(panel, d, { onFocus, extra = null, toolbar = null, linkTools = () => null, justAdded = null, card = null }) {
   panel.replaceChildren();
   if (!d.found) {
     panel.append(el('p', { class: 'muted' }, '항목을 찾을 수 없습니다.'));
+    return;
+  }
+  // 새 항목 카드(CR-22 K): 지도 중심(root)을 뺀 항목. card에 main.js가 만든 값·요소가 들어 있다. 지도 중심은 아래 예전 모양 그대로
+  if (card) {
+    renderCard(panel, d, card.data, { onFocus, linkTools, justAdded, ...card });
     return;
   }
   panel.append(el('h2', {}, d.title));

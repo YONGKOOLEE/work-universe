@@ -479,6 +479,67 @@
   .ws-rows li { padding-bottom: 6px; border-bottom: 1px dashed var(--line); overflow-wrap: anywhere; }
   .ws-rows li:last-child { border-bottom: 0; padding-bottom: 0; }
   aside.add-off details.add, aside.add-off .add-folded { display: none !important; } /* 「사람·업무·문서 추가」는 지도 관리 공간에서만(syncAdd) */
+  /* 항목 카드(CR-22 K): 위 띠 → 이름+유형 칩 → 상태 줄 → 고정 동작 줄 하나 → 지금 볼 것 → 접는 묶음 */
+  .aside-tools:empty { display: none; }
+  .detail-back.card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 4px 0 6px; }
+  .card-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 0 0 4px; }
+  .card-title h2 { margin: 0; font-size: 20px; overflow-wrap: anywhere; }
+  .card-state { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; margin: 2px 0 8px; font-size: 13px; }
+  .card-state .st-warn { color: var(--warn-text); }
+  .chip.warn { background: var(--warn-bg); color: var(--warn-text); border-color: #5a4c1c; }
+  .chip-btn { cursor: pointer; padding: 1px 8px; font: inherit; font-size: 12px; border-radius: 10px; }
+  .chip-btn.sel { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .card-actions { position: sticky; top: -16px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 0 -16px 8px; padding: 6px 12px; background: var(--panel); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .card-actions > button { padding: 4px 8px; font-size: 13px; white-space: nowrap; }
+  .card-actions details.more-tools { margin: 0 0 0 auto; position: relative; }
+  .card-actions details.more-tools summary { padding: 4px 10px; font-size: 15px; line-height: 1.1; }
+  .card-actions details.more-tools summary::before, .card-actions details.more-tools[open] summary::before { content: ""; }
+  .card-actions details.more-tools[open] summary { margin-bottom: 0; }
+  .card-actions .menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 9; display: grid; gap: 2px; min-width: 150px; padding: 4px; background: var(--panel-2); border: 1px solid var(--accent); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.5); }
+  .card-actions .menu button { text-align: left; border: 0; border-radius: 6px; background: none; padding: 6px 10px; white-space: nowrap; }
+  .card-actions .menu button:hover:not(:disabled) { background: var(--chip); }
+  .card-forms { margin: 0 0 10px; }
+  .card-forms[hidden], .card-forms > [hidden] { display: none; }
+  .card-now { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; margin: 0 0 10px; }
+  aside .card-now h3 { margin: 0 0 2px; padding: 0; border: 0; font-size: 13px; color: var(--warn-text); }
+  .now-item { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; padding: 4px 0; border-bottom: 1px dashed var(--line); font-size: 13px; }
+  .now-item:last-child { border-bottom: 0; }
+  .now-text { flex: 1 1 120px; min-width: 0; overflow-wrap: anywhere; }
+  .card-group { border: 1px solid var(--line); border-radius: 8px; margin: 0 0 8px; background: var(--panel); }
+  .card-group > summary { display: flex; align-items: baseline; gap: 4px 8px; padding: 6px 10px; cursor: pointer; list-style: none; font-size: 14px; }
+  .card-group > summary::-webkit-details-marker { display: none; }
+  .card-group > summary::before { content: "▸"; color: var(--accent); width: 10px; flex: none; }
+  .card-group[open] > summary::before { content: "▾"; }
+  .card-group .cg-title { color: var(--accent); white-space: nowrap; }
+  .card-group .cg-count { color: var(--text); font-size: 12px; white-space: nowrap; }
+  .card-group .cg-preview { flex: 1; min-width: 0; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card-group > .cg-body { padding: 2px 10px 8px; border-top: 1px solid var(--line); }
+  .card-group .cg-body > .notice, .card-group .cg-body > p.muted { margin: 6px 0 0; }
+  .card-group .cg-more { display: inline-block; margin-top: 4px; font-size: 12px; }
+  .card-links { display: block; }
+  .card-group .links li { padding: 5px 0; }
+  details.long-value summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  details.long-value p { margin: 4px 0 0; white-space: pre-wrap; }
+  .works-table, .ht-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  .works-table th, .ht-table th { color: var(--muted); font-weight: normal; font-size: 12px; text-align: left; padding: 3px 5px; border-bottom: 1px solid var(--line); }
+  .works-table td, .ht-table td { padding: 4px 5px; border-bottom: 1px dashed var(--line); vertical-align: top; }
+  .works-table td.num { text-align: center; }
+  .works-table td.warn { color: var(--warn-text); font-weight: bold; }
+  .history-gap { margin: 4px 0 0; }
+  .history li .chip.warn { justify-self: start; }
+  .history-foot { margin: 4px 0 0; }
+  .history-table .ht-head { justify-content: space-between; align-items: center; flex-wrap: nowrap; }
+  .history-table .ht-head h2 { margin: 0; font-size: 17px; }
+  .ht-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 8px 0; }
+  .ht-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+  .ht-sep { margin-left: 10px; }
+  .ht-search { width: 200px; max-width: 100%; }
+  .ht-foot { align-items: center; justify-content: space-between; margin: 8px 0 0; position: sticky; bottom: -16px; background: var(--panel); padding: 8px 0; }
+  .ht-table tr.after { opacity: .6; }
+  .ht-table .chip { white-space: nowrap; }
+  .nowrap { white-space: nowrap; }
+  aside.add-by-btn details.add { margin-top: 0; border-top: 0; padding-top: 0; }
+  aside.add-by-btn details.add > summary { display: none; } /* 「지도 관리」에서는 위의 「사람·업무·문서 추가」 단추가 입구다(두 번 보이지 않게) */
   @media (max-width: 1099px) {
     main { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-rows: auto minmax(0, 1fr); }
     .ws-nav { grid-column: 1 / -1; width: auto; flex-direction: row; flex-wrap: wrap; padding: 6px 12px; border-right: 0; border-bottom: 1px solid var(--line); overflow: visible; }
