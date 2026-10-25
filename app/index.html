@@ -414,6 +414,42 @@
   details.start-more > summary { cursor: pointer; font-size: 16px; color: var(--accent); padding: 4px 0; }
   details.start-more[open] > summary { margin-bottom: 12px; }
   details.start-more > section { margin-bottom: 20px; }
+  /* 길 찾기(CR-21): 개요의 「무엇을 할까요?」 단추·목적별 묶음·최근 기록, 방금 기록한 이력 줄, 머리글 기능 찾기 */
+  #detail { container-type: inline-size; }
+  .goal-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 4px; }
+  .goal-bar button { flex: 1 1 auto; padding: 6px 8px; font-size: 13px; white-space: nowrap; }
+  @container (max-width: 310px) { .goal-bar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .goal-sec { margin-top: 4px; }
+  .goal-sec > h3 { border-radius: 6px; }
+  .goal-sec > .goal-desc { margin: 0 0 8px; }
+  .goal-flash { outline: 3px solid #ffd84d; outline-offset: 2px; border-radius: 6px; }
+  details.overview-help { margin-top: 16px; }
+  details.overview-help > summary { cursor: pointer; font-size: 13px; color: var(--accent); }
+  details.overview-help > .hint { margin-top: 8px; }
+  .recent-records { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; margin: 0 0 10px; }
+  .recent-records > p { margin: 0 0 6px; }
+  .recent-list { display: grid; gap: 6px; }
+  .recent-list li { display: grid; grid-template-columns: auto auto 1fr auto; gap: 2px 6px; align-items: baseline; padding-bottom: 6px; border-bottom: 1px dashed var(--line); }
+  .recent-list li:last-child { border-bottom: 0; padding-bottom: 0; }
+  .recent-list .recent-target { font-weight: bold; min-width: 0; overflow-wrap: anywhere; }
+  .recent-list .recent-text { grid-column: 1 / -1; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+  .recent-list .small-btn { grid-column: 4; grid-row: 1; }
+  .history li[data-just-added="1"] { background: rgba(166, 216, 107, .16); outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 6px; }
+  .feature-box { position: relative; flex: 3 1 200px; min-width: 150px; max-width: 340px; } /* 남는 폭을 지도 선택(1)보다 많이(3) 받아 안내 글이 덜 잘리게 */
+  .feature-box input[type=search] { width: 100%; border-radius: 999px; padding: 6px 10px; font-size: 13px; }
+  .feature-box ~ .spacer { flex: 0 0 0; } /* 남는 폭은 지도 선택·기능 찾기 칸이 나눠 쓴다(안내 글이 잘리지 않게). 오른쪽 단추는 아래 margin-left로 붙인다 */
+  #create-open { margin-left: auto; }
+  .feature-results { position: absolute; top: calc(100% + 4px); left: 0; width: 420px; max-width: 90vw; max-height: 70vh; overflow: auto; margin: 0; padding: 4px; list-style: none; background: var(--panel-2); border: 1px solid var(--accent); border-radius: 8px; z-index: 8; box-shadow: 0 6px 18px rgba(0,0,0,.5); }
+  .feature-results button.feature-hit { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; width: 100%; text-align: left; border: 0; border-radius: 6px; background: none; padding: 6px 8px; white-space: normal; }
+  .feature-results button.feature-hit:hover, .feature-results button.feature-hit:focus-visible { background: var(--chip); outline: 2px solid var(--accent); outline-offset: -2px; }
+  .feature-hit .feat-name { font-weight: bold; }
+  .feature-hit .feat-where { grid-column: 1; color: var(--muted); font-size: 12px; }
+  .feature-hit .feat-go { grid-column: 2; grid-row: 1; font-size: 12px; color: var(--accent); white-space: nowrap; }
+  .feature-hit[aria-disabled=true] { opacity: .6; cursor: default; }
+  .feature-hit[aria-disabled=true] .feat-go { display: none; }
+  .feature-results .none, .feature-results .pick-head { padding: 8px; color: var(--warn-text); font-size: 13px; }
+  .feature-results .pick-list { display: grid; gap: 2px; }
+  .feature-results .pick-list button { width: 100%; text-align: left; border-radius: 6px; }
   @media (max-width: 800px) { .aside-tools { display: none; } .panel-resizer { display: none; } aside, main.wide aside { width: auto !important; } main { flex-direction: column; } aside { width: auto; border-left: 0; border-top: 1px solid var(--line); max-height: 50vh; } .graph-wrap { min-height: 320px; } }
 </style>
 </head>
@@ -421,6 +457,7 @@
 <header>
   <button type="button" id="home" class="home" title="시작 화면으로"><h1>업무 <b>UNIVERSE</b></h1></button>
   <select id="universe-picker" aria-label="업무 지도 선택"></select>
+  <div id="feature-box" class="feature-box" data-testid="feature-box"></div>
   <span class="spacer"></span>
   <button type="button" id="create-open" class="primary">새 업무 지도</button>
   <button type="button" id="group-open">업무 지도 묶기</button>

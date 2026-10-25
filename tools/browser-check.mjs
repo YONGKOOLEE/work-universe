@@ -5027,6 +5027,281 @@ async function checkBrowser(browser, port) {
     await rvWait('U-A1');
   }
 
+  // ── CR-21 길 찾기(2026-10-25): C 개요 목적별 묶음·「무엇을 할까요?」 단추, B 쓴 것 바로 보이기(이력에서 보기·최근 기록), A 기능 찾기(머리글 「무엇을 할까요?」).
+  //    데이터·설정을 바꾸므로 시작 때 저장소를 찍어 두었다가 끝에서 되돌린다(RV10 블록과 같은 방식) ──
+  {
+    const c21Snap = await evaluate(s.cdp, 'JSON.stringify(Object.entries(localStorage))');
+    const c21Wait = (id, nodes = true) => waitFor(s.cdp, `window.__wu && window.__wu.doc && window.__wu.doc.universe.id === ${JSON.stringify(id)}${nodes ? ' && window.__wu.cy.nodes().length > 0' : ''}`, 8000); // 읽기 전용(문서 버전이 새로움)은 그래프가 비어 열릴 수 있어 nodes=false
+    // 저장소를 시작 때 상태로 되돌리고 clean이 가리키는 지도는 지워 깨끗한 샘플로 다시 채운 뒤 mutate를 실행하고 hash 지도를 연다. 따라 하기 안내가 끼어들지 않게 tourDone을 채운다
+    const c21Go = async (hash, { mutate = '', clean = [], nodes = true } = {}) => {
+      const rm = clean.map((id) => `localStorage.removeItem('wu:v1:u:${id}');`).join(' ');
+      await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(c21Snap)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); ${rm} ${mutate}; location.hash = ${JSON.stringify(hash)}; location.reload(); })()`).catch(() => {});
+      await sleep(500);
+      return c21Wait(hash, nodes);
+    };
+    // 읽기 전용 지도: 샘플은 고치기 전까지 저장소에 없으므로, 깨끗한 U-A1을 연 뒤 지금 문서를 문서 버전 2.0으로 저장하고 다시 연다(문서 버전이 새로워 읽기 전용, 그래프는 비어 열림)
+    const c21GoReadOnly = async () => {
+      if (!(await c21Go('U-A1', { clean: ['U-A1'] }))) return false;
+      await evaluate(s.cdp, "(() => { const d = JSON.parse(JSON.stringify(window.__wu.doc)); d.schema_version = '2.0'; localStorage.setItem('wu:v1:u:U-A1', JSON.stringify(d)); location.reload(); })()").catch(() => {});
+      await sleep(500);
+      return c21Wait('U-A1', false);
+    };
+    // 요소 정보: 있음·크기·숨김·글자
+    const c21Box = (sel) => evaluate(s.cdp, `(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect(); return { w: r.width, h: r.height, top: r.top, left: r.left, bottom: r.bottom, right: r.right, text: e.textContent, flash: e.classList.contains('goal-flash') }; })()`);
+    // a가 b보다 문서에서 앞인가
+    const c21Before = (a, b) => evaluate(s.cdp, `(() => { const x = document.querySelector(${JSON.stringify(a)}); const y = document.querySelector(${JSON.stringify(b)}); return !!x && !!y && !!(x.compareDocumentPosition(y) & Node.DOCUMENT_POSITION_FOLLOWING); })()`);
+    // 위 요소 안에 아래 요소가 있는가
+    const c21In = (outer, inner) => evaluate(s.cdp, `!!document.querySelector(${JSON.stringify(outer)} + ' ' + ${JSON.stringify(inner)})`);
+    const c21InView = (sel) => evaluate(s.cdp, `(() => { const e = document.querySelector(${JSON.stringify(sel)}); const a = document.querySelector('aside').getBoundingClientRect(); if (!e) return false; const r = e.getBoundingClientRect(); return r.height > 0 && r.top >= a.top - 1 && r.bottom <= a.bottom + 1; })()`);
+    const c21Type = async (q) => {
+      await evaluate(s.cdp, `(() => { const i = document.querySelector('[data-testid=feature-find]'); i.focus(); i.value = ${JSON.stringify(q)}; i.dispatchEvent(new Event('input')); })()`);
+      await sleep(120);
+    };
+    const c21Hits = () => evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=feature-find-result]')].map((b) => ({ id: b.dataset.id, off: b.getAttribute('aria-disabled') === 'true', text: b.textContent }))");
+    const c21Click = (id) => evaluate(s.cdp, `document.querySelector('[data-testid=feature-find-result][data-id=${id}]').click()`);
+    const c21Flash = (sel) => evaluate(s.cdp, `(() => { const e = document.querySelector(${JSON.stringify(sel)}); return !!e && e.classList.contains('goal-flash'); })()`);
+    const c21Doc = () => evaluate(s.cdp, 'window.__wu.doc.events.length');
+    // 「이번 주 기록」으로 기록 하나 남기고 {알림 글, 알림 안 「이력에서 보기」 단추 유무}를 돌려준다(첫 업무 선택)
+    const c21Weekly = async (note, category = 'in_progress') => {
+      await evaluate(s.cdp, `(() => { const q = (id) => document.querySelector('[data-testid=' + id + ']'); const w = q('weekly-work'); w.value = w.options[1].value; w.dispatchEvent(new Event('change')); const c = q('weekly-category'); c.value = ${JSON.stringify(category)}; c.dispatchEvent(new Event('change')); q('weekly-note').value = ${JSON.stringify(note)}; q('weekly-add').click(); })()`);
+      await sleep(250);
+      return evaluate(s.cdp, "(() => { const d = document.querySelector('[data-testid=weekly-done]'); return d ? { text: d.textContent, btn: !!d.querySelector('[data-testid=goto-history]') } : null; })()");
+    };
+
+    // ── C 개요 목적별 묶음 ──
+    if (await c21Go('U-A1', { clean: ['U-A1'] })) {
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await sleep(200);
+      const labels = await evaluate(s.cdp, "['goal-record', 'goal-handover', 'goal-check', 'goal-edit'].map((id) => { const b = document.querySelector('[data-testid=' + id + ']'); const r = b ? b.getBoundingClientRect() : { width: 0, height: 0 }; return { id, text: b ? b.textContent : null, w: r.width, h: r.height }; })");
+      check('CR-21 C 「무엇을 할까요?」 단추 4개(기록하기·인수인계·점검·지도 고치기)가 크기가 있게 보임, 글자가 꺾이지 않음(높이 < 44)', labels.map((l) => l.text).join('|') === '기록하기|인수인계|점검|지도 고치기' && labels.every((l) => l.w > 40 && l.h > 10 && l.h < 44), JSON.stringify(labels));
+      const barRow = await evaluate(s.cdp, "(() => { const bs = [...document.querySelectorAll('[data-testid=goal-bar] button')]; return { tops: bs.map((b) => Math.round(b.getBoundingClientRect().top)), over: bs.some((b) => b.scrollWidth > b.clientWidth + 1) }; })()");
+      check('CR-21 C 기본 패널 폭(380px)에서 단추 4개가 한 줄이고 글자가 잘리지 않음', barRow.tops.length === 4 && new Set(barRow.tops).size === 1 && !barRow.over, JSON.stringify(barRow));
+      check('CR-21 C 단추 줄이 지도 요약(규모) 바로 아래, 그 뒤로 묶음 4개가 기록하기 → 인수인계 → 점검 → 지도 고치기 순',
+        (await c21Before('[data-testid=summary]', '[data-testid=goal-bar]')) && (await c21Before('[data-testid=goal-bar]', '[data-testid=goal-sec-record]')) && (await c21Before('[data-testid=goal-sec-record]', '[data-testid=goal-sec-handover]')) && (await c21Before('[data-testid=goal-sec-handover]', '[data-testid=goal-sec-check]')) && (await c21Before('[data-testid=goal-sec-check]', '[data-testid=goal-sec-edit]')) && (await c21Before('[data-testid=goal-sec-edit]', '[data-testid=overview-help]')));
+      const heads = await evaluate(s.cdp, "['record', 'handover', 'check', 'edit'].map((k) => { const s = document.querySelector('[data-testid=goal-sec-' + k + ']'); return s ? { h3: s.querySelector('h3').tagName === 'H3' ? s.querySelector('h3').textContent : null, desc: s.querySelector('.goal-desc') ? s.querySelector('.goal-desc').textContent : null } : null; })");
+      check('CR-21 C 묶음마다 머리글(h3)과 한 줄 설명', heads.every((h) => h && h.h3 && h.desc && h.desc.length > 10) && heads.map((h) => h.h3).join('|') === '기록하기|인수인계|점검|지도 고치기', JSON.stringify(heads));
+      check('CR-21 C 기존 요소가 묶음 안에: 기록하기(미해결 입구·이번 주 기록·최근 기록)', (await c21In('[data-testid=goal-sec-record]', '[data-testid=issue-count]')) && (await c21In('[data-testid=goal-sec-record]', '[data-testid=weekly-quick]')) && (await c21In('[data-testid=goal-sec-record]', '[data-testid=recent-records]')));
+      check('CR-21 C 기존 요소가 묶음 안에: 인수인계(초안 만들기 단추·담당 바꾸기 안내 한 줄)', (await c21In('[data-testid=goal-sec-handover]', '[data-testid=btn-draft-universe]')) && (await c21In('[data-testid=goal-sec-handover]', '[data-testid=handover-assignee-hint]')) && (await text(s.cdp, '[data-testid=handover-assignee-hint]')).includes('「담당 바꾸기」'));
+      check('CR-21 C 기존 요소가 묶음 안에: 점검(인사이트 보기·설명 줄, 묶지 않은 지도는 매주 점검 안내 한 줄)', (await c21In('[data-testid=goal-sec-check]', '[data-testid=btn-insight-universe]')) && (await c21In('[data-testid=goal-sec-check]', '[data-testid=insight-hint]')) && (await c21In('[data-testid=goal-sec-check]', '[data-testid=check-ungrouped-note]')) && (await text(s.cdp, '[data-testid=check-ungrouped-note]')).includes('묶은 지도에서 합니다') && !(await c21Box('[data-testid=team-risk-summary]')));
+      check('CR-21 C 기존 요소가 묶음 안에: 지도 고치기(추가 열기·편집 되감기 입구·폴더 연결 입구)', (await c21In('[data-testid=goal-sec-edit]', '[data-testid=goal-add-open]')) && ((await c21In('[data-testid=goal-sec-edit]', '[data-testid=rewind-entry]')) || (await c21In('[data-testid=goal-sec-edit]', '[data-testid=rewind-grouped-note]'))) && ((await c21In('[data-testid=goal-sec-edit]', '[data-testid=folder-entry]')) || !(await c21Box('[data-testid=folder-entry]'))));
+      const help = await evaluate(s.cdp, "(() => { const d = document.querySelector('[data-testid=overview-help]'); return d ? { tag: d.tagName, open: d.open, summary: d.querySelector('summary').textContent, hint: !!d.querySelector('[data-testid=hint]'), term: !!d.querySelector('[data-testid=term-note]') } : null; })()");
+      check('CR-21 C 일반 안내(hint·term-note)는 맨 아래 접힌 「처음이면 읽어 보세요」(overview-help)', !!help && help.tag === 'DETAILS' && help.open === false && help.summary === '처음이면 읽어 보세요' && help.hint && help.term, JSON.stringify(help));
+      await shot(s.cdp, `${browser.name}-cr21-1-overview`);
+      // 단추 → 스크롤·머리 강조
+      await clickTestId(s.cdp, 'goal-edit');
+      await sleep(150);
+      const f1 = await c21Box('[data-testid=goal-sec-edit] h3');
+      check('CR-21 C 「지도 고치기」 단추 → 그 묶음 머리가 패널 안에 보이고 강조(goal-flash)', !!f1 && f1.flash && (await c21InView('[data-testid=goal-sec-edit] h3')), JSON.stringify(f1));
+      await shot(s.cdp, `${browser.name}-cr21-2-goal-edit`);
+      check('CR-21 C 강조는 잠깐 뒤(약 1.5초) 사라짐', await waitFor(s.cdp, "!document.querySelector('[data-testid=goal-sec-edit] h3').classList.contains('goal-flash')", 3500));
+      await clickTestId(s.cdp, 'goal-record');
+      await sleep(150);
+      const f2 = await c21Box('[data-testid=goal-sec-record] h3');
+      check('CR-21 C 「기록하기」 단추 → 묶음 머리가 보이고 강조', !!f2 && f2.flash && (await c21InView('[data-testid=goal-sec-record] h3')), JSON.stringify(f2));
+      await clickTestId(s.cdp, 'goal-check');
+      await sleep(150);
+      check('CR-21 C 「점검」 단추 → 묶음 머리 강조·보임', (await c21Flash('[data-testid=goal-sec-check] h3')) && (await c21InView('[data-testid=goal-sec-check] h3')));
+      await clickTestId(s.cdp, 'goal-handover');
+      await sleep(150);
+      check('CR-21 C 「인수인계」 단추 → 묶음 머리 강조·보임', (await c21Flash('[data-testid=goal-sec-handover] h3')) && (await c21InView('[data-testid=goal-sec-handover] h3')));
+      // 「사람·업무·문서 추가」 열기
+      await evaluate(s.cdp, "document.querySelector('details.add').open = false");
+      await clickTestId(s.cdp, 'goal-add-open');
+      await sleep(150);
+      check('CR-21 C 「지도 고치기」의 「사람·업무·문서 추가」 단추 → 아래 추가 칸이 펼쳐지고 보임', (await evaluate(s.cdp, "document.querySelector('details.add').open")) && (await c21InView('details.add summary')));
+      // 좁은 패널(330px 이하 안쪽 폭)에서는 2×2
+      await evaluate(s.cdp, "(() => { const a = document.querySelector('aside'); a.style.width = '300px'; a.scrollTop = 0; })()");
+      await sleep(150);
+      const narrow = await evaluate(s.cdp, "(() => { const bs = [...document.querySelectorAll('[data-testid=goal-bar] button')]; return { cols: getComputedStyle(document.querySelector('[data-testid=goal-bar]')).gridTemplateColumns.split(' ').length, tops: new Set(bs.map((b) => Math.round(b.getBoundingClientRect().top))).size, over: bs.some((b) => b.scrollWidth > b.clientWidth + 1) }; })()");
+      check('CR-21 C 패널을 좁히면(300px) 단추가 2×2로 내려가고 글자가 잘리지 않음', narrow.cols === 2 && narrow.tops === 2 && !narrow.over, JSON.stringify(narrow));
+      await shot(s.cdp, `${browser.name}-cr21-3-goal-narrow`);
+      await evaluate(s.cdp, "document.querySelector('aside').style.width = ''");
+    } else check('CR-21 C 개요', false, '월말 정산 점검이 열리지 않음');
+
+    // 묶은 지도: 점검 묶음에 위험 요약·지난 점검 대비, 지도 고치기 묶음에 통합 확인
+    if (await c21Go('U-D1', { clean: ['U-D1'] })) {
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await sleep(200);
+      check('CR-21 C 묶은 지도: 위험 요약·지난 점검 대비·이번 점검 저장이 「점검」 묶음 안, 매주 점검 안내 한 줄은 없음',
+        (await c21In('[data-testid=goal-sec-check]', '[data-testid=team-risk-summary]')) && (await c21In('[data-testid=goal-sec-check]', '[data-testid=team-risk-compare]')) && (await c21In('[data-testid=goal-sec-check]', '[data-testid=btn-risk-baseline-save]')) && (await c21In('[data-testid=goal-sec-check]', '[data-testid=btn-insight-universe]')) && !(await c21Box('[data-testid=check-ungrouped-note]')));
+      check('CR-21 C 묶은 지도: 통합 확인 목록 입구가 「지도 고치기」 묶음 안, 위험 요약이 「점검」 묶음 맨 앞', (await c21In('[data-testid=goal-sec-edit]', '[data-testid=merge-hint]')) && (await evaluate(s.cdp, "document.querySelector('[data-testid=goal-sec-check]').children[2].getAttribute('data-testid') === 'team-risk-summary'")));
+      await shot(s.cdp, `${browser.name}-cr21-4-overview-grouped`);
+    } else check('CR-21 C 묶은 지도 개요', false, '가상 운영부가 열리지 않음');
+
+    // 읽기 전용(문서 버전이 새로워 열림): 편집 기능이 원래 안 보이는 규칙 그대로 — 기록·추가 입구가 없고, 비면 묶음도 숨김
+    if (await c21GoReadOnly()) {
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await sleep(200);
+      const ro = await evaluate(s.cdp, "({ ro: window.__wu.readOnly, weekly: !!document.querySelector('[data-testid=weekly-quick]'), add: !!document.querySelector('[data-testid=goal-add-open]'), hint: !!document.querySelector('[data-testid=handover-assignee-hint]'), bar: [...document.querySelectorAll('[data-testid=goal-bar] button')].map((b) => b.textContent), secs: ['record', 'handover', 'check', 'edit'].filter((k) => document.querySelector('[data-testid=goal-sec-' + k + ']')) })");
+      check('CR-21 C 읽기 전용: 이번 주 기록·추가 열기·담당 바꾸기 안내는 없고, 보이는 묶음과 단추가 짝(빈 묶음 단추 숨김)', ro.ro === true && !ro.weekly && !ro.add && !ro.hint && ro.bar.length === ro.secs.length && ro.secs.includes('record') && ro.secs.includes('check'), JSON.stringify(ro));
+    } else check('CR-21 C 읽기 전용 개요', false, '월말 정산 점검이 열리지 않음');
+
+    // ── B 쓴 것 바로 보이기 ──
+    if (await c21Go('U-A1', { clean: ['U-A1'] })) {
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await sleep(200);
+      const emptyText = await text(s.cdp, '[data-testid=recent-empty]');
+      check('CR-21 B-2 처음(샘플 기록뿐)에는 개요 「최근 기록」이 「아직 남긴 기록이 없습니다 — 「이번 주 기록」에 첫 기록을 남겨 보세요」', emptyText === '아직 남긴 기록이 없습니다 — 「이번 주 기록」에 첫 기록을 남겨 보세요' && !(await c21Box('[data-testid=recent-item]')), emptyText);
+      const ev0 = await c21Doc();
+      const w1 = await c21Weekly('길찾기 첫 기록');
+      check('CR-21 B-1 「이번 주 기록」 알림 줄 끝에 「이력에서 보기」 단추(goto-history)가 있고 기록이 한 건 늘었다', !!w1 && w1.btn && w1.text.includes('길찾기 첫 기록') && w1.text.endsWith('이력에서 보기') && (await c21Doc()) === ev0 + 1, JSON.stringify(w1));
+      const r1 = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=recent-item]')].map((li) => li.textContent)");
+      check('CR-21 B-2 방금 기록이 「최근 기록」 맨 위에 날짜·업무·종류·내용과 함께 보임(1건)', r1.length === 1 && r1[0].includes('길찾기 첫 기록') && r1[0].includes('진행 중') && /\d{4}-\d{2}-\d{2}/.test(r1[0]) && r1[0].includes('보기'), JSON.stringify(r1));
+      await shot(s.cdp, `${browser.name}-cr21-5-recent`);
+      // 알림의 「이력에서 보기」
+      await clickTestId(s.cdp, 'goto-history');
+      await sleep(300);
+      const h1 = await evaluate(s.cdp, "(() => { const li = document.querySelector('#detail [data-just-added=\"1\"]'); const sel = window.__wu.selected; return { sel, text: li ? li.textContent : null, n: document.querySelectorAll('#detail [data-just-added]').length }; })()");
+      check('CR-21 B-1 「이력에서 보기」 → 그 업무가 선택되고 상세 이력의 방금 기록한 줄 하나가 강조(data-just-added)', !!h1.sel && h1.n === 1 && !!h1.text && h1.text.includes('길찾기 첫 기록'), JSON.stringify(h1));
+      check('CR-21 B-1 강조된 줄이 패널 안에 보이도록 스크롤됨', await c21InView('#detail [data-just-added="1"]'));
+      await shot(s.cdp, `${browser.name}-cr21-6-history-highlight`);
+      check('CR-21 B-1 강조는 몇 초 뒤 사라지고(줄은 그대로) 이력에 남음', (await waitFor(s.cdp, "document.querySelectorAll('[data-just-added]').length === 0", 9000)) && (await text(s.cdp, '[data-testid=history]')).includes('길찾기 첫 기록'));
+      // 개요 「최근 기록」의 「보기」
+      await clickTestId(s.cdp, 'detail-back-universe');
+      await sleep(250);
+      await clickTestId(s.cdp, 'recent-go');
+      await sleep(300);
+      const h2 = await evaluate(s.cdp, "(() => { const li = document.querySelector('#detail [data-just-added=\"1\"]'); return { sel: window.__wu.selected, text: li ? li.textContent : null }; })()");
+      check('CR-21 B-2 「최근 기록」의 「보기」 → 그 업무를 고르고 이력의 그 줄을 강조', !!h2.sel && !!h2.text && h2.text.includes('길찾기 첫 기록'), JSON.stringify(h2));
+      // 6건 넘게 쌓으면 최근 5건만, 기록 시각 늦은 순
+      await clickTestId(s.cdp, 'detail-back-universe');
+      await sleep(250);
+      for (let i = 2; i <= 6; i += 1) await c21Weekly(`길찾기 기록 ${i}`);
+      const r6 = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=recent-item]')].map((li) => li.textContent)");
+      check('CR-21 B-2 기록이 6건이면 최근 5건만, 늦게 기록한 것이 위(6→5→4→3→2)', r6.length === 5 && r6.every((t, i) => t.includes(`길찾기 기록 ${6 - i}`)), JSON.stringify(r6));
+      // 업무 상세 「이력 추가」 → 바로 그 줄 강조(알림 단추 없이)
+      await evaluate(s.cdp, "window.__wu.select('U-A1/N-001')");
+      await sleep(200);
+      await clickTestId(s.cdp, 'btn-event');
+      await fillPanelForm(s.cdp, { 'event-type': 'memo', 'event-date': '2026-10-03', 'event-note': '이력 추가 강조 시험' });
+      await sleep(350);
+      const h3 = await evaluate(s.cdp, "(() => { const li = document.querySelector('#detail [data-just-added=\"1\"]'); return { text: li ? li.textContent : null, n: document.querySelectorAll('#detail [data-just-added]').length, btn: !!document.querySelector('#detail [data-testid=goto-history]') }; })()");
+      check('CR-21 B-1 업무 상세 「이력 추가」 저장 직후 방금 기록한 줄이 바로 강조(단추 없이)되고 패널 안에 보임', h3.n === 1 && !!h3.text && h3.text.includes('이력 추가 강조 시험') && !h3.btn && (await c21InView('#detail [data-just-added="1"]')), JSON.stringify(h3));
+      // 「해결로 표시」 → 알림 + 「이력에서 보기」
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await sleep(200);
+      await clickTestId(s.cdp, 'btn-issues');
+      await sleep(250);
+      await evaluate(s.cdp, "document.querySelector('[data-testid=btn-resolve]').click()");
+      await sleep(300);
+      const rd = await evaluate(s.cdp, "(() => { const d = document.querySelector('[data-testid=resolve-done]'); return d ? { text: d.textContent, btn: !!d.querySelector('[data-testid=goto-history]') } : null; })()");
+      check('CR-21 B-1 「해결로 표시」 뒤 알림 줄(해결로 표시했습니다)에 「이력에서 보기」 단추', !!rd && rd.text.includes('해결로 표시했습니다') && rd.btn, JSON.stringify(rd));
+      if (rd && rd.btn) {
+        await clickTestId(s.cdp, 'goto-history');
+        await sleep(300);
+        const h4 = await evaluate(s.cdp, "(() => { const li = document.querySelector('#detail [data-just-added=\"1\"]'); return { sel: window.__wu.selected, text: li ? li.textContent : null }; })()");
+        check('CR-21 B-1 해결 알림의 「이력에서 보기」 → 그 업무의 이력에서 방금 남긴 「해결됨」 줄이 강조', !!h4.sel && !!h4.text && h4.text.includes('해결됨'), JSON.stringify(h4));
+      }
+    } else check('CR-21 B 쓴 것 바로 보이기', false, '월말 정산 점검이 열리지 않음');
+
+    // ── A 기능 찾기 ──
+    if (await c21Go('U-A1', { clean: ['U-A1'] })) {
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+      await sleep(200);
+      const geo = await evaluate(s.cdp, "(() => { const i = document.querySelector('[data-testid=feature-find]'); const p = document.getElementById('universe-picker'); const h = document.querySelector('body > header'); const ir = i ? i.getBoundingClientRect() : null; const pr = p.getBoundingClientRect(); return { has: !!i, ph: i && i.placeholder, left: ir && ir.left, pright: pr.right, w: ir && ir.width, h: ir && ir.height, headerH: h.getBoundingClientRect().height, aria: i && i.getAttribute('aria-label'), top: ir && ir.top, ptop: pr.top }; })()");
+      check('CR-21 A 머리글 업무 지도 선택 오른쪽에 「무엇을 할까요?」 검색 칸(placeholder 「무엇을 할까요? 예: 담당, 미해결, 점검」), 같은 줄·크기 있음, 머리글은 한 줄', geo.has && geo.ph === '무엇을 할까요? 예: 담당, 미해결, 점검' && geo.left >= geo.pright - 1 && geo.w >= 120 && geo.h > 10 && Math.abs(geo.top - geo.ptop) < 20 && geo.headerH < 70, JSON.stringify(geo));
+      // 담당 → 담당 바꾸기 (업무를 고르지 않은 상태)
+      await c21Type('담당');
+      const hits = await c21Hits();
+      check('CR-21 A 「담당」을 치면 결과 목록(최대 6개)에 「담당 바꾸기」가 있고 이름·위치 설명·「바로 가기」가 보임', hits.length >= 1 && hits.length <= 6 && hits.some((h) => h.id === 'assignee' && h.text.includes('담당 바꾸기') && h.text.includes('업무를 고른 뒤') && h.text.includes('바로 가기')), JSON.stringify(hits));
+      await shot(s.cdp, `${browser.name}-cr21-7-feature-find`);
+      await c21Click('assignee');
+      await sleep(250);
+      const pick = await evaluate(s.cdp, "({ head: (document.querySelector('[data-testid=feature-find-pick]') || {}).textContent || null, works: [...document.querySelectorAll('[data-testid=feature-find-work]')].map((b) => b.textContent) })");
+      check('CR-21 A 업무를 안 고르고 「담당 바꾸기」 → 「그래프에서 업무를 먼저 고르세요」와 업무 이름 목록(최대 8개)', !!pick.head && pick.head.includes('그래프에서 업무를 먼저 고르세요') && pick.works.length >= 1 && pick.works.length <= 8, JSON.stringify(pick));
+      await shot(s.cdp, `${browser.name}-cr21-8-feature-pick`);
+      await evaluate(s.cdp, "document.querySelector('[data-testid=feature-find-work]').click()");
+      await sleep(350);
+      const asg = await evaluate(s.cdp, "(() => { const d = document.querySelector('#detail [data-testid=assignee-change]'); return { sel: window.__wu.selected, open: d ? d.open : null, flash: d ? d.classList.contains('goal-flash') : null }; })()");
+      check('CR-21 A 업무 이름을 누르면 그 업무가 골라지고 상세의 「담당 바꾸기」 상자가 펼쳐져 강조', !!asg.sel && asg.open === true && asg.flash === true, JSON.stringify(asg));
+      await shot(s.cdp, `${browser.name}-cr21-9-feature-assignee`);
+      // 업무를 이미 고른 상태에서는 목록 없이 바로
+      await evaluate(s.cdp, "window.__wu.select('U-A1/N-002')");
+      await sleep(200);
+      await c21Type('담당 바꾸기');
+      await c21Click('assignee');
+      await sleep(300);
+      const asg2 = await evaluate(s.cdp, "(() => { const d = document.querySelector('#detail [data-testid=assignee-change]'); return { sel: window.__wu.selected, open: d ? d.open : null, pick: !!document.querySelector('[data-testid=feature-find-pick]') }; })()");
+      check('CR-21 A 업무를 이미 고른 상태에서 「담당 바꾸기」 → 업무 목록 없이 그 업무의 상자가 바로 펼쳐짐(선택 유지)', asg2.sel === 'U-A1/N-002' && asg2.open === true && !asg2.pick, JSON.stringify(asg2));
+      // 점검 → 점검 묶음
+      await c21Type('점검');
+      const hp = await c21Hits();
+      check('CR-21 A 「점검」 → 첫 결과가 매주 점검(점검 묶음)', hp.length >= 1 && hp[0].id === 'weekly-check', JSON.stringify(hp.map((h) => h.id)));
+      await c21Click('weekly-check');
+      await sleep(300);
+      const chk = await evaluate(s.cdp, "({ sel: window.__wu.selected, head: !!document.querySelector('[data-testid=goal-sec-check] h3.goal-flash') })");
+      check('CR-21 A 「점검」 결과를 고르면 선택이 풀리고 개요의 「점검」 묶음 머리가 보이며 강조', chk.sel === null && chk.head && (await c21InView('[data-testid=goal-sec-check] h3')), JSON.stringify(chk));
+      // 미해결 → 개요 요소
+      await c21Type('미해결');
+      await c21Click('issues');
+      await sleep(250);
+      check('CR-21 A 「미해결」 → 개요의 「미해결 n건」 줄로 가서 강조', (await c21Flash('[data-testid=issue-count]')) && (await c21InView('[data-testid=issue-count]')));
+      // 글로 → 창
+      await c21Type('글로');
+      const hg = await c21Hits();
+      check('CR-21 A 「글로」 → 첫 결과가 「글로 추가」', hg.length >= 1 && hg[0].id === 'text-add' && !hg[0].off, JSON.stringify(hg));
+      await c21Click('text-add');
+      await sleep(300);
+      check('CR-21 A 「글로 추가」 결과 → 글로 추가 창이 열림', await evaluate(s.cdp, "document.getElementById('text-add-dialog').open"));
+      await shot(s.cdp, `${browser.name}-cr21-10-feature-textadd`);
+      await evaluate(s.cdp, "document.getElementById('text-add-dialog').close()");
+      // 설정·폴더·가져오기 탭
+      await c21Type('설정');
+      await c21Click('settings');
+      await sleep(250);
+      check('CR-21 A 「설정」 결과 → 설정 패널이 열림', !!(await c21Box('#detail [data-testid=settings-close]')));
+      await evaluate(s.cdp, "document.querySelector('[data-testid=settings-close]').click()");
+      await c21Type('백업');
+      await c21Click('json-export');
+      await sleep(300);
+      check('CR-21 A 「백업」 → JSON 내보내기 → 가져오기·내보내기 창의 「내보내기」 탭이 열림', await evaluate(s.cdp, "document.getElementById('import-dialog').open && document.querySelector('[data-testid=import-tab-export]').classList.contains('active')"));
+      await evaluate(s.cdp, "document.getElementById('import-dialog').close()");
+      // 키보드: ↓ → Enter, Esc
+      await c21Type('기록');
+      await evaluate(s.cdp, "(() => { const i = document.querySelector('[data-testid=feature-find]'); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); })()");
+      await sleep(100);
+      check('CR-21 A Esc로 결과 목록이 닫히고 글자는 남음', (await evaluate(s.cdp, "document.querySelector('[data-testid=feature-find-list]').hidden")) && (await evaluate(s.cdp, "document.querySelector('[data-testid=feature-find]').value")) === '기록');
+      await evaluate(s.cdp, "(() => { const i = document.querySelector('[data-testid=feature-find]'); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()");
+      await sleep(300);
+      check('CR-21 A Enter는 첫 결과(이번 주 기록)로 간다: 개요의 이번 주 기록 상자가 강조', (await c21Flash('[data-testid=weekly-quick]')) && (await evaluate(s.cdp, "document.querySelector('[data-testid=feature-find]').value")) === '');
+      await c21Type('zzqqxx');
+      check('CR-21 A 맞는 기능이 없으면 「찾는 기능 없음」 안내', (await text(s.cdp, '[data-testid=feature-find-none]')).includes('찾는 기능 없음'));
+      await c21Type('');
+    } else check('CR-21 A 기능 찾기', false, '월말 정산 점검이 열리지 않음');
+
+    // 읽기 전용에서는 쓸 수 없는 기능이 흐리게 + 이유, 눌러도 가지 않음 / 묶은 지도에서 못 쓰는 기능
+    if (await c21GoReadOnly()) {
+      await c21Type('글로');
+      const hr = await c21Hits();
+      check('CR-21 A 읽기 전용: 「글로 추가」 결과가 흐리게(aria-disabled)이고 「이 화면에서는 쓸 수 없음(읽기 전용)」', hr.length >= 1 && hr[0].id === 'text-add' && hr[0].off && hr[0].text.includes('이 화면에서는 쓸 수 없음(읽기 전용)'), JSON.stringify(hr));
+      await shot(s.cdp, `${browser.name}-cr21-11-feature-readonly`);
+      await c21Click('text-add');
+      await sleep(250);
+      check('CR-21 A 읽기 전용에서 흐린 결과를 눌러도 창이 열리지 않음', !(await evaluate(s.cdp, "document.getElementById('text-add-dialog').open")));
+      await c21Type('인사이트');
+      const hi = await c21Hits();
+      check('CR-21 A 읽기 전용에서도 보기만 하는 기능(인사이트)은 흐리지 않음', hi.length >= 1 && hi[0].id === 'insight' && !hi[0].off, JSON.stringify(hi));
+    } else check('CR-21 A 읽기 전용', false, '월말 정산 점검이 열리지 않음');
+    if (await c21Go('U-D1', { clean: ['U-D1'] })) {
+      await c21Type('되감기');
+      const hw = await c21Hits();
+      check('CR-21 A 묶은 지도: 「편집 되감기」 결과가 흐리게 + 「묶은 지도」 이유', hw.length >= 1 && hw[0].id === 'rewind' && hw[0].off && hw[0].text.includes('묶은 지도'), JSON.stringify(hw));
+      await c21Type('글로');
+      const hw2 = await c21Hits();
+      check('CR-21 A 묶은 지도: 「글로 추가」도 흐리게', hw2.length >= 1 && hw2[0].id === 'text-add' && hw2[0].off, JSON.stringify(hw2));
+      await c21Type('매주 점검');
+      await c21Click('weekly-check');
+      await sleep(300);
+      check('CR-21 A 묶은 지도: 매주 점검 → 지난 점검 대비 줄(team-risk-compare)로 가서 강조', (await c21Flash('[data-testid=team-risk-compare]')) && (await c21InView('[data-testid=team-risk-compare]')));
+      await c21Type('');
+    } else check('CR-21 A 묶은 지도', false, '가상 운영부가 열리지 않음');
+
+    // 저장소를 블록 시작 때 찍어 둔 상태로 되돌린다(샘플 문서 포함)
+    await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(c21Snap)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); location.hash = 'U-A1'; location.reload(); })()`).catch(() => {});
+    await sleep(500);
+    await c21Wait('U-A1');
+  }
+
   // ── CR-14 A 편집 되감기(R-25, D-30): 이름 수정 → 개요 「편집 되감기」 → 이전 시점 → 읽기 전용 확인 → 지금으로 → 다시 → 되돌리기. 데이터를 바꾸므로 끝부분 ──
   await reloadApp();
   const rwOld = await evaluate(s.cdp, "window.__wu.doc.nodes.find((n) => n.id === 'N-002').label");
