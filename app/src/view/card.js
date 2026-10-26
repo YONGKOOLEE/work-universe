@@ -220,10 +220,16 @@ export function deadlineLeft(deadline, today) {
   const m = /^(?:(\d{4})-)?(\d{1,2})-(\d{1,2})$/.exec(String(deadline || '').trim());
   const t = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(today || ''));
   if (!m || !t) return '';
-  const y = Number(m[1] || t[1]);
-  const to = Date.UTC(y, Number(m[2]) - 1, Number(m[3]));
-  const days = Math.round((to - Date.UTC(Number(t[1]), Number(t[2]) - 1, Number(t[3]))) / 86400000);
-  if (Number.isNaN(days)) return '';
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const base = Date.UTC(Number(t[1]), Number(t[2]) - 1, Number(t[3]));
+  // 없는 날짜(13-1, 2-30 …)는 날수를 붙이지 않는다(검토 RV13-3)
+  const real = (y) => { const x = new Date(Date.UTC(y, mo - 1, d)); return x.getUTCFullYear() === y && x.getUTCMonth() === mo - 1 && x.getUTCDate() === d ? x.getTime() : null; };
+  // 연도 없는 M-D는 기준일에서 가장 가까운 해의 그 날짜(12-28에 1-5 → 다음 해, 1-2에 12-31 → 지난해, RV13-3)
+  const years = m[1] ? [Number(m[1])] : [Number(t[1]) - 1, Number(t[1]), Number(t[1]) + 1];
+  const cands = years.map(real).filter((x) => x !== null).map((x) => Math.round((x - base) / 86400000));
+  if (!cands.length) return '';
+  const days = cands.reduce((a, b) => (Math.abs(b) < Math.abs(a) ? b : a));
   return days > 0 ? `${days}일 남음` : days === 0 ? '오늘 마감' : `${-days}일 지남`;
 }
 
