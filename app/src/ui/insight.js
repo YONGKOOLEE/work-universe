@@ -57,6 +57,7 @@ function fillExplain(box, view, r, o, note, same = null) {
   // 규칙 기반 문장이 아래 카드와 글자까지 같으면 문장을 다시 쓰지 않는다. 사전 생성·실시간 문장은 카드와 다른 글이라 그대로 보인다
   const dup = !!same && r.method === 'rule' && r.sentences.length > 0 && r.sentences.every((s) => same.has(s.text));
   box.dataset.dup = dup ? 'true' : 'false';
+  box.hidden = dup; // 보일 문장이 없으면 「설명」 칸 자체를 숨긴다(R13 FU8-27: 「요약한 문장이 없습니다」만 있는 빈 칸). 사전 생성·실시간 문장은 카드와 다른 글이라 그대로 보인다
   box.replaceChildren(...[
     el('h4', {}, '설명', el('span', { class: `method-chip ${r.method}`, title: r.method === 'pregen' ? PREGEN_CHIP_TITLE : r.method === 'llm' ? 'Claude API가 실시간으로 이 근거만 보고 쓴 문장 — 앱이 근거 ID와 원문 인용(quote)을 검증했습니다' : METHOD_LABELS[r.method] }, METHOD_LABELS[r.method].replace(/\(.*\)$/, '')), note),
     // 근거가 많으면 접어 둔다(표를 밀어내지 않게)
@@ -115,7 +116,7 @@ export function insightPanel(o) {
   const buildSummary = () => {
     const d = inspectionInput(view, { asOf: summaryAsOf(), n: denseN, mapName: o.mapName || '업무 지도' });
     // 비교 기준 o.baseline은 오늘보다 앞선 날의 가장 최근 기준(M1), o.baselineToday는 오늘 저장한 점검뿐일 때. 업무별 지금 담당 이름(M6)도 함께 견준다
-    return inspectionSummaryText(d, o.baseline || o.baselineToday ? compareRisk(d, o.baseline || null, { ...namesFromInspection(d), owners: currentOwnersByWork(view, summaryAsOf()) }, { savedToday: !!o.baselineToday }) : null);
+    return inspectionSummaryText(d, o.baseline || o.baselineToday ? compareRisk(d, o.baseline || null, { ...namesFromInspection(d), owners: currentOwnersByWork(view, summaryAsOf()) }, { savedToday: !!o.baselineToday }) : null, { all: true }); // 미리 보기·복사·파일·인쇄 모두 같은 글: 「외 n건」으로 자르지 않는다(R13 FU8-26)
   };
   return el('div', { class: 'insight' },
     el('div', { class: 'row panel-head' }, el('h2', {}, '인사이트'), el('button', { type: 'button', 'data-testid': 'insight-close', onclick: o.onClose }, '닫기')),

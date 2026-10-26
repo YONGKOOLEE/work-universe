@@ -85,7 +85,11 @@ export function groupLinks(coreType, links) {
 
 function assignPreview(items) {
   const n = (r) => items.filter((l) => assignRank(l) === r).length;
-  return [n(0) ? `지금 ${n(0)}` : '', n(1) ? `예정 ${n(1)}` : '', n(2) ? `지난 ${n(2)}` : ''].filter(Boolean).join(' · ');
+  // 담당을 넘긴 날의 끝나는 쪽은 「지금」에 세지 않고 「오늘까지」로 따로 센다(R13 FU8-12: 넘기자마자 「지금 2」로 보여 헷갈림). 줄 세우기·펼침 판정(assignRank)은 그대로
+  const handed = items.filter((l) => l.status_key === 'handover');
+  const now = n(0) - handed.length;
+  const handedName = String(handed.length ? handed[0].status || '' : '').replace(/\(.*\)$/, '') || '오늘까지';
+  return [now ? `지금 ${now}` : '', handed.length ? `${handedName} ${handed.length}` : '', n(1) ? `예정 ${n(1)}` : '', n(2) ? `지난 ${n(2)}` : ''].filter(Boolean).join(' · ');
 }
 
 function aroundPreview(p) {
@@ -94,7 +98,8 @@ function aroundPreview(p) {
 
 function previewOf(items) {
   const rel = new Map();
-  for (const l of items) rel.set(l.relation, (rel.get(l.relation) || 0) + 1);
+  // 묶음 머리의 요약 글만: 관계 「수행」은 화면에서 「담당」으로 부른다(R13 FU8-12, 관계 이름·저장 값은 그대로)
+  for (const l of items) { const k = l.relation_type === 'performs' ? '담당' : l.relation; rel.set(k, (rel.get(k) || 0) + 1); }
   return [...rel].map(([k, v]) => `${k} ${v}`).join(' · ');
 }
 

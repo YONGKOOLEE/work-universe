@@ -437,9 +437,10 @@ export const SUMMARY_TOP = 5;
 export const SUMMARY_FAKE_NOTE = '이 앱의 이름과 데이터는 모두 가상입니다. 참고 정보이며 해석과 인력 배치는 사람이 정합니다.';
 
 const countLine = (n, name, unit) => (n === null || n === undefined ? `${name}: 기록이 부족해 셀 수 없음` : `${name}: ${n}${unit}`);
-const top = (list, fmt) => {
-  const shown = list.slice(0, SUMMARY_TOP).map(fmt);
-  const more = list.length > SUMMARY_TOP ? [`  외 ${list.length - SUMMARY_TOP}건`] : [];
+// all: 파일·복사·인쇄에는 빠짐없이 넣는다(R13 FU8-26: 「외 n건」으로 잘려 나머지를 알 수 없었음). 아니면 상위 SUMMARY_TOP개 + 「외 n건」
+const top = (list, fmt, all = false) => {
+  const shown = (all ? list : list.slice(0, SUMMARY_TOP)).map(fmt);
+  const more = !all && list.length > SUMMARY_TOP ? [`  외 ${list.length - SUMMARY_TOP}건`] : [];
   return [...shown, ...more];
 };
 
@@ -448,17 +449,17 @@ const top = (list, fmt) => {
  * @param {{mapName:string, asOf:string, solo:number|null, dense:number|null, gaps:number|null, soloItems:{work:string,person:string,level:string}[], denseItems:{person:string,count:number}[], gapItems:{work:string}[]}} d
  * @param {ReturnType<typeof compareRisk>|null} cmp
  */
-export function inspectionSummaryText(d, cmp) {
+export function inspectionSummaryText(d, cmp, { all = false } = {}) {
   const lines = [
     `점검 요약 — ${d.mapName}`,
     `기준일: ${d.asOf}`,
     '',
     countLine(d.solo, '혼자만 아는 일', '개'),
-    ...(d.solo ? top(d.soloItems, (x) => `  - 「${x.work}」 (${x.person}${x.level === 'high' ? ', 높음' : ', 주의'})`) : []),
+    ...(d.solo ? top(d.soloItems, (x) => `  - 「${x.work}」 (${x.person}${x.level === 'high' ? ', 높음' : ', 주의'})`, all) : []),
     countLine(d.dense, '일 몰린 사람', '명'),
-    ...(d.dense ? top(d.denseItems, (x) => `  - ${x.person} (${x.count}개 담당)`) : []),
+    ...(d.dense ? top(d.denseItems, (x) => `  - ${x.person} (${x.count}개 담당)`, all) : []),
     countLine(d.gaps, '담당자 빈 일', '개'),
-    ...(d.gaps ? top(d.gapItems, (x) => `  - 「${x.work}」`) : []),
+    ...(d.gaps ? top(d.gapItems, (x) => `  - 「${x.work}」`, all) : []),
     '',
   ];
   if (cmp && cmp.has) {

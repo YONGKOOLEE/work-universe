@@ -181,6 +181,12 @@ function riskParts(extras) {
   const r = extras.riskSummary;
   risk.push(el('p', { class: 'risk-summary', 'data-testid': 'team-risk-summary' }, r.parts.join(' · '), ' ',
     el('button', { type: 'button', class: 'link', 'data-testid': 'btn-team-risk-more', onclick: r.onMore }, '자세히')));
+  // 일 몰린 사람 이름(R13 FU8-19): 숫자만 있어 누구부터 볼지 알 수 없었다. 이름을 누르면 그 사람 카드(상위 몇 명만, 나머지는 「자세히」)
+  if (r.dense && r.dense.rows.length) {
+    const names = r.dense.rows.flatMap((p, i) => [i ? ', ' : null, el('button', { type: 'button', class: 'link', 'data-testid': 'team-risk-dense-person', 'data-gid': p.gid, title: `${p.label}의 카드를 엽니다`, onclick: () => r.dense.onPick(p.gid) }, `${p.label}(${p.count}개)`)]).filter(Boolean);
+    risk.push(el('p', { class: 'risk-summary risk-dense', 'data-testid': 'team-risk-dense' }, '일 몰린 사람: ', ...names,
+      r.dense.total > r.dense.rows.length ? el('span', { class: 'muted small' }, ` 외 ${r.dense.total - r.dense.rows.length}명 — 「자세히」에서 모두 봅니다`) : null));
+  }
   // 지난 점검 대비(CR-18 D-3): 증감 한 줄과 「이번 점검 저장」. 기준은 이 브라우저 설정에만 있고 문서에는 들어가지 않는다
   if (r.compare) {
     risk.push(el('p', { class: 'risk-summary risk-compare', 'data-testid': 'team-risk-compare', 'data-has-baseline': r.compare.has ? 'true' : 'false' }, r.compare.text, ' ',

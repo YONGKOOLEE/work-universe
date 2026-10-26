@@ -589,7 +589,16 @@ export function eventForm(o) {
     affiliation_change: () => [field('사람', person), field('이전 소속(선택)', fromOrg), field('새 소속(선택)', toOrg)],
   };
   const slot = el('div', { class: 'event-fields' });
-  const sync = () => { slot.replaceChildren(...groups[type.value]()); syncPast(); syncGate(); };
+  // 「종류」 칸(R13 FU8-6): 메모가 기본이고 대부분 메모만 쓰므로 분류 칩 양식(parts)일 때는 접어 둔다. 메모가 아닌 종류를 고르면 펼쳐 둔다
+  const typeSum = el('summary', { class: 'small', 'data-testid': 'event-type-sum' }, '');
+  const typeBox = parts ? el('details', { class: 'event-type-box', 'data-testid': 'event-type-box' }, typeSum, field('종류', type)) : null;
+  const typeName = () => (EVENT_CHOICES.find(([v]) => v === type.value) || ['', ''])[1];
+  const syncTypeBox = () => {
+    if (!typeBox) return;
+    typeSum.textContent = type.value === 'memo' ? '종류: 메모 — 담당 시작·인수인계 같은 다른 기록을 남기려면 누르세요' : `종류: ${typeName()}`;
+    if (type.value !== 'memo') typeBox.open = true;
+  };
+  const sync = () => { slot.replaceChildren(...groups[type.value]()); syncPast(); syncGate(); syncTypeBox(); };
   type.addEventListener('change', sync);
   sync();
 
@@ -598,12 +607,12 @@ export function eventForm(o) {
     'form',
     { class: 'editor', novalidate: true, 'data-testid': 'event-form' },
     el('h3', {}, '기록 남기기'),
-    field('종류', type),
+    typeBox || field('종류', type),
     field('날짜', date),
     slot,
     field('내용', note),
     msg.box,
-    actions('기록', o.onCancel, parts ? () => parts.needCategory() : null),
+    actions('기록하기', o.onCancel, parts ? () => parts.needCategory() : null), // 왼쪽 메뉴의 「기록」(공간)과 구별(R13 FU8-7)
   );
   submitBtn = parts ? [...form.querySelectorAll('button')].find((b) => b.getAttribute('type') === 'submit') || null : null;
   // 쓰던 메모 보관(R11 FU6-3): o.keep({get,set,clear})가 있으면 이 업무에 쓰던 글·분류를 채우고, 쓰는 대로 보관한다. 저장이 되면 지운다(보관은 이 탭의 메모리뿐)

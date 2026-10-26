@@ -4,6 +4,8 @@
 import { METHOD_LABELS, explainInsight, findCandidatesAsync, isLive, syncProvider } from '../llm/connector.js';
 import { AI_CANDIDATE_LABEL, collectWorks, decidedSets, withAiCandidates } from '../llm/ai-candidates.js';
 import { pairKey } from '../model/schema.js';
+import { josa } from '../model/josa.js';
+import { cardData, personData } from '../view/card.js';
 import { isTopicOnlyCandidate } from '../merge/merge.js';
 import { el } from './dom.js';
 import { evidenceChips as chips } from './evidence.js';
@@ -150,10 +152,46 @@ export function mergePanel(o) {
 function renderMerge(o, plan, aiHead) {
   const { view } = o;
   // 판정은 묻는 말 + 답 단추 둘(사용자 2026-10-26 저녁 "판정 단추가 무엇인지 못 찾겠음" — 단추만 있으면 무엇을 고르는지 안 보임)
-  const decideButtons = (item, sameLabel, diffLabel) => (o.readOnly || !item.b ? null : el('div', { class: 'row decide-row' },
-    el('span', { class: 'decide-q', 'data-testid': 'merge-decide-q' }, `이 둘이 ${sameLabel}인가요?`),
-    el('button', { type: 'button', class: 'small-btn', 'data-testid': 'merge-same', onclick: () => o.onDecide(decisionItem(item), 'confirmed') }, sameLabel),
-    el('button', { type: 'button', class: 'small-btn', 'data-testid': 'merge-diff', onclick: () => o.onDecide(decisionItem(item), 'rejected') }, diffLabel)));
+  // 「같은 …」은 그래프에서 한 항목으로 합쳐지므로 누르면 그 자리에서 한 번 더 묻는다(R13 FU8-25). 「다른 …」은 바로 정한다 — 둘 다 아래 「지금까지 고른 답」의 「다시 묻기」로 되돌릴 수 있다
+  const decideButtons = (item, sameLabel, diffLabel) => {
+    if (o.readOnly || !item.b) return null;
+    const row = el('div', { class: 'row decide-row' });
+    const draw = () => row.replaceChildren(
+      el('span', { class: 'decide-q', 'data-testid': 'merge-decide-q' }, `이 둘이 ${sameLabel}인가요?`),
+      el('button', { type: 'button', class: 'small-btn', 'data-testid': 'merge-same', onclick: ask }, sameLabel),
+      el('button', { type: 'button', class: 'small-btn', 'data-testid': 'merge-diff', onclick: () => o.onDecide(decisionItem(item), 'rejected') }, diffLabel));
+    function ask() {
+      const no = el('button', { type: 'button', class: 'small-btn', 'data-testid': 'merge-same-no', onclick: () => { draw(); const b = row.querySelector('[data-testid=merge-same]'); if (b && b.focus) b.focus(); } }, '아니요');
+      row.replaceChildren(
+        el('span', { class: 'decide-q', role: 'alert', 'data-testid': 'merge-confirm-q' }, `${sameLabel}${josa(sameLabel, '으로/로')} 이으면 그래프에서 한 항목으로 보입니다. 이을까요?`),
+        el('button', { type: 'button', class: 'small-btn', 'data-testid': 'merge-same-yes', onclick: () => o.onDecide(decisionItem(item), 'confirmed') }, '이어요'),
+        no);
+      if (no.focus) no.focus();
+    }
+    draw();
+    return row;
+  };
+
+  // 후보 한 줄에 두 쪽을 가를 근거를 보인다(R13 FU8-24): 어느 지도에 있는지, 사람이면 지금 맡은 업무(최대 3), 업무면 지금 담당. 기존 카드 계산을 읽기만 한다(판정과 무관)
+  const SIDE_WORKS_MAX = 3;
+  const sideText = (gid) => {
+    const n = view.rawNode(gid);
+    if (!n) return '';
+    const parts = [`「${n.label}」`, `지도 「${n.universe_name}」`];
+    try {
+      if (o.asOf) {
+        if (n.core_type === 'person') {
+          const rows = personData(view, view.getNode(gid) || n, { asOf: o.asOf }).personRows;
+          parts.push(rows.length ? `지금 맡은 업무: ${rows.slice(0, SIDE_WORKS_MAX).map((r) => r.label).join(', ')}${rows.length > SIDE_WORKS_MAX ? ` 외 ${rows.length - SIDE_WORKS_MAX}건` : ''}` : '지금 맡은 업무 없음');
+        } else if (n.core_type === 'work') {
+          const c = cardData(view, gid, { asOf: o.asOf });
+          if (c && c.loadText) parts.push(c.loadText);
+        }
+      }
+    } catch { /* 근거 줄은 보조 정보다: 계산이 안 되면 지도 이름까지만 */ }
+    return parts.join(' · ');
+  };
+  const sideLines = (item) => (item.b ? el('div', { class: 'merge-sides small', 'data-testid': 'merge-sides' }, ...[item.a, item.b].map((g) => el('div', { class: 'muted', 'data-testid': 'merge-side' }, sideText(g)))) : null);
 
   // 「사번 없음」 줄의 「사번 넣기」(CR-22 F): 그 사람이 있는 하위 지도가 이 브라우저 저장소에 있고 쓸 수 있을 때만(o.canEmpNo). 아니면 아래 안내
   const empNoRow = (p) => {
@@ -172,6 +210,7 @@ function renderMerge(o, plan, aiHead) {
     ? el('ul', { class: 'patterns', 'data-testid': 'merge-persons' }, ...plan.persons.map((p) => el('li', { 'data-type': p.type },
       el('div', { class: 'who' }, el('strong', {}, p.title), el('span', { class: 'chip' }, p.type === 'conflict' ? '사번 충돌' : p.type === 'stale' ? '사번 바뀜' : '사번 없음')),
       el('div', { class: 'muted small' }, p.reason),
+      sideLines(p),
       chips(view, p.evidence_ids, o.onFocus),
       // 같은 사람이 있는지 비교할 상대가 없는 "사번 없음" 카드는 누를 것이 없으므로 고치는 길을 적는다(여섯 번째 검토 U-12)
       p.type === 'no_empno' && o.canEmpNo && o.canEmpNo(p) ? empNoRow(p) : null,
@@ -188,6 +227,7 @@ function renderMerge(o, plan, aiHead) {
         w.ai ? el('span', { class: 'chip', 'data-testid': 'candidate-ai-chip', title: 'Claude API가 찾은 후보입니다. 두 업무의 글에서 인용이 확인된 쌍만 보입니다. 같은 업무인지는 사람이 정합니다' }, AI_CANDIDATE_LABEL) : null),
       r ? el('div', { class: 'small' }, ...r.sentences.map((s) => el('div', {}, s.text)), el('span', { class: `method-chip ${r.method}`, title: METHOD_LABELS[r.method] }, METHOD_LABELS[r.method].replace(/\(.*\)$/, ''))) : null,
       w.ai ? aiBlock(view, w) : null,
+      sideLines(w),
       chips(view, w.evidence_ids, o.onFocus),
       decideButtons(w, '같은 업무', '다른 업무'));
   };
@@ -212,7 +252,11 @@ function renderMerge(o, plan, aiHead) {
   const raw = (g) => { const n = view.rawNode(g); return n ? `${n.label}(${n.universe_name})` : g; };
   const history = decided.length
     ? el('ul', { class: 'small', 'data-testid': 'merge-decided' }, ...decided.map((l) => el('li', {},
-      `${raw(l.a)} · ${raw(l.b)} — ${l.status === 'confirmed' ? '같음' : '다름'}${l.method === 'emp_no_auto' ? '(사번 자동)' : ''}${l.decided_at ? ` · ${l.decided_at.slice(0, 10)}` : ''}`)))
+      `${raw(l.a)} · ${raw(l.b)} — ${l.status === 'confirmed' ? '같음' : '다름'}${l.method === 'emp_no_auto' ? '(사번 자동)' : ''}${l.decided_at ? ` · ${l.decided_at.slice(0, 10)}` : ''}`,
+      // 잘못 고른 답은 「다시 묻기」로 아직 답하지 않은 상태로 되돌린다(R13 FU8-25). 사번이 같아 자동으로 이은 것은 되돌리지 않는다(다음 묶기에서 다시 이어짐)
+      !o.readOnly && o.onReask && l.method === 'human'
+        ? el('span', {}, ' ', el('button', { type: 'button', class: 'link', 'data-testid': 'merge-reask', title: '이 답을 지우고 위 후보 목록에서 다시 묻습니다(되감기 이력에는 남습니다)', onclick: () => o.onReask(l) }, '다시 묻기'))
+        : null)))
     : el('p', { class: 'muted small' }, '아직 없습니다.');
 
   return el('div', { class: 'insight', 'data-testid': 'merge-panel' },

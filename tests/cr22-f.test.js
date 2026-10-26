@@ -106,13 +106,20 @@ test('CR-22 F 담당 넘기기 — 오류: 둘 다 고름·둘 다 비움·같�
 test('CR-22 F 성공 알림: 문구와 「거기로 가기」 대상(이력 줄 / 항목 / 공간), 기존 testid 유지', () => {
   const rec = successNotice('record', { label: '대사 확인', date: '2026-10-20', today: '2026-10-26', category: 'issue', note: '불일치', workGid: 'U/N-001', evGids: ['U/E-9'] });
   assert.equal(rec.testid, 'weekly-done');
-  assert.equal(rec.text, '「대사 확인」에 (2026-10-20) 기록했습니다 — [이슈] 불일치');
+  assert.equal(rec.text, '「대사 확인」에 (2026-10-20) 기록했습니다 — [이슈] 불일치 — 미해결에 잡혔어요. 끝나면 「해결로 표시」하세요.'); // R13 FU8-8: 이슈·진행 중이면 미해결에 잡혔다는 말을 덧붙임
   assert.deepEqual(rec.goto, { type: 'history', nodeGid: 'U/N-001', gids: ['U/E-9'] });
   assert.equal(successNotice('record', { label: 'a', date: '2026-10-26', today: '2026-10-26', category: 'caution', note: 'n', workGid: 'U/N-001', evGids: [] }).goto, null, '이력 줄을 모르면 가기 단추 없음');
+  assert.ok(!successNotice('record', { label: 'a', date: '2026-10-26', today: '2026-10-26', category: 'caution', note: 'n', workGid: 'U/N-001', evGids: [] }).text.includes('미해결'), '주의사항·해결됨은 미해결에 잡히지 않아 말을 덧붙이지 않음');
+  assert.ok(successNotice('record', { label: 'a', date: '2026-10-26', today: '2026-10-26', category: 'in_progress', note: 'n', workGid: 'U/N-001', evGids: [] }).text.endsWith('미해결에 잡혔어요. 끝나면 「해결로 표시」하세요.'));
   assert.equal(successNotice('resolve', { label: '대사 확인', nodeGid: 'U/N-001', evGids: ['U/E-1'] }).testid, 'resolve-done');
   const as = successNotice('assignee', { work: '대사 확인', from: '서하늘', to: '윤바다', when: '2026-10-26', created: false, handover: true, workGid: 'U/N-001' });
   assert.equal(as.testid, 'assignee-done');
   assert.ok(as.text.includes('서하늘 → 윤바다로 바꿨습니다') && as.text.includes('인수인계 기록도 남겼습니다'));
+  // R13 FU8-12: 「수행」 대신 「담당」, 오늘 끝나는 사람은 「오늘까지」
+  assert.ok(!as.text.includes('수행'));
+  assert.ok(as.text.includes('서하늘의 담당은 2026-10-26까지이고 윤바다의 담당은 2026-10-26부터 시작됩니다'), as.text);
+  const asToday = successNotice('assignee', { work: '대사 확인', from: '서하늘', to: '윤바다', when: '2026-10-26', today: '2026-10-26', created: false, handover: false, workGid: 'U/N-001' });
+  assert.ok(asToday.text.includes('서하늘의 담당은 오늘까지이고 윤바다의 담당은 오늘부터 시작됩니다'), asToday.text);
   assert.deepEqual(as.goto, { type: 'node', nodeGid: 'U/N-001' });
   assert.equal(successNotice('confirm', { text: 't', nodeGid: 'U/A-1' }).testid, 'confirm-done');
   assert.equal(successNotice('record-past', { workGid: 'U/N-1', evGids: ['U/E-1', 'U/E-2'] }).testid, 'past-resolved-done');

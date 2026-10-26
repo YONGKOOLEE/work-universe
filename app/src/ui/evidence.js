@@ -22,12 +22,13 @@ export function evidenceChip(view, gid, onFocus, { unknown = false, onShow = nul
   let btn;
   const after = (fn) => () => { fn(); if (onShow) onShow(gid, btn); };
   if (hit.found) {
-    btn = button(gid, displayName(hit.node), after(() => onFocus(hit.node.gid)));
-    // 사람 칩은 눌러도 그래프 강조뿐이라 카드가 안 열렸다(R12 FU7-2). onCard가 있으면 옆에 작은 「카드」 단추를 둔다 — 칩 동작(근거 글·강조)은 그대로
+    // 사람 칩은 눌러도 그래프 강조뿐이라 카드가 안 열렸다(R12 FU7-2). onCard가 있으면 이름 칩 하나가 곧 카드를 여는 단추다 —
+    // 이름 칩과 「카드」 링크가 둘이라 어느 쪽을 눌러야 할지 헷갈렸다(R13 FU8-21). 카드를 열면 그래프에서도 그 사람이 골라져 강조된다(근거 글 한 줄은 이 칩에서는 보이지 않음)
     if (onCard && hit.node.core_type === 'person') {
-      return el('span', { class: 'evidence-person' }, btn,
-        el('button', { type: 'button', class: 'link small evidence-card', 'data-testid': 'evidence-card', 'data-gid': hit.node.gid, title: `${displayName(hit.node)}의 카드를 엽니다(연락처·맡은 업무)`, onclick: () => onCard(hit.node.gid) }, '카드'));
+      const name = displayName(hit.node);
+      return el('button', { type: 'button', class: 'evidence evidence-card', 'data-testid': 'evidence-card', 'data-gid': hit.node.gid, title: `${name}의 카드를 엽니다(연락처·맡은 업무). 그래프에서도 이 사람이 골라집니다 (근거: ${gid})`, onclick: () => onCard(hit.node.gid) }, name);
     }
+    btn = button(gid, displayName(hit.node), after(() => onFocus(hit.node.gid)));
     return btn;
   }
   const ev = view.events.find((e) => e.gid === gid);

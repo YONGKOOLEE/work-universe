@@ -63,7 +63,12 @@ test('처음 온 화면: 미리 보기 도식·세 갈래·더 보기 하나, �
     // 작은 단추·샘플·처음 순서는 더 보기 안
     const more = q(r, 'start-more');
     assert.equal(qa(r, '[data-testid=start-more]').length, 1);
-    for (const id of ['start-primary', 'start-create', 'start-samples', 'start-steps']) assert.ok(q(more, id), id);
+    for (const id of ['start-create', 'start-samples', 'start-steps']) assert.ok(q(more, id), id);
+    // R13 FU8-1: 샘플 바로 열기는 「더 보기」 밖, 세 갈래 카드 바로 아래(같은 위쪽 header 안)
+    assert.equal(q(more, 'start-primary'), null);
+    assert.ok(q(r, 'start-primary') && q(r, 'start-primary').textContent.startsWith('샘플 바로 열기: '));
+    const kidsOf = q(r, 'start-ways').parentNode.children;
+    assert.equal(kidsOf.indexOf(q(r, 'start-sample-line')), kidsOf.indexOf(q(r, 'start-ways')) + 1, '세 갈래 바로 아래');
     assert.equal(q(more, 'start-more'), null);
     assert.equal(more.querySelector('summary').textContent, '더 보기'); // 접힘 제목은 「더 보기」(안에 샘플 바로 열기·새 지도·가져오기·용어·처음 순서·샘플 목록 — 메인 검토로 되돌림)
     assert.equal(q(r, 'start-ways').parentNode.tagName, 'HEADER'); // 세 갈래는 접히지 않은 위쪽
