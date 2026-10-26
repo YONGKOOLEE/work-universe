@@ -21,6 +21,7 @@ export function renderWorkspaceNav(nav, o) {
       'data-testid': w.testid,
       'data-space': w.key,
       'aria-pressed': String(o.current === w.key),
+      'aria-current': o.current === w.key ? 'page' : null, // 현재 공간을 스크린리더에도(X-40)
       title: n && BADGE_TITLE[w.key] ? `${w.desc} — ${BADGE_TITLE[w.key](n)}` : w.desc,
       // 배지의 뜻을 스크린리더에도(R11 FU6-16): 「기록, 미해결 3건」
       'aria-label': n && BADGE_TITLE[w.key] ? `${w.label}, ${BADGE_TITLE[w.key](n)}` : null,

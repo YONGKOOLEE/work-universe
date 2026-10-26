@@ -132,7 +132,7 @@ export function tableDialog(o) {
     const existing = st.mode === 'edit';
     const attachBox = !existing ? el('label', { class: 'check' },
       el('input', { type: 'checkbox', 'data-testid': 'table-attach', checked: st.attach, onchange: (e) => { st.attach = e.target.checked; } }),
-      ' 업무는 지도 중심(연두색 큰 동그라미)에 바로 연결하기') : null;
+      ' 업무는 지도 중심(연두색 큰 원)에 바로 연결하기') : null;
     const pasteBox = !existing ? el('div', { class: 'editor' },
       el('label', { class: 'field' },
         el('span', {}, '스프레드시트에서 복사한 표 붙여 넣기(탭으로 나뉜 글)'),

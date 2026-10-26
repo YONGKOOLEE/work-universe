@@ -274,7 +274,7 @@ export function nodeForm(o) {
 
   // 추가할 때만: 꼭지에 바로 연결(포함). 업무는 기본으로 켠다 — 연결 없이 떠 있는 노드를 줄이기 위해
   const attach = el('input', { type: 'checkbox', 'data-testid': 'node-attach', checked: type.value === 'work' });
-  const attachField = el('label', { class: 'check' }, attach, ' 지도 중심(연두색 큰 동그라미)에 바로 연결하기');
+  const attachField = el('label', { class: 'check' }, attach, ' 지도 중심(연두색 큰 원)에 바로 연결하기');
   if (o.mode === 'add') type.addEventListener('change', () => { attach.checked = type.value === 'work'; });
 
   // 추가할 때만(선택, CR-22 F): 업무면 담당자·산출물·다음 업무 이름 칸. 표로 추가의 연결 칸과 같은 한 행 처리로 한 번에 만든다

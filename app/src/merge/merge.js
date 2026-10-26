@@ -16,6 +16,23 @@ export const WORK_CANDIDATE_LIMIT = 12;
 const normEmp = (v) => normalizeEmpNo(v);
 
 /**
+ * 업무 후보 이유 문장(mergePlan이 만든 reason)에서 겹친 근거 종류별 개수를 센다. 후보 항목의 모양·점수는 건드리지 않고 화면이 읽는다(Q1·FU6-9).
+ * 문장 조각은 아래 mergePlan의 why와 같은 것이며 시험(cr22-polish)이 둘이 어긋나지 않게 지킨다
+ */
+export function candidateEvidenceKinds(item) {
+  const r = (item && item.reason) || '';
+  const count = (re) => (r.match(re) || []).length;
+  return { topic: count(/같은 주제 「/g), artifact_type: count(/같은 산출물 유형 「/g), token: count(/이름에 같은 낱말 「/g) };
+}
+
+/** 겹친 근거가 주제 하나뿐인 업무 후보인가(산출물 유형·이름 낱말 겹침 없음). 이유 문장이 없는 AI 후보는 아니다 */
+export function isTopicOnlyCandidate(item) {
+  if (!item || item.source === 'ai') return false;
+  const k = candidateEvidenceKinds(item);
+  return k.topic === 1 && k.artifact_type === 0 && k.token === 0;
+}
+
+/**
  * @param {object} view 통합 유니버스의 buildView 결과
  * @param {object[]} links 통합 유니버스 문서의 identity_links(판정 기록)
  * @returns {{auto:object[], persons:object[], works:object[], counts:{auto:number, persons:number, works:number, pending:number}}}

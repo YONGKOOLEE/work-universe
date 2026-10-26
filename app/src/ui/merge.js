@@ -4,6 +4,7 @@
 import { METHOD_LABELS, explainInsight, findCandidatesAsync, isLive, syncProvider } from '../llm/connector.js';
 import { AI_CANDIDATE_LABEL, collectWorks, decidedSets, withAiCandidates } from '../llm/ai-candidates.js';
 import { pairKey } from '../model/schema.js';
+import { isTopicOnlyCandidate } from '../merge/merge.js';
 import { el } from './dom.js';
 import { evidenceChips as chips } from './evidence.js';
 
@@ -172,20 +173,34 @@ function renderMerge(o, plan, aiHead) {
       decideButtons(p, '같은 사람', '다른 사람'))))
     : el('p', { class: 'muted small' }, '확인할 사람이 없습니다.');
 
+  // 업무 후보 한 줄. AI 후보(규칙 후보에 없는 쌍)는 점수가 없고 이유가 AI의 것이다: 칩 「AI 후보」 + 이유·인용. 규칙 후보와 겹친 쌍은 기존 내용 그대로 + 칩 + 덧붙임
+  const workItem = (w) => {
+    const aiOnly = w.source === 'ai';
+    const r = aiOnly ? null : candidateReason(view, w, o.provider);
+    return el('li', { 'data-type': 'work', 'data-source': aiOnly ? 'ai' : null },
+      el('div', { class: 'who' }, el('strong', {}, w.title), aiOnly ? null : el('span', { class: 'chip' }, `${w.score}점`),
+        w.ai ? el('span', { class: 'chip', 'data-testid': 'candidate-ai-chip', title: 'Claude API가 찾은 후보입니다. 두 업무의 글에서 인용이 확인된 쌍만 보입니다. 같은 업무인지는 사람이 정합니다' }, AI_CANDIDATE_LABEL) : null),
+      r ? el('div', { class: 'small' }, ...r.sentences.map((s) => el('div', {}, s.text)), el('span', { class: `method-chip ${r.method}`, title: METHOD_LABELS[r.method] }, METHOD_LABELS[r.method].replace(/\(.*\)$/, ''))) : null,
+      w.ai ? aiBlock(view, w) : null,
+      chips(view, w.evidence_ids, o.onFocus),
+      decideButtons(w, '같은 업무', '다른 업무'));
+  };
+  // 겹친 근거가 주제 하나뿐인 후보(Q1)는 목록 아래 접힌 묶음으로 내린다. 지우지 않고 판정 단추도 그대로다. AI도 같은 쌍으로 본 후보는 위에 둔다
+  const topicOnly = plan.works.filter((w) => !w.ai && isTopicOnlyCandidate(w));
+  const mainWorks = plan.works.filter((w) => !topicOnly.includes(w));
   const workList = plan.works.length
-    ? el('ul', { class: 'patterns', 'data-testid': 'merge-works' }, ...plan.works.map((w) => {
-      // AI 후보(규칙 후보에 없는 쌍)는 점수가 없고 이유가 AI의 것이다: 칩 「AI 후보」 + 이유·인용. 규칙 후보와 겹친 쌍은 기존 내용 그대로 + 칩 + 덧붙임
-      const aiOnly = w.source === 'ai';
-      const r = aiOnly ? null : candidateReason(view, w, o.provider);
-      return el('li', { 'data-type': 'work', 'data-source': aiOnly ? 'ai' : null },
-        el('div', { class: 'who' }, el('strong', {}, w.title), aiOnly ? null : el('span', { class: 'chip' }, `${w.score}점`),
-          w.ai ? el('span', { class: 'chip', 'data-testid': 'candidate-ai-chip', title: 'Claude API가 찾은 후보입니다. 두 업무의 글에서 인용이 확인된 쌍만 보입니다. 같은 업무인지는 사람이 정합니다' }, AI_CANDIDATE_LABEL) : null),
-        r ? el('div', { class: 'small' }, ...r.sentences.map((s) => el('div', {}, s.text)), el('span', { class: `method-chip ${r.method}`, title: METHOD_LABELS[r.method] }, METHOD_LABELS[r.method].replace(/\(.*\)$/, ''))) : null,
-        w.ai ? aiBlock(view, w) : null,
-        chips(view, w.evidence_ids, o.onFocus),
-        decideButtons(w, '같은 업무', '다른 업무'));
-    }))
-    : el('p', { class: 'muted small' }, '확인할 업무 후보가 없습니다.');
+    ? [
+      mainWorks.length
+        ? el('ul', { class: 'patterns', 'data-testid': 'merge-works' }, ...mainWorks.map(workItem))
+        : el('p', { class: 'muted small', 'data-testid': 'merge-works-none' }, '주제 말고도 겹친 후보는 없습니다. 아래 접힌 묶음에서 주제만 겹친 후보를 볼 수 있습니다.'),
+      topicOnly.length
+        ? el('details', { class: 'topic-only-candidates', 'data-testid': 'merge-works-topic-only' },
+          el('summary', {}, `주제만 겹친 후보 ${topicOnly.length}건`),
+          el('p', { class: 'muted small' }, '겹친 근거가 같은 주제 하나뿐이라 같은 업무일 가능성이 낮아 아래로 내렸습니다. 판정은 같은 방법으로 합니다.'),
+          el('ul', { class: 'patterns', 'data-testid': 'merge-works-topic-list' }, ...topicOnly.map(workItem)))
+        : null,
+    ].filter(Boolean)
+    : [el('p', { class: 'muted small' }, '확인할 업무 후보가 없습니다.')];
 
   const decided = (o.links || []).filter((l) => l.status !== 'pending');
   const raw = (g) => { const n = view.rawNode(g); return n ? `${n.label}(${n.universe_name})` : g; };
@@ -205,7 +220,7 @@ function renderMerge(o, plan, aiHead) {
     ...aiHead,
     plan.works.length ? el('p', { class: 'muted small' }, '서로 다른 업무 지도에서 같은 일로 보이는 업무 쌍입니다. 점수는 겹친 수(주제 3, 산출물 유형 2, 이름 낱말 1)를 더한 것으로, 높을수록 비슷합니다.') : null,
     plan.hidden_candidates ? el('p', { class: 'muted small' }, `점수가 낮은 후보 ${plan.hidden_candidates}건은 목록에서 뺐습니다.`) : null,
-    workList,
+    ...workList,
     el('h3', {}, `판정 기록 ${decided.length}건`),
     history,
     el('p', { class: 'muted small' }, '같다고 확인하면 그래프에서 한 항목으로 보입니다. 다르다고 판정한 쌍은 다시 묻지 않습니다.'),

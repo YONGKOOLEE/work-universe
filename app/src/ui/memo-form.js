@@ -21,6 +21,16 @@ export function memoParts(o) {
     onclick: () => { select.value = select.value === k ? '' : k; refresh(); },
   }, MEMO_CATEGORIES[k]));
   // 분류를 안 고르고 막힌 「기록」을 눌렀을 때(FU6-5): 칩 줄 바로 위에 크게 안내하고 칩 줄을 깜빡인다. 고르면 사라진다
+  // 방향키: ← ↑ 이전, → ↓ 다음(끝에서 처음으로), Home·End. 옮기면 그 칩을 고른다(라디오 그룹과 같음, X-41)
+  chips.forEach((c, i) => c.addEventListener('keydown', (e) => {
+    const to = { ArrowLeft: i - 1, ArrowUp: i - 1, ArrowRight: i + 1, ArrowDown: i + 1, Home: 0, End: chips.length - 1 }[e.key];
+    if (to === undefined) return;
+    e.preventDefault();
+    const next = chips[(to + chips.length) % chips.length];
+    select.value = next.dataset.cat;
+    refresh();
+    next.focus();
+  }));
   const hint = el('p', { class: 'memo-pick-hint', 'data-testid': 'memo-pick-hint', role: 'alert', hidden: true }, CATEGORY_REQUIRED_TEXT);
   const chipRow = el('div', { class: 'memo-chips', role: 'radiogroup', 'aria-label': '분류', 'data-testid': 'memo-chips' }, ...chips);
 
@@ -39,6 +49,7 @@ export function memoParts(o) {
     for (const c of chips) {
       const on = c.dataset.cat === cat;
       c.setAttribute('aria-checked', String(on));
+      c.tabIndex = on || (!cat && c === chips[0]) ? 0 : -1; // 라디오 그룹처럼 Tab은 그룹에 한 번(고른 칩, 없으면 첫 칩)
       c.className = `chip chip-btn${on ? ' sel' : ''}`;
     }
     const g = categoryGate(cat);

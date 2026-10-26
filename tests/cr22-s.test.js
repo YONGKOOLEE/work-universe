@@ -109,7 +109,7 @@ test('공간 이름 표기는 「」, 어려운 낱말(유니버스·노드)이 
   try {
     const r = mk();
     const t = r.textContent.replace(/「[^」]*」/g, '');
-    assert.ok(!/유니버스|노드|꼭지/.test(t.replace(/동그라미/g, '')));
+    assert.ok(!/유니버스|노드|꼭지/.test(t));
     assert.ok(FakeEl);
   } finally { uninstallDom(); }
 });

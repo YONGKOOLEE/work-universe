@@ -39,7 +39,7 @@ export const TEXT_ADD = Object.freeze({
   partialTag: ' (일부만 읽음)', // 이름은 읽었지만 모양을 다 읽지 못한 문장
   stale: '글이 바뀌었습니다 — 다시 읽으세요',
   shapesTitle: '규칙으로 읽는 모양',
-  attach: ' 새 업무는 지도 중심(연두색 큰 동그라미)에 바로 연결하기',
+  attach: ' 새 업무는 지도 중심(연두색 큰 원)에 바로 연결하기',
   save: '저장',
   close: '닫기',
   nothingToSave: '넣을 항목이 없습니다. 항목을 체크하세요.',

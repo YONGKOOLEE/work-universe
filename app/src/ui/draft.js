@@ -62,7 +62,7 @@ const DRAFT_FIELDS = { target: '대상', from: '보내는 사람', to: '받는 �
 function draftError(err) {
   if (err.same_person) return '보내는 사람과 받는 사람이 같습니다.';
   if (err.code === 'E-REQUIRED') return `${DRAFT_FIELDS[err.field]}${josa(DRAFT_FIELDS[err.field], '을/를')} 고르세요.`;
-  if (err.field === 'target') return '대상은 지도 중심(업무 지도의 연두색 큰 동그라미)이나 업무만 고를 수 있습니다.';
+  if (err.field === 'target') return '대상은 지도 중심(업무 지도의 연두색 큰 원)이나 업무만 고를 수 있습니다.';
   return messageFor(err);
 }
 

@@ -2547,6 +2547,17 @@ function start() {
     if (!selected || editing || drafting || merging || settingsOpen) return;
     select(null);
   });
+  // 「⋯」 메뉴 안에서 ↑ ↓ 로 항목(맨 앞은 「⋯」 단추)을 옮긴다. 열기·닫기는 Enter·Space·Esc (X-42)
+  document.addEventListener('keydown', (e) => {
+    if ((e.key !== 'ArrowDown' && e.key !== 'ArrowUp') || e.defaultPrevented) return;
+    const menu = e.target && e.target.closest ? e.target.closest('details.more-tools[open]') : null;
+    if (!menu || ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    const items = [menu.querySelector('summary'), ...menu.querySelectorAll('button:not([disabled]), a[href]')].filter(Boolean);
+    const i = items.indexOf(e.target);
+    if (i < 0) return;
+    e.preventDefault();
+    items[Math.min(items.length - 1, Math.max(0, i + (e.key === 'ArrowDown' ? 1 : -1)))].focus();
+  });
   // 「⋯」 메뉴: 바깥을 눌러도 닫힌다(CR-22 F)
   document.addEventListener('click', (e) => {
     for (const d of document.querySelectorAll('details.more-tools[open]')) if (!d.contains(e.target)) d.open = false;

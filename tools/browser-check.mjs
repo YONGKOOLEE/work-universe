@@ -1610,9 +1610,17 @@ async function checkBrowser(browser, port) {
     check('R-11 ②: 업무 후보(장소 섭외 ↔ 강의실·강사 섭외)와 이유(사전 생성), 자동으로 합치지 않음', worksTxt.includes('장소 섭외') && worksTxt.includes('강의실·강사 섭외') && worksTxt.includes('사전 생성') && worksTxt.includes('일정에 맞춰 장소를 알아보고'), worksTxt.slice(0, 80));
     check('U-12: 사번 없음 카드에 고치는 방법(유니버스를 열어 「수정」에서 사번)이 적혀 있음', persons.includes('고치는 방법') && persons.includes('「수정」에서 사번을 넣으세요'));
     // 2026-10-17 D8-2: 부서 샘플에 「다른 업무」 판정 3건이 미리 들어 있어 후보가 4건, 첫 항목은 2025 행사가 아니며, 「같은 업무」는 강조색이 아니다
-    const d82 = await evaluate(s.cdp, "(() => { const lis = [...document.querySelectorAll('[data-testid=merge-works] li')]; const same = document.querySelector('[data-testid=merge-works] [data-testid=merge-same]'); const diff = document.querySelector('[data-testid=merge-works] [data-testid=merge-diff]'); return JSON.stringify({ n: lis.length, first: lis[0] ? lis[0].querySelector('strong').textContent : '', samePrimary: same.classList.contains('primary'), sameClass: same.className, diffClass: diff.className, decided: (document.querySelector('[data-testid=merge-decided]') || { children: [] }).children.length }); })()");
+    const d82 = await evaluate(s.cdp, "(() => { const lis = [...document.querySelectorAll('[data-testid=merge-works] li, [data-testid=merge-works-topic-only] li')]; const same = document.querySelector('[data-testid=merge-works] [data-testid=merge-same]'); const diff = document.querySelector('[data-testid=merge-works] [data-testid=merge-diff]'); return JSON.stringify({ n: lis.length, first: lis[0] ? lis[0].querySelector('strong').textContent : '', samePrimary: same.classList.contains('primary'), sameClass: same.className, diffClass: diff.className, decided: (document.querySelector('[data-testid=merge-decided]') || { children: [] }).children.length }); })()");
     const d82o = JSON.parse(d82);
     check('D8-2: 부서 통합 확인 목록에 업무 후보 4건, 첫 항목은 2025 행사가 아님, 「같은 업무」가 강조색이 아님(「다른 업무」와 같은 모양), 판정 기록에 미리 넣은 3건', d82o.n === 4 && !d82o.first.includes('2025 행사') && !d82o.samePrimary && d82o.sameClass === d82o.diffClass && d82o.decided >= 4 && hint.includes('6건'), d82);
+    // X-40(Q1 통합 확인 업무 후보): 겹친 근거가 주제 하나뿐인 짝(대사 확인 ↔ 거래 조회·장애 시 재처리)은 위 목록이 아니라 접힌 「주제만 겹친 후보 n건」 묶음 안에 있다(판정 단추는 그대로)
+    const q1 = JSON.parse(await evaluate(s.cdp, "(() => { const f = document.querySelector('[data-testid=merge-works-topic-only]'); const top = [...document.querySelectorAll('[data-testid=merge-works] li')].map((li) => li.textContent).join(' '); return JSON.stringify({ has: !!f, open: f ? f.open : null, summary: f ? f.querySelector('summary').textContent : '', n: f ? f.querySelectorAll('li').length : 0, btns: f ? f.querySelectorAll('[data-testid=merge-same], [data-testid=merge-diff]').length : 0, foldText: f ? f.textContent : '', topHas: /거래 조회|장애 시 재처리/.test(top), head: [...document.querySelectorAll('[data-testid=merge-panel] h3')].map((h) => h.textContent).find((t) => t.startsWith('업무 후보')) }); })()"));
+    check('X-40 Q1: 부서 통합 확인 목록에서 주제만 겹친 짝 2건(거래 조회·장애 시 재처리)은 위 목록에 없고, 접힌 「주제만 겹친 후보 2건」 안에 판정 단추(같음·다름 2쌍)와 함께 있음, 제목의 업무 후보 수는 4건 그대로', q1.has && q1.open === false && q1.summary === '주제만 겹친 후보 2건' && q1.n === 2 && q1.btns === 4 && q1.foldText.includes('거래 조회') && q1.foldText.includes('장애 시 재처리') && !q1.topHas && q1.head === '업무 후보 4건', JSON.stringify(q1));
+    await shot(s.cdp, `${browser.name}-x-merge-folded`);
+    await evaluate(s.cdp, "(() => { const f = document.querySelector('[data-testid=merge-works-topic-only]'); f.open = true; f.scrollIntoView({ block: 'center' }); })()");
+    await sleep(200);
+    await shot(s.cdp, `${browser.name}-x-merge-folded-open`);
+    await evaluate(s.cdp, "document.querySelector('[data-testid=merge-works-topic-only]').open = false");
     await shot(s.cdp, `${browser.name}-9e-merge`);
     const before = await evaluate(s.cdp, "window.__wu.view.canonical('U-C/N-102') === window.__wu.view.canonical('U-B/N-103')");
     // 장소 섭외 후보의 「같은 업무」
@@ -3122,7 +3130,8 @@ async function checkBrowser(browser, port) {
     const openMerge = async () => { await evaluate(s.cdp, 'window.__wu.select(null)'); await sleep(150); await clickTestId(s.cdp, 'btn-merge'); await sleep(200); };
     const closeMerge = async () => { await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=merge-panel] button')].find((b) => b.textContent === '닫기').click()"); await sleep(150); };
     const calls = () => evaluate(s.cdp, 'window.__wu.fakeLlm.calls.length');
-    const aiUi = () => evaluate(s.cdp, "({ btn: !!document.querySelector('[data-testid=btn-ai-candidates]'), live: !!document.querySelector('[data-testid=ai-candidates-live]'), chips: document.querySelectorAll('[data-testid=candidate-ai-chip]').length, summary: !!document.querySelector('[data-testid=ai-candidates-summary]'), fb: !!document.querySelector('[data-testid=ai-candidates-fallback]'), works: document.querySelectorAll('[data-testid=merge-works] li').length })");
+    // X-40(2026-10-26): 주제만 겹친 후보는 접힌 묶음(merge-works-topic-only)으로 내려갔으므로, 후보 수는 위 목록과 묶음 안을 합쳐 센다(이전 기대값 그대로)
+    const aiUi = () => evaluate(s.cdp, "({ btn: !!document.querySelector('[data-testid=btn-ai-candidates]'), live: !!document.querySelector('[data-testid=ai-candidates-live]'), chips: document.querySelectorAll('[data-testid=candidate-ai-chip]').length, summary: !!document.querySelector('[data-testid=ai-candidates-summary]'), fb: !!document.querySelector('[data-testid=ai-candidates-fallback]'), works: document.querySelectorAll('[data-testid=merge-works] li, [data-testid=merge-works-topic-only] li').length })");
     await evaluate(s.cdp, "location.hash = 'U-D1'; location.reload()").catch(() => {});
     await sleep(500);
     await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-D1' && window.__wu.cy.nodes().length > 0", 8000);
@@ -3132,7 +3141,7 @@ async function checkBrowser(browser, port) {
     // 1) 키가 없다: 단추도 안내 칸도 없고 업무 후보 4건은 지금과 같다
     await openMerge();
     const noKey = await aiUi();
-    const baseTexts = await evaluate(s.cdp, "JSON.stringify([...document.querySelectorAll('[data-testid=merge-works] li')].map((li) => li.textContent))");
+    const baseTexts = await evaluate(s.cdp, "JSON.stringify([...document.querySelectorAll('[data-testid=merge-works] li, [data-testid=merge-works-topic-only] li')].map((li) => li.textContent))");
     const base = noKey.works; // 이 블록이 돌 때의 후보 수(앞 블록들이 판정 기록을 바꿀 수 있어 고정값을 쓰지 않는다)
     check('CR-15 T-38 키가 없으면 통합 확인 목록에 「AI로 연관 찾기」도 안내 칸도 없고 업무 후보 4건이 지금과 같음', !noKey.btn && !noKey.live && noKey.chips === 0 && noKey.works >= 1, JSON.stringify(noKey));
     await closeMerge();
@@ -3144,7 +3153,7 @@ async function checkBrowser(browser, port) {
     await sleep(100);
     await settingsClose();
     await openMerge();
-    const withKey = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=btn-ai-candidates]'); const h = [...document.querySelectorAll('[data-testid=merge-panel] h3')].find((x) => x.textContent.startsWith('업무 후보')); const r = b ? b.getBoundingClientRect() : { width: 0, height: 0 }; const live = document.querySelector('[data-testid=ai-candidates-live]'); return { text: b ? b.textContent : '', size: r.width > 0 && r.height > 0, enabled: b ? !b.disabled : false, below: !!b && !!h && h.compareDocumentPosition(b) === Node.DOCUMENT_POSITION_FOLLOWING, live: !!live, aria: live ? live.getAttribute('aria-live') : '', liveText: live ? live.textContent : '?', works: document.querySelectorAll('[data-testid=merge-works] li').length }; })()");
+    const withKey = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=btn-ai-candidates]'); const h = [...document.querySelectorAll('[data-testid=merge-panel] h3')].find((x) => x.textContent.startsWith('업무 후보')); const r = b ? b.getBoundingClientRect() : { width: 0, height: 0 }; const live = document.querySelector('[data-testid=ai-candidates-live]'); return { text: b ? b.textContent : '', size: r.width > 0 && r.height > 0, enabled: b ? !b.disabled : false, below: !!b && !!h && h.compareDocumentPosition(b) === Node.DOCUMENT_POSITION_FOLLOWING, live: !!live, aria: live ? live.getAttribute('aria-live') : '', liveText: live ? live.textContent : '?', works: document.querySelectorAll('[data-testid=merge-works] li, [data-testid=merge-works-topic-only] li').length }; })()");
     check('CR-15 T-38 키를 넣으면 「업무 후보」 제목 아래에 「AI로 연관 찾기」(크기 있음)와 안내 칸(aria-live=polite, 비어 있음)이 보이고 후보 4건은 그대로', withKey.text === 'AI로 연관 찾기' && withKey.size && withKey.enabled && withKey.below && withKey.live && withKey.aria === 'polite' && withKey.liveText === '' && withKey.works === base, JSON.stringify(withKey));
     // 3) 누르면 「AI가 업무를 비교하는 중… (최대 60초)」 → 「AI 후보」
     await evaluate(s.cdp, 'window.__wu.fakeLlm.delayMs = 700');
@@ -3153,7 +3162,7 @@ async function checkBrowser(browser, port) {
     const during = await evaluate(s.cdp, "(() => { const n = document.querySelector('[data-testid=ai-candidates-live]'); const b = document.querySelector('[data-testid=btn-ai-candidates]'); return { note: n ? n.textContent : '', disabled: b ? b.disabled : null, chips: document.querySelectorAll('[data-testid=candidate-ai-chip]').length, calls: window.__wu.fakeLlm.calls.length }; })()");
     check('CR-15 T-38 누르면 「AI가 업무를 비교하는 중… (최대 60초)」가 보이고 단추가 잠기며 아직 AI 후보는 없음, 호출 1회', during.note === 'AI가 업무를 비교하는 중… (최대 60초)' && during.disabled === true && during.chips === 0 && during.calls === 1, JSON.stringify(during));
     const shown = await waitFor(s.cdp, "document.querySelectorAll('[data-testid=candidate-ai-chip]').length > 0", 5000);
-    const done = await evaluate(s.cdp, "(() => { const li = document.querySelector('[data-testid=merge-works] li[data-source=ai]'); const h = [...document.querySelectorAll('[data-testid=merge-panel] h3')].find((x) => x.textContent.startsWith('업무 후보')); const drop = document.querySelector('[data-testid=ai-candidates-dropped]'); return { chips: document.querySelectorAll('[data-testid=candidate-ai-chip]').length, works: document.querySelectorAll('[data-testid=merge-works] li').length, head: h ? h.textContent : '', summary: (document.querySelector('[data-testid=ai-candidates-summary]') || {}).textContent || '', live: (document.querySelector('[data-testid=ai-candidates-live]') || {}).textContent, title: li ? li.querySelector('strong').textContent : '', chipText: li ? li.querySelector('[data-testid=candidate-ai-chip]').textContent : '', quotes: li ? [...li.querySelectorAll('[data-testid=candidate-ai-quote]')].map((x) => x.textContent) : [], reason: li && li.querySelector('[data-testid=candidate-ai]') ? li.querySelector('[data-testid=candidate-ai]').textContent : '', score: li ? [...li.querySelectorAll('.who .chip')].map((x) => x.textContent) : [], btns: li ? li.querySelectorAll('[data-testid=merge-same], [data-testid=merge-diff]').length : 0, dropSummary: drop ? drop.querySelector('summary').textContent : '', dropText: drop ? drop.textContent : '', disabled: document.querySelector('[data-testid=btn-ai-candidates]').disabled, texts: JSON.stringify([...document.querySelectorAll('[data-testid=merge-works] li:not([data-source=ai])')].map((x) => x.textContent)) }; })()");
+    const done = await evaluate(s.cdp, "(() => { const li = document.querySelector('[data-testid=merge-works] li[data-source=ai]'); const h = [...document.querySelectorAll('[data-testid=merge-panel] h3')].find((x) => x.textContent.startsWith('업무 후보')); const drop = document.querySelector('[data-testid=ai-candidates-dropped]'); return { chips: document.querySelectorAll('[data-testid=candidate-ai-chip]').length, works: document.querySelectorAll('[data-testid=merge-works] li, [data-testid=merge-works-topic-only] li').length, head: h ? h.textContent : '', summary: (document.querySelector('[data-testid=ai-candidates-summary]') || {}).textContent || '', live: (document.querySelector('[data-testid=ai-candidates-live]') || {}).textContent, title: li ? li.querySelector('strong').textContent : '', chipText: li ? li.querySelector('[data-testid=candidate-ai-chip]').textContent : '', quotes: li ? [...li.querySelectorAll('[data-testid=candidate-ai-quote]')].map((x) => x.textContent) : [], reason: li && li.querySelector('[data-testid=candidate-ai]') ? li.querySelector('[data-testid=candidate-ai]').textContent : '', score: li ? [...li.querySelectorAll('.who .chip')].map((x) => x.textContent) : [], btns: li ? li.querySelectorAll('[data-testid=merge-same], [data-testid=merge-diff]').length : 0, dropSummary: drop ? drop.querySelector('summary').textContent : '', dropText: drop ? drop.textContent : '', disabled: document.querySelector('[data-testid=btn-ai-candidates]').disabled, texts: JSON.stringify([...document.querySelectorAll('[data-testid=merge-works] li:not([data-source=ai]), [data-testid=merge-works-topic-only] li:not([data-source=ai])')].map((x) => x.textContent)) }; })()");
     check('CR-15 T-38 「AI 후보」 칩이 1개 붙은 후보가 목록 끝에 더해짐(제목·칩·이유·인용 두 줄·「같은 업무」/「다른 업무」 단추, 점수 칩 없음)', shown && done.chips === 1 && done.works === base + 1 && done.head === `업무 후보 ${base + 1}건` && done.chipText === 'AI 후보' && done.title.includes('참가자 모집') && done.title.includes('신입 교육 운영') && done.quotes.length === 2 && done.quotes[0].includes('참가자 모집') && done.quotes[1].includes('신입 교육 운영') && done.reason.includes('같은 일을 다른 이름으로') && done.reason.includes('Claude API') && done.score.join() === 'AI 후보' && done.btns === 2, JSON.stringify(done));
     check('CR-15 T-38 머리에 「AI 후보 1개(확인되지 않아 뺀 쌍 3개)」와 뺀 쌍 목록(지어낸 업무·틀린 인용·같은 업무 지도), 안내 문구는 지워지고 단추는 다시 켜짐', shown && done.summary === 'AI 후보 1개(확인되지 않아 뺀 쌍 3개)' && done.dropSummary === '원문 인용·업무가 확인되지 않아 뺀 쌍 3개' && done.dropText.includes('지어낸 업무') && done.dropText.includes('인용을 찾지 못함') && done.dropText.includes('같은 업무 지도 안의 쌍') && done.live === '' && done.disabled === false, JSON.stringify({ summary: done.summary, dropSummary: done.dropSummary, live: done.live, disabled: done.disabled }));
     check('CR-15 T-38 기존 후보 4건은 순서·내용 그대로이고 AI 후보는 그 뒤에만 더해짐(판정 기록 수도 그대로 — 확정·거부를 누르지 않음)', shown && done.texts === baseTexts && (await evaluate(s.cdp, 'window.__wu.doc.identity_links.length')) === linksBefore, JSON.stringify({ base: JSON.parse(baseTexts).length, now: JSON.parse(done.texts).length, diff: JSON.parse(done.texts).map((t, i) => [t.slice(0, 60), (JSON.parse(baseTexts)[i] || "").slice(0, 60)]).filter(([a, b]) => a !== b).slice(0, 2) }));
@@ -3177,7 +3186,7 @@ async function checkBrowser(browser, port) {
     await openMerge();
     await clickTestId(s.cdp, 'btn-ai-candidates');
     const failedShown = await waitFor(s.cdp, "!!document.querySelector('[data-testid=ai-candidates-fallback]')", 5000);
-    const failed = await evaluate(s.cdp, "({ fb: (document.querySelector('[data-testid=ai-candidates-fallback]') || {}).textContent || '', chips: document.querySelectorAll('[data-testid=candidate-ai-chip]').length, summary: !!document.querySelector('[data-testid=ai-candidates-summary]'), works: document.querySelectorAll('[data-testid=merge-works] li').length, live: (document.querySelector('[data-testid=ai-candidates-live]') || {}).textContent, disabled: document.querySelector('[data-testid=btn-ai-candidates]').disabled })");
+    const failed = await evaluate(s.cdp, "({ fb: (document.querySelector('[data-testid=ai-candidates-fallback]') || {}).textContent || '', chips: document.querySelectorAll('[data-testid=candidate-ai-chip]').length, summary: !!document.querySelector('[data-testid=ai-candidates-summary]'), works: document.querySelectorAll('[data-testid=merge-works] li, [data-testid=merge-works-topic-only] li').length, live: (document.querySelector('[data-testid=ai-candidates-live]') || {}).textContent, disabled: document.querySelector('[data-testid=btn-ai-candidates]').disabled })");
     check('CR-15 T-38 실패(시간 초과) → 「AI 연관 찾기 실패: 연결 실패·시간 초과 — 기존 후보만 보여 줍니다」 + 후보 4건 그대로, AI 후보·요약 없음, 단추 다시 켜짐', failedShown && failed.fb === 'AI 연관 찾기 실패: 연결 실패·시간 초과 — 기존 후보만 보여 줍니다' && failed.chips === 0 && !failed.summary && failed.works === base && failed.live === '' && failed.disabled === false, JSON.stringify(failed));
     // 7) 응답을 기다리다 닫으면 응답이 버려진다 / 다른 노드를 골라 목록을 벗어나도 버려진다
     await evaluate(s.cdp, "window.__wu.fakeLlm.mode = 'candidates'; window.__wu.fakeLlm.delayMs = 600; window.__aiErr = []; window.addEventListener('error', (e) => window.__aiErr.push(String(e.message))); window.addEventListener('unhandledrejection', (e) => window.__aiErr.push(String(e.reason)))");
@@ -4563,7 +4572,7 @@ async function checkBrowser(browser, port) {
   }
 
   // ── 처음 사용 5회차(FU5, 2026-10-25, CR-18 범위 안 보완): A 매주 점검(바뀐 것 보기·저장 알림·점검 요약 미리 보기/내려받기 알림·점검 저장한 지도·유사 경험자 안내) + B 화면(전체 보기가 흐림을 풂·담당 넘긴 날 표시·
-  //    오류 줄 지우기·「연두색 큰 동그라미」·실패 흉내는 ?check에서만). 못 쓰는 관계는 고를 수 없음(FU5-9)은 연결 추가/수정·함께 잇기 점검 곳곳에서 고쳐 확인하고, 되감기 배치 되돌림(FU5-7)은 바로 아래 CR-14 A 블록 안에 있다.
+  //    오류 줄 지우기·「연두색 큰 원」·실패 흉내는 ?check에서만). 못 쓰는 관계는 고를 수 없음(FU5-9)은 연결 추가/수정·함께 잇기 점검 곳곳에서 고쳐 확인하고, 되감기 배치 되돌림(FU5-7)은 바로 아래 CR-14 A 블록 안에 있다.
   //    데이터·설정을 바꾸므로 시작 때 저장소를 찍어 두었다가 끝에서 되돌린다("일상 사용 G3" 블록과 같은 방식) ──
   {
     const fu5Snap = await evaluate(s.cdp, 'JSON.stringify(Object.entries(localStorage))');
@@ -4654,12 +4663,12 @@ async function checkBrowser(browser, port) {
       check('FU5-4 점검을 저장하지 않은 다른 안 고친 샘플(비교 자료)은 목록에 없음', (await fu5Q('[data-testid=mine-card-U-K1]')) === null);
       await shot(s.cdp, `${browser.name}-fu5-start-checked`);
       const t = await text(s.cdp, '[data-testid=start-terms]');
-      check('FU5-11 시작 화면의 용어 줄은 「연두색 큰 동그라미」(「가운데 큰 동그라미」 아님)', t.includes('연두색 큰 동그라미') && !t.includes('가운데 큰 동그라미'), t);
+      check('FU5-11 시작 화면의 용어 줄은 「연두색 큰 원」(「가운데 큰 동그라미」 아님)', t.includes('연두색 큰 원') && !t.includes('가운데 큰 동그라미'), t);
       await evaluate(s.cdp, "document.querySelector('[data-testid=mine-open-U-D1]').click()");
       await sleep(500);
       check('FU5-4 그 카드의 「열기」로 가상 운영부가 열림', await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-D1' && window.__wu.cy.nodes().length > 0", 8000));
       const termsDept = await text(s.cdp, '[data-testid=term-note]');
-      check('FU5-11 개요의 용어 줄은 「연두색 큰 동그라미」(「가운데 큰 동그라미」 아님)', termsDept.includes('연두색 큰 동그라미') && !termsDept.includes('가운데 큰 동그라미'), termsDept);
+      check('FU5-11 개요의 용어 줄은 「연두색 큰 원」(「가운데 큰 동그라미」 아님)', termsDept.includes('연두색 큰 원') && !termsDept.includes('가운데 큰 동그라미'), termsDept);
     } else check('FU5-4 시작 화면 열기', false, '시작 화면이 열리지 않음');
 
     // ── B6: 「전체 보기」가 선택 강조(흐림)도 푼다. 편집 양식이 열려 있으면 양식은 지키고 배율만 맞춘다 ──
@@ -6299,6 +6308,14 @@ async function checkBrowser(browser, port) {
       return r11Wait(hash.split('~')[0]);
     };
     const pickSpace = async (k) => { await R(`document.querySelector('[data-testid=ws-${k}]').click()`); await sleep(220); };
+    // CR-22 X(2026-10-26 마무리 다듬기) 키보드 점검 도구: 실제 키 입력(CDP). Enter·Space는 글자를 함께 보내야 단추 기본 동작이 일어난다
+    const xKey = async (k, code = k, vk = 0, text = null) => {
+      await s.cdp.send('Input.dispatchKeyEvent', text ? { type: 'keyDown', key: k, code, windowsVirtualKeyCode: vk, text, unmodifiedText: text } : { type: 'rawKeyDown', key: k, code, windowsVirtualKeyCode: vk });
+      await s.cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk });
+      await sleep(150);
+    };
+    const xActive = () => R("(() => { const a = document.activeElement; return a ? (a.dataset.testid || a.tagName) : ''; })()");
+    const xOutline = () => R("(() => { const a = document.activeElement; const c = getComputedStyle(a); return { style: c.outlineStyle, width: parseFloat(c.outlineWidth), vis: a.matches(':focus-visible') }; })()");
     const inAside = (sel) => R(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); const a = document.querySelector('aside').getBoundingClientRect(); if (!e) return false; const r = e.getBoundingClientRect(); return r.height > 0 && r.top >= a.top - 1 && r.bottom <= a.bottom + 1; })()`);
     const setWeekly = (workLabel, category, note) => R(`(() => { const q = (i) => document.querySelector('[data-testid=' + i + ']'); const w = q('weekly-work'); const o = [...w.options].find((x) => x.textContent === ${JSON.stringify(workLabel)}); w.value = o.value; w.dispatchEvent(new Event('change')); const c = q('weekly-category'); c.value = ${JSON.stringify(category)}; c.dispatchEvent(new Event('change')); const n = q('weekly-note'); n.value = ${JSON.stringify(note)}; n.dispatchEvent(new Event('input')); })()`);
     const weeklyVals = () => R("(() => { const q = (i) => document.querySelector('[data-testid=' + i + ']'); const w = q('weekly-work'); return { work: w ? w.options[w.selectedIndex].textContent : null, cat: q('weekly-category') ? q('weekly-category').value : null, note: q('weekly-note') ? q('weekly-note').value : null }; })()");
@@ -6384,6 +6401,14 @@ async function checkBrowser(browser, port) {
       await sleep(200);
       const fr = await R("({ head: (document.querySelector('[data-testid=feature-find-records-head]') || {}).textContent || '', rows: document.querySelectorAll('[data-testid=feature-find-record]').length, none: !!document.querySelector('[data-testid=feature-find-none]'), text: (document.querySelector('[data-testid=feature-find-record]') || {}).textContent || '' })");
       check('R11 FU6-4 기능 결과가 없을 때 「기록에서 「검색확인용」 n건」과 기록 줄(날짜·업무·내용)', fr.head === '기록에서 「검색확인용」 1건' && fr.rows === 1 && fr.text.includes('대사 확인') && fr.text.includes('검색확인용 문장 R11'), JSON.stringify(fr));
+      // X-42 기록 찾기 결과도 ↑↓로: 입력 칸에서 ↓ 를 눌러 가며 기능 결과 다음에 기록 줄(feature-find-record)에 닿고, ↑ 를 눌러 가며 입력 칸으로 돌아온다
+      let fk1 = '';
+      let down = 0;
+      while (fk1 !== 'feature-find-record' && down < 8) { await xKey('ArrowDown', 'ArrowDown', 40); down += 1; fk1 = await xActive(); }
+      let fk2 = '';
+      let up = 0;
+      while (fk2 !== 'feature-find' && up < 8) { await xKey('ArrowUp', 'ArrowUp', 38); up += 1; fk2 = await xActive(); }
+      check('X-42 기록 찾기 결과: ↓ 를 눌러 가며 기능 결과 다음의 기록 줄(feature-find-record)에 초점이 닿고, ↑ 로 입력 칸으로 돌아옴', fk1 === 'feature-find-record' && fk2 === 'feature-find' && down === up, JSON.stringify({ fk1, fk2, down, up }));
       await shot(s.cdp, `${browser.name}-r11-find-records`);
       await R("document.querySelector('[data-testid=feature-find-record]').click()");
       await sleep(300);
@@ -6471,6 +6496,65 @@ async function checkBrowser(browser, port) {
         await pickSpace('record'); // 되감기에서 나가는 단추 이름을 모르면 다른 공간으로 나간다
       } else check('R11 RV11C-9 되감기 입구', false, '입구가 없음');
     } else check('R11 고침 U-A1', false, 'U-A1이 열리지 않음');
+
+    // ── CR-22 X(2026-10-26 마무리 다듬기) 키보드 접근성: 공간 메뉴·분류 칩·「⋯」 메뉴를 실제 키 입력(CDP)으로. 화면 모양은 그대로 ──
+    if (await r11Go('U-A1', ['U-A1'])) {
+      await R('window.__wu.select(null)');
+      await pickSpace('map');
+      // 공간 메뉴: Tab으로 옮기고 Enter·Space로 고른다. 현재 공간은 aria-pressed=true + aria-current=page, 초점은 새로 그려도 그 단추에 남는다
+      await R("document.querySelector('[data-testid=ws-map]').focus()");
+      await xKey('Tab', 'Tab', 9);
+      const t1 = await xActive();
+      await xKey('Enter', 'Enter', 13, '\r');
+      const ws1 = await R("({ space: window.__wu.space, active: document.activeElement.dataset.testid, cur: [...document.querySelectorAll('.ws-btn')].filter((b) => b.getAttribute('aria-current') === 'page').map((b) => b.dataset.testid), pressed: [...document.querySelectorAll('.ws-btn')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.dataset.testid) })");
+      check('X-41 공간 메뉴: Tab으로 다음 단추(ws-record)에 가고 Enter로 그 공간이 열림, 현재 공간만 aria-pressed·aria-current=page, 초점은 그 단추에 남음', t1 === 'ws-record' && ws1.space === 'record' && ws1.active === 'ws-record' && JSON.stringify(ws1.cur) === '["ws-record"]' && JSON.stringify(ws1.pressed) === '["ws-record"]', JSON.stringify({ t1, ws1 }));
+      const ol1 = await xOutline();
+      check('X-43 공간 메뉴 초점 테두리: 키보드 초점(:focus-visible)에서 2px 이상 실선 테두리', ol1.vis && ol1.style === 'solid' && ol1.width >= 2, JSON.stringify(ol1));
+      await shot(s.cdp, `${browser.name}-x-focus-ws`);
+      await xKey('Tab', 'Tab', 9);
+      await xKey(' ', 'Space', 32, ' ');
+      const ws2 = await R("({ space: window.__wu.space, active: document.activeElement.dataset.testid })");
+      check('X-41 공간 메뉴: Tab 한 번 더 → Space로 다음 공간(인수인계)이 열림', ws2.space === 'handover' && ws2.active === 'ws-handover', JSON.stringify(ws2));
+      await pickSpace('record');
+
+      // 분류 칩: 라디오 그룹처럼 Tab은 그룹에 한 번, 방향키로 옮기며 고른다
+      const c0 = await R("(() => { const g = document.querySelector('[data-testid=memo-chips]'); return { role: g.getAttribute('role'), tabs: [...g.querySelectorAll('[role=radio]')].map((c) => c.tabIndex), checked: [...g.querySelectorAll('[role=radio]')].map((c) => c.getAttribute('aria-checked')) }; })()");
+      check('X-42 분류 칩: role=radiogroup, 아무것도 안 골랐을 땐 첫 칩만 Tab 순서(tabindex 0), 나머지 -1', c0.role === 'radiogroup' && JSON.stringify(c0.tabs) === '[0,-1,-1,-1]' && c0.checked.every((x) => x === 'false'), JSON.stringify(c0));
+      const chipIds = await R("[...document.querySelectorAll('[data-testid=memo-chips] [role=radio]')].map((c) => c.dataset.testid)");
+      await R(`document.querySelector('[data-testid=${chipIds[0]}]').focus()`);
+      await xKey('ArrowRight', 'ArrowRight', 39);
+      const c1 = await R("({ active: document.activeElement.dataset.testid, cat: document.querySelector('[data-testid=weekly-category]').value, tabs: [...document.querySelectorAll('[data-testid=memo-chips] [role=radio]')].map((c) => c.tabIndex) })");
+      await xKey('ArrowDown', 'ArrowDown', 40);
+      const c2 = await R("({ active: document.activeElement.dataset.testid, cat: document.querySelector('[data-testid=weekly-category]').value })");
+      await xKey('ArrowLeft', 'ArrowLeft', 37);
+      await xKey('ArrowLeft', 'ArrowLeft', 37);
+      await xKey('ArrowLeft', 'ArrowLeft', 37); // 첫 칩에서 한 번 더 ← 는 끝으로
+      const c3 = await R("({ active: document.activeElement.dataset.testid, cat: document.querySelector('[data-testid=weekly-category]').value })");
+      check('X-42 분류 칩 방향키: → 로 옮기며 고름(첫째 → 둘째), ↓ 셋째, ← 이전·처음에서 끝으로 돌아감, 고른 칩이 Tab 순서', c1.active === chipIds[1] && c1.cat === chipIds[1].replace('memo-chip-', '') && JSON.stringify(c1.tabs) === '[-1,0,-1,-1]' && c2.active === chipIds[2] && c3.active === chipIds[3] && c3.cat === chipIds[3].replace('memo-chip-', ''), JSON.stringify({ chipIds, c1, c2, c3 }));
+      const ol2 = await xOutline();
+      check('X-43 분류 칩 초점 테두리: 방향키로 옮긴 칩에 2px 이상 실선 테두리', ol2.vis && ol2.style === 'solid' && ol2.width >= 2, JSON.stringify(ol2));
+      await shot(s.cdp, `${browser.name}-x-focus-chip`);
+      await R(`document.querySelector('[data-testid=${chipIds[3]}]').click()`); // 고른 분류를 풀어 둔다
+
+      // 카드 「⋯」 메뉴: Enter로 열고 ↓ 로 항목, Esc로 닫으면 「⋯」로 초점이 돌아온다
+      await R("window.__wu.select('U-A1/N-001')");
+      await sleep(300);
+      await R("document.querySelector('[data-testid=more-tools] summary').focus()");
+      await xKey('Enter', 'Enter', 13, '\r');
+      const m1 = await R("(() => { const d = document.querySelector('[data-testid=more-tools]'); return { open: d.open, active: document.activeElement.tagName }; })()");
+      const olS = await xOutline();
+      await shot(s.cdp, `${browser.name}-x-focus-more`);
+      await xKey('ArrowDown', 'ArrowDown', 40);
+      const m2 = await R("(() => { const a = document.activeElement; return { tag: a.tagName, inMenu: !!a.closest('details.more-tools') }; })()");
+      await xKey('ArrowUp', 'ArrowUp', 38);
+      const m3 = await R('document.activeElement.tagName');
+      await xKey('ArrowDown', 'ArrowDown', 40);
+      await xKey('Escape', 'Escape', 27);
+      const m4 = await R("(() => ({ open: document.querySelector('[data-testid=more-tools]').open, active: document.activeElement.tagName }))()");
+      check('X-42 「⋯」 메뉴: 초점이 있는 「⋯」에서 Enter로 열림, ↓ 로 메뉴 안 단추, ↑ 로 「⋯」로 되돌아옴, Esc로 닫고 초점이 「⋯」로 돌아옴', m1.open && m1.active === 'SUMMARY' && m2.tag === 'BUTTON' && m2.inMenu && m3 === 'SUMMARY' && !m4.open && m4.active === 'SUMMARY', JSON.stringify({ m1, m2, m3, m4 }));
+      check('X-43 「⋯」 단추 초점 테두리: 2px 이상 실선', olS.vis && olS.style === 'solid' && olS.width >= 2, JSON.stringify(olS));
+      await R('window.__wu.select(null)');
+    } else check('X 키보드 점검 U-A1', false, 'U-A1이 열리지 않음');
 
     // ~done 표지(RV11S-1): 주소만으로는 알림이 뜨지 않고, 같은 탭의 표지가 있어야 뜬다
     if (await r11Go('U-A1~done=group', ['U-A1'])) {
