@@ -529,7 +529,10 @@
   .ws-badge { flex: none; min-width: 18px; padding: 0 4px; border-radius: 10px; background: var(--warn-bg); color: var(--warn-text); border: 1px solid #5a4c1c; font-size: 11px; font-weight: bold; text-align: center; }
   .ws-btn[aria-pressed=true] .ws-badge { background: var(--accent-ink); color: var(--accent); border-color: var(--accent-ink); }
   .ws-badge[data-word]::before { content: attr(data-word) " "; font-weight: normal; } /* 숫자 옆의 작은 낱말(R13 FU8-2) */
-  @media (min-width: 1100px) { .ws-btn { flex-wrap: wrap; } .ws-btn .ws-badge { flex-basis: 100%; text-align: left; border-radius: 6px; white-space: normal; } } /* 세로 메뉴(112px)에서는 낱말이 들어가게 숫자 줄을 아래로 */
+  @media (min-width: 1100px) { .ws-btn { flex-wrap: wrap; } .ws-btn .ws-badge { flex-basis: 100%; text-align: left; border-radius: 6px; white-space: nowrap; } } /* 세로 메뉴(112px)에서는 낱말이 들어가게 숫자 줄을 아래로 */
+  .insight-headline { margin: 6px 0; padding: 8px 10px; border-left: 4px solid var(--accent); background: var(--panel-2); border-radius: 6px; font-weight: bold; font-size: 14px; }
+  .insight-how { margin: 0 0 10px; } .insight-how > summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+  .handover-line { align-items: baseline; }
   .ws-list, .ws-admin { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; margin: 0 0 10px; }
   .ws-list > p, .ws-admin > p { margin: 0 0 6px; }
   .ws-rows { display: grid; gap: 6px; }

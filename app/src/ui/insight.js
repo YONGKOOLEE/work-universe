@@ -16,6 +16,11 @@ import { SUBTYPE_ROLE } from '../model/schema.js';
 import { KEYLESS_PREGEN_REASON, KEYLESS_REASON } from '../llm/providers.js';
 import { EXPLAIN_SAME_AS_BELOW, PREGEN_CHIP_TITLE } from './ai-notes.js';
 
+// 탭마다 맨 위 한 줄 결론과 접힌 「어떻게 셌나요?」(8회차 남은 것 FU8-20). 계산은 그대로, 글 배치만 바꾼다
+const headline = (testid, text) => el('p', { class: 'insight-headline', 'data-testid': testid }, text);
+const howFold = (...parts) => el('details', { class: 'insight-how', 'data-testid': 'insight-how' }, el('summary', {}, '어떻게 셌나요?'), ...parts.filter(Boolean));
+const similarHeadline = (r) => (r.status === 'ok' ? `직접 해 본 사람 ${r.direct.length}명 · 비슷한 일을 해 본 사람 ${r.people.filter((p) => !r.direct.some((d) => d.gid === p.gid)).length}명` : '비슷한 경험자를 찾지 못했습니다');
+
 // 밀집 기준 N. 화면에서 바꾸면 이 세션 동안 유지되고 사람 상세의 "밀집 기준에 해당" 판정도 같은 값을 쓴다(저장하지 않음)
 let denseN = DENSE_DEFAULT_N;
 export const currentDenseN = () => denseN;
@@ -151,12 +156,15 @@ function similarView(o, view) {
   const multi = new Set(works.map((w) => w.universe_id)).size > 1; // 유니버스가 하나면 이름 접미사를 붙이지 않는다(U-14)
   for (const w of works) pick.append(el('option', { value: w.gid, selected: w.gid === o.work }, multi ? `${w.label} (${w.universe_name})` : w.label));
   const out = el('div', { 'data-testid': 'insight-result' });
+  const head = headline('insight-headline', '');
   const run = () => {
     if (!pick.value) {
+      head.textContent = '업무를 고르면 해 본 사람을 찾아 줍니다';
       out.replaceChildren(el('p', { class: 'muted' }, '업무를 고르면 비슷한 업무를 수행한 사람을 찾아 줍니다.'));
       return;
     }
     const r = similarExperts(view, { works: [pick.value], asOf: o.asOf || todayLocal() });
+    head.textContent = similarHeadline(r);
     renderSimilar(out, view, r, o.onFocus);
     const box = explainBox(view, similarExplain(r, pick.value), o);
     if (box) out.prepend(box);
@@ -164,7 +172,8 @@ function similarView(o, view) {
   pick.addEventListener('change', () => { if (o.onWork) o.onWork(pick.value); run(); });
   run();
   return el('div', {},
-    el('p', { class: 'muted small' }, '먼저 고른 업무를 예전에 직접 한 사람(이전 담당)을 보여 주고, 그다음 같은 주제·산출물 유형·이름 낱말을 가진 다른 업무를 수행한 사람을 보여 줍니다. 현재 담당자는 뺍니다. 이름 낱말만 같은 업무는 같은 일이 아닐 수 있어 낮은 점수로 두고 확인을 권합니다. 점수는 겹친 수(주제 3, 산출물 유형 2, 이름 낱말 1)를 더한 것으로, 높을수록 비슷합니다. 사람 이름 없이 역할 이름만 있는 항목은 따로 묶습니다.'),
+    head,
+    howFold(el('p', { class: 'muted small' }, '먼저 고른 업무를 예전에 직접 한 사람(이전 담당)을 보여 주고, 그다음 같은 주제·산출물 유형·이름 낱말을 가진 다른 업무를 수행한 사람을 보여 줍니다. 현재 담당자는 뺍니다. 이름 낱말만 같은 업무는 같은 일이 아닐 수 있어 낮은 점수로 두고 확인을 권합니다. 점수는 겹친 수(주제 3, 산출물 유형 2, 이름 낱말 1)를 더한 것으로, 높을수록 비슷합니다. 사람 이름 없이 역할 이름만 있는 항목은 따로 묶습니다.')),
     // FU5-5: 사람이 빠질 때를 묻는 사람이 이 탭에서 길을 잃지 않게
     el('p', { class: 'muted small', 'data-testid': 'similar-person-hint' }, SIMILAR_PERSON_HINT),
     el('label', { class: 'field' }, el('span', {}, '업무'), pick),
@@ -223,7 +232,10 @@ function expertCard(view, p, onFocus) {
 function repeatView(view, o) {
   const onFocus = o.onFocus;
   const r = repeatInefficiency(view, { asOf: o.asOf || todayLocal() }); // 밀집·흐름과 같이 오늘 기준: 미래 날짜 이력은 세지 않는다(검토5 I-2)
-  const parts = [el('p', { class: 'muted small' }, '담당자가 바뀔 때마다 같은 설명을 처음부터 반복하거나, 같은 문제가 여러 업무에서 되풀이되는 패턴입니다.')];
+  const nChain = r.status === 'ok' ? r.patterns.filter((p) => p.kind === 'handover_chain').length : 0;
+  const nTopic = r.status === 'ok' ? r.patterns.length - nChain : 0;
+  const parts = [headline('insight-headline', r.status === 'ok' ? `되풀이되는 곳 ${r.patterns.length}건 (인수인계 반복 ${nChain} · 주제 반복 ${nTopic})` : '되풀이되는 곳을 찾지 못했습니다'),
+    howFold(el('p', { class: 'muted small' }, '담당자가 바뀔 때마다 같은 설명을 처음부터 반복하거나, 같은 문제가 여러 업무에서 되풀이되는 패턴입니다.'))];
   if (r.status === 'insufficient') {
     parts.push(el('p', { class: 'notice', 'data-testid': 'repeat-insufficient' }, `데이터 부족 — ${r.reason}${r.last_input ? ` (마지막 입력 ${r.last_input})` : ' (입력된 업무 이력 없음)'}.`));
   } else if (r.status === 'none') {
@@ -242,7 +254,7 @@ function repeatView(view, o) {
       ),
     );
   }
-  parts.splice(1, 0, explainBox(view, repeatExplain(r, view.universe_id), o, new Set(r.status === 'ok' ? r.patterns.map((p) => p.summary) : [])));
+  parts.splice(2, 0, explainBox(view, repeatExplain(r, view.universe_id), o, new Set(r.status === 'ok' ? r.patterns.map((p) => p.summary) : [])));
   return el('div', { 'data-testid': 'repeat-body' }, ...parts.filter(Boolean));
 }
 
@@ -251,9 +263,11 @@ function densityView(o, view) {
   const asOf = o.asOf || todayLocal();
   const nInput = el('input', { type: 'number', min: '1', step: '1', value: String(denseN), 'data-testid': 'dense-n' });
   const out = el('div', { 'data-testid': 'density-result' });
+  const head = headline('insight-headline', '');
   const run = () => {
     if (nInput.value !== '') denseN = denseLimit(nInput.value);
     const r = densityGaps(view, { asOf, n: denseN });
+    head.textContent = r.status === 'insufficient' ? '데이터가 부족해 세지 못했습니다' : `담당자 없는 업무(공백) ${r.gaps.length}건 · 일이 몰린 사람(밀집) ${r.dense.length}명`;
     renderDensity(out, view, r, o.onFocus);
     const box = explainBox(view, densityExplain(r, view.universe_id), o);
     if (box) out.prepend(box);
@@ -261,7 +275,8 @@ function densityView(o, view) {
   nInput.addEventListener('input', run);
   run();
   return el('div', { 'data-testid': 'density-body' },
-    el('p', { class: 'muted small' }, `기준일 ${asOf}에 담당자가 없는 업무(공백)와 한 사람이 여러 업무를 맡은 경우(밀집)입니다. 기간이 끝난 업무는 세지 않습니다.`),
+    head,
+    howFold(el('p', { class: 'muted small' }, `기준일 ${asOf}에 담당자가 없는 업무(공백)와 한 사람이 여러 업무를 맡은 경우(밀집)입니다. 기간이 끝난 업무는 세지 않습니다.`)),
     el('label', { class: 'dg-n' }, el('span', {}, '일이 몰렸다고 볼 기준(밀집): 한 사람이'), nInput, el('span', {}, '개 이상 맡음')),
     out);
 }
@@ -312,9 +327,12 @@ function flowView(o, view) {
   const today = o.today || todayLocal();
   const unit = el('select', { 'data-testid': 'flow-unit' }, el('option', { value: 'month', selected: flowUnit === 'month' }, '월'), el('option', { value: 'quarter', selected: flowUnit === 'quarter' }, '분기'));
   const out = el('div', { 'data-testid': 'flow-result' });
+  const head = headline('insight-headline', '');
   const run = () => {
     flowUnit = unit.value;
     const r = flowChange(view, { unit: flowUnit, asOf: today });
+    const lastP = r.status === 'insufficient' ? null : [...r.periods].reverse().find((p) => !p.no_data);
+    head.textContent = lastP ? `가장 최근 기록이 있는 기간 ${lastP.key}: 이력 ${lastP.counts.total}건` : '기간별 변화를 보여 줄 기록이 부족합니다';
     renderFlow(out, view, r, o);
     const box = explainBox(view, flowExplain(r, view.universe_id), o);
     if (box) out.prepend(box);
@@ -322,7 +340,8 @@ function flowView(o, view) {
   unit.addEventListener('change', run);
   run();
   return el('div', { 'data-testid': 'flow-body' },
-    el('p', { class: 'muted small' }, '기간마다 기록된 이력 수와, 그 기간 말에 담당 중인 업무·사람 수입니다. 기간(예: 2026-06)을 누르면 그래프가 그 시점으로 바뀝니다.'),
+    head,
+    howFold(el('p', { class: 'muted small' }, '기간마다 기록된 이력 수와, 그 기간 말에 담당 중인 업무·사람 수입니다. 기간(예: 2026-06)을 누르면 그래프가 그 시점으로 바뀝니다.')),
     el('label', { class: 'dg-n' }, el('span', {}, '기간 단위'), unit),
     out);
 }
@@ -388,8 +407,8 @@ function shortPath(text) {
 function riskView(o, view) {
   const asOf = o.asOf || todayLocal();
   const uid = view.universe_id;
-  const section = (testid, title, hint, content, explain) =>
-    el('section', { class: 'risk-section', 'data-testid': testid }, el('h3', {}, title), el('p', { class: 'muted small' }, hint), explain, content);
+  const section = (testid, title, content, explain) =>
+    el('section', { class: 'risk-section', 'data-testid': testid }, el('h3', {}, title), explain, content);
   const insuff = (testid, r) => el('p', { class: 'notice', 'data-testid': testid }, `데이터 부족 — ${r.reason}.`);
 
   // ① 지식 집중 위험
@@ -457,9 +476,17 @@ function riskView(o, view) {
   }
   const pBox = explainBox(view, rippleExplain(p, uid), o);
 
+  const hintOf = (t, h) => el('p', { class: 'muted small' }, el('strong', {}, `${t}: `), h);
+  const topWork = !c.insufficient && c.status !== 'none' && c.items.length ? c.items[0].work.label : '';
+  const solo = c.insufficient ? 0 : c.counts.one;
+  const lead = c.insufficient ? '데이터가 부족해 세지 못했습니다' : `혼자만 아는 업무 ${solo}개${topWork ? ` — 가장 급한 곳: 「${topWork}」` : ''}`;
   return el('div', { 'data-testid': 'risk-body' },
-    el('p', { class: 'muted small' }, `기준일 ${asOf}에 한 사람에게 일이 몰려 있거나 인수인계 준비가 덜 된 곳, 한 업무가 막힐 때 영향이 퍼지는 곳을 기록에서 셉니다. 기록에 없는 것은 세지 않으므로, 입력이 모자란 곳은 위험이 낮게 보일 수 있습니다.`),
-    section('risk-concentration', '① 한 사람에게 몰린 지식', '업무를 해 본 사람(과거·현재, 역할 이름 제외)이 한 명뿐이고 인수인계 기록이 없으면 「높음」, 기록이 있으면 「주의」입니다.', cBody, cBox),
-    section('risk-readiness', `② 인수인계 준비도 (6항목 중 몇 개)`, `표준 양식 권장 항목 · 미해결 이슈 없음 · 산출물 연결 · 현재 담당자 · 인수인계 이력 또는 인수인계서 · 최근 ${RISK.RECENT_DAYS}일 이내 이력. 낮은 순입니다.`, rBody, rBox),
-    section('risk-ripple', '③ 막히면 퍼지는 영향', '선후행(앞 → 뒤)과 산출 → 참조(이 업무의 산출물을 다른 업무가 참조)를 따라 이어서 닿는 업무 수입니다.', pBody, pBox));
+    headline('insight-headline', lead),
+    howFold(el('p', { class: 'muted small' }, `기준일 ${asOf}에 한 사람에게 일이 몰려 있거나 인수인계 준비가 덜 된 곳, 한 업무가 막힐 때 영향이 퍼지는 곳을 기록에서 셉니다. 기록에 없는 것은 세지 않으므로, 입력이 모자란 곳은 위험이 낮게 보일 수 있습니다.`),
+    hintOf('① 한 사람에게 몰린 지식', '업무를 해 본 사람(과거·현재, 역할 이름 제외)이 한 명뿐이고 인수인계 기록이 없으면 「높음」, 기록이 있으면 「주의」입니다.'),
+    hintOf('② 인수인계 준비도', `표준 양식 권장 항목 · 미해결 이슈 없음 · 산출물 연결 · 현재 담당자 · 인수인계 이력 또는 인수인계서 · 최근 ${RISK.RECENT_DAYS}일 이내 이력. 낮은 순입니다.`),
+    hintOf('③ 막히면 퍼지는 영향', '선후행(앞 → 뒤)과 산출 → 참조(이 업무의 산출물을 다른 업무가 참조)를 따라 이어서 닿는 업무 수입니다.')),
+    section('risk-concentration', '① 한 사람에게 몰린 지식', cBody, cBox),
+    section('risk-readiness', '② 인수인계 준비도 (6항목 중 몇 개)', rBody, rBox),
+    section('risk-ripple', '③ 막히면 퍼지는 영향', pBody, pBox));
 }
