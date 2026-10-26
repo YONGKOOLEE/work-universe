@@ -144,7 +144,7 @@ test("R18 'none' 모드 화면: intro 글이 바뀌고, 처음에는 아무것�
   assert.ok(dialog.querySelectorAll('[data-testid^=text-add-edge-check-]').every((e) => !e.checked));
   assert.equal(q('text-add-count').textContent, '넣을 항목 0개(새로 만듦)·연결 0개'); // R21-1: 개수 줄 새 모양
   q('text-add-save').click();
-  assert.equal(q('text-add-message').textContent, '넣을 항목이 없습니다. 항목을 체크하세요.');
+  assert.equal(q('text-add-message').textContent, '넣을 것이 없습니다. 항목이나 연결을 체크하세요.');
   const before = app.doc.edges.length;
   q('text-add-check-all').click();
   q('text-add-save').click();

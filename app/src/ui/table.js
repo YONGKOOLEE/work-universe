@@ -90,7 +90,9 @@ export function tableDialog(o) {
     if (!r.ok) {
       if (r.errors && r.errors.length) {
         for (const e of r.errors) st.errors.set(e.row, st.errors.has(e.row) ? `${st.errors.get(e.row)} / ${errorText(e.error)}` : errorText(e.error));
-        st.message = `${r.errors.length}행에 문제가 있어 아무것도 저장하지 않았습니다. 표시된 행을 고친 뒤 다시 저장하세요.`;
+        const bad = [...st.errors.keys()].sort((a, b) => a - b);
+        const which = bad.length === 1 ? `${bad[0]}행에 문제가 있어` : `문제 있는 행 ${bad.length}개(${bad.join('·')}행)가 있어`;
+        st.message = `${which} 아무것도 저장하지 않았습니다. 표시된 행을 고친 뒤 다시 저장하세요.`;
       } else st.message = errorText(r.error);
       return render();
     }
@@ -107,7 +109,7 @@ export function tableDialog(o) {
     });
     const typeCell = existing
       ? el('input', { 'data-col': 'type', value: r.cells.type, readonly: true, 'aria-label': `${i + 1}행 유형`, class: 'ro' })
-      : el('input', { 'data-col': 'type', 'data-testid': `table-type-${i}`, list: 'table-types', value: r.cells.type, autocomplete: 'off', 'aria-label': `${i + 1}행 유형` });
+      : el('input', { 'data-col': 'type', 'data-testid': `table-type-${i}`, list: 'table-types', placeholder: '업무·사람·문서(산출물)', value: r.cells.type, autocomplete: 'off', 'aria-label': `${i + 1}행 유형` });
     const main = el('tr', { class: err ? 'row-error' : '', 'data-testid': `table-row-${i}` },
       el('th', { scope: 'row' }, String(i + 1)),
       el('td', {}, typeCell),
@@ -160,7 +162,7 @@ export function tableDialog(o) {
       attachBox,
       el('p', { class: 'error-text', 'data-testid': 'table-message', 'aria-live': 'polite' }, st.message),
       el('div', { class: 'row decide-row' }, el('span', { class: 'decide-q', 'data-testid': 'table-save-q' }, existing ? '바꾼 행을 지도에 저장할까요?' : '표의 행을 지도에 넣을까요?'), el('button', { type: 'button', class: 'primary', 'data-testid': 'table-save', onclick: save }, '저장')),
-      el('datalist', { id: 'table-types' }, ...TYPE_CHOICES.map((t) => el('option', { value: t }))),
+      el('datalist', { id: 'table-types' }, ...TYPE_CHOICES.map((t) => el('option', { value: t }, t === '산출물' ? '문서(산출물)' : undefined))),
     ];
     if (bundled) {
       // 묶은 화면(U-2): 하위 유니버스 노드는 이 문서에 없으므로 빈 표와 「저장」 대신 안내만 보인다

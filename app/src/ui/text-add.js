@@ -42,7 +42,8 @@ export const TEXT_ADD = Object.freeze({
   attach: ' 새 업무는 지도 중심(연두색 큰 원)에 바로 연결하기',
   save: '저장',
   close: '닫기',
-  nothingToSave: '넣을 항목이 없습니다. 항목을 체크하세요.',
+  nothingToSave: '넣을 것이 없습니다. 항목이나 연결을 체크하세요.', // FU9-4: 읽은 연결이 있으면 연결만 체크해도 된다
+  nothingToSaveNodes: '넣을 항목이 없습니다. 항목을 체크하세요.', // 읽은 연결이 하나도 없을 때
   emptyText: '글을 붙여 넣으세요.',
   // R21: 지도에 있는 항목은 새로 넣는 것이 아니므로 「넣을 항목」에서 빼고 따로 「이어 씀」으로 센다
   count: (nNew, nEdge, nMap = 0) => `넣을 항목 ${nNew}개(새로 만듦)·연결 ${nEdge}개${nMap ? ` · 지도 항목 ${nMap}개 이어 씀` : ''}`,
@@ -156,7 +157,9 @@ export function textAddDialog(o) {
     st.errors = new Map();
     const ops = proposalToOps(st.proposal, st.sel, o.app.doc, { attachRoot: st.attach ? 'work' : false });
     if (!ops.length) {
-      st.message = TEXT_ADD.nothingToSave;
+      const held = contextHeldBack(st.proposal);
+      const base = st.proposal.edges.length ? TEXT_ADD.nothingToSave : TEXT_ADD.nothingToSaveNodes;
+      st.message = held ? `${base} (${TEXT_ADD.heldBack(held)})` : base; // 연결이 체크되지 않은 이유(읽지 못한 문장)도 알린다
       return render();
     }
     const r = o.app.applyBatch(ops);
@@ -339,9 +342,9 @@ export function textAddDialog(o) {
           head(['넣기', '앞 항목', '관계', '뒤 항목', '상태', '원문 구절']), el('tbody', {}, ...p.edges.flatMap((e, j) => edgeRow(e, j, r))))));
       }
     }
-    parts.push(el('details', { class: 'small', 'data-testid': 'text-add-shapes' },
+    parts.push(el('details', { class: 'small', open: true, 'data-testid': 'text-add-shapes' }, // FU9-3: 읽는 모양 예시는 펼쳐 둔다
       el('summary', {}, TEXT_ADD.shapesTitle),
-      el('ul', {}, ...TEXT_PATTERN_DOC.map((x) => el('li', {}, `${x.shape} — 예: ${x.example}`))),
+      el('ul', {}, ...TEXT_PATTERN_DOC.map((x) => el('li', { title: x.shape }, `예: ${x.example}`))),
       el('p', { class: 'muted' }, `글은 ${TEXT_LIMITS.maxChars.toLocaleString()}자까지, 항목은 ${TEXT_LIMITS.maxNodes}개까지 한 번에 넣을 수 있습니다.`)));
     previewBox.replaceChildren(...parts);
   }

@@ -127,7 +127,7 @@ export function messageFor(err, ctx = {}) {
       if (err.field === 'occurred_at' && err.future) return '날짜는 오늘보다 뒤일 수 없습니다. 아무것도 저장하지 않았습니다.';
       if (err.field === 'occurred_at') return '날짜를 확인하세요(YYYY-MM-DD, 1900~2200년의 실제 있는 날짜).';
       if (err.field === 'label') return '지도 중심 이름은 업무 지도 이름과 같아서 여기서 바꿀 수 없습니다.';
-      if (err.unknown_type) return `알 수 없는 유형 「${err.unknown_type}」입니다. 업무·사람·산출물·조직·주제 중 하나를 쓰세요.`;
+      if (err.unknown_type) return `알 수 없는 유형 「${err.unknown_type}」입니다. 업무·사람·문서(산출물)·조직·주제 중 하나를 쓰세요.`;
       if (err.cannot_change) return '유형은 바꿀 수 없습니다. 유형을 바꾸려면 새 항목으로 추가하세요.';
       if (err.extra_cells) return '머리글보다 칸이 많습니다. 탭이 더 들어갔는지 확인하세요.';
       if (err.no_active) return '이 사람이 이 업무를 담당 중인 연결이 없어 종료할 수 없습니다. 담당자와 업무를 확인하세요.';

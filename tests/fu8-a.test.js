@@ -40,8 +40,10 @@ test('FU8 일상말: 부재·출장은 담당 넘기기·인수인계 쪽(1~3위
     assert.ok(!ids.includes('html-export') || ids.indexOf('html-export') > 2, `「${t}」 ${ids}`);
     assert.ok(!ids.slice(0, 2).includes('folder'), t);
   }
-  // 흔한 낱말만으로는 약하게: 「사람」·「업무」 단독은 점수 5 이하
-  assert.ok(searchFeatures('사람').every((r) => r.score <= 5));
+  // 흔한 낱말만으로는 약하게: 「사람」·「업무」 단독은 점수 6 이하(이름에 들어 있는 기능만 한 칸 위 — RV13-4: 「사람·업무·문서 추가」가 1위)
+  assert.ok(searchFeatures('사람').every((r) => r.score <= 6));
+  assert.equal(searchFeatures('사람')[0].id, 'add');
+  assert.equal(searchFeatures('업무')[0].id, 'add');
   assert.equal(searchFeatures('담당')[0].id, 'assignee'); // 예전 용어는 그대로
 });
 test('FU8-23 통합 확인: 고르면 공간까지가 아니라 통합 확인 목록 화면을 바로 연다(go = merge)', () => {

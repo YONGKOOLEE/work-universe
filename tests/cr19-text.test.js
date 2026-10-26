@@ -860,7 +860,7 @@ test('CR-19 화면: 저장된 Claude 읽기 결과도 같은 묶음 저장을 �
   assert.equal(rows(d, 'text-add-node').length, 5);
   assert.equal(d.q('text-add-note'), null, 'ok 응답은 뺀 행이 없다');
   d.q('text-add-save').click();
-  assert.equal(d.q('text-add-message').textContent, '넣을 항목이 없습니다. 항목을 체크하세요.', 'R17: Claude 읽기도 처음에는 지도에 이미 있는 항목만 체크 — 새로 만드는 항목이 없으면 저장할 것이 없다');
+  assert.equal(d.q('text-add-message').textContent, '넣을 것이 없습니다. 항목이나 연결을 체크하세요.', 'R17: Claude 읽기도 처음에는 지도에 이미 있는 항목만 체크 — 새로 만드는 항목이 없으면 저장할 것이 없다');
   d.q('text-add-check-all').click();
   d.q('text-add-save').click();
   assert.equal(d.q('text-add-done').textContent, '항목 2개·연결 2개를 넣었습니다');

@@ -2348,7 +2348,8 @@ async function checkBrowser(browser, port) {
   const t19writes = await evaluate(s.cdp, 'window.__t19w');
   await evaluate(s.cdp, 'Storage.prototype.setItem = window.__t19orig');
   check('R-18 ①⑤: 저장 → 대화상자가 닫히고 노드 5개 추가, 이력 7건(생성 5+꼭지 연결 2), 저장소 쓰기 2회 이하(본문+목록)', !(await evaluate(s.cdp, "document.getElementById('table-dialog').open")) && (await t19Count()) === t19n0 + 5 && (await t19Events()) === t19e0 + 7 && t19writes >= 1 && t19writes <= 2, `노드 ${t19n0}→${await t19Count()}, 이력 ${t19e0}→${await t19Events()}, 쓰기 ${t19writes}`);
-  check('R-18 ①: 새 노드가 그래프에 보이고 마지막 새 노드가 선택됨', (await hasLabel(s.cdp, 'T19 가상 조직')) && (await hasLabel(s.cdp, 'T19 표 업무 1')) && (await evaluate(s.cdp, "(window.__wu.view.getNode(window.__wu.selected || '') || {}).label")) === 'T19 가상 조직');
+  // FU9-12(2026-10-27): 저장 뒤에는 마지막 항목 카드 대신 지도 전체(선택 없음)를 두고 알림에 개수를 알린다(예전 기대: 마지막 새 노드가 선택됨)
+  check('R-18 ①: 새 노드가 그래프에 보이고 선택 없이 지도 전체 + 알림 「5개를 넣었습니다」', (await hasLabel(s.cdp, 'T19 가상 조직')) && (await hasLabel(s.cdp, 'T19 표 업무 1')) && (await evaluate(s.cdp, 'window.__wu.selected')) === null && (await text(s.cdp, '[data-testid=table-add-done]')).includes('5개를 넣었습니다'));
   check('R-18 ①: 안내 문구(추가·고침 개수)가 보임', (await text(s.cdp, '[data-testid=add-done]')).includes('5개를 추가하고 0개를 고쳤습니다'));
 
   // ③ 오류 행: 한 행이라도 문제면 아무것도 저장하지 않고 그 행과 사유 표시, 고치면 전부 저장
@@ -4484,7 +4485,7 @@ async function checkBrowser(browser, port) {
       await clickTestId(s.cdp, 'text-add-save');
       await sleep(150);
       const crD0Save = await evaluate(s.cdp, "({ msg: document.querySelector('[data-testid=text-add-message]').textContent, nodes: window.__wu.doc.nodes.length })");
-      check('CR-19 R19 아무것도 체크하지 않고 저장하면 「넣을 항목이 없습니다. 항목을 체크하세요.」이고 문서는 그대로', crD0Save.msg === '넣을 항목이 없습니다. 항목을 체크하세요.' && crD0Save.nodes === c0.nodes, JSON.stringify([crD0Save, c0]));
+      check('CR-19 R19 아무것도 체크하지 않고 저장하면 「넣을 것이 없습니다. 항목이나 연결을 체크하세요.」(연결이 있는 글, FU9-4)이고 문서는 그대로', crD0Save.msg === '넣을 것이 없습니다. 항목이나 연결을 체크하세요.' && crD0Save.nodes === c0.nodes, JSON.stringify([crD0Save, c0]));
       const crAllBtns = await evaluate(s.cdp, "({ all: !!document.querySelector('[data-testid=text-add-check-all]'), none: !!document.querySelector('[data-testid=text-add-uncheck-all]'), ex: !!document.querySelector('[data-testid=text-add-check-existing]') })");
       check('CR-19 R19·R21 미리 보기 위에 「지도에 있는 항목끼리 연결 체크」·「모두 체크」·「모두 해제」 단추', crAllBtns.all && crAllBtns.none && crAllBtns.ex && ((await crBox('[data-testid=text-add-check-all]')) || {}).text === '모두 체크' && ((await crBox('[data-testid=text-add-uncheck-all]')) || {}).text === '모두 해제' && ((await crBox('[data-testid=text-add-check-existing]')) || {}).text === '지도에 있는 항목끼리 연결 체크', JSON.stringify(crAllBtns));
       await clickTestId(s.cdp, 'text-add-check-existing');
@@ -7395,6 +7396,106 @@ async function checkBrowser(browser, port) {
         check('8회차 남은 것 메뉴 「매주 점검」 배지는 메뉴 폭 안 한 줄(보이는 낱말은 짧게, title·aria-label은 긴 말)', mb === null || (mb.lines === 1 && mb.h < 22 && mb.inNav && /혼자만/.test(mb.word) && mb.title.includes('혼자만 아는 일') && (mb.aria || '').includes('혼자만 아는 일')), JSON.stringify(mb));
         await shot(s.cdp, `${browser.name}-fu8c-03-menu`);
       } else check('8회차 남은 것 U-D1', false, 'U-D1이 열리지 않음');
+    }
+
+    // ── FU9 P(2026-10-27, 처음 사용 점검 9회차 P 묶음): 표 「문서」·오류 행 번호·저장 뒤 알림, 글로 추가 새 모양, JSON 바로 미리 보기·안내, 숨김 알림, 찾기 일상말, 도움말 맨 위·실수했을 때 ──
+    {
+      const R9 = (e) => R(e);
+      const clickT = (id) => R9(`document.querySelector('[data-testid=${id}]').click()`);
+      const txt = (sel) => R9(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); return e ? e.textContent.replace(/\\s+/g, ' ').trim() : null; })()`);
+      const vis = (sel) => R9(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); return !!e && e.checkVisibility(); })()`);
+      const setVal = (sel, v) => R9(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); e.value = ${JSON.stringify(v)}; e.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+      if (await r11Go('U-A1', ['U-A1'])) {
+        await R9('window.__wu.select(null)');
+        await pickSpace('edit');
+        // 1. 표로 추가: 문제 행 번호 → 고쳐서 저장
+        await clickT('btn-table-add');
+        await sleep(200);
+        await setVal('[data-testid=table-paste]', '유형\t이름\n이상한유형\t점검표 A\n문서\t분기 점검표 FU9\n또이상\t점검표 B\n파일\t검증 로그 FU9\n업무\t분기 점검 FU9');
+        await clickT('table-paste-apply');
+        await clickT('table-save');
+        await sleep(300);
+        const e1 = await txt('[data-testid=table-message]');
+        check('FU9-2 표 저장 오류: 문제 있는 행이 둘이면 「문제 있는 행 2개(1·3행)」로 실제 번호를 알림', /문제 있는 행 2개\(1·3행\)/.test(e1 || ''), String(e1));
+        await shot(s.cdp, `${browser.name}-fu9p-01-table-error`);
+        await setVal('[data-testid=table-type-0]', '문서');
+        await setVal('[data-testid=table-type-2]', '자료');
+        const before = await R9('window.__wu.doc.nodes.length');
+        await clickT('table-save');
+        await sleep(500);
+        const t1 = await R9("(() => { const d = window.__wu.doc; const art = (l) => (d.nodes.find((n) => n.label === l) || {}).core_type; return { n: d.nodes.length, a: art('분기 점검표 FU9'), f: art('검증 로그 FU9'), s: art('점검표 B'), sel: window.__wu.selected, open: document.getElementById('table-dialog').open, note: (document.querySelector('[data-testid=table-add-done]') || {}).textContent || '' }; })()");
+        check('FU9-1 표로 추가 유형 칸에 「문서」·「파일」·「자료」를 쓰면 산출물(artifact)로 저장됨', t1.a === 'artifact' && t1.f === 'artifact' && t1.s === 'artifact' && t1.n === before + 5, JSON.stringify([before, t1]));
+        check('FU9-12 표로 추가 저장 뒤 선택 없이 지도 전체를 두고 알림 「5개를 넣었습니다」', t1.sel === null && t1.open === false && t1.note.includes('5개를 넣었습니다'), JSON.stringify(t1));
+        await shot(s.cdp, `${browser.name}-fu9p-02-table-saved`);
+        // 2. 글로 추가: 새 모양
+        await clickT('btn-text-add');
+        await sleep(200);
+        check('FU9-3 글로 추가: 읽는 모양 예시 목록이 펼쳐져 있음', await R9("document.querySelector('[data-testid=text-add-shapes]').open === true"));
+        await setVal('[data-testid=text-add-input]', '분기 점검 FU9는 노을빛이 맡는다. 분기 점검 FU9에서 점검 지침을 참고한다.');
+        await clickT('text-add-read');
+        await sleep(300);
+        const x1 = await R9("({ edges: document.querySelectorAll('[data-testid=text-add-edges] tbody tr').length, nodes: document.querySelectorAll('[data-testid=text-add-nodes] tbody tr').length, unread: !!document.querySelector('[data-testid=text-add-unread-0]') })");
+        check('FU9-3 「A는 X가 맡는다」·「A에서 B를 참고한다」를 읽어 연결 2개·읽지 못한 문장 없음', x1.edges >= 2 && !x1.unread, JSON.stringify(x1));
+        await shot(s.cdp, `${browser.name}-fu9p-03-text-read`);
+        await clickT('text-add-uncheck-all');
+        await clickT('text-add-save');
+        await sleep(200);
+        check('FU9-4 아무것도 체크하지 않고 저장하면 「항목이나 연결을 체크하세요」', (await txt('[data-testid=text-add-message]') || '').includes('항목이나 연결을 체크하세요'), String(await txt('[data-testid=text-add-message]')));
+        await clickT('text-add-close');
+        await sleep(150);
+        // 3. 가져오기 창: JSON 안내 한 줄·파일을 고르면 바로 미리 보기
+        await R9("document.getElementById('import-open').click()");
+        await sleep(250);
+        check('FU9-10 가져오기 창 맨 위(문서 탭)에 「.json 파일은 「JSON 파일」 탭」 안내가 보임', (await txt('[data-testid=import-json-hint]') || '').includes('JSON 파일」 탭') && await vis('[data-testid=import-json-hint]'));
+        await clickT('import-tab-json');
+        await sleep(150);
+        await R9("(() => { const input = document.querySelector('[data-testid=import-json-file]'); const dt = new DataTransfer(); dt.items.add(new File([JSON.stringify(window.__wu.doc)], 'fu9-내보낸-지도.json', { type: 'application/json' })); input.files = dt.files; input.dispatchEvent(new Event('change', { bubbles: true })); })()");
+        await sleep(700);
+        const j1 = await R9("({ summary: !!document.querySelector('[data-testid=import-summary]'), name: (document.querySelector('[data-testid=import-json-name]') || {}).textContent || '', marks: !!document.querySelector('[data-testid=import-marks]'), notes: (document.querySelector('[data-testid=import-notes]') || {}).textContent || '', file: document.querySelector('[data-testid=import-json-file]').files.length, dev: document.getElementById('import-dialog').textContent.includes('개발 중 변환') })");
+        check('FU9-7 JSON 파일을 고르면 「확인」 없이 바로 미리 보기가 열리고 파일 이름이 보임', j1.summary && j1.name.includes('fu9-내보낸-지도.json') && j1.file === 1, JSON.stringify(j1));
+        check('FU9-11 JSON 미리 보기에는 문서 변환용 「[미확인]·[가정] 표시」·「원문에 사번이 없어」·「개발 중 변환」 말이 없음', !j1.marks && !j1.notes.includes('원문에') && !j1.dev, JSON.stringify(j1));
+        await shot(s.cdp, `${browser.name}-fu9p-04-json-preview`);
+        await clickT('import-close');
+        await sleep(150);
+        // 4. 숨기기 알림 → 「되살리기」로 숨긴 항목 목록
+        const hid = await R9("(() => { const n = window.__wu.doc.nodes.find((x) => x.label === '점검표 B'); window.confirm = () => true; return n.id; })()");
+        await R9(`window.__wu.select('U-A1/${hid}')`);
+        await sleep(300);
+        await clickT('btn-hide');
+        await sleep(400);
+        const h1 = await R9("({ note: (document.querySelector('[data-testid=hidden-done]') || {}).textContent || '', go: !!document.querySelector('[data-testid=goto-notice]'), sel: window.__wu.selected })");
+        check('FU9-8 항목을 숨기면 알림 「숨겼습니다 — 되살리기는 「지도 관리」의 「숨긴 항목」…」 + 「되살리기」 단추', h1.note.includes('숨겼습니다') && h1.note.includes('「숨긴 항목」') && h1.go, JSON.stringify(h1));
+        await shot(s.cdp, `${browser.name}-fu9p-05-hidden-notice`);
+        await clickT('goto-notice');
+        await sleep(300);
+        check('FU9-8 알림의 「되살리기」를 누르면 숨긴 항목 목록이 열림', await vis('[data-testid=hidden-close]'));
+        await clickT('hidden-close');
+        await sleep(200);
+        // 5. 찾기 일상말
+        const findIds = async (q) => { await setVal('[data-testid=feature-find]', q); await sleep(200); return R9("[...document.querySelectorAll('[data-testid=feature-find-result]')].map((b) => b.dataset.id)"); };
+        const f1 = await findIds('지우기');
+        check('FU9-24 찾기 「지우기」 → 「항목 숨기기·삭제」가 1위, 초기화는 3위 안에 없음', f1[0] === 'hide' && !f1.slice(0, 3).includes('reset'), JSON.stringify(f1));
+        await shot(s.cdp, `${browser.name}-fu9p-06-find-erase`);
+        const f2 = await findIds('초기화');
+        check('FU9-24 찾기 「초기화」 → 가상 데이터 초기화가 1위, 결과 줄에 「전부 지웁니다」', f2[0] === 'reset' && (await txt('[data-testid=feature-find-result] .feat-where') || '').includes('전부 지웁니다'), JSON.stringify(f2));
+        const f3 = await findIds('다른 PC로 옮기기');
+        check('FU9-25 찾기 「다른 PC로 옮기기」 → JSON 내보내기·가져오기', f3.slice(0, 2).sort().join() === 'json-export,json-import', JSON.stringify(f3));
+        await shot(s.cdp, `${browser.name}-fu9p-07-find-move`);
+        const f4 = await findIds('다시 묻기');
+        check('FU9-26 찾기 「다시 묻기」 → 통합 확인이 1위', f4[0] === 'merge', JSON.stringify(f4));
+        const f5 = await findIds('업무');
+        check('RV13-4 찾기 「업무」 한 낱말 → 「사람·업무·문서 추가」가 1위', f5[0] === 'add', JSON.stringify(f5));
+        await R9("(() => { const e = document.querySelector('[data-testid=feature-find]'); e.value = ''; e.dispatchEvent(new Event('input', { bubbles: true })); e.blur(); })()");
+        // 6. 도움말
+        await clickT('tour-open');
+        await sleep(300);
+        const hp = await R9("(() => { const b = document.getElementById('help-dialog'); return { open: b.open, top: b.scrollTop, active: document.activeElement && document.activeElement.id, mistakes: !!document.querySelector('[data-testid=help-mistakes]') && document.querySelector('[data-testid=help-mistakes]').checkVisibility() }; })()");
+        check('FU9-27 도움말 「?」를 열면 맨 위(스크롤 0)이고 초점은 제목', hp.open && hp.top === 0 && hp.active === 'help-title', JSON.stringify(hp));
+        check('FU9-28 도움말에 「실수했을 때」 묶음(되돌리는 길 4개)', hp.mistakes && (await R9("document.querySelectorAll('[data-testid=help-mistakes] dt').length")) === 4, JSON.stringify(hp));
+        await shot(s.cdp, `${browser.name}-fu9p-08-help`);
+        await clickT('help-close');
+        await sleep(150);
+      } else check('FU9 P U-A1', false, 'U-A1이 열리지 않음');
     }
 
     // 저장소를 블록 시작 때 상태로 되돌린다
