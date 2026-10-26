@@ -1,3 +1,5 @@
+import { searchNodes } from './explore.js';
+
 // 기능 찾기 카탈로그와 검색(CR-21 A). 화면(DOM)·저장소를 쓰지 않는다.
 // 정해 둔 목록만 찾는다(자유 문장을 이해하지 않음, limits). 낱말 겹침·앞부분 일치·키워드(동의어)로 점수를 매기고 동점은 목록 순서.
 //
@@ -20,7 +22,7 @@ export const FEATURE_WORK_LIMIT = 8; // 업무를 고르게 할 때 보이는 �
 const F = (id, name, keywords, where, needs, go, extra = {}) => ({ id, name, keywords, where, needs, go, ...extra });
 
 // 목록 순서가 동점 순서다 — 자주 찾는 것을 앞에 둔다
-export const FEATURES = [
+const BASE_FEATURES = [
   F('weekly', '이번 주 기록', ['기록', '메모', '이슈', '진행', '주간', '이번주', '남기기', '적기', '일지'], '「기록」 공간의 「이번 주 기록」', 'none', 'ov:weekly-quick', { write: true, sec: 'record' , space: 'record' }),
   F('issues', '미해결·해결로 표시', ['미해결', '해결', '해결됨', '이슈', '완료', '끝난', '닫기'], '「기록」 공간의 「미해결 n건」', 'none', 'ov:issue-count', { sec: 'record' , space: 'record' }),
   F('recent', '최근 기록', ['최근', '기록', '방금', '쓴', '썼던', '어디', '이력', '확인', '메모', '쓴 것', '기록 찾기', '찾기', '검색'], '「기록」 공간의 「최근 기록」(「모두 보기」에서 지도 전체 기록을 찾습니다)', 'none', 'ov:recent-records', { sec: 'record' , space: 'record' }),
@@ -59,6 +61,61 @@ export const FEATURES = [
   F('tour', '따라 하기 다시 보기', ['따라', '도움말', '사용법', '안내', '튜토리얼', '처음', '가이드', '둘러보기'], '머리글 「?」 → 「따라 하기 다시 보기」', 'none', 'dlg:help', { requires: 'tourOk' }),
   F('reset', '가상 데이터 초기화', ['초기화', '리셋', '처음 상태', '샘플', '되돌리기', '지우기'], '「지도 관리」 공간의 「가져오기·내보내기」 창 맨 아래', 'none', 'dlg:import:doc', { space: 'edit' }),
 ];
+
+// 일상말 동의어(사용자 의견 10-26 저녁: "무엇을 할까요에서 아무거나 치면 나오는 게 아니라 앱 용어를 쳐야 한다").
+// 기능 id별로 사람들이 실제로 치는 말을 더한다. 여기 한 곳에서만 고친다.
+// 두 글자 이상 낱말은 앞부분 일치(「퇴사했어요」→ 퇴사)로 걸린다. 한 글자 낱말은 똑같을 때만 걸리므로 흔한 변형을 함께 적는다
+export const DAILY_WORDS = {
+  weekly: ['메모 남기기', '메모해', '적어', '적어 두기', '적기', '남겨', '남기', '써 두기', '써 놓기', '오늘 한 일', '한 일', '진행 상황', '기록하기', '기록해'],
+  event: ['남겨', '남기', '적어', '메모 남기기', '메모해', '인수인계 기록', '담당 바뀜', '기록해'],
+  issues: ['문제', '문제 생김', '끝났', '끝남', '완료', '해결했', '처리', '처리됨', '닫기', '안 풀린', '안 끝난', '밀린', '막힌', '남은 일'],
+  recent: ['어디 썼', '썼지', '썼나', '썼는지', '썼어', '쓴 것', '찾아', '찾아보기', '어디에 있', '지난 기록', '옛 기록', '적은 것', '예전에 쓴', '뭐 썼', '어디 적'],
+  draft: ['퇴사', '휴가', '출산', '육아', '전보', '자리 옮', '넘겨줄', '넘겨', '인계서', '후임에게', '다음 사람', '교대', '인수인계 문서', '그만두'],
+  assignee: ['퇴사', '휴가', '대신', '대신 맡', '넘겨', '넘기', '바뀌', '바뀜', '맡기', '맡겨', '맡길', '담당 바뀜', '담당 변경', '누구에게', '이어받', '그만두'],
+  collab: ['같이 하는', '함께 하는', '도와주는', '다른 팀 사람', '참여자', '공동'],
+  edit: ['이름 바꾸', '이름 변경', '오타', '틀린', '잘못', '고쳐', '수정해', '바꿔', '설명 바꾸'],
+  edge: ['연결해', '이어주', '관계 맺', '엮', '붙이기'],
+  add: ['새로', '새 업무', '새 사람', '새 문서', '추가', '더 넣', '넣기', '만들', '등록', '하나씩'],
+  'table-add': ['엑셀', '표', '붙여', '붙여넣', '복사해서', '여러 명', '여러 개', '여러 업무', '한번에', '대량', '목록 붙여'],
+  'text-add': ['글로', '문장', '글 붙여', '메일', '카톡', '복붙', '글 넣기', '문장 읽'],
+  'table-edit': ['엑셀', '표', '한꺼번에 고치', '일괄 수정', '대량 수정'],
+  'doc-import': ['파일', '문서', '올리', '올려', '업로드', '워드', 'pdf', '불러오', '가져오', '업무 문서'],
+  'json-export': ['백업', '저장', '보관', '파일로 저장', '내려받', '내보내', '다운로드', '복사본', '저장해'],
+  'json-import': ['복원', '백업 불러', '되살', '파일 열', '불러오', '가져오', '가져와', '올리', '올려', '옛 파일'],
+  'html-export': ['보내', '보낼', '공유', '메일로', '전달', '링크', '읽기만', '동료에게', '공유하기'],
+  folder: ['공유', '함께 쓰', '같이 쓰', '여럿이', '동료와', '공용', '같이 보기', '팀원'],
+  group: ['팀', '합치', '합쳐', '묶', '하나로', '여러 지도', '부서', '팀 전체', '통합 지도'],
+  create: ['새로', '새 지도', '처음부터', '다른 부서', '지도 하나 더', '새로 시작'],
+  merge: ['같은 사람', '중복', '겹치', '겹쳐', '이름이 같', '동명이인', '합치', '합쳐', '두 번 나옴', '두 명으로'],
+  insight: ['위험', '위험한', '혼자', '혼자만', '한 명만', '퇴사하면', '빠지면', '집중', '큰일'],
+  density: ['몰린', '몰려', '과로', '바쁜', '너무 많', '담당 없', '주인 없', '비어', '빈 업무', '누가 안 맡'],
+  similar: ['대신', '누가', '누가 할', '대타', '대체', '대신 할', '할 수 있는 사람', '해 본', '경험'],
+  repeat: ['반복', '매번', '계속 같은', '똑같은 일', '또 같은'],
+  flow: ['요즘', '변하', '달라진'],
+  'weekly-check': ['이번 주 점검', '주간 점검', '지난주', '저번 주', '비교'],
+  summary: ['보고서', '공유용'],
+  rewind: ['되돌', '되돌려', '실수', '잘못 지움', '복구', '방금 한 것', '이전으로', '전으로'],
+  hidden: ['지워', '지운', '지웠', '삭제', '숨기', '숨겼', '숨긴', '없애', '안 보이', '다시 보이'],
+  time: ['그때', '예전', '지난달', '과거', '옛날', '당시', '그 시점'],
+  find: ['이름으로', '어디 있', '이 사람', '이 업무', '항목 찾'],
+  settings: ['내 이름', 'ai', '자동', '클로드'],
+  tour: ['사용법', '어떻게', '도움', '모르겠', '가이드'],
+  reset: ['처음 상태', '다 지우', '샘플 지우', '예시 지우', '비우기'],
+};
+
+export const FEATURES = BASE_FEATURES.map((f) => (DAILY_WORDS[f.id] ? { ...f, keywords: [...f.keywords, ...DAILY_WORDS[f.id].filter((k) => !f.keywords.includes(k))] } : f));
+
+// 찾기 칸을 누르면(빈 칸) 바로 보이는 「자주 하는 일」(사용자 의견 10-26 저녁). id는 위 기능 목록, label은 사람이 말하는 이름
+export const COMMON_FEATURES = [
+  { id: 'weekly', label: '메모 남기기' },
+  { id: 'draft', label: '인수인계서 만들기' },
+  { id: 'assignee', label: '담당 넘기기' },
+  { id: 'recent', label: '쓴 것 찾기' },
+  { id: 'insight', label: '이번 주 점검' },
+  { id: 'add', label: '업무·사람 더 넣기' },
+];
+export const MAP_ITEM_LIMIT = 5; // 결과의 「지도에서」 묶음에 보이는 항목 수
+export const MAP_ITEM_MIN_CHARS = 2; // 공백을 뺀 낱말이 이 글자 수 미만이면 지도 안 이름을 찾지 않는다(한 글자는 거의 다 맞는다)
 
 const norm = (s) => String(s || '').toLowerCase().replace(/[「」()·,.?!~]/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -119,5 +176,25 @@ export function searchFeatures(query, ctx = {}, { limit = FEATURE_RESULT_LIMIT, 
     if (score > 0) out.push({ f, order, score });
   });
   out.sort((a, b) => b.score - a.score || a.order - b.order);
-  return out.slice(0, limit).map(({ f, score }) => ({ id: f.id, name: f.name, where: f.where, needs: f.needs, go: f.go, ...(f.sec ? { sec: f.sec } : {}), ...(f.space ? { space: f.space } : {}), score, blocked: featureBlock(f, ctx) }));
+  return out.slice(0, limit).map(({ f, score }) => toResult(f, ctx, f.name, score));
+}
+
+function toResult(f, ctx, name, score) {
+  return { id: f.id, name, where: f.where, needs: f.needs, go: f.go, ...(f.sec ? { sec: f.sec } : {}), ...(f.space ? { space: f.space } : {}), score, blocked: featureBlock(f, ctx) };
+}
+
+/** 「자주 하는 일」 목록(빈 칸일 때). 못 쓰는 것은 blocked 이유가 붙는다 */
+export function commonFeatures(ctx = {}, { common = COMMON_FEATURES, features = FEATURES } = {}) {
+  return common.map((c) => ({ f: features.find((x) => x.id === c.id), label: c.label })).filter((x) => x.f).map(({ f, label }) => toResult(f, ctx, label, 0));
+}
+
+/**
+ * 지도 안 항목 이름 찾기(순수). 기존 그래프 「항목 찾기」의 searchNodes를 그대로 쓴다(이름 일부, 대소문자·공백 무시, 숨긴 항목 제외).
+ * @returns {{query:string, total:number, rows:{gid:string,label:string,type_label:string}[]}}
+ */
+export function searchMapItems(view, query, { limit = MAP_ITEM_LIMIT, minChars = MAP_ITEM_MIN_CHARS } = {}) {
+  const shown = String(query ?? '').replace(/\s+/g, ' ').trim();
+  if (shown.replace(/\s/g, '').length < minChars) return { query: shown, total: 0, rows: [] };
+  const hits = searchNodes(view, shown);
+  return { query: shown, total: hits.length, rows: hits.slice(0, limit).map((h) => ({ gid: h.gid, label: h.label, type_label: h.type_label })) };
 }

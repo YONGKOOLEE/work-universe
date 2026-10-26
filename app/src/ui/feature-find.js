@@ -8,13 +8,16 @@ import { el } from './dom.js';
  *   search: (q:string) => {id:string,name:string,where:string,blocked:string|null}[],
  *   onGo: (result:object) => (void|{pick:{works:{gid:string,label:string}[], note?:string}}),
  *   onPick: (gid:string, result:object) => void,
+ *   common?: () => {id:string,name:string,where:string,blocked:string|null}[],   // 빈 칸을 누르면 보이는 「자주 하는 일」(사용자 의견 10-26 저녁)
+ *   items?: (q:string) => {query:string, total:number, rows:{gid:string,label:string,type_label:string}[]},   // 지도 안 항목 이름 찾기 — 「지도에서」 묶음
+ *   onItem?: (row:object) => void,
  *   records?: (q:string) => {query:string, total:number, rows:object[]},   // 쓴 것 찾기(R11 FU6-4): 기능 결과가 없거나 적을 때 아래에 「기록에서 …」를 더한다
  *   recordFew?: number,                                                    // 기능 결과가 이 수 이하일 때만
  *   onRecord?: (row:object) => void, onRecordsAll?: (q:string) => void,
  * }} o  onGo가 {pick}을 돌려주면 「그래프에서 업무를 먼저 고르세요」와 업무 이름 목록을 보이고, 이름을 누르면 onPick(gid, result)
  */
 export function featureFind(o) {
-  const input = el('input', { type: 'search', placeholder: '무엇을 할까요? 예: 담당, 미해결, 점검', 'aria-label': '무엇을 할까요?', 'data-testid': 'feature-find', autocomplete: 'off', 'aria-controls': 'feature-find-list' });
+  const input = el('input', { type: 'search', placeholder: '무엇을 할까요? 예: 메모 남기기, 대사 확인', 'aria-label': '무엇을 할까요?', 'data-testid': 'feature-find', autocomplete: 'off', 'aria-controls': 'feature-find-list' });
   const list = el('ul', { id: 'feature-find-list', class: 'feature-results', 'data-testid': 'feature-find-list', hidden: true, 'aria-label': '기능 찾기 결과' });
   o.container.replaceChildren(input, list);
   let hits = [];
@@ -40,18 +43,44 @@ export function featureFind(o) {
     input.blur();
   }
 
-  const noneRow = (q, quiet) => el('li', { class: quiet ? 'none quiet muted small' : 'none', role: 'status', 'data-testid': 'feature-find-none' }, `찾는 기능 없음: 「${q}」 — 다른 낱말(예: 담당, 미해결, 점검, 글로)로 찾아 보세요`);
+  // 기능 한 줄(찾기 결과·자주 하는 일 공용)
+  const featureRow = (h, testid = 'feature-find-result') => el('li', {}, el('button', { type: 'button', class: 'feature-hit', 'data-testid': testid, 'data-id': h.id, 'aria-disabled': h.blocked ? 'true' : null, onclick: () => choose(h) },
+    el('span', { class: 'feat-name' }, h.name),
+    el('span', { class: 'feat-where' }, h.blocked ? `이 화면에서는 쓸 수 없음(${h.blocked})` : h.where),
+    el('span', { class: 'feat-go' }, '바로 가기')));
+  const head = (text, testid) => el('li', { class: 'rec-head', 'data-testid': testid }, text);
+
+  // 자주 하는 일(빈 칸을 눌렀을 때, 그리고 아무것도 못 찾았을 때)
+  const commonRows = () => (o.common ? o.common().map((h) => featureRow(h, 'feature-find-common')) : []);
+
+  // 아무것도 안 맞을 때: 못 찾았다고 끝내지 않고 어떻게 치면 되는지 보여 준다
+  const noneRows = (q) => [
+    el('li', { class: 'none', role: 'status', 'data-testid': 'feature-find-none' }, `「${q}」는 못 찾았어요. 이렇게 쳐 보세요 — 하고 싶은 일을 짧게 (예: 메모 남기기, 담당 넘기기, 쓴 것 찾기), 또는 업무·사람 이름 일부 (예: 대사)`),
+    ...(o.common ? [head('자주 하는 일', 'feature-find-common-head'), ...commonRows()] : []),
+  ];
 
   function show() {
     const q = input.value.trim();
     if (!q) {
       hits = [];
-      return close();
+      if (!o.common) return close();
+      list.replaceChildren(head('자주 하는 일', 'feature-find-common-head'), ...commonRows());
+      list.hidden = false;
+      return undefined;
     }
     hits = o.search(q);
+    const found = o.items ? o.items(q) : null;
+    const itemRows = found && found.rows.length ? [
+      head(`지도에서 ${found.total}건`, 'feature-find-items-head'),
+      ...found.rows.map((r) => el('li', {}, el('button', { type: 'button', class: 'feature-hit', 'data-testid': 'feature-find-item', 'data-gid': r.gid, onclick: () => { close(); input.value = ''; o.onItem(r); } },
+        el('span', { class: 'feat-name' }, r.label),
+        el('span', { class: 'feat-where' }, r.type_label),
+        el('span', { class: 'feat-go' }, '보기'))))
+      , found.total > found.rows.length ? el('li', { class: 'rec-more muted small' }, `외 ${found.total - found.rows.length}건 — 이름을 더 쳐서 좁혀 보세요`) : null,
+    ].filter(Boolean) : [];
     const rec = o.records && hits.length <= (o.recordFew ?? Infinity) ? o.records(q) : null;
     const recordItems = rec && rec.rows.length ? [
-      el('li', { class: 'rec-head', 'data-testid': 'feature-find-records-head' }, `기록에서 「${rec.query}」 ${rec.total}건`),
+      head(`기록에서 「${rec.query}」 ${rec.total}건`, 'feature-find-records-head'),
       ...rec.rows.map((r) => el('li', { class: 'rec-row' }, el('button', { type: 'button', class: 'feature-hit', 'data-testid': 'feature-find-record', 'data-gid': r.gid, onclick: () => { close(); input.value = ''; o.onRecord(r); } },
         el('span', { class: 'feat-name' }, `${r.date} · ${r.target}`),
         el('span', { class: 'feat-where' }, `[${r.kind}] ${r.text}`, r.source_chip ? el('span', { class: 'chip muted small src-chip', 'data-testid': 'feature-find-source-chip' }, r.source_chip) : null),
@@ -60,23 +89,35 @@ export function featureFind(o) {
         ? el('li', { class: 'rec-more' }, el('button', { type: 'button', class: 'link', 'data-testid': 'feature-find-records-all', onclick: () => { close(); input.value = ''; o.onRecordsAll(q); } }, `외 ${rec.total - rec.rows.length}건 — 기록 표에서 모두 보기`))
         : null,
     ].filter(Boolean) : [];
-    list.replaceChildren(...(hits.length
-      ? hits.map((h) => el('li', {}, el('button', { type: 'button', class: 'feature-hit', 'data-testid': 'feature-find-result', 'data-id': h.id, 'aria-disabled': h.blocked ? 'true' : null, onclick: () => choose(h) },
-        el('span', { class: 'feat-name' }, h.name),
-        el('span', { class: 'feat-where' }, h.blocked ? `이 화면에서는 쓸 수 없음(${h.blocked})` : h.where),
-        el('span', { class: 'feat-go' }, '바로 가기'))))
-      // 기록 결과가 있으면 「찾는 기능 없음」은 보이지 않는다(사용자 2026-10-26 저녁 "찾아지는데 왜 없음이 나와?" — FU7-9의 흐린 줄도 뺌)
-      : recordItems.length ? [] : [noneRow(q, false)]).concat(recordItems));
+    // 순서: 기능 → 지도에서(항목) → 기록에서. 기능 묶음은 다른 묶음이 같이 있을 때만 머리글을 단다
+    const featureItems = hits.map((h) => featureRow(h));
+    const several = itemRows.length > 0 || recordItems.length > 0;
+    // 아무것도 안 맞으면 「못 찾았어요 + 이렇게 쳐 보세요 + 자주 하는 일」(사용자 2026-10-26 저녁 "찾아지는데 왜 없음이 나와?"도 그대로: 기록·항목이 하나라도 있으면 이 안내는 없다)
+    const empty = !hits.length && !itemRows.length && !recordItems.length;
+    list.replaceChildren(...(empty ? noneRows(q) : [
+      ...(hits.length && several ? [head('할 수 있는 일', 'feature-find-features-head')] : []),
+      ...featureItems, ...itemRows, ...recordItems,
+    ]));
     list.hidden = false;
+    return undefined;
   }
 
   input.addEventListener('input', show);
-  input.addEventListener('focus', () => { if (input.value.trim()) show(); });
+  input.addEventListener('focus', () => show()); // 빈 칸이면 「자주 하는 일」
+  input.addEventListener('click', () => { if (list.hidden) show(); }); // Esc로 닫은 뒤 다시 눌러도 보인다
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.isComposing) {
       e.preventDefault();
+      if (!input.value.trim()) { // 빈 칸에서 Enter: 자주 하는 일 목록으로 내려가 고르게 한다(실수로 바로 실행하지 않음)
+        if (list.hidden) show();
+        if (buttons()[0]) buttons()[0].focus();
+        return;
+      }
       if (!hits.length || list.hidden) show();
-      choose(hits.find((h) => !h.blocked));
+      const usable = hits.find((h) => !h.blocked);
+      if (usable) return choose(usable);
+      const item = list.querySelector('[data-testid=feature-find-item]'); // 기능은 없고 항목 이름만 맞으면 그 첫 항목으로
+      if (item) item.click();
     } else if (e.key === 'ArrowDown' && !list.hidden && buttons().length) {
       e.preventDefault();
       buttons()[0].focus();

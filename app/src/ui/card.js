@@ -1,8 +1,8 @@
 // 항목 카드 그리기(CR-22 K). 값은 view/card.js(cardData·groupLinks·historyRows 등)가 만들고, 여기서는 DOM으로 옮기기만 한다.
-// 모양: 이름+유형 칩 → 상태 줄 → 고정 동작 줄 하나 → 「지금 볼 것」 → 접는 묶음(내용·담당·산출물·앞뒤 업무·기록(이력)·알림·관리).
+// 모양: 이름+유형 칩 → 상태 줄 → 고정 동작 줄 하나 → 「지금 볼 것」 → 「기록」 최근 3줄만 펼침 + 나머지 묶음(내용·담당·산출물·앞뒤 업무·알림·관리)은 머리글 한 줄+건수로 접어 둠(사용자 의견 10-26 저녁).
 // 단추의 동작(편집 상태 바꾸기·저장)은 main.js가 만들어 넘기는 요소·함수가 한다 — 이 파일은 저장소·편집 상태를 모른다.
 import { el } from './dom.js';
-import { groupLinks, groupOpen, historyPreview, isLongValue, issueSplitText, limitItems } from '../view/card.js';
+import { deadlineLeft, groupLinks, groupOpen, historyPreview, isLongValue, issueSplitText, limitItems } from '../view/card.js';
 
 /** 알림 한 개의 짧은 이름(알림 묶음 머리 미리보기와 상태 줄 칩) */
 export const ALERT_LABEL = { 'work-load': '담당 공백', 'person-load': '일 몰림', 'person-solo-works': '혼자만 아는 일', 'repeat-note': '반복 비효율', 'risk-note': '혼자만 아는 일' };
@@ -138,20 +138,61 @@ function otherState(d, o) {
   return items;
 }
 
-// 「지금 볼 것」: 미해결 최신 2건(+ 해결 단추)과 최근 기록 1건
+// 눌렀을 때 도착한 자리를 잠깐 강조(CSS goal-flash). 화면 밖으로 가려진 자리면 스크롤
+function arrive(node, ms = 1800) {
+  if (!node) return;
+  if (typeof node.scrollIntoView === 'function') node.scrollIntoView({ block: 'center' });
+  node.classList.add('goal-flash');
+  setTimeout(() => { if (node.classList && node.classList.remove) node.classList.remove('goal-flash'); }, ms);
+}
+
+// 알림 한 개를 「지금 볼 것」 줄로 쓸 때의 말: [무엇이 있다, 눌러서 무엇을 하나]. 판정은 알림 쪽 계산 그대로이고 여기는 글만이다
+const ALERT_NOW = {
+  'work-load': ['담당 공백', '어디가 비었나 보기'],
+  'person-load': ['일이 몰려 있음', '맡은 업무 보기'],
+  'person-solo-works': ['혼자만 아는 일', '어떤 일인지 보기'],
+  'repeat-note': ['반복 비효율', '무엇이 반복되나 보기'],
+  'risk-note': ['인수인계 기록 없음', '인수인계서 만들기'],
+};
+
+// 「지금 볼 것」 한 줄: 무엇이 있는지 + 누르면 무엇을 하는지(동사). 누르면 그 자리로 간다
+function nowLine(testid, head, verb, onclick, extra = {}) {
+  return el('div', { class: 'now-item now-go', 'data-testid': testid, ...extra },
+    el('button', { type: 'button', class: 'link now-btn', onclick }, el('span', {}, head), el('span', { class: 'now-verb' }, ` — ${verb} →`)));
+}
+
+// 「지금 볼 것」: 줄마다 동사로 쓰고 누르면 그 자리로 간다. 미해결(+ 해결 단추), 마감, 알림, 최근 기록 1건
+// 무엇이 나오는지는 예전 계산 그대로다(새 판정 없음) — 바뀐 것은 글과 이동뿐
 function nowBlock(c, o) {
   const rows = [];
+  // 미해결 머리 줄은 아래에 다 보이지 않을 때만(줄마다 이미 누를 수 있다 — 메인 화면 확인 10-26 저녁: 같은 말이 두 번)
+  if (c.issues && c.issues.total > (c.now || []).length) {
+    const first = (c.now || [])[0];
+    rows.push(nowLine('now-issues-head', `미해결 ${c.issues.total}건`, '모두 보기', () => (first ? o.seeRecord(first.gid) : o.seeRecord(null))));
+  }
   for (const it of c.now || []) {
     rows.push(el('div', { class: 'now-item', 'data-testid': 'now-issue', 'data-gid': it.gid },
-      el('span', { class: 'chip warn' }, it.category), el('span', { class: 'muted small' }, it.date), el('span', { class: 'now-text', title: it.note }, it.text),
+      el('span', { class: 'chip warn' }, it.category), el('span', { class: 'muted small' }, it.date),
+      el('button', { type: 'button', class: 'link now-text', title: `${it.note} — 누르면 기록의 그 줄로 갑니다`, onclick: () => o.seeRecord(it.gid) }, it.text),
       o.canResolve ? el('button', { type: 'button', class: 'small-btn', 'data-testid': 'now-resolve', title: '이 메모 한 건을 해결로 표시합니다(원래 메모는 그대로 남고 「해결됨」 메모가 이력에 더해집니다)', onclick: () => o.onResolve(it.gid) }, '해결') : null));
   }
+  // 마감은 카드 맨 위 상태 줄에도 있다 — 남은 날수를 셀 수 있을 때만 여기 한 줄 더(날짜가 아닌 글이면 겹치기만 한다)
+  const left = c.deadline && !c.past ? deadlineLeft(c.deadline, c.asOf) : '';
+  if (left) {
+    rows.push(el('div', { class: 'now-item', 'data-testid': 'now-deadline' }, el('span', {}, `마감 ${c.deadline}`), el('span', { class: 'now-left' }, ` · ${left}`)));
+  }
+  for (const a of o.alertRows) {
+    const [head, verb] = ALERT_NOW[a.testid] || [a.label, '보기'];
+    rows.push(nowLine('now-alert', head, verb, a.testid === 'risk-note' && o.onDraft ? () => o.onDraft() : () => o.onShowAlert(a.testid), { 'data-note': a.testid }));
+  }
   if (c.latest) {
-    rows.push(el('div', { class: 'now-item', 'data-testid': 'now-recent' },
-      el('span', { class: 'chip' }, '최근 기록'), el('span', { class: 'muted small' }, c.latest.date), el('span', { class: 'now-text' }, `${c.latest.type_label !== '메모' ? `[${c.latest.type_label}] ` : ''}${c.latest.text}`)));
+    rows.push(el('div', { class: 'now-item now-go', 'data-testid': 'now-recent' },
+      el('span', { class: 'chip' }, '최근 기록'), el('span', { class: 'muted small' }, c.latest.date),
+      el('button', { type: 'button', class: 'link now-text', title: '누르면 기록의 그 줄로 갑니다', onclick: () => o.seeRecord(c.latest.gid) }, `${c.latest.type_label !== '메모' ? `[${c.latest.type_label}] ` : ''}${c.latest.text}`)));
   }
   if (!rows.length) return null;
-  return el('section', { class: 'card-now', 'data-testid': 'card-now' }, el('h3', {}, '지금 볼 것'), ...rows);
+  return el('section', { class: 'card-now', 'data-testid': 'card-now' }, el('h3', {}, '지금 볼 것'),
+    el('p', { class: 'muted small now-hint', 'data-testid': 'now-hint' }, '누르면 그 자리로 갑니다'), ...rows);
 }
 
 // 사람 카드 「최근 기록」(위쪽 「지금 볼 것」 자리)
@@ -196,12 +237,35 @@ export function renderCard(panel, d, c, o) {
   const alerts = o.notes.alerts || [];
   const alertChips = alerts.filter((a) => a.chip).map((a) => ({ testid: a.testid, label: a.label, text: a.el.textContent }));
   let alertsGroup = null;
+  let historyGroup = null;
   const showAlerts = () => {
     if (!alertsGroup) return;
     alertsGroup.open = true;
     if (typeof alertsGroup.scrollIntoView === 'function') alertsGroup.scrollIntoView({ block: 'nearest' });
   };
-  const ctx = { ...o, alertChips, onShowAlerts: showAlerts };
+  // 「지금 볼 것」 줄: 알림 묶음을 펼치고 그 알림 글로 간다
+  const showAlert = (testid) => {
+    const a = alerts.find((x) => x.testid === testid);
+    if (!alertsGroup || !a) return;
+    alertsGroup.open = true;
+    arrive(a.el);
+  };
+  // 「지금 볼 것」 줄: 기록 묶음을 펼치고 그 기록 줄(gid)로 간다. 줄이 처음 3건 밖이면 상세를 다시 그려 보이게 하고(o.onShowRecord), 이 항목의 기록이 아니면(같은 주제의 다른 업무 메모) 미해결 목록으로
+  const seeRecord = (gid) => {
+    const rowsAll = c ? c.rows : [];
+    const li = gid ? [...root.querySelectorAll('li')].find((x) => x.getAttribute('data-ev-gid') === gid) : null;
+    if (li && historyGroup) {
+      historyGroup.open = true;
+      return arrive(li);
+    }
+    if (gid && o.onShowRecord && rowsAll.some((r) => r.gid === gid)) return o.onShowRecord(gid);
+    if (historyGroup && !gid) {
+      historyGroup.open = true;
+      return arrive(historyGroup);
+    }
+    return o.onOpenIssues();
+  };
+  const ctx = { ...o, alertChips, alertRows: alerts.map((a) => ({ testid: a.testid, label: a.label })), onShowAlerts: showAlerts, onShowAlert: showAlert, seeRecord };
 
   const root = el('div', { class: 'item-card', 'data-testid': 'item-card', 'data-type': type });
   // 머리: 이름 + 유형 칩, 상태 줄
@@ -230,12 +294,12 @@ export function renderCard(panel, d, c, o) {
 
   // 내용
   const contentExtra = [o.notes.form].filter(Boolean);
-  const contentGroup = group({ key: 'content', title: '내용', count: `${d.rows.length}칸`, preview: contentPreview(d), dflt: true, state: o.state }, attrsList(d.rows), ...contentExtra);
+  const contentGroup = group({ key: 'content', title: '내용', count: `${d.rows.length}칸`, preview: contentPreview(d), dflt: false, state: o.state }, attrsList(d.rows), ...contentExtra);
 
   // 사람 전용 묶음
   const personGroups = [];
   if (type === 'person' && c && c.hasAssignments) {
-    personGroups.push(group({ key: 'person-works', title: '지금 맡은 업무', count: c.count, preview: c.personRows.some((r) => r.solo || r.open) ? '위험·미해결 많은 것 먼저' : '', dflt: true, state: o.state },
+    personGroups.push(group({ key: 'person-works', title: '지금 맡은 업무', count: c.count, preview: c.personRows.some((r) => r.solo || r.open) ? '위험·미해결 많은 것 먼저' : '', dflt: false, state: o.state },
       o.notes.personLoad || null, c.personRows.length ? personWorks(c, ctx) : el('p', { class: 'muted small' }, '지금 맡은 업무 없음')));
     if (c.pastRows.length) {
       personGroups.push(group({ key: 'person-past', title: '지난 업무', count: c.pastRows.length, preview: `${c.pastRows[0].label}${c.pastRows.length > 1 ? ' 외' : ''}`, dflt: false, state: o.state },
@@ -247,7 +311,7 @@ export function renderCard(panel, d, c, o) {
   const linkGroups = groupLinks(type, d.links).map((g) => {
     const dflt = groupOpen(g.items.length);
     const first = g.key === 'assign' && o.notes.workLoad ? o.notes.workLoad : null;
-    return group({ key: g.key, title: g.label, count: g.items.length, preview: g.preview, dflt: type === 'person' ? false : dflt, state: o.state },
+    return group({ key: g.key, title: g.key === 'links' ? '연결된 항목' : g.label, count: g.items.length, preview: g.preview, dflt: type === 'person' ? false : dflt, state: o.state },
       first, limitedList(g.key, o.state, g.items, (l) => linkItem(l, ctx), 'ul', { class: 'links' }));
   });
   const linksBox = d.no_links
@@ -266,9 +330,9 @@ export function renderCard(panel, d, c, o) {
       prev.extra ? el('p', { class: 'muted small history-gap' }, '방금 기록한 줄(옛 날짜)') : null,
       prev.extra ? el('ol', { class: 'history history-extra', 'data-testid': 'history-extra' }, historyItem(prev.extra, o.justAdded)) : null,
     el('p', { class: 'muted small history-foot', 'data-testid': 'history-count' }, `최신이 위 · ${rows.length}건`, ' ',
-      prev.rest > 0 || prev.extra ? el('button', { type: 'button', class: 'link', 'data-testid': 'history-all', onclick: (e) => o.onHistoryAll(e.currentTarget) }, '모두 보기 →') : null)];
+      prev.rest > 0 || prev.extra ? el('button', { type: 'button', class: 'link', 'data-testid': 'history-all', onclick: (e) => o.onHistoryAll(e.currentTarget) }, '기록 모두 보기 →') : null)];
   const hasJust = o.justAdded && rows.some((r) => o.justAdded.includes(r.gid));
-  const historyGroup = group({ key: 'history', title: '기록(이력)', count: rows.length, preview: rows.length ? '최신이 위' : '', dflt: groupOpen(rows.length), force: hasJust, state: o.state,
+  historyGroup = group({ key: 'history', title: '기록(이력)', count: rows.length, preview: rows.length ? '최신이 위' : '', dflt: true, force: hasJust, state: o.state,
     summaryAttrs: { id: 'history-heading', tabindex: '-1', 'data-testid': 'history-heading' } }, ...historyBody);
 
   // 알림 · 관리

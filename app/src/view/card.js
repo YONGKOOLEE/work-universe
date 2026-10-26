@@ -12,7 +12,8 @@ import { soloWorksOf } from './risk-summary.js';
 // 바꾸기 쉬운 값은 한 곳에(연속 진행 모드 원칙)
 export const CARD = {
   LIST_MAX: 5, // 묶음을 펼쳐도 처음 보이는 줄 수(그 위는 「모두 n개」)
-  OPEN_MAX: 5, // 이 줄 수 이하인 묶음은 기본 펼침(작은 지도에서는 지금과 비슷하게 보인다)
+  HISTORY_SHOWN: 3, // 카드 첫 화면 「기록」에 보이는 최근 줄 수(나머지는 「기록 모두 보기」). 예전 5
+  OPEN_MAX: 0, // 이 줄 수 이하인 묶음은 기본 펼침. 0 = 건수가 있는 묶음은 모두 접어 두고 머리글 한 줄+건수만 보인다(사용자 의견 10-26 저녁: 카드 첫 화면은 요약만). 예전 값 5
   NOW_ISSUES: 2, // 「지금 볼 것」의 미해결 건수
   TEXT_CLIP: 46, // 「지금 볼 것」 줄의 내용 앞부분 글자 수
   LONG_VALUE: 80, // 이 글자 수를 넘는 속성 값은 한 번 더 접는다(절차·주의사항 등)
@@ -174,7 +175,7 @@ export function pageRows(rows, page = 1, size = CARD.HISTORY_PAGE) {
  * 카드의 이력 묶음에 보일 줄: 최신 max건. 방금 기록한 줄(justAdded)이 그보다 옛 줄이면 그 줄도 따로 보인다(강조·스크롤이 닿게)
  * @returns {{shown:object[], extra:object|null, rest:number}} rest = 보이지 않는 줄 수
  */
-export function historyPreview(rows, justAdded = null, max = CARD.LIST_MAX) {
+export function historyPreview(rows, justAdded = null, max = CARD.HISTORY_SHOWN) {
   const shown = rows.slice(0, max);
   const want = justAdded && justAdded.length ? new Set(justAdded) : null;
   const extra = want && !shown.some((r) => want.has(r.gid)) ? rows.slice(max).find((r) => want.has(r.gid)) || null : null;
@@ -205,6 +206,21 @@ const attrOf = (node, key) => {
   const v = node && node.attrs && node.attrs[key];
   return v === undefined || v === null || String(v).trim() === '' ? '' : String(v).trim();
 };
+
+/**
+ * 마감 값이 날짜(YYYY-MM-DD 또는 M-D)일 때만 남은 날수 글. 글(「월 마감 후 5영업일 이내」 같은)이면 ''. 새 판정이 아니라 화면 글이다.
+ * @returns {string} 「3일 남음」「오늘 마감」「2일 지남」 또는 ''
+ */
+export function deadlineLeft(deadline, today) {
+  const m = /^(?:(\d{4})-)?(\d{1,2})-(\d{1,2})$/.exec(String(deadline || '').trim());
+  const t = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(today || ''));
+  if (!m || !t) return '';
+  const y = Number(m[1] || t[1]);
+  const to = Date.UTC(y, Number(m[2]) - 1, Number(m[3]));
+  const days = Math.round((to - Date.UTC(Number(t[1]), Number(t[2]) - 1, Number(t[3]))) / 86400000);
+  if (Number.isNaN(days)) return '';
+  return days > 0 ? `${days}일 남음` : days === 0 ? '오늘 마감' : `${-days}일 지남`;
+}
 
 /** 미해결 메모 한 건을 「지금 볼 것」 줄로 */
 const nowIssue = (ev) => ({ gid: ev.gid, date: ev.occurred_at, category: MEMO_CATEGORIES[memoCategoryOf(ev.payload)] || '', text: clip(ev.note || '메모', CARD.TEXT_CLIP), note: ev.note || '' });
