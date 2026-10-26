@@ -649,16 +649,18 @@ function start() {
   // ── 쓴 것 바로 보이기(CR-21 B) ──
   // 방금 기록한 이력 줄(이벤트 전역 ID들). 상세의 이력 목록이 그 줄에 data-just-added를 달아 강조하고, 몇 초 뒤 강조만 지운다
   let justAdded = null;
-  function markJustAdded(gids) {
+  // picked: 실제로 방금 기록한 것이 아니라 「지금 볼 것」·찾기·최근 기록에서 골라 간 줄(FU8-4: 강조만 하고 「방금 기록한 줄」 글은 붙이지 않는다)
+  function markJustAdded(gids, picked = false) {
     if (justAdded) clearTimeout(justAdded.timer);
     if (!gids.length) {
       justAdded = null;
       return;
     }
-    const mine = { gids, timer: setTimeout(() => {
+    const mine = { gids, picked, timer: setTimeout(() => {
       if (justAdded !== mine) return;
       justAdded = null;
       for (const li of document.querySelectorAll('[data-just-added]')) li.removeAttribute('data-just-added');
+      for (const g of document.querySelectorAll('[data-testid=history-gap]')) g.remove(); // 방금 기록한 줄 표지도 강조와 함께 사라진다
     }, RECENT_RECORDS.JUST_ADDED_MS) };
     justAdded = mine;
   }
@@ -669,8 +671,8 @@ function start() {
     if (li && typeof li.scrollIntoView === 'function') li.scrollIntoView({ block: 'center' });
   }
   // 그 업무를 고르고 상세 이력의 방금 기록한 줄로 간다(알림의 「이력에서 보기」·개요 「최근 기록」의 「보기」)
-  function showHistory(nodeGid, gids) {
-    markJustAdded(gids);
+  function showHistory(nodeGid, gids, picked = false) {
+    markJustAdded(gids, picked);
     focus(nodeGid);
     scrollJustAdded();
   }
@@ -893,15 +895,20 @@ function start() {
     renderPanel();
   }
 
-  function openIssues(targetGid) {
+  // opts.open: 펼쳐 둘 업무 묶음(업무 gid, 대상 없는 주제 묶음은 'topics'), opts.item: 눌러 온 메모 한 건(그 줄을 강조) — 카드의 「지금 볼 것」에서 올 때(FU8-14·15)
+  function openIssues(targetGid, opts = null) {
     rememberOpener();
     settingsOpen = false;
     merging = false;
     editing = null;
     closeDraft();
     insight = null;
-    issues = { target: targetGid };
+    issues = { target: targetGid, open: (opts && opts.open) || null, item: (opts && opts.item) || null };
     renderPanel();
+    if (issues && issues.item) { // 눌러 온 줄로 스크롤하고 잠깐 강조
+      const li = [...$('detail').querySelectorAll('[data-testid=issue-item]')].find((x) => x.getAttribute('data-gid') === issues.item);
+      if (li) { if (typeof li.scrollIntoView === 'function') li.scrollIntoView({ block: 'center' }); flash(li); }
+    }
   }
 
   // 미해결 n건(R-20): 업무 상세에서는 그 업무 범위, 유니버스 개요에서는 화면에 모인 모든 메모
@@ -1198,6 +1205,15 @@ function start() {
       msg);
   }
 
+  // 카드 「지금 볼 것」의 「반복 비효율」: 알림 칸을 거치지 않고 인사이트의 「반복 비효율」 탭을 열고, 이 업무가 든 패턴 줄을 강조한다(FU8-5)
+  function openRepeatFor(gid) {
+    const node = view.getNode(gid);
+    openInsight('', 'repeat');
+    const label = node ? displayName(node) : '';
+    const li = label ? [...$('detail').querySelectorAll('[data-testid=repeat-patterns] > li')].find((x) => x.textContent.includes(label)) : null;
+    if (li) { if (typeof li.scrollIntoView === 'function') li.scrollIntoView({ block: 'center' }); flash(li); }
+  }
+
   // 업무·주제 노드가 반복 비효율 패턴에 들어 있으면 한 줄
   function repeatNote(gid) {
     const node = view.getNode(gid);
@@ -1451,9 +1467,12 @@ function start() {
           el('button', { type: 'button', class: 'link', onclick: () => openUniverse(node.universe_id) }, `「${node.universe_name}」 열기`), '.')],
       canResolve: editable,
       onResolve: (g) => resolveMemoNow(g),
-      onOpenIssues: () => openIssues(gid),
+      // 카드에서 미해결 목록으로 오면 이 업무 묶음을 펼친 채(FU8-14·15). 「지금 볼 것」 줄에서는 그 줄의 묶음·줄(opts)
+      onOpenIssues: (opts) => openIssues(gid, opts && typeof opts === 'object' && opts.constructor === Object ? opts : { open: gid }),
+      justPicked: !!(justAdded && justAdded.picked),
+      onRepeat: () => openRepeatFor(gid),
       onHistoryAll: () => openHistTable(),
-      onShowRecord: (evGid) => showHistory(gid, [evGid]), // 「지금 볼 것」 줄: 처음 3건 밖의 기록 줄로(방금 기록한 줄과 같은 강조)
+      onShowRecord: (evGid) => showHistory(gid, [evGid], true), // 「지금 볼 것」 줄: 처음 3건 밖의 기록 줄로(방금 기록한 줄과 같은 강조)
       onDraft: () => { const n = view.getNode(gid); if (n) openDraft(n.gid); }, // 「인수인계 기록 없음 — 인수인계서 만들기」
     };
   }
@@ -1773,7 +1792,7 @@ function start() {
     }
     if (issues) {
       panel.replaceChildren(issuePanel({
-        view, targetGid: issues.target, rootGid: app.rootGid(), universeId: app.doc.universe.id, readOnly: app.readOnly,
+        view, targetGid: issues.target, openKey: issues.open || null, rootGid: app.rootGid(), universeId: app.doc.universe.id, readOnly: app.readOnly,
         onFocus: showInGraph,
         onClose: closeSidePanel,
         // 해결 표시는 메모가 있는 유니버스 문서에 저장한다(묶음 화면의 하위 유니버스 메모 포함). 이미 닫힌 메모면 아무것도 더하지 않는다
@@ -1835,7 +1854,7 @@ function start() {
         onClose: closeSidePanel,
         onResolve: (g) => resolveMemoNow(g),
         canResolve: (r) => isOwn(r.target_gid),
-        onOpenRow: (r) => { closeHistTable(); showHistory(r.target_gid, [r.gid]); },
+        onOpenRow: (r) => { closeHistTable(); showHistory(r.target_gid, [r.gid], true); },
       }));
       focusClose('history-table-close');
       return;
@@ -2100,7 +2119,7 @@ function start() {
   // ── 길 찾기(CR-21 B·A, CR-22 W): 최근 기록·기능 찾기 ──
   // 개요 「최근 기록」(B-2): 계산은 view/recent-records.js. 「보기」는 알림의 「이력에서 보기」와 같은 이동
   function recentBox() {
-    return recentList(recentRecords(view), (row) => showHistory(row.target_gid, [row.gid]), { onAll: () => openMapHistTable(), canRecord: canWeekly() });
+    return recentList(recentRecords(view), (row) => showHistory(row.target_gid, [row.gid], true), { onAll: () => openMapHistTable(), canRecord: canWeekly() });
   }
 
   // 화면 아래 「사람·업무·문서 추가」를 펼치고 거기로 간다(개요 「지도 고치기」의 단추)
@@ -2182,8 +2201,18 @@ function start() {
     const works = ownNodes().filter((n) => n.core_type === 'work').slice(0, FEATURE_WORK_LIMIT).map((n) => ({ gid: n.gid, label: n.label }));
     return { pick: { works } };
   }
+  // 묶은 지도에서 「메모 남기기」: 메모는 업무가 있는 하위 업무 지도에서 쓴다 — 그래프 위 구석 안내 대신 「어느 업무 지도에 쓸까요?」 목록(담당 넘기기의 업무 먼저 고르기와 같은 모양, FU8-28)
+  function childMapsToWrite() {
+    const ids = [...new Set((view.ref_links || []).map((l) => l.child))];
+    return ids.map((id) => ({ id, name: (view.nodes.find((n) => n.universe_id === id) || {}).universe_name, works: view.nodes.some((n) => n.universe_id === id && n.core_type === 'work' && !n.hidden) }))
+      .filter((m) => m.name && m.works).map((m) => ({ gid: m.id, label: m.name }));
+  }
   function goFeature(r) {
     const [kind, arg, arg2] = r.go.split(':');
+    if (kind === 'ov' && arg === 'weekly-quick' && isGroupedView(view) && !app.readOnly && !rw && !$('detail').querySelector('[data-testid=weekly-quick]')) {
+      const maps = childMapsToWrite();
+      if (maps.length) return { pick: { works: maps, note: '어느 업무 지도에 쓸까요? 메모는 업무가 있는 지도에서 남깁니다. 고르면 그 지도를 열고 「기록」 공간으로 갑니다.', onPick: (id) => { goSpace('record'); openUniverse(id); } } };
+    }
     if (kind === 'ov') return showInOverview(arg, r.space);
     // 그 기능이 있는 공간으로 먼저 바꾼다(되감기 중 창만 여는 기능은 되감기를 끝내지 않도록 그대로 둔다)
     if (r.space && !(rw && kind === 'dlg')) goSpace(r.space, { keepCard: true }); // 고른 항목에 일을 시키는 길이라 카드는 둔다(FU6-1)
@@ -2194,6 +2223,10 @@ function start() {
       return undefined;
     }
     if (kind === 'summary') return openCheckSummary();
+    if (kind === 'merge') { // 「같은 사람」 등: 공간까지만이 아니라 통합 확인 목록 화면을 바로 연다(FU8-23). 묶은 지도가 아니면 왜 못 여는지 알려 주는 자리로
+      if (app.mergePlan() && !rw) { openMerge(); return undefined; }
+      return showInOverview('merge-hint', r.space);
+    }
     if (kind === 'time') {
       flash($('timebar'));
       if (!tb.range.hidden) tb.range.focus();
@@ -2236,7 +2269,7 @@ function start() {
     // 쓴 것 찾기(R11 FU6-4): 기능 결과가 없거나 적으면 아래에 「기록에서 낱말 n건」(읽기만, 최대 8건)
     records: (q) => searchRecords(view, q),
     recordFew: RECORD_SEARCH.FEATURE_FEW,
-    onRecord: (row) => { showHistory(row.target_gid, [row.gid]); focusAfterFeature(); },
+    onRecord: (row) => { showHistory(row.target_gid, [row.gid], true); focusAfterFeature(); },
     onRecordsAll: (q) => { openMapHistTable(q); focusAfterFeature(); },
   });
 

@@ -37,7 +37,8 @@ function whereOf(view, ev, currentUniverse) {
 
 /**
  * 목록 화면.
- * @param {{view:object, targetGid:string, rootGid?:string, universeId:string, readOnly:boolean, onResolve:(gid:string)=>object, onFocus:(gid:string)=>void, onClose:()=>void}} o
+ * openKey: 펼쳐 둘 업무 묶음(카드에서 왔을 때 그 업무, FU8-15). 없으면 기본(2건 넘는 묶음은 접힘)
+ * @param {{view:object, targetGid:string, openKey?:string|null, rootGid?:string, universeId:string, readOnly:boolean, onResolve:(gid:string)=>object, onFocus:(gid:string)=>void, onClose:()=>void}} o
  */
 export function issuePanel(o) {
   const { view } = o;
@@ -82,7 +83,7 @@ export function issuePanel(o) {
     const head = g.target
       ? el('button', { type: 'button', class: 'link', onclick: () => o.onFocus(g.target) }, name)
       : el('span', {}, name);
-    list.append(el('details', { class: 'issue-group', 'data-testid': 'issue-group', 'data-count': String(g.items.length), open: g.collapsed ? null : true },
+    list.append(el('details', { class: 'issue-group', 'data-testid': 'issue-group', 'data-target': g.target || 'topics', 'data-count': String(g.items.length), open: g.collapsed && o.openKey !== (g.target || 'topics') ? null : true },
       el('summary', {}, head, el('span', { class: 'muted small' }, ` · ${g.items.length}건`)),
       ul));
   }

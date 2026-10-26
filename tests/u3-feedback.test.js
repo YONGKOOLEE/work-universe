@@ -89,16 +89,16 @@ test('카드 첫 화면: 기록만 펼쳐 있고 나머지는 접힌 묶음, 「
   const panel = document.createElement('div');
   body.append(panel);
   const seen = [];
-  renderNodeDetail(panel, d, { onFocus() {}, linkTools: () => null, justAdded: null, card: cardOpts(view, 'U-N/N-W1', d, { onOpenIssues: () => seen.push('issues'), onShowRecord: (g) => seen.push(`rec:${g}`) }) });
+  renderNodeDetail(panel, d, { onFocus() {}, linkTools: () => null, justAdded: null, card: cardOpts(view, 'U-N/N-W1', d, { onOpenIssues: (o) => seen.push(`issues:${o && o.open}:${o && o.item}`), onShowRecord: (g) => seen.push(`rec:${g}`) }) });
   const groups = ['content', 'assign', 'outputs', 'history'].map((k) => [k, q(panel, `card-group-${k}`).getAttribute('open') !== null]);
   assert.deepEqual(groups, [['content', false], ['assign', false], ['outputs', false], ['history', true]]);
   assert.equal(q(panel, 'history').querySelectorAll('li').length, 3, '기록은 최근 3줄');
   assert.match(q(panel, 'now-hint').textContent, /누르면 그 자리로 갑니다/);
   assert.equal(q(panel, 'now-issues-head'), null, '미해결이 아래에 다 보이면 머리 줄은 없다(같은 말 두 번 — 메인 10-26 저녁)');
   assert.match(q(panel, 'now-deadline').textContent, /마감 2026-10-05 · 3일 남음/);
-  // 미해결(메모 1, 가장 오래된 줄)은 기록 3줄 밖이라 상세를 다시 그려 보이게(onShowRecord)
+  // 미해결 줄(FU8-29): 어느 카드에서나 「미해결 목록」으로(그 줄의 업무 묶음을 펼치고 그 줄을 강조) — 기록 3줄 안이든 밖이든 같은 곳
   q(panel, 'now-issue').querySelector('button').click();
-  assert.deepEqual(seen, ['rec:U-N/E-1']);
+  assert.deepEqual(seen, ['issues:U-N/N-W1:U-N/E-1']);
   // 처음 3줄 안의 최근 기록은 그 자리에서 펼침·이동
   q(panel, 'now-recent').querySelector('button').click();
   assert.equal(seen.length, 1, '화면 안 줄이면 다시 그리지 않는다');

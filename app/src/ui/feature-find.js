@@ -1,12 +1,13 @@
 // 머리글 「무엇을 할까요?」 기능 찾기 칸(CR-21 A). 검색 계산은 view/feature-index.js(순수), 이 파일은 입력·결과 목록·업무 고르기만 그린다.
 // 키보드: 입력 칸에서 Enter = 첫 결과로, ↓ = 결과 목록으로, 목록에서 ↑↓로 옮기고 Enter, Esc = 닫기.
 import { el } from './dom.js';
+import { josa } from '../model/josa.js';
 
 /**
  * @param {{
  *   container: HTMLElement,
  *   search: (q:string) => {id:string,name:string,where:string,blocked:string|null}[],
- *   onGo: (result:object) => (void|{pick:{works:{gid:string,label:string}[], note?:string}}),
+ *   onGo: (result:object) => (void|{pick:{works:{gid:string,label:string}[], note?:string, onPick?:(gid:string, result:object)=>void}}),   // pick.onPick이 있으면 그것으로(묶은 지도의 「어느 업무 지도에 쓸까요?」, FU8-28)
  *   onPick: (gid:string, result:object) => void,
  *   common?: () => {id:string,name:string,where:string,blocked:string|null}[],   // 빈 칸을 누르면 보이는 「자주 하는 일」(사용자 의견 10-26 저녁)
  *   items?: (q:string) => {query:string, total:number, rows:{gid:string,label:string,type_label:string}[]},   // 지도 안 항목 이름 찾기 — 「지도에서」 묶음
@@ -29,7 +30,7 @@ export function featureFind(o) {
     list.replaceChildren(
       el('li', { class: 'pick-head', role: 'status', 'data-testid': 'feature-find-pick' }, pick.note || '그래프에서 업무를 먼저 고르세요. 아래에서 골라도 됩니다.'),
       ...(pick.works.length
-        ? [el('li', {}, el('div', { class: 'pick-list' }, ...pick.works.map((w) => el('button', { type: 'button', class: 'link', 'data-testid': 'feature-find-work', 'data-gid': w.gid, onclick: () => { close(); input.value = ''; o.onPick(w.gid, result); } }, w.label))))]
+        ? [el('li', {}, el('div', { class: 'pick-list' }, ...pick.works.map((w) => el('button', { type: 'button', class: 'link', 'data-testid': 'feature-find-work', 'data-gid': w.gid, onclick: () => { close(); input.value = ''; (pick.onPick || o.onPick)(w.gid, result); } }, w.label))))]
         : [el('li', { class: 'none' }, '이 지도에는 고를 업무가 없습니다.')]));
     list.hidden = false;
   }
@@ -55,7 +56,7 @@ export function featureFind(o) {
 
   // 아무것도 안 맞을 때: 못 찾았다고 끝내지 않고 어떻게 치면 되는지 보여 준다
   const noneRows = (q) => [
-    el('li', { class: 'none', role: 'status', 'data-testid': 'feature-find-none' }, `「${q}」는 못 찾았어요. 이렇게 쳐 보세요 — 하고 싶은 일을 짧게 (예: 메모 남기기, 담당 넘기기, 쓴 것 찾기), 또는 업무·사람 이름 일부 (예: 대사)`),
+    el('li', { class: 'none', role: 'status', 'data-testid': 'feature-find-none' }, `「${q}」${josa(q, '은/는')} 못 찾았어요. 이렇게 쳐 보세요 — 하고 싶은 일을 짧게 (예: 메모 남기기, 담당 넘기기, 쓴 것 찾기), 또는 업무·사람 이름 일부 (예: 대사)`),
     ...(o.common ? [head('자주 하는 일', 'feature-find-common-head'), ...commonRows()] : []),
   ];
 
@@ -80,7 +81,7 @@ export function featureFind(o) {
     ].filter(Boolean) : [];
     const rec = o.records && hits.length <= (o.recordFew ?? Infinity) ? o.records(q) : null;
     const recordItems = rec && rec.rows.length ? [
-      head(`기록에서 「${rec.query}」 ${rec.total}건`, 'feature-find-records-head'),
+      head(rec.mine ? `최근에 내가 직접 쓴 기록 ${rec.total}건` : `기록에서 「${rec.query}」 ${rec.total}건`, 'feature-find-records-head'),
       ...rec.rows.map((r) => el('li', { class: 'rec-row' }, el('button', { type: 'button', class: 'feature-hit', 'data-testid': 'feature-find-record', 'data-gid': r.gid, onclick: () => { close(); input.value = ''; o.onRecord(r); } },
         el('span', { class: 'feat-name' }, `${r.date} · ${r.target}`),
         el('span', { class: 'feat-where' }, `[${r.kind}] ${r.text}`, r.source_chip ? el('span', { class: 'chip muted small src-chip', 'data-testid': 'feature-find-source-chip' }, r.source_chip) : null),

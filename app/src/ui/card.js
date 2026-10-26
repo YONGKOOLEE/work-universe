@@ -2,6 +2,7 @@
 // 모양: 이름+유형 칩 → 상태 줄 → 고정 동작 줄 하나 → 「지금 볼 것」 → 「기록」 최근 3줄만 펼침 + 나머지 묶음(내용·담당·산출물·앞뒤 업무·알림·관리)은 머리글 한 줄+건수로 접어 둠(사용자 의견 10-26 저녁).
 // 단추의 동작(편집 상태 바꾸기·저장)은 main.js가 만들어 넘기는 요소·함수가 한다 — 이 파일은 저장소·편집 상태를 모른다.
 import { el } from './dom.js';
+import { RESOLVE_Q } from './issues.js';
 import { deadlineLeft, groupLinks, groupOpen, historyPreview, isLongValue, issueSplitText, limitItems } from '../view/card.js';
 
 /** 알림 한 개의 짧은 이름(알림 묶음 머리 미리보기와 상태 줄 칩) */
@@ -77,7 +78,7 @@ const issueButton = (c, o) => {
   if (!s.total) return el('span', { class: 'muted', 'data-testid': 'issue-count', 'data-count': '0' }, '미해결 0건');
   const split = issueSplitText(s);
   return el('span', { class: 'st-warn', 'data-testid': 'issue-count', 'data-count': String(s.total) },
-    el('button', { type: 'button', class: 'link', 'data-testid': 'btn-issues', onclick: o.onOpenIssues }, `미해결 ${s.total}건`),
+    el('button', { type: 'button', class: 'link', 'data-testid': 'btn-issues', onclick: () => o.onOpenIssues() }, `미해결 ${s.total}건`),
     split ? el('span', { class: 'muted small', 'data-testid': 'issue-split' }, ` (${split})`) : null);
 };
 
@@ -161,21 +162,33 @@ function nowLine(testid, head, verb, onclick, extra = {}) {
     el('button', { type: 'button', class: 'link now-btn', onclick }, el('span', {}, head), el('span', { class: 'now-verb' }, ` — ${verb} →`)));
 }
 
+// 「지금 볼 것」의 미해결 한 줄. 글을 누르면 미해결 목록(그 줄의 업무 묶음을 펼친 채), 「해결」은 묻고 나서 처리한다(FU8-17: 바로 처리하던 것)
+function nowIssueRow(it, o) {
+  const row = el('div', { class: 'now-item', 'data-testid': 'now-issue', 'data-gid': it.gid });
+  const ask = el('div', { class: 'now-ask row decide-row', 'data-testid': 'now-resolve-ask', hidden: true },
+    el('span', { class: 'decide-q', 'data-testid': 'now-resolve-q' }, RESOLVE_Q),
+    el('button', { type: 'button', 'data-testid': 'now-resolve-yes', onclick: () => o.onResolve(it.gid) }, '해결로 표시'),
+    el('button', { type: 'button', 'data-testid': 'now-resolve-cancel', onclick: () => { ask.hidden = true; resolveBtn.setAttribute('aria-expanded', 'false'); resolveBtn.focus(); } }, '취소'));
+  const resolveBtn = o.canResolve ? el('button', { type: 'button', class: 'small-btn', 'data-testid': 'now-resolve', 'aria-expanded': 'false', title: '이 일이 끝났나요? 누르면 먼저 물어봅니다 — 「해결로 표시」를 누르면 이 메모 한 건이 해결로 표시됩니다(원래 메모는 그대로 남고 「해결됨」 메모가 이력에 더해집니다)',
+    onclick: () => { ask.hidden = !ask.hidden; resolveBtn.setAttribute('aria-expanded', String(!ask.hidden)); if (!ask.hidden) ask.querySelector('[data-testid=now-resolve-yes]').focus(); } }, '해결') : null;
+  row.append(...[el('span', { class: 'chip warn' }, it.category), el('span', { class: 'muted small' }, it.date),
+    it.where ? el('span', { class: 'chip', 'data-testid': 'now-issue-where', title: it.own ? '' : '이 업무가 아니라 이 이름의 업무(또는 같은 주제)에 걸린 미해결입니다' }, it.where) : null,
+    el('button', { type: 'button', class: 'link now-text', title: `${it.note} — 누르면 미해결 목록의 그 줄로 갑니다`, onclick: () => o.onOpenIssues({ open: it.target_gid || 'topics', item: it.gid }) }, it.text),
+    resolveBtn].filter(Boolean));
+  if (resolveBtn) row.append(ask);
+  return row;
+}
+
 // 「지금 볼 것」: 줄마다 동사로 쓰고 누르면 그 자리로 간다. 미해결(+ 해결 단추), 마감, 알림, 최근 기록 1건
 // 무엇이 나오는지는 예전 계산 그대로다(새 판정 없음) — 바뀐 것은 글과 이동뿐
 function nowBlock(c, o) {
   const rows = [];
   // 미해결 머리 줄은 아래에 다 보이지 않을 때만(줄마다 이미 누를 수 있다 — 메인 화면 확인 10-26 저녁: 같은 말이 두 번)
   if (c.issues && c.issues.total > (c.now || []).length) {
-    const first = (c.now || [])[0];
-    rows.push(nowLine('now-issues-head', `미해결 ${c.issues.total}건`, '모두 보기', () => (first ? o.seeRecord(first.gid) : o.seeRecord(null))));
+    // 카드 머리의 「미해결 n건」과 같은 곳: 미해결 목록(이 업무 묶음을 펼친 채, FU8-14·15)
+    rows.push(nowLine('now-issues-head', `미해결 ${c.issues.total}건`, '모두 보기', () => o.onOpenIssues()));
   }
-  for (const it of c.now || []) {
-    rows.push(el('div', { class: 'now-item', 'data-testid': 'now-issue', 'data-gid': it.gid },
-      el('span', { class: 'chip warn' }, it.category), el('span', { class: 'muted small' }, it.date),
-      el('button', { type: 'button', class: 'link now-text', title: `${it.note} — 누르면 기록의 그 줄로 갑니다`, onclick: () => o.seeRecord(it.gid) }, it.text),
-      o.canResolve ? el('button', { type: 'button', class: 'small-btn', 'data-testid': 'now-resolve', title: '이 일이 끝났나요? 누르면 이 메모 한 건을 해결로 표시합니다(원래 메모는 그대로 남고 「해결됨」 메모가 이력에 더해집니다)', onclick: () => o.onResolve(it.gid) }, '해결') : null));
-  }
+  for (const it of c.now || []) rows.push(nowIssueRow(it, o));
   // 마감은 카드 맨 위 상태 줄에도 있다 — 남은 날수를 셀 수 있을 때만 여기 한 줄 더(날짜가 아닌 글이면 겹치기만 한다)
   const left = c.deadline && !c.past ? deadlineLeft(c.deadline, c.asOf) : '';
   if (left) {
@@ -183,7 +196,9 @@ function nowBlock(c, o) {
   }
   for (const a of o.alertRows) {
     const [head, verb] = ALERT_NOW[a.testid] || [a.label, '보기'];
-    rows.push(nowLine('now-alert', head, verb, a.testid === 'risk-note' && o.onDraft ? () => o.onDraft() : () => o.onShowAlert(a.testid), { 'data-note': a.testid }));
+    // 반복 비효율: 알림 칸을 거치지 않고 바로 인사이트의 「반복 비효율」 탭으로(FU8-5: 3번 누르던 길)
+    const go = a.testid === 'risk-note' && o.onDraft ? () => o.onDraft() : a.testid === 'repeat-note' && o.onRepeat ? () => o.onRepeat() : () => o.onShowAlert(a.testid);
+    rows.push(nowLine('now-alert', head, a.testid === 'repeat-note' && o.onRepeat ? '인사이트에서 보기' : verb, go, { 'data-note': a.testid }));
   }
   if (c.latest) {
     rows.push(el('div', { class: 'now-item now-go', 'data-testid': 'now-recent' },
@@ -327,7 +342,8 @@ export function renderCard(panel, d, c, o) {
     ? [el('p', { class: 'muted', 'data-testid': 'no-history' }, '기록된 이력 없음')]
     : [el('ol', { class: 'history', 'data-testid': 'history' }, ...prev.shown.map((h) => historyItem(h, o.justAdded))),
       // 방금 기록한 줄이 최신 5건보다 옛 날짜면 따로 한 줄(강조·스크롤이 닿게)
-      prev.extra ? el('p', { class: 'muted small history-gap' }, '방금 기록한 줄(옛 날짜)') : null,
+      // 이 표지는 실제로 방금 기록했을 때만(FU8-4). 「지금 볼 것」·찾기에서 눌러 온 줄은 강조만 한다
+      prev.extra && !o.justPicked ? el('p', { class: 'muted small history-gap', 'data-testid': 'history-gap' }, '방금 기록한 줄(옛 날짜)') : null,
       prev.extra ? el('ol', { class: 'history history-extra', 'data-testid': 'history-extra' }, historyItem(prev.extra, o.justAdded)) : null,
     el('p', { class: 'muted small history-foot', 'data-testid': 'history-count' }, `최신이 위 · ${rows.length}건`, ' ',
       prev.rest > 0 || prev.extra ? el('button', { type: 'button', class: 'link', 'data-testid': 'history-all', onclick: (e) => o.onHistoryAll(e.currentTarget) }, '기록 모두 보기 →') : null)];
