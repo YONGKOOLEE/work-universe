@@ -26,6 +26,9 @@ export const HANDOVER_ITEMS = [
   { key: '유사_경험자', title: '유사 경험자' },
 ];
 
+/** 설명·절차·사용 시스템이 모두 비어 이름만 나열되는 업무 뒤에 붙는 안내(FU9-13) */
+export const NO_DESCRIPTION_NOTE = ' — (설명 없음 — 카드 「⋯ → 수정」에서 채우기)';
+
 // 관계자·연락처에 협업자로 셀 수 있는 노드 유형(CR-17 F). 「참조」로 이은 상대 중 사람·조직만. 바꾸려면 여기 한 곳
 const COLLABORATOR_TYPES = ['person', 'org'];
 
@@ -266,6 +269,7 @@ export function buildHandoverDraft(view, input) {
     if (w.description && w.gid !== start.gid) parts.push(` — ${w.description}`); // 대상 업무 자신의 설명은 「업무 개요」에 있으니 여기서는 절차·사용 시스템만(CR-17 G)
     if (attr(w, '절차')) parts.push(` / 절차: ${attr(w, '절차')}`);
     if (attr(w, '사용 시스템')) parts.push(` / 사용 시스템: ${attr(w, '사용 시스템')}`);
+    if (parts.length === 1) parts.push(NO_DESCRIPTION_NOTE); // FU9-13: 이름만 나열되면 받는 사람이 읽을 것이 없다 — 비어 있다고 밝히고 채우는 길을 안내(판정·근거는 그대로)
     items.세부_업무_절차.push(sentence(parts.join(''), [w.gid]));
   }
 

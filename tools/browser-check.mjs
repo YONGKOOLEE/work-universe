@@ -6700,7 +6700,7 @@ async function checkBrowser(browser, port) {
         await R('window.__wu.select(null)');
         await pickSpace('check');
         const g1 = await R("({ link: (document.querySelector('[data-testid=check-merge-link]') || {}).textContent || '', solo: !!document.querySelector('[data-testid=ws-solo]'), soloRows: document.querySelectorAll('[data-testid=ws-solo-row]').length, order: [...document.querySelectorAll('[data-testid=check-merge-link],[data-testid=ws-solo],[data-testid=btn-insight-universe]')].map((e) => e.dataset.testid) })");
-        check('FU7-12 묶은 지도 「매주 점검」에 「통합 확인할 것 n건 → 지도 관리」 한 줄', /통합 확인할 것 \d+건/.test(g1.link) && /지도 관리/.test(g1.link), JSON.stringify(g1));
+        check('FU7-12 묶은 지도 「매주 점검」에 「통합 확인할 것 n건 → 지도 관리」 한 줄', /통합 확인할 것 \d+건/.test(g1.link) && /통합 확인 열기/.test(g1.link), JSON.stringify(g1));
         check('FU7-2 묶은 지도 「매주 점검」에 혼자만 아는 일 상위 목록(이름 → 카드)', g1.solo, JSON.stringify(g1));
         await shot(s.cdp, `${browser.name}-fu7-grouped-check`);
         if (g1.soloRows > 0) {
@@ -7497,6 +7497,156 @@ async function checkBrowser(browser, port) {
         await sleep(150);
       } else check('FU9 P U-A1', false, 'U-A1이 열리지 않음');
     }
+
+    // ── FU9 Q(2026-10-27, 처음 사용 점검 9회차 Q 묶음): 주변만 보기 → 전체 보기 배치 복원(FU9-9), 매주 점검 분모·팀별(FU9-17·22), 통합 확인 샘플 답 칩·다시 물어볼 답·바로 열기(FU9-19·20, RV13-1·2·5),
+    //    점검 요약 아래 단추(FU9-21), 확정 작성자 안내(FU9-14), 낱말(FU9-23). 초안 빈 설명(FU9-13)은 단위 시험(tests/fu9-q.test.js)에서 ──
+    try {
+      const txt = (sel) => R(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); return e ? e.textContent.replace(/\\s+/g, ' ').trim() : null; })()`);
+      const layout = () => R(`(() => { const cy = window.__wu.cy; let h = 0; const p = cy.nodes().map((n) => Math.round(n.position('x')) + ',' + Math.round(n.position('y'))).sort().join(';'); for (let i = 0; i < p.length; i += 1) h = (h * 31 + p.charCodeAt(i)) | 0; const o = ${NAME_OVERLAP_JS}; return { n: cy.nodes().length, h, zoom: Math.round(cy.zoom() * 1000) / 1000, panX: Math.round(cy.pan().x), panY: Math.round(cy.pan().y), folded: cy.nodes().filter((x) => x.data('collapsed')).length, overlap: o.pairs, shown: o.shown }; })()`);
+      const findHit = async (q) => { await R(`(() => { const i = document.querySelector('[data-testid=find-input]'); i.value = ${JSON.stringify(q)}; i.dispatchEvent(new Event('input')); })()`); await sleep(300); await R("document.querySelector('[data-testid=find-hit]').click()"); await sleep(600); };
+      const reopen = async (id) => { await sleep(600); return waitFor(s.cdp, `window.__wu && window.__wu.doc && window.__wu.doc.universe.id === ${JSON.stringify(id)} && window.__wu.cy.nodes().length > 0`, 8000); };
+      // A. 묶은 지도(U-D1): 주변만 보기 → 전체 보기
+      if (await r11Go('U-D1', ['U-D1'])) {
+        await R('window.__wu.select(null)');
+        await findHit('대사 확인');
+        const base = await layout();
+        const rounds = [];
+        for (const [i, way] of ['band', 'toolbar', 'band'].entries()) {
+          if (i > 0) await findHit('대사 확인');
+          await R("document.querySelector('[data-testid=btn-nbhd]').click()");
+          await sleep(450);
+          if (i === 0) await shot(s.cdp, `${browser.name}-fu9q-01-nbhd`);
+          await pickSpace(['check', 'edit', 'handover'][i]); // 공간을 바꿔 가며 되풀이해도 배치가 늘 같은지
+          const inNbhd = await R('!!window.__wu.nbhd');
+          const bandText = await txt('[data-testid=nbhd-exit]');
+          if (way === 'toolbar') await R("document.getElementById('fit').click()");
+          else await R("document.querySelector('[data-testid=nbhd-exit]').click()");
+          await sleep(500);
+          rounds.push({ way, inNbhd, bandText, ...(await layout()) });
+          if (i === 0) await shot(s.cdp, `${browser.name}-fu9q-02-back`);
+          await pickSpace('map');
+        }
+        check('FU9-9 주변만 보기 → 「전체 보기로 돌아가기」(띠)·툴바 「전체 보기」: 들어가기 전과 같은 배치(항목 자리·접힌 팀 수·배율)로 돌아옴, 공간을 바꿔 가며 세 번 되풀이해도 같음', rounds.every((r) => r.inNbhd && r.h === base.h && r.folded === base.folded && r.n === base.n && Math.abs(r.zoom - base.zoom) < 0.01 && Math.abs(r.panX - base.panX) <= 25 && Math.abs(r.panY - base.panY) <= 25), JSON.stringify({ base, rounds }));
+        check('FU9-9 돌아온 뒤 이름이 서로 겹친 쌍은 들어가기 전보다 늘지 않음(공간 전환마다 늘지 않음)', rounds.every((r) => r.overlap <= base.overlap), JSON.stringify({ base: base.overlap, rounds: rounds.map((r) => r.overlap) }));
+        check('FU9-9 띠 단추 이름은 「전체 보기로 돌아가기」 하나(툴바 「전체 보기」는 그대로)', rounds[0].bandText === '전체 보기로 돌아가기' && (await txt('#fit')) === '전체 보기', JSON.stringify([rounds[0].bandText, await txt('#fit')]));
+      } else check('FU9 Q U-D1', false, 'U-D1이 열리지 않음');
+
+      // B. 매주 점검 분모·팀별(묶은 지도)과 점검 요약(미리 보기 단추·분모 줄)
+      if (await r11Go('U-D1', ['U-D1'])) {
+        await R('window.__wu.select(null)');
+        await pickSpace('check');
+        await sleep(300);
+        const wk = await R("(() => { const sum = (document.querySelector('[data-testid=team-risk-summary]') || {}).textContent || ''; const num = (re) => Number((re.exec(sum) || [])[1] || 0); const rows = [...document.querySelectorAll('[data-testid=team-risk-team]')].map((e) => e.textContent); const t = (re) => rows.reduce((a, r) => a + Number((re.exec(r) || [])[1] || 0), 0); return { denom: (document.querySelector('[data-testid=team-risk-denom]') || {}).textContent || '', sum, works: num(/업무 (\\d+)개 중/), solo: num(/혼자만 아는 일 (\\d+)개/), gaps: num(/담당자 빈 일 (\\d+)개/), rows, tWorks: t(/업무 (\\d+)개 중/), tSolo: t(/혼자만 (\\d+)개/), tGaps: t(/빈 일 (\\d+)개/) }; })()");
+        check('FU9-17 묶은 지도 「매주 점검」 첫 요약 줄이 「업무 n개 중」으로 시작하고 아래에 팀별 한 줄(2줄 이상)이 있음', /^업무 \d+개 중 /.test(wk.sum) && wk.works > 0 && wk.rows.length >= 2 && wk.rows.every((r) => /업무 \d+개 중 혼자만 \d+개 · 일 몰린 \d+명 · 빈 일 \d+개/.test(r)), JSON.stringify(wk));
+        check('FU9-17 팀별 숫자의 합 = 위 전체(업무·혼자만 아는 일·담당자 빈 일) — 새 판정 없이 나눠 센 것', wk.tWorks === wk.works && wk.tSolo === wk.solo && wk.tGaps === wk.gaps, JSON.stringify(wk));
+        await shot(s.cdp, `${browser.name}-fu9q-03-weekly-teams`);
+        // 인사이트 → 점검 요약 미리 보기: 분모 줄, 펼쳐도 보이는 아래 단추
+        await R("document.querySelector('[data-testid=btn-insight-universe]').click()");
+        await sleep(450);
+        await R("(() => { const d = document.querySelector('[data-testid=summary-preview]'); d.open = true; d.dispatchEvent(new Event('toggle')); })()");
+        await sleep(200);
+        const pv = await R("(() => { const t = document.querySelector('[data-testid=summary-preview-text]'); const b = document.querySelector('[data-testid=summary-below-buttons]'); const tb = t.getBoundingClientRect(); const bb = b.getBoundingClientRect(); return { text: t.textContent, below: bb.top >= tb.bottom - 1 && bb.height > 0 && bb.width > 0, btns: [...b.querySelectorAll('button')].map((x) => x.textContent) }; })()");
+        check('FU9-17 점검 요약 글에 「센 범위: 기준일에 진행 중인 업무 n개 중」 한 줄', /센 범위: 기준일에 진행 중인 업무 \d+개 중/.test(pv.text), pv.text.slice(0, 200));
+        check('FU9-21 미리 보기를 펼치면 미리 보기 아래에도 복사·내려받기·인쇄 단추가 보임(위 단추와 같은 동작)', pv.below && pv.btns.join('|') === '복사|내려받기(.txt)|인쇄', JSON.stringify(pv));
+        await R("document.querySelector('[data-testid=summary-preview]').scrollIntoView({ block: 'center' })");
+        await shot(s.cdp, `${browser.name}-fu9q-04-summary-preview`);
+        // FU9-22 밀집·공백 표의 팀 합계 줄
+        await R("document.querySelector('[data-testid=tab-density]').click()");
+        await sleep(400);
+        const dg = await R("(() => { const rows = [...document.querySelectorAll('[data-testid=density-groups] tbody tr')]; const team = rows.filter((r) => r.dataset.testid === 'density-team-row'); const cells = (r) => [...r.children].map((c) => c.textContent.trim()); return { n: rows.length, teams: team.map(cells) }; })()");
+        check('FU9-22 묶은 지도의 밀집·공백 표에 팀 합계 줄(「○○ 합계」)이 있음(팀 안에 지도가 둘 이상일 때)', dg.teams.length >= 1 && dg.teams.every((c) => c[0].endsWith(' 합계')), JSON.stringify(dg));
+        await shot(s.cdp, `${browser.name}-fu9q-05-density-team`);
+      } else check('FU9 Q U-D1(점검)', false, 'U-D1이 열리지 않음');
+
+      // C. 묶지 않은 지도(U-A1) 「매주 점검」 첫 줄
+      if (await r11Go('U-A1', [])) {
+        await R('window.__wu.select(null)');
+        await pickSpace('check');
+        await sleep(300);
+        const one = await txt('[data-testid=check-denom]');
+        check('FU9-17 묶지 않은 지도 「매주 점검」 첫 줄에 「업무 n개 중 혼자만 … · 일 몰린 … · 담당자 빈 …」', /^업무 \d+개 중 혼자만 아는 일 .+ · 일 몰린 사람 .+ · 담당자 빈 일 .+/.test(one || ''), one);
+      } else check('FU9 Q U-A1', false, 'U-A1이 열리지 않음');
+
+      // D. 통합 확인: 바로 열기(FU9-20), 샘플 답 칩(FU9-19), 다시 물어볼 답(RV13-1), 되감기 글 없음(RV13-2), 긴 이름(RV13-5)
+      if (await r11Go('U-D1', ['U-D1'])) {
+        await R('window.__wu.select(null)');
+        await pickSpace('check');
+        await sleep(300);
+        if (await R("!!document.querySelector('[data-testid=check-merge-go]')")) {
+          await R("document.querySelector('[data-testid=check-merge-go]').click()");
+          await sleep(400);
+          check('FU9-20 매주 점검 「통합 확인할 것 n건 → 통합 확인 열기」를 누르면 통합 확인 목록이 바로 열림(지도 관리 첫 화면이 아님)', (await R('window.__wu.space')) === 'edit' && (await R("!!document.querySelector('[data-testid=merge-panel]')")), await R('window.__wu.space'));
+        } else check('FU9-20 통합 확인 바로가기', false, '대기 건이 없어 바로가기가 없음');
+        const chips = await R("({ chips: document.querySelectorAll('[data-testid=merge-sample-answer]').length, rows: document.querySelectorAll('[data-testid=merge-decided] li').length })");
+        check('FU9-19 처음 연 통합 확인의 「지금까지 고른 답」은 모두 「샘플에 미리 넣은 답」 칩이 붙음(사람이 고른 것 없음)', chips.rows > 0 && chips.chips === chips.rows, JSON.stringify(chips));
+        // 사람이 하나 고르면(다름) 그 줄에는 칩이 없다
+        await R("(() => { const row = document.querySelector('[data-testid=merge-works] li [data-testid=merge-diff]') || document.querySelector('[data-testid=merge-works-topic-list] li [data-testid=merge-diff]'); row.click(); })()");
+        await sleep(400);
+        const mine = await R("(() => { const ls = [...document.querySelectorAll('[data-testid=merge-decided] li')]; return { rows: ls.length, chips: document.querySelectorAll('[data-testid=merge-sample-answer]').length, hasUserRow: ls.some((l) => !l.querySelector('[data-testid=merge-sample-answer]')) }; })()");
+        check('FU9-19 내가 「다른 업무」를 고르면 그 줄에는 칩이 없고(샘플 답 줄만 칩) 판정 기록은 그대로 두 개 이상', mine.rows === chips.rows + 1 && mine.chips === chips.chips && mine.hasUserRow, JSON.stringify(mine));
+        const rk = await R("(() => { const b = [...document.querySelectorAll('[data-testid=merge-reask]')].at(-1); return { title: b ? b.title : null }; })()");
+        check('RV13-2 「다시 묻기」 단추 title에 「되감기」가 없음(묶은 지도에는 편집 되감기가 없음)', rk.title !== null && !rk.title.includes('되감기'), JSON.stringify(rk));
+        // 같은 지도 업무끼리(후보에 오르지 않는 쌍)의 pending: 저장소에 넣고 다시 열기
+        const pair = await R("(() => { const w = window.__wu.view.nodes.filter((n) => n.core_type === 'work' && !n.hidden); const by = {}; for (const n of w) (by[n.universe_id] ||= []).push(n.gid); const k = Object.keys(by).find((x) => by[x].length > 1); return by[k].slice(0, 2); })()");
+        await R(`(() => { const d = JSON.parse(JSON.stringify(window.__wu.doc)); d.identity_links.push({ id: 'I-900', a: ${JSON.stringify(pair[0])}, b: ${JSON.stringify(pair[1])}, kind: 'work', method: 'human', status: 'pending', reason: '시험용 다시 묻기 쌍' }); localStorage.setItem('wu:v1:u:U-D1', JSON.stringify(d)); location.reload(); })()`).catch(() => {});
+        await reopen('U-D1');
+        await pickSpace('edit');
+        await R("document.querySelector('[data-testid=btn-merge]').click()");
+        await sleep(400);
+        const ra = await R("(() => { const box = document.querySelector('[data-testid=merge-reask-box]'); const dec = [...document.querySelectorAll('h3')].find((h) => h.textContent.startsWith('지금까지 고른 답')); return { h: box ? box.querySelector('h3').textContent : null, rows: document.querySelectorAll('[data-testid=merge-reask-row]').length, q: (document.querySelector('[data-testid=merge-reask-row] [data-testid=merge-decide-q]') || {}).textContent || '', above: !!box && !!dec && !!(box.compareDocumentPosition(dec) & Node.DOCUMENT_POSITION_FOLLOWING) }; })()");
+        check('RV13-1 후보에 오르지 않는 pending 쌍은 「다시 물어볼 답 1건」 묶음으로 「지금까지 고른 답」 위에 보이고 「이 둘이 같은 업무인가요?」 질문 줄이 있음', ra.h === '다시 물어볼 답 1건' && ra.rows === 1 && ra.q === '이 둘이 같은 업무인가요?' && ra.above, JSON.stringify(ra));
+        await R("document.querySelector('[data-testid=merge-reask-row]').scrollIntoView({ block: 'center' })");
+        await shot(s.cdp, `${browser.name}-fu9q-06-merge-reask-box`);
+        await R("document.querySelector('[data-testid=merge-reask-row] [data-testid=merge-diff]').click()");
+        await sleep(400);
+        const rb = await R("({ box: !!document.querySelector('[data-testid=merge-reask-box]'), links: window.__wu.doc.identity_links.filter((l) => l.id === 'I-900').map((l) => l.status + '/' + l.method + '/' + !!l.decided_by) })");
+        check('RV13-1 그 줄에서 「다른 업무」를 고르면 묶음이 사라지고 판정 기록은 rejected·human(고른 사람 있음)', !rb.box && rb.links.join() === 'rejected/human/true', JSON.stringify(rb));
+        // RV13-1 알림 위치: 후보에 오르지 않는 쌍(방금 고른 I-900)의 「다시 묻기」 알림은 「다시 물어볼 답」 묶음으로 안내
+        await R("window.confirm = () => true; [...document.querySelectorAll('[data-testid=merge-reask]')].at(-1).click()");
+        await sleep(400);
+        const rn = await txt('[data-testid=identity-reask-done]');
+        check('RV13-1 후보에 오르지 않는 쌍의 「다시 묻기」 알림은 「다시 물어볼 답」 묶음에서 다시 고르라고 안내(「위 후보 목록」이 아님)', !!rn && rn.includes('「다시 물어볼 답」 묶음') && !rn.includes('위 후보 목록'), rn);
+        // RV13-5 긴 이름: 첫 후보의 한쪽 업무(그 지도 문서) 이름을 끊을 곳 없는 긴 글로 바꿔 다시 연다
+        const tgt = await R("(() => { const li = document.querySelector('[data-testid=merge-works] li'); if (!li) return null; const t = li.querySelector('[data-testid=merge-side]').textContent; const m = /^「(.+?)」 · 지도 「(.+?)」/.exec(t); if (!m) return null; const n = window.__wu.view.nodes.find((x) => x.label === m[1] && x.universe_name === m[2]); return n ? { uid: n.universe_id, id: n.gid.split('/')[1] } : null; })()");
+        if (tgt) {
+          await evaluate(s.cdp, `location.hash = ${JSON.stringify('#' + tgt.uid)}; location.reload()`).catch(() => {});
+          await reopen(tgt.uid);
+          await R(`(() => { const d = JSON.parse(JSON.stringify(window.__wu.doc)); const n = d.nodes.find((x) => x.id === ${JSON.stringify(tgt.id)}); n.label = n.label + ' <img_src=x_onerror="window.__xss=1">' + 'ㅁ'.repeat(60); localStorage.setItem('wu:v1:u:${tgt.uid}', JSON.stringify(d)); location.hash = '#U-D1'; location.reload(); })()`).catch(() => {});
+          await reopen('U-D1');
+          await pickSpace('edit');
+          await R("document.querySelector('[data-testid=btn-merge]').click()");
+          await sleep(400);
+        }
+        const lg = await R("(() => { const p = document.querySelector('[data-testid=merge-panel]'); const pr = p.getBoundingClientRect().right; const items = [...document.querySelectorAll('[data-testid=merge-works] li, [data-testid=merge-works-topic-list] li')]; const li = items.find((e) => e.textContent.includes('ㅁㅁㅁ')); const sides = li ? [...li.querySelectorAll('[data-testid=merge-side]')].map((e) => Math.round(e.getBoundingClientRect().right)) : []; const strong = li ? li.querySelector('.who strong').getBoundingClientRect() : null; return { found: !!li, sw: p.scrollWidth, cw: p.clientWidth, panelRight: Math.round(pr), liRight: li ? Math.round(li.getBoundingClientRect().right) : 0, sides, strongRight: strong ? Math.round(strong.right) : 0, xss: window.__xss || 0 }; })()");
+        check('RV13-5 끊을 곳 없는 긴 이름이 섞인 후보도 패널 안에 들어옴(근거 줄·제목 오른쪽이 잘리지 않음, 가로 스크롤 없음, 태그 글은 글자로만 보임)', !!tgt && lg.found && lg.sw <= lg.cw && lg.liRight <= lg.panelRight && lg.sides.every((x) => x <= lg.panelRight) && lg.strongRight <= lg.panelRight && lg.xss === 0, JSON.stringify({ tgt, lg }));
+        await R("(() => { const li = [...document.querySelectorAll('[data-testid=merge-works] li')].find((e) => e.textContent.includes('ㅁㅁㅁ')); if (li) li.scrollIntoView(); })()");
+        await shot(s.cdp, `${browser.name}-fu9q-07-merge-long`);
+      } else check('FU9 Q 통합 확인', false, 'U-D1이 열리지 않음');
+
+      // E. 확정 작성자 안내(FU9-14): 작성자 이름이 비어 있을 때의 초안 확정 확인(앞선 점검이 넣은 작성자 이름은 지우고 시작)
+      const noAuthor = "const st = JSON.parse(localStorage.getItem('wu:v1:settings') || '{}'); delete st.authorName; localStorage.setItem('wu:v1:settings', JSON.stringify(st));";
+      if (await r11Go('U-A1', [], noAuthor)) {
+        await R('window.__wu.select(null)');
+        await pickSpace('handover');
+        await R("document.querySelector('[data-testid=btn-draft-universe]').click()");
+        await sleep(300);
+        await R(`(() => { const set = (id, v) => { const e = document.querySelector('[data-testid=' + id + ']'); e.value = v; e.dispatchEvent(new Event('change')); }; set('draft-target', 'U-A1/N-001'); set('draft-from', 'U-A1/N-012'); set('draft-to', 'U-A1/N-011'); document.querySelector('[data-testid=draft-form] button[type=submit]').click(); })()`);
+        await sleep(300);
+        const na = await R("(() => { const n = document.querySelector('[data-testid=confirm-no-author]'); const q = document.querySelector('[data-testid=draft-confirm-q]'); return { text: n ? n.textContent : null, vis: !!n && n.checkVisibility(), nearQ: !!n && !!q && n.closest('[data-testid=confirm-bar]') === q.closest('[data-testid=confirm-bar]') }; })()");
+        check('FU9-14 작성자 이름이 설정에 없으면 확정 확인 근처에 「작성자 이름이 비어 있어 「사용자(이 브라우저)」로 남습니다 — 「설정」에서 넣을 수 있어요」 한 줄', na.vis && na.nearQ && na.text === '작성자 이름이 비어 있어 「사용자(이 브라우저)」로 남습니다 — 「설정」에서 넣을 수 있어요', JSON.stringify(na));
+        await R("document.querySelector('[data-testid=draft-confirm-q]').scrollIntoView({ block: 'center' })");
+        await shot(s.cdp, `${browser.name}-fu9q-08-confirm-no-author`);
+        // 작성자 이름을 넣으면 안내가 사라진다
+        await r11Go('U-A1', [], "const st = JSON.parse(localStorage.getItem('wu:v1:settings') || '{}'); st.authorName = '가상 담당'; localStorage.setItem('wu:v1:settings', JSON.stringify(st));");
+        await R('window.__wu.select(null)');
+        await pickSpace('handover');
+        await R("document.querySelector('[data-testid=btn-draft-universe]').click()");
+        await sleep(300);
+        await R(`(() => { const set = (id, v) => { const e = document.querySelector('[data-testid=' + id + ']'); e.value = v; e.dispatchEvent(new Event('change')); }; set('draft-target', 'U-A1/N-001'); set('draft-from', 'U-A1/N-012'); set('draft-to', 'U-A1/N-011'); document.querySelector('[data-testid=draft-form] button[type=submit]').click(); })()`);
+        await sleep(300);
+        check('FU9-14 작성자 이름이 있으면 안내 줄이 없음(확정 확인은 그대로 보임)', (await R("!!document.querySelector('[data-testid=draft-confirm-q]')")) && !(await R("!!document.querySelector('[data-testid=confirm-no-author]')")), '');
+      } else check('FU9 Q 초안', false, 'U-A1이 열리지 않음');
+    } catch (e) { check('FU9 Q 점검 중 오류(식이 던짐)', false, String((e && e.message) || e).slice(0, 300)); }
 
     // 저장소를 블록 시작 때 상태로 되돌린다
     await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(r11Snap)}); localStorage.clear(); sessionStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); location.hash = 'U-A1'; location.reload(); })()`).catch(() => {});

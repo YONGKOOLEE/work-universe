@@ -321,6 +321,8 @@ export function draftPanel(o) {
 export const DRAFT_WHAT = '담당자가 바뀔 때 넘겨줄 내용을 지금까지의 기록에서 모아 만든 글입니다. 읽어 보고 확정하면 인수인계서로 남습니다.';
 /** 확정 단추 앞의 묻는 말(질문형, 사용자 10-26 저녁) */
 export const DRAFT_CONFIRM_Q = '이 초안을 인수인계서로 확정할까요?';
+/** 작성자 이름이 설정에 없을 때 확정 확인 근처의 한 줄(FU9-14): 확정자 기록이 「사용자(이 브라우저)」로 남는다 */
+export const NO_AUTHOR_NOTE = '작성자 이름이 비어 있어 「사용자(이 브라우저)」로 남습니다 — 「설정」에서 넣을 수 있어요';
 /** 확정 확인의 「담당도 넘기기」 칸 문구(CR-18-6). 칸 아래 작은 글은 넘길 업무 목록과 건너뛰는 사유 */
 export const TRANSFER_LABEL = '담당도 넘기기 — 보내는 사람의 담당을 오늘로 끝내고 받는 사람이 오늘부터 맡습니다';
 export function transferListText(plan, names, where) {
@@ -376,7 +378,8 @@ function confirmBox(d, view, o) {
   });
   // 읽기 전용이면 누를 수 없는 단추를 두지 않고 이유 한 줄만 보인다(R11 RV11-9)
   const bar = el('div', { class: 'confirm-bar', 'data-testid': 'confirm-bar' }, transferBox,
-    o.readOnly ? null : el('div', { class: 'row decide-row' }, el('span', { class: 'decide-q', 'data-testid': 'draft-confirm-q' }, DRAFT_CONFIRM_Q), btn), msg);
+    o.readOnly ? null : el('div', { class: 'row decide-row' }, el('span', { class: 'decide-q', 'data-testid': 'draft-confirm-q' }, DRAFT_CONFIRM_Q), btn),
+    !o.readOnly && typeof o.authorName === 'string' && !o.authorName ? el('p', { class: 'muted small', 'data-testid': 'confirm-no-author' }, NO_AUTHOR_NOTE) : null, msg);
   const info = el('div', { class: 'confirm-box', 'data-testid': 'confirm-box' },
     el('p', { class: 'muted small' }, `확정하면 「${where}」에 인수인계서와 인수인계 기록(${date})이 남고, 다음 인수인계 초안을 만들 때 「이전 인수인계」로 쓰입니다.`),
     elsewhere.length ? el('p', { class: 'muted small', 'data-testid': 'confirm-elsewhere' }, `이 화면(「${where}」)에만 저장됩니다. 업무 지도(「${elsewhere.join('」·「')}」)를 단독으로 열면 이 인수인계는 보이지 않습니다. 그 업무 지도에서도 보이게 하려면 그 업무 지도를 열어 업무를 대상으로 확정하세요.`) : null,

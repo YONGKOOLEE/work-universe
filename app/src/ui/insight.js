@@ -10,7 +10,7 @@ import { el } from './dom.js';
 import { evidenceChips } from './evidence.js';
 import { summaryBar } from './check-summary.js';
 import { compareRisk, currentOwnersByWork, inspectionSummaryText, namesFromInspection } from '../rules/daily-use.js';
-import { inspectionInput } from '../view/risk-summary.js';
+import { groupRowsWithTeams, inspectionInput } from '../view/risk-summary.js';
 import { todayLocal } from './time.js';
 import { SUBTYPE_ROLE } from '../model/schema.js';
 import { KEYLESS_PREGEN_REASON, KEYLESS_REASON } from '../llm/providers.js';
@@ -294,11 +294,18 @@ function renderDensity(box, view, r, onFocus) {
   const parts = [
     el('table', { class: 'dg-table', 'data-testid': 'density-groups' },
       el('thead', {}, el('tr', {}, el('th', {}, '조직(업무 지도)'), el('th', {}, '업무'), el('th', { title: '기준일에 업무를 맡고 있는 사람 수' }, '인원'), el('th', {}, '공백'), el('th', {}, '밀집'))),
-      el('tbody', {}, ...r.groups.map((g) => el('tr', {},
-        el('td', {}, g.name),
-        ...(g.insufficient
-          ? [el('td', { colspan: '4', class: 'muted' }, '데이터 부족(담당자 연결 없음)')]
-          : [el('td', {}, String(g.works)), el('td', {}, String(g.people)), el('td', {}, String(g.gaps)), el('td', {}, String(g.dense))]))))),
+      // FU9-22: 묶은 지도는 팀(바로 아래 하위 지도) 합계 줄을 그 팀 지도들 위에 끼운다(인원은 사람이 여러 지도에 걸쳐 더하면 겹쳐 세므로 비움)
+      el('tbody', {}, ...groupRowsWithTeams(view, r.groups, r.dense).map((g) => (g.kind === 'team'
+        ? el('tr', { class: 'dg-team', 'data-testid': 'density-team-row' },
+          el('td', {}, el('strong', {}, `${g.name} 합계`)),
+          ...(g.insufficient
+            ? [el('td', { colspan: '4', class: 'muted' }, '데이터 부족(담당자 연결 없음)')]
+            : [el('td', {}, String(g.works)), el('td', { title: '사람이 여러 지도에 걸쳐 있어 더하지 않습니다' }, '-'), el('td', {}, String(g.gaps)), el('td', {}, String(g.dense))]))
+        : el('tr', {},
+          el('td', {}, g.name),
+          ...(g.insufficient
+            ? [el('td', { colspan: '4', class: 'muted' }, '데이터 부족(담당자 연결 없음)')]
+            : [el('td', {}, String(g.works)), el('td', {}, String(g.people)), el('td', {}, String(g.gaps)), el('td', {}, String(g.dense))])))))),
   ];
   if (r.ended_works) parts.push(el('p', { class: 'muted small', 'data-testid': 'density-ended' }, `기간이 끝난 업무 ${r.ended_works}개는 세지 않았습니다.`));
   if (r.status === 'none') parts.push(el('p', { class: 'muted', 'data-testid': 'density-none' }, `${r.reason}.`));

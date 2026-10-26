@@ -119,6 +119,8 @@
   .notice { background: var(--warn-bg); color: var(--warn-text); padding: 8px 10px; border-radius: 8px; font-size: 13px; margin: 0 0 10px; }
   /* 처음 사용 점검 W3: 묶은 지도 위험 요약(FU-10), 접힌 사번 충돌(FU-13), 노드 상세의 「← 지도 전체 보기」(FU-6), 사람 상세의 「이 사람만 아는 일」(FU-12) */
   .risk-summary { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; font-size: 13px; margin: 0 0 10px; }
+  ul.risk-teams { list-style: none; display: grid; gap: 3px; margin: 0 0 10px; }
+  .dg-table tr.dg-team td { background: var(--panel-2); }
   .risk-compare { margin-top: -4px; } /* 위험 요약 바로 아래 「지난 점검 대비」(CR-18 D-3) */
   details.risk-changes { margin: 0 0 10px; } /* 「바뀐 것 보기」(FU5-1) */
   details.risk-changes > summary { cursor: pointer; }
@@ -260,8 +262,12 @@
   .insight .tabs { gap: 2px; } /* 9차 검토 U9-6: 인사이트 탭 5개가 기본 패널 폭(380px)에서 한 줄에 들어가게 촘촘히 */
   .insight .tab { padding: 4px 3px; font-size: 11px; letter-spacing: -0.02em; }
   .tab.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: bold; }
-  .patterns { display: grid; gap: 12px; margin-top: 8px; padding: 0; }
-  .patterns > li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; gap: 6px; }
+  .patterns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 8px; padding: 0; }
+  .patterns > li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0; }
+  /* 14회차 RV13-5: 끊을 곳 없는 긴 이름이 칸을 넓혀 오른쪽이 잘리던 것 — 칸은 패널 폭 안(minmax(0,1fr)), 제목·근거 줄은 어디서든 줄바꿈 */
+  .patterns .who { flex-wrap: wrap; }
+  .patterns .who > strong { flex: 1 1 12em; min-width: 0; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+  .merge-sides > div, .patterns .small { overflow-wrap: anywhere; min-width: 0; }
   .steps { display: grid; gap: 3px; font-size: 13px; color: var(--muted); padding-left: 0; }
   .steps .missed { color: var(--err); }
   /* 표로 추가·고치기(T-19): 칸이 많아 가로로 스크롤 */

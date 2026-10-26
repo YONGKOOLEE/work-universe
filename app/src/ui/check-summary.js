@@ -29,7 +29,9 @@ export function summaryBar(o) {
   const note = el('div', { 'data-testid': 'summary-extra' });
   // 미리 보기(FU5-3): 복사·내려받기·인쇄될 글 그대로. 열 때마다, 그리고 단추를 누를 때 다시 만든다
   const previewText = el('pre', { 'data-testid': 'summary-preview-text' });
-  const preview = el('details', { class: 'summary-preview', 'data-testid': 'summary-preview' }, el('summary', {}, '미리 보기'), previewText);
+  // FU9-21: 미리 보기가 길어 펼치면 위쪽 단추가 화면 밖으로 밀렸다 — 미리 보기 아래에도 같은 단추(위 단추를 그대로 누른다)
+  const belowRow = el('div', { class: 'row', 'data-testid': 'summary-below-buttons' });
+  const preview = el('details', { class: 'summary-preview', 'data-testid': 'summary-preview' }, el('summary', {}, '미리 보기'), previewText, belowRow);
   const refreshPreview = () => { if (preview.open) previewText.textContent = o.build(); };
   preview.addEventListener('toggle', refreshPreview);
   const copyBtn = el('button', { type: 'button', class: 'small-btn', 'data-testid': 'summary-copy' }, '복사');
@@ -61,6 +63,8 @@ export function summaryBar(o) {
   });
   const printBtn = el('button', { type: 'button', class: 'small-btn', 'data-testid': 'summary-print' }, '인쇄');
   printBtn.addEventListener('click', () => printHtml(summaryPrintHtml(o.build(), `점검 요약 — ${o.mapName}`)));
+  const twin = (label, from, testid) => el('button', { type: 'button', class: 'small-btn', 'data-testid': testid, onclick: () => from.click() }, label);
+  belowRow.append(twin('복사', copyBtn, 'summary-copy-below'), twin('내려받기(.txt)', downBtn, 'summary-download-below'), twin('인쇄', printBtn, 'summary-print-below'));
   return el('div', { class: 'summary-bar', 'data-testid': 'summary-bar' },
     el('div', { class: 'row' }, el('strong', {}, '점검 요약'), copyBtn, downBtn, printBtn),
     el('p', { class: 'muted small' }, `위험·몰림·공백 숫자를 한 장 글로 모읍니다. ${SUMMARY_FAKE_NOTE}`),

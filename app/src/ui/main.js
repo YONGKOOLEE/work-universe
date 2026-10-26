@@ -14,7 +14,7 @@ import { currentHoldersText, describeNode, describeUniverse, displayName, eventT
 import { exposureOf, projectView } from '../view/collapse.js';
 import { parseGid, toGid } from '../view/view.js';
 import { PANEL, clampPanelWidth, maxPanelWidth } from '../view/panel.js';
-import { DRAFT_TARGET_TYPES, MEMO_CATEGORIES, SUBTYPE_HANDOVER_DOC } from '../model/schema.js';
+import { DRAFT_TARGET_TYPES, MEMO_CATEGORIES, SUBTYPE_HANDOVER_DOC, pairKey } from '../model/schema.js';
 import { validateDocument } from '../model/validate.js';
 import { BACKUP_NONE_TEXT, backupRows, collabPlan, draftCenterFor } from '../view/quick-input.js';
 import { addNodeOps, extraNames, extraSummary, groupedStrip, memoRecordInput, closeTargetWord, resolveCloseCount, successNotice, transferBranchPlan, canInlineEmpNo, BRANCH_DOC, BRANCH_LABELS, BRANCH_ONLY, BRANCH_WHAT, BRIEF_HANDOVER_HINT, HANDOVER_CHECK_WHAT } from '../view/record-form.js';
@@ -41,7 +41,7 @@ import { nowIso, todayLocal } from './time.js';
 import { personLoad, repeatPatternsFor, workLoad } from '../rules/insight.js';
 import { riskNoteFor } from '../rules/insight-risk.js';
 import { TOUR_ONCE, TOUR_ONCE_NOTE, WEEKLY_DATE_MESSAGES, WEEKLY_DATE_MIN, baselineSavedNote, compareRisk, currentOwnersByWork, isEditedSample, lastModifiedDeep, makeBaseline, namesFromInspection, pickBaseline, resumeTarget, saveBaseline, shouldAutoStartTour, startMaps, weeklyDateError } from '../rules/daily-use.js';
-import { inspectionInput, soloWorksOf, soloWorksText, teamRiskParts, teamRiskSummary } from '../view/risk-summary.js';
+import { inspectionInput, soloWorksOf, soloWorksText, teamRiskParts, teamRiskRows, teamRiskSummary, teamRowText } from '../view/risk-summary.js';
 import { monthAsOf, timeMonths } from '../rules/flow.js';
 import { splitHint, workFormMissing } from '../rules/form.js';
 import { starterSteps } from '../rules/starter-steps.js';
@@ -409,6 +409,7 @@ function start() {
       }
     } };
   let hiddenOpen = false; // 숨긴 항목 목록 화면(R-21)
+  let nbhdBack = null; // 주변만 보기에 들어가기 전 {expanded, snap}(FU9-9)
   let rwGraphSnap = null; // 편집 되감기에 들어가기 전 그래프 배치·배율(FU5-7)
   let rw = null; // 편집 되감기 중이면 {at}(CR-14 A). 옛 지도를 읽기 전용으로 본다. 저장하지 않는다
   let rwPast = null; // 되감기 중인 시점의 app.viewAt 결과 {doc, view, diff, limits}
@@ -1265,6 +1266,10 @@ function start() {
       el('button', { type: 'button', class: 'link', 'data-testid': 'btn-person-solo', onclick: () => openInsight('', 'risk') }, '인수인계 위험 보기'));
   }
 
+  // FU9-19: 통합 확인의 「지금까지 고른 답」 중 샘플 데이터에 처음부터 들어 있던 답(이 브라우저에서 사람이 고른 것이 아님).
+  // 기준: 내장 샘플의 판정 기록과 id·두 항목·답·방법·고른 사람·고른 시각이 모두 같은 것. 사람이 다시 묻고 고르면 고른 사람·시각이 달라져 이 표시가 빠진다. 판정 기록은 바꾸지 않고 표시만 한다
+  const isSampleAnswer = (l) => SAMPLES.some((s) => (s.identity_links || []).some((x) => x.id === l.id && x.a === l.a && x.b === l.b && x.status === l.status && x.method === l.method && (x.decided_by || '') === (l.decided_by || '') && (x.decided_at || '') === (l.decided_at || '')));
+
   function openMerge() {
     noteOpener();
     merging = true; insight = null; issues = null; closeDraft(); editing = null; settingsOpen = false;
@@ -1779,14 +1784,17 @@ function start() {
           return ownerCheck.get(universeId);
         };
         panel.replaceChildren(mergePanel({
-          view, plan, links: app.doc.identity_links || [], provider, readOnly: app.readOnly, asOf: asOf(),
+          view, plan, links: app.doc.identity_links || [], provider, readOnly: app.readOnly, asOf: asOf(), isSampleAnswer: isSampleAnswer,
           // 「다시 묻기」(R13 FU8-25): 그 연결을 아직 답하지 않은 상태(pending)로 되돌린다. 새 명령 없이 decideIdentity(status 'pending') — 이벤트 updated(before/after)가 남아 편집 되감기에 보인다
           onReask: (l) => {
             const r = app.decideIdentity({ a: l.a, b: l.b, kind: l.kind, status: 'pending', reason: l.reason, score: l.score });
             if (!r.ok) return window.alert(messageFor(r.error));
             refresh();
             const nm = (g) => { const x = view.rawNode(g); return x ? `「${x.label}」` : ''; };
-            notify('plain', { testid: 'identity-reask-done', text: `${nm(l.a)}${nm(l.a) ? ' · ' : ''}${nm(l.b)} — 고른 답을 지웠습니다. 위 후보 목록에서 다시 고를 수 있습니다.`, nodeGid: l.a });
+            // RV13-1: 후보 규칙상 목록에 다시 오르는 쌍이면 「위 후보 목록」, 아니면(같은 지도 업무끼리 등) 「다시 물어볼 답」 묶음에서 고른다
+            const plan2 = app.mergePlan();
+            const inList = !!plan2 && [...plan2.works, ...plan2.persons].some((x) => x.b && pairKey(x.a, x.b) === pairKey(l.a, l.b));
+            notify('plain', { testid: 'identity-reask-done', text: `${nm(l.a)}${nm(l.a) ? ' · ' : ''}${nm(l.b)} — 고른 답을 지웠습니다. ${inList ? '위 후보 목록' : '「다시 물어볼 답」 묶음(지금까지 고른 답 위)'}에서 다시 고를 수 있습니다.`, nodeGid: l.a });
             return undefined;
           },
           onDecide: (item, status) => {
@@ -1849,7 +1857,7 @@ function start() {
       const recordsChanged = !sameMark(draftRecords, records);
       draftRecords = records;
       draftShell = shell;
-      panel.replaceChildren(draftPanel({ seenStorage: storage, view, provider, target: drafting.target, preset: drafting.preset || (tour ? tour.preset() : undefined), rerun: draftShown, rerunNote: recordsChanged, onDraft: () => { draftShown = true; tourHook(); }, autoMake: !!drafting.autoMake && !draftShown, presetTransfer: !!drafting.transfer, onTransferChange: (v) => { drafting.transfer = v; }, asOf: todayLocal(), viewDate, readOnly: app.readOnly, onFocus: showInGraph, onClose: closeSidePanel,
+      panel.replaceChildren(draftPanel({ authorName: (settings.authorName || '').trim(), seenStorage: storage, view, provider, target: drafting.target, preset: drafting.preset || (tour ? tour.preset() : undefined), rerun: draftShown, rerunNote: recordsChanged, onDraft: () => { draftShown = true; tourHook(); }, autoMake: !!drafting.autoMake && !draftShown, presetTransfer: !!drafting.transfer, onTransferChange: (v) => { drafting.transfer = v; }, asOf: todayLocal(), viewDate, readOnly: app.readOnly, onFocus: showInGraph, onClose: closeSidePanel,
         // 확정(R-03 ③, CR-8): 저장되면 초안 화면을 닫고 새 인수인계서를 연다
         onConfirm: (input) => {
           const r = app.confirmHandover(input);
@@ -2064,9 +2072,10 @@ function start() {
         const plan = app.mergePlan();
         if (!plan || !plan.counts.pending) return null;
         return el('p', { class: 'notice small', 'data-testid': 'check-merge-link' }, `통합 확인할 것 ${plan.counts.pending}건 `,
-          el('button', { type: 'button', class: 'link', 'data-testid': 'check-merge-go', title: '「지도 관리」의 통합 확인 목록으로 갑니다', onclick: () => goSpace('edit') }, '→ 지도 관리'));
+          // FU9-20: 「지도 관리」 첫 화면이 아니라 통합 확인 목록을 바로 연다(기능 찾기의 「같은 사람」과 같은 동작)
+          el('button', { type: 'button', class: 'link', 'data-testid': 'check-merge-go', title: '통합 확인 목록을 바로 엽니다(「지도 관리」 공간)', onclick: () => { goSpace('edit'); if (app.mergePlan() && !rw) openMerge(); } }, '→ 통합 확인 열기'));
       },
-      'map-risk': () => [soloBox(soloRows(view, { asOf: asOfDate }), pickGid, () => openInsight('', 'risk')), denseBox(denseRows(view, { asOf: asOfDate, n }), pickGid, () => openInsight('', 'density')), gapBox(gapWorkRows(view, { asOf: asOfDate, n }), pickGid, () => openInsight('', 'density'))],
+      'map-risk': () => [singleDenom(), soloBox(soloRows(view, { asOf: asOfDate }), pickGid, () => openInsight('', 'risk')), denseBox(denseRows(view, { asOf: asOfDate, n }), pickGid, () => openInsight('', 'density')), gapBox(gapWorkRows(view, { asOf: asOfDate, n }), pickGid, () => openInsight('', 'density'))],
       'group-hint': () => el('p', { class: 'muted small', 'data-testid': 'check-ungrouped-note' }, '지난 점검과 비교하고 저장하는 매주 점검은 팀·부서로 묶은 지도에서 합니다 → 「지도 관리」의 「업무 지도 묶기」'),
       insight: () => insightRow(),
       'add-open': () => el('div', { class: 'row' }, el('button', { type: 'button', 'data-testid': 'goal-add-open', title: '화면 아래의 「사람·업무·문서 추가」를 펼칩니다', onclick: openAddForm }, '사람·업무·문서 추가'), el('span', { class: 'muted small' }, '하나씩 · 표로 · 글로 추가')),
@@ -2077,13 +2086,18 @@ function start() {
       merge: () => mergeButton(),
       folder: () => folderEntry(),
     };
+    // FU9-17: 묶지 않은 지도의 「매주 점검」 첫 줄 — 아래 세 상자 숫자의 분모(기준일에 진행 중인 업무 수)
+    const singleDenom = () => {
+      const r = teamRiskSummary(view, { asOf: asOfDate, n });
+      return r.works > 0 ? el('p', { class: 'risk-summary', 'data-testid': 'check-denom' }, el('strong', {}, `업무 ${r.works}개 중`), ` ${teamRiskParts(r).join(' · ')}`) : null;
+    };
     const listOf = () => parts.flatMap((k) => (build[k] ? [build[k]()].flat() : [])).filter(Boolean);
     const riskNums = space === 'check' && grouped ? teamRiskSummary(view, { asOf: asOfDate, n }) : null;
     // 이름 목록(FU5-1): 저장할 때 같이 남기고 지난 점검과 비교한다. 숫자와 같은 기준일·밀집 기준의 같은 계산이라 숫자와 어긋나지 않는다
     // owners(M6): 업무별 지금 담당 이름. 기준에 함께 저장하고 「담당이 바뀐 업무」를 가린다
     const riskNames = riskNums ? { ...namesFromInspection(inspectionInput(view, { asOf: asOfDate, n, mapName: '' })), owners: currentOwnersByWork(view, asOfDate) } : null;
     const denseNow = riskNums && riskNums.dense ? denseRows(view, { asOf: asOfDate, n }) : null;
-    const riskSummary = riskNums ? { parts: teamRiskParts(riskNums), onMore: () => openInsight('', 'risk'), compare: riskCompareFor(riskNums, riskNames), dense: denseNow && denseNow.rows.length ? { rows: denseNow.rows, total: denseNow.total, onPick: pickGid } : null } : null;
+    const riskSummary = riskNums ? { denom: riskNums.works > 0 ? `업무 ${riskNums.works}개 중` : null, teams: teamRiskRows(view, { asOf: asOfDate, n }).map((r) => ({ id: r.id, text: teamRowText(r) })), parts: teamRiskParts(riskNums), onMore: () => openInsight('', 'risk'), compare: riskCompareFor(riskNums, riskNames), dense: denseNow && denseNow.rows.length ? { rows: denseNow.rows, total: denseNow.total, onPick: pickGid } : null } : null;
     renderUniverseSummary(panel, summary, display.nodes.length, {
       space, split, starter, universeId: app.doc.universe.id, riskSummary,
       onOpenFolder: folder && folder.state.supported && !rw && !app.readOnly ? openFolderTab : null,
@@ -2455,6 +2469,8 @@ function start() {
       exploreNote = { text: `이어진 항목 없음: 「${view.getNode(gid).label}」${josa(view.getNode(gid).label, '은/는')} 연결된 항목이 없어 주변만 보기를 할 수 없습니다.`, warn: true };
       return renderExploreStatus();
     }
+    // FU9-9: 처음 들어갈 때(깊이만 바꾸는 때는 말고) 접힘 상태·항목 자리·배율·위치를 기억해 두었다가 「전체 보기로 돌아가기」에서 되돌린다
+    if (!nbhd) nbhdBack = { expanded: new Set(expanded), snap: graph.snapshot() };
     nbhd = { center: d.center, depth, all };
     selected = d.center;
     exploreNote = all ? { text: '오늘 유효한 연결이 없어 지난 담당까지 보여 줍니다', testid: 'nbhd-past-note' } : null;
@@ -2466,8 +2482,16 @@ function start() {
     if (!nbhd) return;
     nbhd = null;
     exploreNote = null;
+    // FU9-9: 들어가기 전 접힘 상태로 되돌리고, 그때 있던 항목만 그려지면 그 자리·배율·위치를 그대로 되살린다(없던 항목이 끼면 새로 배치)
+    const back = nbhdBack;
+    nbhdBack = null;
+    if (back) {
+      expanded.clear();
+      for (const u of back.expanded) expanded.add(u);
+    }
     refresh();
-    graph.relayout();
+    if (back && graph.cy.nodes().every((n) => back.snap.pos.has(n.id()))) graph.restore(back.snap);
+    else graph.relayout();
   }
 
   function nbhdButtons(gid) {
@@ -2476,7 +2500,7 @@ function start() {
     const on = nbhd && nbhd.center === view.canonical(gid);
     return [on && nbhd.depth === 1 ? null : el('button', { type: 'button', 'data-testid': 'btn-nbhd', title: '이 항목과 바로 이어진 항목만 남겨 다시 배치합니다(데이터는 바뀌지 않음)', onclick: () => enterNbhd(gid, 1) }, '주변만 보기'),
         on && nbhd.depth === 2 ? null : el('button', { type: 'button', 'data-testid': 'btn-nbhd2', title: '두 단계 떨어진 항목까지 남깁니다', onclick: () => enterNbhd(gid, 2) }, '주변 2단계'),
-        nbhd ? el('button', { type: 'button', 'data-testid': 'btn-nbhd-exit', onclick: leaveNbhd }, '전체 보기로') : null].filter(Boolean);
+        nbhd ? el('button', { type: 'button', 'data-testid': 'btn-nbhd-exit', onclick: leaveNbhd }, '전체 보기로 돌아가기') : null].filter(Boolean);
   }
 
   function renderExploreStatus() {
@@ -2491,7 +2515,7 @@ function start() {
     if (nbhd) {
       parts.push(el('span', { class: 'grp' }, el('span', { class: 'on', 'data-testid': 'nbhd-on' }, `주변만 보기: 「${(view.getNode(nbhd.center) || { label: '?' }).label}」 ${nbhd.depth}단계 — 항목 ${display.nodes.length}개`),
         el('button', { type: 'button', class: 'small-btn', 'data-testid': 'nbhd-depth', onclick: () => enterNbhd(nbhd.center, nbhd.depth === 1 ? 2 : 1) }, nbhd.depth === 1 ? '2단계로' : '1단계로'),
-        el('button', { type: 'button', class: 'small-btn', 'data-testid': 'nbhd-exit', onclick: leaveNbhd }, '전체 보기로')));
+        el('button', { type: 'button', class: 'small-btn', 'data-testid': 'nbhd-exit', onclick: leaveNbhd }, '전체 보기로 돌아가기')));
     }
     if (exploreNote) parts.push(el('span', { class: exploreNote.warn ? 'on' : 'ok', 'data-testid': exploreNote.testid || 'explore-note', role: 'status' }, exploreNote.text));
     bar.setStatus(...parts);
