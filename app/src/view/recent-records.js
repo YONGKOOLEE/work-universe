@@ -14,6 +14,7 @@ export const RECENT_RECORDS = {
 // 쓴 것 찾기(R11 FU6-4): 머리글 「무엇을 할까요?」의 「기록에서 …」 결과. 바꾸기 쉬운 값은 한 곳에
 export const RECORD_SEARCH = {
   LIMIT: 8, // 한 번에 보이는 건수
+  MINE_LIMIT: 3, // 「내가 쓴 메모」처럼 내 기록을 묻는 말이면 보여 주는 최근 직접 쓴 기록 수(FU8-9)
   MIN_CHARS: 2, // 공백을 뺀 낱말이 이 글자 수 미만이면 찾지 않는다(한 글자는 거의 다 맞는다)
   FEATURE_FEW: Infinity, // 기능 결과가 이 수 이하일 때만 기록 결과를 아래에 더한다. Infinity = 맞는 기록이 있으면 기능 결과 수와 상관없이 늘 아래에 보인다(R12 RV12C-6, 메인 결정; 예전 값 2)
 };
@@ -108,11 +109,15 @@ function* userRecords(view) {
  */
 export function recordFields(view, ev, node) {
   const body = ev.type === 'memo' ? ev.note || '' : eventText(view, ev);
-  return [ev.note || '', body, displayName(node)];
+  // 분류(이슈·진행 중·해결됨…)도 찾는 글자에 든다: 「해결」로 찾으면 [해결됨] 기록도 걸린다(찾기 범위일 뿐 해결 판정이 아니다)
+  return [ev.note || '', body, displayName(node), ev.type === 'memo' ? MEMO_CATEGORIES[memoCategoryOf(ev.payload)] || '' : eventTypeLabel(ev.type)];
 }
 
 /** 접은 글에 낱말(접은 것)이 들어 있는 조각이 하나라도 있는가 */
 export const fieldsMatch = (fields, foldedQuery) => fields.some((f) => foldText(f).includes(foldedQuery));
+
+/** 「내가 쓴 메모」·「내 기록」처럼 내가 직접 쓴 기록을 묻는 말인가(낱말 찾기가 아니라 최근 기록을 보여 줄 말) */
+export const isMineQuery = (query) => /^내(가)?((쓴|적은|남긴|작성한)(것|메모|기록|글)?|(메모|기록|글))$/.test(foldText(query));
 
 /**
  * 기록에서 낱말 찾기: 기록 종류 이벤트(출처 무관, 사용자가 쓴 것이 아니면 source_chip)의 메모 내용(note)과 내용 글(eventText)에서 대소문자·공백을 무시하고 부분 일치.
@@ -123,6 +128,11 @@ export function searchRecords(view, query, { limit = RECORD_SEARCH.LIMIT, textMa
   const shown = String(query ?? '').replace(/\s+/g, ' ').trim();
   const q = foldText(shown);
   if (q.length < minChars) return { query: shown, total: 0, rows: [] };
+  // 「내가 쓴 메모」: 낱말로는 글에 안 나오므로(메모 내용에 「내가 쓴」이 없다) 직접 쓴 최근 기록 몇 줄을 보여 준다
+  if (isMineQuery(shown)) {
+    const mine = recentRecords(view, { limit: RECORD_SEARCH.MINE_LIMIT, textMax }).map((r) => ({ ...r, source_chip: null }));
+    return { query: shown, total: mine.length, rows: mine, mine: true };
+  }
   const hits = [];
   for (const { ev, node } of userRecords(view)) {
     const isMemo = ev.type === 'memo';

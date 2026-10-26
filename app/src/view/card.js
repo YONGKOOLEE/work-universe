@@ -3,7 +3,7 @@
 // 이 파일이 하는 일은 (1) 연결을 묶음으로 나누고 줄 세우기, (2) 이력을 최신순으로 거르고 쪽 나누기, (3) 상태 줄·「지금 볼 것」·사람 카드 표의 값 모으기, (4) 유형별 동작 줄 구성이다.
 
 import { MEMO_CATEGORIES, USER_EVENT_TYPES, memoCategoryOf } from '../model/schema.js';
-import { currentHoldersText, edgeStatus } from './describe.js';
+import { currentHoldersText, displayName, edgeStatus } from './describe.js';
 import { contactOf, openMemosOf } from '../rules/handover.js';
 import { OPEN_CATEGORIES, memoTarget, openMemos } from '../rules/issues.js';
 import { personLoad, workLoad } from '../rules/insight.js';
@@ -223,7 +223,14 @@ export function deadlineLeft(deadline, today) {
 }
 
 /** 미해결 메모 한 건을 「지금 볼 것」 줄로 */
-const nowIssue = (ev) => ({ gid: ev.gid, date: ev.occurred_at, category: MEMO_CATEGORIES[memoCategoryOf(ev.payload)] || '', text: clip(ev.note || '메모', CARD.TEXT_CLIP), note: ev.note || '' });
+// where: 이 업무가 아닌 곳에 걸린 메모(다른 업무·주제만 단 메모)면 출처 이름. 이 업무의 메모면 ''(FU8-29: 「미해결 2건(이 업무 0 · 같은 주제 2)」일 때 줄이 어디 것인지)
+const nowIssue = (view, gid, ev) => {
+  const t = memoTarget(view, ev);
+  const own = t === view.canonical(gid);
+  const node = !own && t ? view.getNode(t) : null;
+  const where = own ? '' : node ? displayName(node) : '같은 주제';
+  return { gid: ev.gid, date: ev.occurred_at, category: MEMO_CATEGORIES[memoCategoryOf(ev.payload)] || '', text: clip(ev.note || '메모', CARD.TEXT_CLIP), note: ev.note || '', where, own, target_gid: t || null };
+};
 
 /** 미해결 메모를 최신(날짜, 같은 날은 나중 기록)이 위로 */
 export function newestFirst(memos) {
@@ -256,7 +263,7 @@ export function cardData(view, gid, { asOf, past = false, rootGid = null, n = un
     const w = workLoad(view, gid, { asOf });
     const memos = rootGid && view.canonical(gid) === view.canonical(rootGid) ? all : openMemosOf(view, node.gid);
     data.issues = splitIssues(view, gid, memos);
-    data.now = newestFirst(memos).slice(0, CARD.NOW_ISSUES).map(nowIssue);
+    data.now = newestFirst(memos).slice(0, CARD.NOW_ISSUES).map((ev) => nowIssue(view, gid, ev));
     data.load = w;
     if (w) {
       data.owners = w.current.map((p) => ({ gid: p.gid, label: p.label, contact: contactOf(view.getNode(p.gid)) || '' }));
