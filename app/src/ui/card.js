@@ -41,7 +41,7 @@ function linkItem(l, o) {
     el('span', { class: 'arrow', title: l.direction === 'out' ? '이 항목에서 나가는 연결' : '이 항목으로 들어오는 연결' }, l.direction === 'out' ? '→' : '←'),
     el('button', { type: 'button', class: 'link', onclick: () => o.onFocus(l.other.gid) }, l.other.label),
     el('span', { class: 'muted small' }, ` ${l.other.type_label}`),
-    l.status ? el('span', { class: `chip status-${l.status_key === 'current' ? 'current' : 'other'}`, title: l.status_key === 'handover' ? '이 날 다른 사람이 담당을 이어받았습니다. 판정(인사이트·초안)에서는 이 날까지 담당으로 셉니다' : null, 'data-testid': 'link-status' }, l.status) : null,
+    l.status ? el('span', { class: `chip status-${l.status_key === 'current' ? 'current' : 'other'}`, title: l.status_key === 'handover' ? '이 날 다른 사람이 담당을 이어받았습니다. 인사이트·초안을 셀 때는 이 날까지 담당으로 봅니다' : null, 'data-testid': 'link-status' }, l.status) : null,
     l.period ? el('div', { class: 'muted small' }, l.period) : null,
     l.note ? el('div', { class: 'muted small' }, l.note) : null,
     o.linkTools(l),
@@ -174,7 +174,7 @@ function nowBlock(c, o) {
     rows.push(el('div', { class: 'now-item', 'data-testid': 'now-issue', 'data-gid': it.gid },
       el('span', { class: 'chip warn' }, it.category), el('span', { class: 'muted small' }, it.date),
       el('button', { type: 'button', class: 'link now-text', title: `${it.note} — 누르면 기록의 그 줄로 갑니다`, onclick: () => o.seeRecord(it.gid) }, it.text),
-      o.canResolve ? el('button', { type: 'button', class: 'small-btn', 'data-testid': 'now-resolve', title: '이 메모 한 건을 해결로 표시합니다(원래 메모는 그대로 남고 「해결됨」 메모가 이력에 더해집니다)', onclick: () => o.onResolve(it.gid) }, '해결') : null));
+      o.canResolve ? el('button', { type: 'button', class: 'small-btn', 'data-testid': 'now-resolve', title: '이 일이 끝났나요? 누르면 이 메모 한 건을 해결로 표시합니다(원래 메모는 그대로 남고 「해결됨」 메모가 이력에 더해집니다)', onclick: () => o.onResolve(it.gid) }, '해결') : null));
   }
   // 마감은 카드 맨 위 상태 줄에도 있다 — 남은 날수를 셀 수 있을 때만 여기 한 줄 더(날짜가 아닌 글이면 겹치기만 한다)
   const left = c.deadline && !c.past ? deadlineLeft(c.deadline, c.asOf) : '';
