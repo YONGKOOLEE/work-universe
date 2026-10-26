@@ -107,12 +107,11 @@ async function walk(browser, port) {
     const need = (name, text) => { check(`안내 둘러보기에 「${text}」가 적혀 있음(${name})`, labels.includes(text)); return text; };
     const wsBtn = (name) => clickText(cdp, name, '.ws-btn'); // 왼쪽 작업 공간 메뉴(CR-22 W)
     const closeScreen = () => clickText(cdp, '닫기', '#detail button');
-    // 1단계: 처음 화면 → 「더 보기」 → 「샘플 바로 열기」
+    // 1단계: 처음 화면 → 「샘플 바로 열기」(처음 사용 8회차 FU8-1: 「더 보기」 밖, 세 갈래 바로 아래로 옮김)
     const startText = await ev(cdp, 'document.body.innerText');
     check('1단계: 처음 화면에 화면 미리 보기와 「무엇을 하고 싶어요?」 세 갈래가 있음', (await ev(cdp, "!!document.querySelector('[data-testid=start-preview]')")) && startText.includes('무엇을 하고 싶어요?') && (await ev(cdp, "document.querySelectorAll('[data-testid=start-ways] button').length")) === 3);
-    const moreLabel = need('1단계', '더 보기');
     const sampleLabel = L((l) => l.startsWith('샘플 바로 열기'));
-    check(`1단계: 「${moreLabel}」를 열고 「${sampleLabel}」를 누르면 월말 정산이 열림`, !!sampleLabel && await clickText(cdp, moreLabel, 'summary') && await clickText(cdp, sampleLabel) && await waitFor(cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0"));
+    check(`1단계: 「${sampleLabel}」(「더 보기」를 열지 않고 바로 보임)를 누르면 월말 정산이 열림`, !!sampleLabel && await clickText(cdp, sampleLabel) && await waitFor(cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0"));
     await sleep(1200);
     const menu = await ev(cdp, "[...document.querySelectorAll('.ws-btn .ws-label')].map((b) => b.textContent).join('|')");
     check('1단계: 지도를 열면 왼쪽에 작업 공간 메뉴 5개(안내에 적힌 이름)', ['지도 보기', '기록', '인수인계', '매주 점검', '지도 관리'].every((n) => menu.includes(n) && labels.includes(n)), menu);
@@ -121,7 +120,7 @@ async function walk(browser, port) {
     // 2단계: 항목 카드
     const clicked = await clickNode(cdp, '대사 확인');
     const p2 = await panel(cdp);
-    check('2단계: 「대사 확인」을 누르면 항목 카드(위 띠·상태 줄·동작 줄·지금 볼 것·접는 묶음)가 나오고 이름이 안내와 같음', clicked && ['← 지도 전체', '기록 남기기', '담당 넘기기', '인수인계 초안', '⋯', '지금 볼 것', '기록(이력)', '모두 보기 →', '미해결 2건', '⚠ 반복 비효율'].every((t) => labels.includes(t)) && ['← 지도 전체', '기록 남기기', '담당 넘기기', '인수인계 초안', '⋯', '지금 볼 것', '기록(이력)', '미해결 2건', '반복 비효율'].every((t) => p2.includes(t)), p2.slice(0, 60));
+    check('2단계: 「대사 확인」을 누르면 항목 카드(위 띠·상태 줄·동작 줄·지금 볼 것·접는 묶음)가 나오고 이름이 안내와 같음', clicked && ['← 지도 전체', '기록 남기기', '담당 넘기기', '인수인계 초안', '⋯', '지금 볼 것', '기록(이력)', '기록 모두 보기 →', '미해결 2건', '⚠ 반복 비효율'].every((t) => labels.includes(t)) && ['← 지도 전체', '기록 남기기', '담당 넘기기', '인수인계 초안', '⋯', '지금 볼 것', '기록(이력)', '미해결 2건', '반복 비효율'].every((t) => p2.includes(t)), p2.slice(0, 60));
     await shot(cdp, `${browser.name}-g2-node`);
     const ok2a = await clickText(cdp, '기록 남기기', '#detail button');
     await sleep(300);
