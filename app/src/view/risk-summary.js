@@ -27,7 +27,7 @@ export function teamRiskSummary(view, { asOf, n }) {
 
 /** 한 줄 글의 세 조각. 숫자가 0이면 「혼자만 아는 일 없음」처럼, 한 가지만 못 세면 「… 기록 부족」, 모두 못 세면 한 문장 */
 export function teamRiskParts(s) {
-  if (s.insufficient) return ['담당(수행) 기록이 부족해 아직 셀 수 없음'];
+  if (s.insufficient) return ['담당 기록이 부족해 아직 셀 수 없음'];
   const part = (n, name, unit) => (n === null ? `${name} 기록 부족` : n === 0 ? `${name} 없음` : `${name} ${n}${unit}`);
   return [part(s.solo, '혼자만 아는 일', '개'), part(s.dense, '일 몰린 사람', '명'), part(s.gaps, '담당자 빈 일', '개')];
 }

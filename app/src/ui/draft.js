@@ -312,16 +312,21 @@ export function draftPanel(o) {
   }
 
   return el('div', { class: 'draft' }, el('div', { class: 'row panel-head' }, el('h2', {}, '인수인계 초안'), el('button', { type: 'button', 'data-testid': 'draft-close', onclick: o.onClose }, '닫기')),
+    el('p', { class: 'panel-what', 'data-testid': 'draft-what' }, DRAFT_WHAT),
     o.viewDate ? el('p', { class: 'notice', 'data-testid': 'draft-today' }, `초안은 오늘(${o.asOf}) 기준으로 만듭니다. 시간 보기의 기준일(${o.viewDate})과 상관없습니다.`) : null,
     form, rerunNote, liveNote, result);
 }
 
+/** 처음 쓰는 사람용 한 줄(사용자 10-26 저녁 쉬운 말): 초안 창이 무엇을 하는 곳인지 */
+export const DRAFT_WHAT = '담당자가 바뀔 때 넘겨줄 내용을 지금까지의 기록에서 모아 만든 글입니다. 읽어 보고 확정하면 인수인계서로 남습니다.';
+/** 확정 단추 앞의 묻는 말(질문형, 사용자 10-26 저녁) */
+export const DRAFT_CONFIRM_Q = '이 초안을 인수인계서로 확정할까요?';
 /** 확정 확인의 「담당도 넘기기」 칸 문구(CR-18-6). 칸 아래 작은 글은 넘길 업무 목록과 건너뛰는 사유 */
-export const TRANSFER_LABEL = '담당도 넘기기 — 보내는 사람의 수행을 오늘로 끝내고 받는 사람이 오늘부터 맡습니다';
+export const TRANSFER_LABEL = '담당도 넘기기 — 보내는 사람의 담당을 오늘로 끝내고 받는 사람이 오늘부터 맡습니다';
 export function transferListText(plan, names, where) {
   if (!plan.persons_ok) return `보내는 사람과 받는 사람이 모두 「${where}」 안에 있어야 담당을 넘길 수 있습니다. 이 확정에서는 담당을 넘기지 않습니다.`;
   const parts = [];
-  parts.push(plan.moves.length ? `넘길 업무(보내는 사람이 지금 수행 중): ${names(plan.moves.map((m) => m.work))}` : '넘길 업무가 없습니다(보내는 사람이 지금 수행 중인 업무가 이 범위에 없음).');
+  parts.push(plan.moves.length ? `넘길 업무(보내는 사람이 지금 맡은 일): ${names(plan.moves.map((m) => m.work))}` : '넘길 업무가 없습니다(보내는 사람이 지금 맡은 업무가 이 범위에 없음).');
   if (plan.already.length) parts.push(`받는 사람이 이미 맡고 있어 건너뜀: ${names(plan.already)}`);
   if (plan.elsewhere.length) parts.push(`다른 업무 지도의 연결이라 이 화면에서는 못 넘김: ${names(plan.elsewhere)}`);
   return parts.join(' · ');
@@ -360,8 +365,8 @@ function confirmBox(d, view, o) {
     : null;
   btn.addEventListener('click', () => {
     const moving = !!(transfer && transfer.checked);
-    const extra = moving ? `\n담당도 넘깁니다(${date}부터 ${label(d.to)}): ${names(plan.moves.map((m) => m.work))}에서 ${label(d.from)}의 수행이 ${date}로 끝납니다.` : '';
-    if (!window.confirm(`이 초안을 확정합니다.\n「${where}」에 인수인계서(산출물)와 ${date} 인수인계 이력이 저장됩니다. 저장한 뒤에는 이력으로 남습니다(숨기기만 가능).${extra}`)) return;
+    const extra = moving ? `\n담당도 넘깁니다(${date}부터 ${label(d.to)}): ${names(plan.moves.map((m) => m.work))}에서 ${label(d.from)}의 담당이 ${date}로 끝납니다.` : '';
+    if (!window.confirm(`${DRAFT_CONFIRM_Q}\n「${where}」에 인수인계서(산출물)와 ${date} 인수인계 기록이 저장됩니다. 저장한 뒤에는 기록으로 남아 지울 수 없고 숨기기만 됩니다.${extra}`)) return;
     const r = o.onConfirm({ draft: d, text: draftText(d, true), date, transfer: moving });
     if (r && !r.ok) {
       msg.className = 'form-message error';
@@ -370,9 +375,10 @@ function confirmBox(d, view, o) {
     }
   });
   // 읽기 전용이면 누를 수 없는 단추를 두지 않고 이유 한 줄만 보인다(R11 RV11-9)
-  const bar = el('div', { class: 'confirm-bar', 'data-testid': 'confirm-bar' }, transferBox, o.readOnly ? null : btn, msg);
+  const bar = el('div', { class: 'confirm-bar', 'data-testid': 'confirm-bar' }, transferBox,
+    o.readOnly ? null : el('div', { class: 'row decide-row' }, el('span', { class: 'decide-q', 'data-testid': 'draft-confirm-q' }, DRAFT_CONFIRM_Q), btn), msg);
   const info = el('div', { class: 'confirm-box', 'data-testid': 'confirm-box' },
-    el('p', { class: 'muted small' }, `내용을 확인했으면 확정하세요. 「${where}」에 인수인계서와 인수인계 이력(${date})이 남고, 다음 인수인계 초안의 「이전 인수인계」 근거가 됩니다.`),
+    el('p', { class: 'muted small' }, `확정하면 「${where}」에 인수인계서와 인수인계 기록(${date})이 남고, 다음 인수인계 초안을 만들 때 「이전 인수인계」로 쓰입니다.`),
     elsewhere.length ? el('p', { class: 'muted small', 'data-testid': 'confirm-elsewhere' }, `이 화면(「${where}」)에만 저장됩니다. 업무 지도(「${elsewhere.join('」·「')}」)를 단독으로 열면 이 인수인계는 보이지 않습니다. 그 업무 지도에서도 보이게 하려면 그 업무 지도를 열어 업무를 대상으로 확정하세요.`) : null,
     o.readOnly ? el('p', { class: 'muted small', 'data-testid': 'confirm-readonly' }, '이 화면은 읽기 전용이라 확정할 수 없습니다') : null,
     null);
@@ -439,12 +445,12 @@ function renderDraft(box, d, view, onFocus, o = {}) {
         i.insufficient && i.empty_reason
           ? el('p', { class: 'muted', 'data-testid': 'not-found' }, `해당 없음 — ${i.empty_reason}`)
           : i.insufficient
-          ? el('div', {}, el('p', { class: 'muted', 'data-testid': 'insufficient' }, '이력 부족 — 근거가 되는 기록이 없어 내용을 만들지 않았습니다.'),
+          ? el('div', {}, el('p', { class: 'muted', 'data-testid': 'insufficient' }, '이력 부족 — 이 항목에 쓸 기록이 없어 내용을 만들지 않았습니다.'),
             fillHintOf(i.key) ? el('p', { class: 'muted small', 'data-testid': 'draft-fill-hint' }, fillHintOf(i.key)) : null)
           : el('ul', {}, ...i.sentences.map((s) => el('li', {}, el('span', {}, s.text), isNewSentence(view, s, o.newSince) ? el('span', { class: 'chip new-mark', 'data-testid': 'draft-new-mark', title: newMarkTitle(o.newSince) }, NEW_MARK_LABEL) : null, roleChip(view, i.key, s), el('span', { class: 'evidence-row' }, el('span', { class: 'evidence-label' }, '근거:'), evidenceChips(view, s.evidence_ids, onFocus, { dedupe: false, unknown: true, showText: true }))))),
       ),
     ),
-    el('p', { class: 'muted small' }, '축적된 이력으로 만든 초안입니다. 근거를 눌러 확인하고, 담당자가 검토해 확정하세요.'),
+    el('p', { class: 'muted small' }, '지금까지 쌓인 기록으로 만든 초안입니다. 「근거:」 옆 단추를 누르면 어느 기록에서 나왔는지 보입니다. 담당자가 읽어 보고 확정하세요.'),
     ...[confirmBox(d, view, o)].flat(),
     draftNext(),
     // 결과를 다 읽은 뒤 맨 아래에 한 줄. 키가 있으면 없고, 키 없음 안내(draft-fallback)가 이미 같은 말을 하면 중복이라 그리지 않는다

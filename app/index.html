@@ -191,6 +191,8 @@
   .period input { flex: 1; min-width: 0; }
   .small-btn { padding: 2px 10px; font-size: 12px; }
   .decide-row { align-items: center; } .decide-q { font-weight: 600; font-size: 13px; margin-right: 4px; } /* 통합 확인: 묻는 말 + 답 단추(사용자 10-26 저녁) */
+  .panel-what { margin: -4px 0 10px; font-size: 13px; line-height: 1.5; color: var(--text); } /* 패널 제목 아래 「무엇을 하는 곳인지」 한 줄(쉬운 말, 사용자 10-26 저녁) */
+  .tab-what { margin: -4px 0 8px; } /* 인사이트: 고른 탭의 쉬운 말 한 줄 */
   .danger { border-color: #6b3434; }
   .danger:hover:not(:disabled) { border-color: var(--err); color: var(--err); }
   .toolbar { margin: -2px 0 10px; }
@@ -614,7 +616,7 @@
   <div id="ws-admin-stash" hidden>
     <button type="button" id="create-open" class="primary">새 업무 지도</button>
     <button type="button" id="group-open">업무 지도 묶기</button>
-    <button type="button" id="import-open" title="업무정의서 문서를 붙여 넣어 초벌로 바꾸거나, JSON 파일을 열거나, 지금 업무 지도를 JSON 파일로 내려받습니다">가져오기·내보내기</button>
+    <button type="button" id="import-open" title="업무정의서 문서를 붙여 넣어 업무 지도 밑그림으로 바꾸거나, JSON 파일을 열거나, 지금 업무 지도를 JSON 파일로 내려받습니다">가져오기·내보내기</button>
   </div>
 </header>
 <div id="start-screen"></div>
@@ -629,7 +631,7 @@
     <div class="explore-row">
       <div id="explore-bar" class="explore-bar" data-testid="explore-bar"></div>
       <div class="graph-tools"><button type="button" id="relayout" title="항목 배치를 처음부터 다시 계산합니다">다시 정렬</button><button type="button" id="fit" title="그래프 전체를 화면에 맞춥니다. 주변만 보기 중이면 전체 그래프로 돌아갑니다">전체 보기</button><button type="button" id="tools-toggle" data-testid="tools-toggle" aria-expanded="false" aria-controls="tools-more" title="흐름 정렬·거르기 같은 고급 도구를 펼치거나 접습니다(펼침 상태는 이 브라우저에 기억)">도구 더 보기</button></div>
-      <div id="tools-more" class="tools-more" data-testid="tools-more" hidden><button type="button" id="flowlayout" aria-pressed="false" title="업무를 선후 순서대로 가로로, 사람은 위·산출물은 아래 층으로 놓습니다. 「다시 정렬」로 원래 배치로 돌아갑니다(시제품)">흐름 정렬</button></div>
+      <div id="tools-more" class="tools-more" data-testid="tools-more" hidden><button type="button" id="flowlayout" aria-pressed="false" title="업무를 앞뒤 순서대로 가로로, 사람은 위·산출물은 아래 층으로 놓습니다. 「다시 정렬」로 원래 배치로 돌아갑니다(시제품)">흐름 정렬</button></div>
     </div>
     <div id="graph" aria-label="그래프"></div>
     <div id="timebar" class="timebar" data-testid="timebar"></div>
@@ -674,14 +676,14 @@
   <form id="group-form" novalidate>
     <h2 id="group-title">업무 지도 묶기</h2>
     <p class="muted small" data-testid="group-note">이미 이 브라우저에 있는 지도끼리 묶습니다. 동료가 만든 지도는 「폴더 연결」이나 「가져오기」로 먼저 들여오세요.</p>
-    <p class="muted small">고른 업무 지도를 하위 업무 지도로 묶어 상위 업무 지도를 만듭니다. 원래 업무 지도는 바뀌지 않습니다.</p>
+    <p class="muted small">고른 업무 지도 여러 개를 팀·부서 지도 한 장으로 묶습니다(묶인 지도는 그 안에 접혀 보입니다). 원래 업무 지도는 바뀌지 않습니다.</p>
     <label>이름 <input id="group-name" maxlength="100" autocomplete="off" placeholder="예: 가상 신규팀"></label>
     <label>단위 <input id="group-level" list="group-levels" value="팀" autocomplete="off"></label>
     <datalist id="group-levels"><option value="팀"><option value="부서"><option value="본부"><option value="회사"><option value="프로젝트"></datalist>
-    <label>작성 주체 <input id="group-owner" autocomplete="off" placeholder="예: 가상 운영부"></label>
+    <label><span>작성 주체 <span class="muted small">(이 지도를 책임질 팀·부서 이름)</span></span> <input id="group-owner" autocomplete="off" placeholder="예: 가상 운영부"></label>
     <fieldset><legend>묶을 업무 지도(2개 이상)</legend><div id="group-children" class="checks"></div></fieldset>
     <div id="group-message" class="error-text" aria-live="polite"></div>
-    <div class="row"><button type="submit">묶기</button><button type="button" id="group-cancel">취소</button></div>
+    <div class="row decide-row"><span class="decide-q" data-testid="group-q">고른 지도를 한 장으로 묶을까요?</span><button type="submit">묶기</button><button type="button" id="group-cancel">취소</button></div>
   </form>
 </dialog>
 <dialog id="help-dialog" data-testid="help-box" aria-labelledby="help-title"></dialog>

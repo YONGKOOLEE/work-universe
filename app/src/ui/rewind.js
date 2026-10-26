@@ -66,7 +66,7 @@ export function limitTexts(limits) {
   const out = ['「바로 삭제」한 항목과 하위 유형 추가는 기록이 남지 않아 여기에 보이지 않습니다.'];
   const n = (code) => limits.filter((l) => l.code === code).length;
   if (n('purged')) out.push(`「완전히 삭제」한 항목 ${n('purged')}개는 내용을 지웠으므로 「(삭제된 항목)」 자리표시로만 보입니다.`);
-  if (n('identity_detail')) out.push('같은 사람·업무 판정의 점수·이유·판정자는 기록에 없어, 판정 상태만 그때로 보입니다.');
+  if (n('identity_detail')) out.push('같은 사람·업무인지 고른 답은 점수·이유·고른 사람이 기록에 없어, 같음·다름 상태만 그때로 보입니다.');
   const kept = limits.filter((l) => l.code === 'user_events_kept').reduce((sum, l) => sum + (l.count || 0), 0);
   if (kept) out.push(`이 시점 뒤에 남긴 메모·인수인계·담당 같은 사용자 이력 ${kept}건은 되감아도 그대로 남습니다. 담당을 넘긴 기록이 있으면 연결은 그때로 돌아가도 넘긴 기록은 이력에 보입니다.`);
   return out;
@@ -78,12 +78,12 @@ export function confirmText(preview, at, labelOf = pointLabel) {
   const hidden = c.hide_nodes + c.hide_edges;
   const shown = c.restore_nodes + c.add_edges;
   const edited = c.update_nodes + c.update_edges;
-  const lines = [`지도를 ${labelOf(at)} 시점으로 되돌립니다.`];
+  const lines = [`지도를 ${labelOf(at)} 시점으로 되돌릴까요?`];
   lines.push(`- 그 뒤 생기거나 그때 숨겨져 있던 항목·연결 ${hidden}개는 숨겨집니다(지워지지 않습니다).`);
   lines.push(`- 그 뒤 숨긴 항목·연결 ${shown}개는 다시 보입니다.`);
   lines.push(`- 그 뒤 바뀐 내용 ${edited}건은 그때 값으로 돌아갑니다.`);
   const extra = c.hide_refs + c.add_refs + c.identity;
-  if (extra) lines.push(`- 묶음·같은 사람 판정 ${extra}건도 그때 상태로 맞춥니다.`);
+  if (extra) lines.push(`- 묶음·같은 사람인지 고른 답 ${extra}건도 그때 상태로 맞춥니다.`);
   const skipped = preview.limits.filter((l) => ['purged_skip', 'edge_end_hidden', 'identity_created_after'].includes(l.code)).length;
   if (skipped) lines.push('- 되살릴 수 없는 일부(완전히 삭제한 항목 등)는 그대로 둡니다.');
   const kept = preview.limits.filter((l) => l.code === 'user_events_kept').reduce((sum, l) => sum + (l.count || 0), 0);
@@ -124,7 +124,7 @@ export function rewindEntry({ points, onOpen }) {
     el('div', { class: 'row' },
       el('button', { type: 'button', 'data-testid': 'btn-rewind', disabled: !enough, onclick: onOpen, title: '지도가 언제 어떻게 고쳐졌는지 시점을 골라, 그때 모습을 읽기 전용으로 보고 필요하면 되돌립니다' }, '편집 되감기')),
     el('p', { class: 'muted small', 'data-testid': 'rewind-hint' }, enough
-      ? '고친 시점을 골라 그때의 지도를 봅니다(읽기 전용). 업무가 언제 누구 것이었나를 보는 「시간 보기」와 다릅니다.'
+      ? '지도를 고치기 전 모습으로 돌아가 보는 곳입니다. 고친 시점을 고르면 그때의 지도를 봅니다(읽기 전용). 업무가 언제 누구 것이었나를 보는 「시간 보기」와 다릅니다.'
       : '고친 기록이 아직 없습니다. 항목을 고치거나 추가하면 그 시점이 생겨, 나중에 되감을 수 있습니다.'));
 }
 

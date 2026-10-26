@@ -86,12 +86,14 @@ export function insightPanel(o) {
   const body = el('div', { 'data-testid': 'insight-body' });
   const tabs = el('div', { class: 'tabs', role: 'tablist' });
 
+  const tabWhat = el('p', { class: 'muted small tab-what', 'data-testid': 'insight-tab-what' });
   const tabButton = (key, label, testid) =>
-    el('button', { type: 'button', role: 'tab', class: kind === key ? 'tab active' : 'tab', 'data-testid': testid, onclick: () => { kind = key; if (o.onKind) o.onKind(key); draw(); } }, label);
+    el('button', { type: 'button', role: 'tab', class: kind === key ? 'tab active' : 'tab', 'data-testid': testid, title: INSIGHT_TAB_WHAT[key], onclick: () => { kind = key; if (o.onKind) o.onKind(key); draw(); } }, label);
 
   function draw() {
     // 탭 순서(R9-2): 인수인계 위험을 첫 자리에(핵심 인사이트). 열릴 때 기본으로 보이는 탭은 호출하는 쪽의 kind가 정한다
     tabs.replaceChildren(tabButton('risk', '인수인계 위험', 'tab-risk'), tabButton('similar', '유사 경험자', 'tab-similar'), tabButton('repeat', '반복 비효율', 'tab-repeat'), tabButton('density', '밀집·공백', 'tab-density'), tabButton('flow', '흐름 변화', 'tab-flow'));
+    tabWhat.textContent = `이 탭: ${INSIGHT_TAB_WHAT[kind] || ''}`;
     asofNote.hidden = !past;
     asofNote.textContent = kind === 'flow'
       ? `표는 전체 기간이고, 강조한 줄이 기준일(${o.asOf})입니다. 오늘 기준은 그래프 아래 「오늘로」.`
@@ -117,14 +119,26 @@ export function insightPanel(o) {
   };
   return el('div', { class: 'insight' },
     el('div', { class: 'row panel-head' }, el('h2', {}, '인사이트'), el('button', { type: 'button', 'data-testid': 'insight-close', onclick: o.onClose }, '닫기')),
+    el('p', { class: 'panel-what', 'data-testid': 'insight-what' }, INSIGHT_WHAT),
     summaryBar({ build: buildSummary, mapName: o.mapName || '업무 지도', asOf: summaryAsOf() }),
     asofNote,
     keylessNote,
     tabs,
+    tabWhat,
     body,
     el('p', { class: 'muted small', 'data-testid': 'insight-note' }, '참고 정보입니다. 해석과 인력 배치는 사람이 정합니다.'),
   );
 }
+
+/** 처음 쓰는 사람용(사용자 10-26 저녁 쉬운 말): 인사이트가 무엇을 하는 곳인지와 탭마다 쉬운 말 한 줄. 탭 이름은 안내·대본에 박혀 있어 그대로 둔다 */
+export const INSIGHT_WHAT = '기록을 세어 혼자만 아는 일·일이 몰린 사람·되풀이되는 설명처럼 손볼 곳을 찾아 보여 주는 곳입니다.';
+export const INSIGHT_TAB_WHAT = {
+  risk: '한 사람만 해 본 일, 넘길 준비가 덜 된 일, 막히면 다른 일까지 멈추는 일',
+  similar: '고른 업무를 직접 해 봤거나 비슷한 일을 해 본 사람',
+  repeat: '담당이 바뀔 때마다 같은 설명을 처음부터 다시 하거나, 같은 문제가 여러 업무에서 되풀이되는 곳',
+  density: '일이 한 사람에게 몰린 곳(밀집)과 담당자가 없는 업무(공백)',
+  flow: '기간마다 기록·담당·사람 수가 어떻게 바뀌었나',
+};
 
 // ── 유사 경험자 ──
 /** FU5-5: 탭 설명 아래 한 줄 */
@@ -247,7 +261,7 @@ function densityView(o, view) {
   run();
   return el('div', { 'data-testid': 'density-body' },
     el('p', { class: 'muted small' }, `기준일 ${asOf}에 담당자가 없는 업무(공백)와 한 사람이 여러 업무를 맡은 경우(밀집)입니다. 기간이 끝난 업무는 세지 않습니다.`),
-    el('label', { class: 'dg-n' }, el('span', {}, '밀집 기준: 한 사람이'), nInput, el('span', {}, '개 이상 맡음')),
+    el('label', { class: 'dg-n' }, el('span', {}, '일이 몰렸다고 볼 기준(밀집): 한 사람이'), nInput, el('span', {}, '개 이상 맡음')),
     out);
 }
 
@@ -425,7 +439,7 @@ function riskView(o, view) {
   else if (p.status === 'none') pBody = el('p', { class: 'muted', 'data-testid': 'risk-ripple-none' }, `${p.reason}.`);
   else {
     pBody = el('div', {},
-      el('h4', {}, `길목 업무 상위 ${p.works.length}개`),
+      el('h4', {}, `다른 업무로 많이 이어지는 업무(길목) 상위 ${p.works.length}개`),
       el('ol', { class: 'patterns', 'data-testid': 'risk-ripple-works' },
         ...p.works.map((x) => el('li', {},
           el('div', { class: 'who' }, el('strong', {}, `「${x.work.label}」`), el('span', { class: 'chip' }, `${x.count}개 업무에 닿음`)),

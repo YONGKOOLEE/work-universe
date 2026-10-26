@@ -233,7 +233,7 @@ test('CR-18-6 화면: 확정 영역에 기본 꺼짐의 「담당도 넘기기�
   assert.ok(box, '칸이 있다');
   assert.equal(!!box.checked, false, '기본 꺼짐');
   assert.equal(box.disabled, false);
-  assert.match(q('draft-transfer-box').textContent, /담당도 넘기기 — 보내는 사람의 수행을 오늘로 끝내고 받는 사람이 오늘부터 맡습니다/);
+  assert.match(q('draft-transfer-box').textContent, /담당도 넘기기 — 보내는 사람의 담당을 오늘로 끝내고 받는 사람이 오늘부터 맡습니다/);
   assert.match(q('draft-transfer-list').textContent, /넘길 업무.*「대사 확인」/);
   // 끄고 확정
   q('draft-confirm').click();

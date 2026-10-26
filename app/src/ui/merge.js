@@ -60,7 +60,7 @@ function aiSummary(result, plan) {
   return [
     el('p', { class: 'small', 'data-testid': 'ai-candidates-summary' },
       `AI 후보 ${n}개(확인되지 않아 뺀 쌍 ${result.counts.dropped}개)`,
-      result.counts.decided ? ` · 사람이 이미 판정한 쌍 ${result.counts.decided}개는 넣지 않았습니다` : ''),
+      result.counts.decided ? ` · 사람이 이미 답을 고른 쌍 ${result.counts.decided}개는 넣지 않았습니다` : ''),
     invalid.length
       ? el('details', { class: 'ai-dropped', 'data-testid': 'ai-candidates-dropped' },
         el('summary', {}, `원문 인용·업무가 확인되지 않아 뺀 쌍 ${invalid.length}개`),
@@ -130,7 +130,7 @@ export function mergePanel(o) {
     const skip = (a, b) => a === b || now.rejected.has(pairKey(a, b)) || now.confirmed.has(pairKey(a, b));
     const plan = st.result ? withAiCandidates(o.plan, st.result.pairs, { canon: now.canon, skip }) : o.plan;
     const head = [
-      el('div', { class: 'row' }, el('button', { type: 'button', class: 'small-btn', 'data-testid': 'btn-ai-candidates', disabled: st.busy, title: 'Claude API로 하위 업무 지도의 업무 글을 비교해 뜻이 같은 업무 쌍을 찾습니다. 키가 있을 때만 보입니다. 확정은 사람이 합니다', onclick: press }, 'AI로 연관 찾기')),
+      el('div', { class: 'row' }, el('button', { type: 'button', class: 'small-btn', 'data-testid': 'btn-ai-candidates', disabled: st.busy, title: 'Claude API로 묶인 업무 지도들의 업무 글을 비교해 뜻이 같은 업무 쌍을 찾습니다. 키가 있을 때만 보입니다. 확정은 사람이 합니다', onclick: press }, 'AI로 연관 찾기')),
       el('p', { class: 'muted small', 'data-testid': 'ai-candidates-live', 'aria-live': 'polite' }, st.busy ? AI_CANDIDATES_WAIT : ''),
       st.error ? el('p', { class: 'notice', 'data-testid': 'ai-candidates-fallback' }, `AI 연관 찾기 실패: ${st.error} — 기존 후보만 보여 줍니다`) : null,
       ...aiSummary(st.result, plan),
@@ -166,7 +166,7 @@ function renderMerge(o, plan, aiHead) {
       if (r && !r.ok) msg.textContent = r.text || '사번을 넣지 못했습니다.';
     };
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
-    return el('div', { class: 'row', 'data-testid': 'merge-empno-row' }, el('label', { class: 'small' }, '사번 넣기 ', input), el('button', { type: 'button', class: 'small-btn', 'data-testid': 'merge-empno-add', onclick: submit }, '넣기'), msg);
+    return el('div', { class: 'row decide-row', 'data-testid': 'merge-empno-row' }, el('label', { class: 'small' }, el('span', { class: 'decide-q' }, '이 사람의 사번을 넣을까요?'), ' ', input), el('button', { type: 'button', class: 'small-btn', 'data-testid': 'merge-empno-add', onclick: submit }, '사번 넣기'), msg);
   };
   const personList = plan.persons.length
     ? el('ul', { class: 'patterns', 'data-testid': 'merge-persons' }, ...plan.persons.map((p) => el('li', { 'data-type': p.type },
@@ -202,7 +202,7 @@ function renderMerge(o, plan, aiHead) {
       topicOnly.length
         ? el('details', { class: 'topic-only-candidates', 'data-testid': 'merge-works-topic-only', open: topicOnlyOpen.has(view.universe_id), ontoggle: (e) => { if (e.target.open) topicOnlyOpen.add(view.universe_id); else topicOnlyOpen.delete(view.universe_id); } },
           el('summary', {}, `주제만 겹친 후보 ${topicOnly.length}건`),
-          el('p', { class: 'muted small' }, '주제 하나만 겹친 쌍은 점수와 상관없이 같은 업무일 가능성이 낮아 아래로 내렸습니다. 판정은 같은 방법으로 합니다.'),
+          el('p', { class: 'muted small' }, '주제 하나만 겹친 쌍은 점수와 상관없이 같은 업무일 가능성이 낮아 아래로 내렸습니다. 답은 위와 같은 방법으로 고릅니다.'),
           el('ul', { class: 'patterns', 'data-testid': 'merge-works-topic-list' }, ...topicOnly.map((w) => workItem(w, true))))
         : null,
     ].filter(Boolean)
@@ -217,9 +217,11 @@ function renderMerge(o, plan, aiHead) {
 
   return el('div', { class: 'insight', 'data-testid': 'merge-panel' },
     el('div', { class: 'row panel-head' }, el('h2', {}, '통합 확인'), el('button', { type: 'button', 'data-testid': 'merge-close', onclick: () => { topicOnlyOpen.delete(view.universe_id); o.onClose(); } }, '닫기')),
-    el('p', { class: 'muted small' }, '같은 사번·이름의 사람은 자동으로 하나로 이었습니다. 아래는 사람이 확인할 항목입니다. 확인하지 않아도 이 업무 지도는 그대로 볼 수 있습니다. 판정만으로는 원래 업무 지도가 바뀌지 않습니다(「사번 넣기」는 그 사람이 있는 원래 지도에 사번을 넣습니다).'),
-    plan.auto.length && !o.readOnly ? el('p', { class: 'notice', 'data-testid': 'merge-auto' }, `사번·이름이 같은 사람 ${plan.auto.length}명을 아직 잇지 않았습니다. `,
-      el('button', { type: 'button', class: 'link', onclick: o.onApplyAuto }, '사번 자동 연결 적용')) : null,
+    // 처음 쓰는 사람용 한 줄(사용자 10-26 저녁 쉬운 말): 이름은 두고 무엇을 하는 곳인지
+    el('p', { class: 'panel-what', 'data-testid': 'merge-what' }, '같은 사람·같은 업무가 여러 지도에 따로 들어갔는지 맞춰 보는 곳입니다.'),
+    el('p', { class: 'muted small' }, '사번과 이름이 같은 사람은 이미 하나로 이었습니다. 아래는 사람이 답해야 하는 것입니다. 답하지 않아도 이 업무 지도는 그대로 볼 수 있고, 여기서 고른 답은 원래 업무 지도를 바꾸지 않습니다(「사번 넣기」만 그 사람이 있는 원래 지도에 사번을 넣습니다).'),
+    plan.auto.length && !o.readOnly ? el('p', { class: 'notice', 'data-testid': 'merge-auto' }, `사번·이름이 같은 사람 ${plan.auto.length}명을 아직 잇지 않았습니다. 지금 하나로 이을까요? `,
+      el('button', { type: 'button', class: 'link', onclick: o.onApplyAuto }, '하나로 잇기')) : null,
     el('h3', {}, `사람 확인 ${plan.persons.length}건`),
     personList,
     el('h3', {}, `업무 후보 ${plan.works.length}건`),
@@ -227,8 +229,8 @@ function renderMerge(o, plan, aiHead) {
     plan.works.length ? el('p', { class: 'muted small' }, '서로 다른 업무 지도에서 같은 일로 보이는 업무 쌍입니다. 점수는 겹친 수(주제 3, 산출물 유형 2, 이름 낱말 1)를 더한 것으로, 높을수록 비슷합니다.') : null,
     plan.hidden_candidates ? el('p', { class: 'muted small' }, `점수가 낮은 후보 ${plan.hidden_candidates}건은 목록에서 뺐습니다.`) : null,
     ...workList,
-    el('h3', {}, `판정 기록 ${decided.length}건`),
+    el('h3', {}, `지금까지 고른 답 ${decided.length}건`),
     history,
-    el('p', { class: 'muted small' }, '같다고 확인하면 그래프에서 한 항목으로 보입니다. 다르다고 판정한 쌍은 다시 묻지 않습니다.'),
+    el('p', { class: 'muted small' }, '「같은 사람」·「같은 업무」를 고르면 그래프에서 한 항목으로 보입니다. 「다른 사람」·「다른 업무」를 고른 둘은 다시 묻지 않습니다.'),
   );
 }
