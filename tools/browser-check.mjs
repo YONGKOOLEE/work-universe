@@ -1344,6 +1344,13 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, "window.confirm = () => true; document.querySelector('[data-testid=import-confirm]').click()").catch(() => {});
     await sleep(600);
     check('덮어쓰기 확인 → 같은 유니버스가 새 내용으로 열림', await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.description === '덮어쓴 판'", 8000));
+    // 항목 수는 앱 어디서나 지도 중심을 포함한 같은 수(미리 보기 규모·가져온 뒤 알림·개요 규모)
+    await waitFor(s.cdp, "!!document.querySelector('[data-testid=import-done]')", 4000);
+    const doneN = /항목 ([0-9]+)개/.exec(await evaluate(s.cdp, "(document.body.innerText.match(/가져왔습니다.*/) || [''])[0]"));
+    const ovN = /항목 ([0-9]+)개/.exec(await text(s.cdp, '[data-testid=overview-scale], #detail dl'));
+    const viewN = await evaluate(s.cdp, 'window.__wu.view.visible().nodes.length');
+    const doneDbg = await evaluate(s.cdp, "(document.body.innerText.match(/가져왔습니다.*/) || [''])[0] + '|' + location.hash");
+    check('가져온 뒤 알림의 「항목 n개」는 개요 규모와 같은 수(지도 중심 포함, 미리 보기 규모와 같은 기준)', !!doneN && Number(doneN[1]) === viewN && (!ovN || Number(ovN[1]) === viewN), JSON.stringify([doneN && doneN[1], ovN && ovN[1], viewN, doneDbg]));
   } else {
     check('내보낸 파일로 JSON 가져오기 점검', false, '내보내기 결과 없음');
   }
@@ -3256,6 +3263,45 @@ async function checkBrowser(browser, port) {
       const foldOpen = await evaluate(s.cdp, "(() => { const d = document.querySelector('[data-testid=empno-conflicts]'); const p = d.querySelector('[data-testid=empno-conflict]'); return { open: d.open, visible: p.checkVisibility(), text: p.textContent }; })()");
       check('W3 FU-13 펼치면 예전 내용 그대로(V-1002 윤바다·윤바다라, 자동으로 합치지 않았다는 안내)', foldOpen.open && foldOpen.visible && foldOpen.text.includes('윤바다라') && foldOpen.text.includes('자동으로 합치지 않았으니'), JSON.stringify(foldOpen));
       await shot(s.cdp, `${browser.name}-w3-1-team-summary`);
+      // 넓은 패널 뒤 지도 보기(촬영 콘티 2026-10-26): 인사이트가 패널을 자동으로 넓혔다 돌아와도 그래프 배율·자리가 그대로이고, 접힌 팀 더블클릭이 펼친다
+      {
+        const gv = () => evaluate(s.cdp, "(() => { const cy = window.__wu.cy; return { n: cy.nodes().length, zoom: cy.zoom(), pan: cy.pan(), w: cy.width() }; })()");
+        const gv0 = await gv();
+        await evaluate(s.cdp, "document.querySelector('[data-testid=btn-insight-universe]').click()");
+        await sleep(500);
+        const gvWide = await gv();
+        // 패널이 넓은 채로 사람 노드를 한 번 누르면 누른 노드가 골라진다(옆 노드가 열리지 않는다)
+        const personId = await evaluate(s.cdp, "window.__wu.cy.nodes().filter((n) => n.data('core_type') === 'person').map((n) => n.id())[0] || ''");
+        const pp = await evaluate(s.cdp, `(() => { const p = window.__wu.cy.getElementById(${JSON.stringify(personId)}).renderedPosition(); const r = document.getElementById('graph').getBoundingClientRect(); return { x: r.left + p.x, y: r.top + p.y }; })()`);
+        await s.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: pp.x, y: pp.y });
+        for (const type of ['mousePressed', 'mouseReleased']) await s.cdp.send('Input.dispatchMouseEvent', { type, x: pp.x, y: pp.y, button: 'left', clickCount: 1 });
+        await sleep(400);
+        check('W3 넓은 패널(인사이트)이 열린 채 그래프의 사람 노드를 한 번 누르면 그 노드가 골라진다', !!personId && (await evaluate(s.cdp, 'window.__wu.selected')) === personId, JSON.stringify([personId, await evaluate(s.cdp, 'window.__wu.selected')]));
+        await evaluate(s.cdp, 'window.__wu.select(null)');
+        await sleep(200);
+        await evaluate(s.cdp, "window.__wu.goSpace('check')");
+        await evaluate(s.cdp, "(document.querySelector('[data-testid=btn-insight-universe]') || { click() {} }).click()");
+        await sleep(400);
+        await evaluate(s.cdp, "window.__wu.goSpace('map')");
+        await sleep(700);
+        const gv1 = await gv();
+        const near = (a, b) => Math.abs(a - b) <= Math.max(2, Math.abs(b) * 0.02);
+        check('W3 넓은 패널(인사이트) 뒤 「지도 보기」로 돌아오면 그래프 배율·자리가 처음 그대로(좁아질 때 배율을 줄이고 돌아올 때 되돌림)',
+          gvWide.w < gv0.w && gvWide.zoom < gv0.zoom && near(gv1.zoom, gv0.zoom) && near(gv1.pan.x, gv0.pan.x) && gv1.n === gv0.n, JSON.stringify({ gv0, gvWide, gv1 }));
+        const teamId = await evaluate(s.cdp, "window.__wu.cy.nodes().filter((n) => n.data('collapsed')).map((n) => n.id())[0] || ''");
+        const tp = await evaluate(s.cdp, `(() => { const p = window.__wu.cy.getElementById(${JSON.stringify(teamId)}).renderedPosition(); const r = document.getElementById('graph').getBoundingClientRect(); return { x: r.left + p.x, y: r.top + p.y }; })()`);
+        for (const clickCount of [1, 2]) {
+          for (const type of ['mousePressed', 'mouseReleased']) await s.cdp.send('Input.dispatchMouseEvent', { type, x: tp.x, y: tp.y, button: 'left', clickCount });
+          await sleep(60);
+        }
+        await sleep(500);
+        const gv2 = await gv();
+        check('W3 넓은 패널 뒤 접힌 팀을 더블클릭하면 펼쳐진다(항목 수 늘어남)', !!teamId && gv2.n > gv1.n, JSON.stringify([teamId, gv1.n, gv2.n]));
+        await shot(s.cdp, `${browser.name}-w3-0-wide-back`);
+        await gotoU('U-D1');
+        await evaluate(s.cdp, 'window.__wu.select(null)');
+        await sleep(200);
+      }
       // FU-5 「인사이트 보기」 기본 탭 risk + 맨 위. 먼저 패널을 아래로 내려 둔다
       await evaluate(s.cdp, "document.getElementById('detail').parentElement.scrollTop = 600");
       await clickTestId(s.cdp, 'btn-insight-universe');

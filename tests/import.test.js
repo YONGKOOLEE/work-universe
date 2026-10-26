@@ -10,6 +10,9 @@ import { SAMPLE_A1 } from '../app/data/sample-a1.js';
 import { SAMPLE_CARD } from '../app/data/sample-card.js';
 import { DOC_EXAMPLE } from '../app/data/doc-example.js';
 import { exportFileName } from '../app/src/ui/import.js';
+import { buildView } from '../app/src/view/view.js';
+import { describeUniverse } from '../app/src/view/describe.js';
+import { successNotice } from '../app/src/view/record-form.js';
 import { clone } from './helpers.js';
 
 function memoryStorage() {
@@ -166,4 +169,13 @@ test('미리 보기: 이름·단위가 같은 유니버스가 있으면 W-SAME-N
   team.universe.name = '대형가맹점 A 카드승인 전문 송수신 신규 업무';
   team.universe.level = '팀';
   assert.equal(app.previewImport(team).same_name, null);
+});
+
+test('항목 수 기준: 미리 보기 규모·개요 규모·가져온 뒤 알림이 같은 수(지도 중심 포함)', () => {
+  const doc = converted();
+  const p = previewImport(doc, { existing: [] });
+  const view = buildView(doc);
+  assert.equal(describeUniverse(view).node_total, p.node_total, '개요 규모 = 미리 보기 규모');
+  assert.equal(p.node_total, 18);
+  assert.equal(successNotice('import', { name: '지도', nodes: describeUniverse(view).node_total }).text, '가져왔습니다 — 「지도」(항목 18개)');
 });

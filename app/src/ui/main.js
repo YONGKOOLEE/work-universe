@@ -2593,12 +2593,17 @@ function start() {
   // 오른쪽이 패널에 가려진다(사용자 지적 2026-10-23). 폭이 바뀐 만큼 절반을 밀어 보던 가운데를 그대로 유지한다
   // 배율도 폭 비율만큼 따라간다(사용자 지적 2026-10-23 "노드 크기가 패널과 상관없이 작아져 있거나 커져 있음"): 넓어지면 노드가 커지고 좁아지면 작아져,
   // 보이던 범위가 그대로 보인다. 기준점은 그래프 가운데(cytoscape가 minZoom·maxZoom 안으로 자른다)
-  let lastGraphW = null;
+  // 이전 폭(lastGraphW)은 처음부터 알고 있어야 한다. 처음 한 번 기준이 없으면(null) 배율·가운데를 못 맞춘 채 새 폭만 적고,
+  // 나중에 되돌릴 때 한 번도 줄이지 않은 배율을 폭 비율만큼 키워 그래프가 어긋난다(촬영 콘티 2026-10-26: 넓은 패널 뒤 지도 보기).
+  // cy.width()는 resize 뒤 처음 읽을 때 지금 칸 크기를 적어 이전 폭으로 못 쓴다. 그래서 칸 크기 관찰기가 늘 마지막 폭을 따라간다
+  // (패널을 바꾸는 코드는 관찰기보다 먼저 이 함수를 불러 이전 폭을 쓴다)
+  let lastGraphW = graph.cy.container().clientWidth;
+  if (typeof ResizeObserver === 'function') new ResizeObserver(() => { lastGraphW = graph.cy.container().clientWidth; }).observe(graph.cy.container());
   const resizeGraphKeepCenter = () => {
     const cy = graph.cy;
     const el = cy.container();
     const w = el.clientWidth;
-    if (lastGraphW === null || w === lastGraphW || lastGraphW <= 0) {
+    if (!(lastGraphW > 0) || !(w > 0) || w === lastGraphW) {
       cy.resize();
       lastGraphW = w;
       return;
@@ -3008,7 +3013,7 @@ function start() {
     const strip = groupedStrip(app.mergePlan(), { name: app.doc.universe.name, auto: doneAuto });
     notify('group', { text: strip.text, pending: strip.pending });
   } else if (doneFlag === 'import') {
-    notify('import', { name: app.doc.universe.name, nodes: view.nodes.filter((n) => !n.hidden && n.core_type !== 'root').length });
+    notify('import', { name: app.doc.universe.name, nodes: describeUniverse(view).node_total });
   }
   if (tour && tourId && scenarioOf(tourId).universeId === currentId()) {
     // D-2: 한 번 끝내거나 건너뛴 따라 하기는 시작 화면 카드로 다시 들어와도 자동으로 뜨지 않는다. 대신 상태 줄에 다시 보는 길을 알린다
