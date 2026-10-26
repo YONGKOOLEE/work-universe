@@ -128,10 +128,12 @@ export function searchRecords(view, query, { limit = RECORD_SEARCH.LIMIT, textMa
   const shown = String(query ?? '').replace(/\s+/g, ' ').trim();
   const q = foldText(shown);
   if (q.length < minChars) return { query: shown, total: 0, rows: [] };
+  let mineNone = false;
   // 「내가 쓴 메모」: 낱말로는 글에 안 나오므로(메모 내용에 「내가 쓴」이 없다) 직접 쓴 최근 기록 몇 줄을 보여 준다
   if (isMineQuery(shown)) {
     const mine = recentRecords(view, { limit: RECORD_SEARCH.MINE_LIMIT, textMax }).map((r) => ({ ...r, source_chip: null }));
-    return { query: shown, total: mine.length, rows: mine, mine: true };
+    if (mine.length) return { query: shown, total: mine.length, rows: mine, mine: true };
+    mineNone = true; // 직접 쓴 기록이 아직 0건(RV13-7): 안내 한 줄과 함께 그 말이 든 기록을 일반 낱말로 찾아 보인다
   }
   const hits = [];
   for (const { ev, node } of userRecords(view)) {
@@ -149,7 +151,7 @@ export function searchRecords(view, query, { limit = RECORD_SEARCH.LIMIT, textMa
     });
   }
   hits.sort((a, b) => instant(b.recorded_at) - instant(a.recorded_at) || b.gid.localeCompare(a.gid));
-  return { query: shown, total: hits.length, rows: hits.slice(0, limit) };
+  return { query: shown, total: hits.length, rows: hits.slice(0, limit), ...(mineNone ? { mineNone: true } : {}) };
 }
 
 /**

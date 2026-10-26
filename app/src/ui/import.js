@@ -3,7 +3,7 @@
 
 import { el } from './dom.js';
 import { josa, messageFor } from './messages.js';
-import { SCHEMA_VERSION, nodeTypeLabel } from '../model/schema.js';
+import { MEMO_CATEGORIES, SCHEMA_VERSION, memoCategoryOf, nodeTypeLabel } from '../model/schema.js';
 import { IMPORT_MAX_CHARS, parseImportText } from '../model/import.js';
 import { METHOD_LABELS } from '../llm/connector.js';
 import { folderTab } from './folder-tab.js';
@@ -72,9 +72,9 @@ function warningText(w, from) {
   if (w.code === 'W-SAMPLE-FLAG') return '파일에 샘플 표시가 있지만 내장 샘플이 아니므로 「내 업무 지도」로 가져옵니다.';
   if (w.code === 'W-REAL-NAME-LIKE') return `실명처럼 보이는 사람 이름 ${w.count}개가 있습니다(${w.labels.join(', ')}). 이 도구는 가상 데이터용입니다. 실제 이름이면 가져오기 전에 역할 이름(예: 정산 담당)으로 바꾸세요.`;
   if (w.code === 'W-EMPNO-LIKE') return `사번·주민번호처럼 보이는 숫자(6자리 이상)가 ${w.count}곳에 있습니다. 실제 번호면 지우거나 V-0000 형식의 가상 사번으로 바꾸세요.`;
-  if (w.code === 'W-SAME-NAME' && from === 'json') return `이름·단위가 같은 업무 지도「${w.name}」(${w.level})가 이미 있습니다. 가져오면 따로 하나 더 생깁니다.`;
+  if (w.code === 'W-SAME-NAME' && from === 'json') return `이름·단위가 같은 「${w.name}」(${w.level}) 업무 지도가 이미 있습니다. 가져오면 따로 하나 더 생깁니다.`;
   if (w.code === 'W-NO-SOURCE') return `원문 근거가 없는 항목 ${w.count}개가 있습니다(${w.ids.slice(0, 5).join(', ')}${w.ids.length > 5 ? ' …' : ''}).`;
-  if (w.code === 'W-SAME-NAME') return `이름·단위가 같은 업무 지도「${w.name}」(${w.level})가 이미 있습니다. 같은 문서를 다시 가져오는 것이면 위에서 이름을 바꾸거나 취소하세요. 가져오면 따로 하나 더 생깁니다.`;
+  if (w.code === 'W-SAME-NAME') return `이름·단위가 같은 「${w.name}」(${w.level}) 업무 지도가 이미 있습니다. 같은 문서를 다시 가져오는 것이면 위에서 이름을 바꾸거나 취소하세요. 가져오면 따로 하나 더 생깁니다.`;
   if (w.code === 'W-MISSING-CHILD') return `이 업무 지도가 묶는 하위 업무 지도가 이 브라우저에 없습니다(${w.ids.join(', ')}). 가져와도 그 부분은 비어 보입니다.`;
   return messageFor(w);
 }
@@ -104,7 +104,7 @@ function parseErrorText(err) {
  */
 export function importDialog(o) {
   // aiRun: 「AI로 변환」 요청 번호. 창을 닫거나 글을 바꾸거나 탭을 옮기면 올려서, 늦게 온 응답을 버린다
-  const st = { tab: 'doc', docText: '', jsonText: '', result: null, message: '', aiRun: 0, aiBusy: false };
+  const st = { tab: 'doc', docText: '', jsonText: '', jsonFile: '', result: null, message: '', aiRun: 0, aiBusy: false };
   let aiLive = null; // 지금 그려진 「AI가 읽는 중」 안내 칸
   const cancelAi = () => { st.aiRun += 1; st.aiBusy = false; };
 
@@ -145,6 +145,18 @@ export function importDialog(o) {
       st.message = '';
     } catch {
       st.message = '파일을 읽지 못했습니다.';
+      render();
+      return;
+    }
+    if (key === 'jsonText') {
+      // FU9-7: JSON 파일은 고르는 즉시 미리 본다(「확인」을 또 누르지 않게). 파일 고르기 칸은 다시 그리지 않아 고른 파일 이름이 그대로 보인다
+      st.jsonFile = f.name;
+      const ta = o.dialog.querySelector('#import-json');
+      if (ta) ta.value = st.jsonText;
+      const nameEl = o.dialog.querySelector('[data-testid=import-json-name]');
+      if (nameEl) nameEl.textContent = `고른 파일: ${f.name}`;
+      runJson(true);
+      return;
     }
     render();
   }
@@ -216,7 +228,7 @@ export function importDialog(o) {
     if (st.result && typeof head.scrollIntoView === 'function') head.scrollIntoView({ block: 'start' }); // 작성 주체(필수) 칸이 보이도록 head부터(재검증)
   }
 
-  function runJson() {
+  function runJson(keepDom = false) {
     cancelAi();
     st.jsonText = o.dialog.querySelector('#import-json').value;
     const r = parseImportText(st.jsonText);
@@ -227,12 +239,19 @@ export function importDialog(o) {
       st.result = { from: 'json', doc: r.doc };
       st.message = '';
     }
+    if (keepDom === true) {
+      const msg = o.dialog.querySelector('[data-testid=import-message]');
+      if (msg) msg.textContent = st.message;
+      renderHead();
+      renderPreview();
+      return;
+    }
     render();
   }
 
   function doImport(preview) {
-    if (preview.same_name && !window.confirm(`이름·단위가 같은 업무 지도「${preview.same_name.name}」가 이미 있습니다. 그래도 하나 더 가져올까요?`)) return;
-    if (preview.conflict && !window.confirm(`같은 ID(${preview.conflict.id})의 업무 지도「${preview.conflict.name}」가 이미 있습니다. 덮어쓸까요? 덮어쓰면 그 업무 지도에 고친 내용은 사라집니다.`)) return;
+    if (preview.same_name && !window.confirm(`이름·단위가 같은 「${preview.same_name.name}」 업무 지도가 이미 있습니다. 그래도 하나 더 가져올까요?`)) return;
+    if (preview.conflict && !window.confirm(`같은 ID(${preview.conflict.id})의 「${preview.conflict.name}」 업무 지도가 이미 있습니다. 덮어쓸까요? 덮어쓰면 그 업무 지도에 고친 내용은 사라집니다.`)) return;
     const r = o.app.importUniverse(st.result.doc, { overwrite: !!preview.conflict });
     if (!r.ok) {
       st.message = r.error.code === 'E-DUP' ? '같은 ID의 업무 지도가 있어 가져오지 않았습니다.' : messageFor(r.error);
@@ -305,7 +324,7 @@ export function importDialog(o) {
         summary.append(el('dt', {}, '항목 수 기준'), el('dd', { 'data-testid': 'import-granularity' }, `월말 정산 수준(항목 ${min}~${max}개) — ${fit}`));
       }
       if (p.source) summary.append(el('dt', {}, '원문 위치가 적힌 항목'), el('dd', { 'data-testid': 'import-source' }, `항목 ${p.source.with}/${p.source.total}개`));
-      summary.append(el('dt', {}, '[미확인]·[가정] 표시'), el('dd', { 'data-testid': 'import-marks' }, `[미확인] 항목 ${p.marks.미확인}개, [가정] 항목 ${p.marks.가정}개`));
+      if (st.result.from === 'doc') summary.append(el('dt', {}, '[미확인]·[가정] 표시'), el('dd', { 'data-testid': 'import-marks' }, `[미확인] 항목 ${p.marks.미확인}개, [가정] 항목 ${p.marks.가정}개`)); // JSON 파일은 문서 변환용 표시가 없다(FU9-11)
       blocks.push(summary);
 
       // 작성 주체만 비어 있는 것은 실패가 아니라 "입력할 차례"다: 빨간 오류 대신 안내로 둔다(여섯 번째 검토 U-6). 가져오기 버튼은 그대로 막힌다
@@ -317,12 +336,12 @@ export function importDialog(o) {
           el('ul', {}, ...p.errors.slice(0, 8).map((e) => el('li', {}, errorText(e)))),
           p.errors.length > 8 ? el('p', {}, `외 ${p.errors.length - 8}건`) : null));
       }
-      if (p.conflict) blocks.push(el('p', { class: 'notice', 'data-testid': 'import-conflict' }, `같은 ID의 업무 지도「${p.conflict.name}」가 이미 있습니다. 가져오면 덮어쓸지 묻습니다.`));
+      if (p.conflict) blocks.push(el('p', { class: 'notice', 'data-testid': 'import-conflict' }, `같은 ID의 「${p.conflict.name}」 업무 지도가 이미 있습니다. 가져오면 덮어쓸지 묻습니다.`));
 
       const noEmp = p.warnings.filter((w) => w.code === 'W-NO-EMPNO').length;
       const notes = [
         ...(report ? report.notes.filter((n) => n.code !== 'C-AI-MODEL' && n.code !== 'C-AI-DROPPED').map(noteText) : []),
-        ...(noEmp ? [`사번 없는 사람 ${noEmp}명 — 원문에 사번이 없어 비워 두었습니다. 통합할 때 확인 목록에 오르고, 가져온 뒤 입력할 수 있습니다.`] : []),
+        ...(noEmp && st.result.from === 'doc' ? [`사번 없는 사람 ${noEmp}명 — 원문에 사번이 없어 비워 두었습니다. 통합할 때 확인 목록에 오르고, 가져온 뒤 입력할 수 있습니다.`] : []),
         ...p.warnings.filter((w) => w.code !== 'W-NO-EMPNO').map((w) => warningText(w, st.result.from)),
       ];
       if (notes.length) blocks.push(el('ul', { class: 'import-notes', 'data-testid': 'import-notes' }, ...notes.map((t) => el('li', {}, t))));
@@ -366,7 +385,11 @@ export function importDialog(o) {
       blocks.push(list);
       const memos = (doc.events || []).filter((e) => e && e.type === 'memo');
       if (memos.length) {
-        blocks.push(el('details', {}, el('summary', {}, `메모 ${memos.length}건(질문·리스크)`),
+        // 문서 변환은 질문·리스크 메모만 만든다. JSON 파일은 실제 분류 이름으로 센다(FU9-11)
+        const cats = new Map();
+        for (const m of memos) cats.set(memoCategoryOf(m.payload), (cats.get(memoCategoryOf(m.payload)) || 0) + 1);
+        const catText = [...cats].map(([c, n]) => `${MEMO_CATEGORIES[c] || c} ${n}`).join('·');
+        blocks.push(el('details', {}, el('summary', {}, st.result.from === 'json' ? `메모 ${memos.length}건(${catText})` : `메모 ${memos.length}건(질문·리스크)`),
           el('ul', { class: 'import-memos' }, ...memos.map((m) => el('li', { class: 'small' }, m.note || '')))));
       }
     }
@@ -400,7 +423,7 @@ export function importDialog(o) {
     const tab = (key, label) => el('button', { type: 'button', class: `tab${st.tab === key ? ' active' : ''}`, 'data-testid': `import-tab-${key}`, onclick: () => { cancelAi(); keepInputs(); st.tab = key; st.result = null; st.message = ''; render(); } }, label);
     const u = o.app.doc.universe;
     const exportBody = () => el('div', { class: 'editor' },
-      el('p', { class: 'muted small' }, '지금 연 업무 지도를 JSON 파일로 내려받습니다. 다른 PC에서 「JSON 파일」 탭으로 열면 그대로 이어서 쓸 수 있습니다. 브라우저 저장은 이 PC에만 남으므로, 시연 전후에 내려받아 두면 안전합니다.'),
+      el('p', { class: 'muted small' }, '지금 연 업무 지도를 JSON 파일로 내려받습니다. 다른 PC에서 「JSON 파일」 탭으로 열면 그대로 이어서 쓸 수 있습니다. 브라우저 저장은 이 PC에만 남으므로, 큰 수정을 한 뒤나 다른 PC로 옮기기 전에 내려받아 두면 안전합니다.'),
       el('dl', {}, el('dt', {}, '업무 지도'), el('dd', { 'data-testid': 'export-name' }, `${u.name} (${u.level})`), el('dt', {}, '파일 이름'), el('dd', {}, exportFileName(u))),
       el('div', { class: 'row' }, el('button', { type: 'button', class: 'primary', 'data-testid': 'export-download', onclick: () => o.onExport() }, 'JSON 파일로 내려받기'),
         o.onExportHtml ? el('button', { type: 'button', 'data-testid': 'export-html', onclick: (e) => o.onExportHtml(e.currentTarget) }, 'HTML 파일로 내려받기(내용 포함)') : null),
@@ -422,8 +445,9 @@ export function importDialog(o) {
           el('span', { class: 'muted small', 'data-testid': 'import-method-note' }, aiBtn ? '「읽어 보기」는 규칙으로, 「AI로 변환」은 Claude가 읽습니다(원문 인용이 확인된 항목만 담음). 결과는 미리 보기에서 사람이 확인합니다.' : '문서 변환은 규칙으로 읽습니다. 결과는 미리 보기에서 사람이 확인합니다.')),
         aiBtn ? aiLive : null)
       : el('div', { class: 'editor' },
-        el('p', { class: 'muted small' }, '「내보내기」로 저장한 업무 지도 파일(.json)이나, 개발 중 변환해 둔 업무 지도 파일을 엽니다.'),
+        el('p', { class: 'muted small' }, '「내보내기」로 저장한 업무 지도 파일(.json)을 엽니다. 파일을 고르면 바로 미리 보기가 열립니다.'),
         el('label', { class: 'file-pick' }, 'JSON 파일 열기 ', el('input', { type: 'file', accept: '.json,application/json', 'data-testid': 'import-json-file', onchange: (e) => readFile(e.target, 'jsonText') })),
+        el('p', { class: 'muted small', 'data-testid': 'import-json-name' }, st.jsonFile ? `고른 파일: ${st.jsonFile}` : ''),
         el('textarea', { id: 'import-json', rows: '6', 'aria-label': 'JSON 내용', placeholder: '또는 JSON 내용을 붙여 넣으세요' }, st.jsonText),
         el('div', { class: 'row' }, el('button', { type: 'button', class: 'primary', 'data-testid': 'import-check', onclick: runJson }, '확인')));
 
@@ -431,6 +455,7 @@ export function importDialog(o) {
       el('div', { class: 'import-head' },
         el('h2', { id: 'import-title' }, o.onExport ? '가져오기·내보내기' : '가져오기'),
         el('button', { type: 'button', 'data-testid': 'import-close', onclick: () => o.dialog.close() }, '닫기')),
+      ...(st.tab === 'doc' ? [el('p', { class: 'muted small', 'data-testid': 'import-json-hint' }, '내보내기로 받아 둔 .json 파일은 「JSON 파일」 탭에서 엽니다.')] : []), // FU9-10 (replaceChildren은 null을 글자로 넣는다)
       el('div', { class: 'tabs' }, tab('doc', '문서 붙여넣기(읽어 보기)'), tab('json', 'JSON 파일'), o.onExport ? tab('export', '내보내기') : null, o.folder && o.onExport ? tab('folder', '폴더 연결') : null),
       body,
       el('p', { class: 'error-text', 'data-testid': 'import-message', 'aria-live': 'polite' }, st.message),

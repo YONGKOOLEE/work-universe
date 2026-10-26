@@ -12,8 +12,8 @@ export function renderBackupNudge(slot, advice, { onExport, onClose }) {
     return;
   }
   const why = advice.reason === 'count'
-    ? `바뀐 것이 ${advice.changes}건으로 ${BACKUP_CHANGES}건을 넘었습니다.`
-    : `마지막 내보내기 뒤 ${advice.days}일이 지났고(${BACKUP_DAYS}일 기준) 바뀐 것이 ${advice.changes}건 있습니다.`;
+    ? `아직 파일로 받아 두지 않은 변경 ${advice.changes}건(${BACKUP_CHANGES}건을 넘었습니다) — 「내보내기」로 받아 두세요.`
+    : `마지막 내보내기 뒤 ${advice.days}일이 지났고(${BACKUP_DAYS}일 기준) 아직 파일로 받아 두지 않은 변경 ${advice.changes}건이 있습니다 — 「내보내기」로 받아 두세요.`;
   slot.replaceChildren(
     el('strong', {}, '내보내기를 권합니다'), ` — ${why} 브라우저 저장소가 지워지면 되돌릴 수 없어, 지금 업무 지도를 파일로 내려받아 두세요. `,
     el('button', { type: 'button', class: 'primary', 'data-testid': 'backup-export', onclick: onExport }, '지금 내보내기'), ' ',

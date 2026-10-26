@@ -41,25 +41,26 @@ export function renderWorkspaceNav(nav, o) {
 }
 
 /** 목록 상자 하나: 제목(개수) + 줄들. total이 null이면 셀 수 없음, 0이면 없음 문구 */
-function listBox(testid, title, { total, rows, unit, lack, none, more }, rowEl) {
+function listBox(testid, title, { total, rows, unit, lack, none, more, onMore }, rowEl) {
   const head = total === null ? `${title} — ${lack}` : total === 0 ? `${title} — ${none}` : `${title} ${total}${unit}`;
   return el('div', { class: 'ws-list', 'data-testid': testid, 'data-total': total === null ? '' : String(total) },
     el('p', { class: 'small' }, el('strong', {}, head)),
     rows.length ? el('ul', { class: 'ws-rows' }, ...rows.map(rowEl)) : null,
-    total !== null && total > rows.length ? el('p', { class: 'muted small' }, `외 ${total - rows.length}${unit} — ${more}`) : null);
+    // 나머지는 눌러서 바로 그 탭으로 간다(FU9-16: 글만 있어 어디를 눌러야 할지 몰랐음)
+    total !== null && total > rows.length ? el('p', { class: 'muted small' }, `외 ${total - rows.length}${unit} — `, onMore ? el('button', { type: 'button', class: 'link', 'data-testid': `${testid}-more`, onclick: onMore }, more) : more) : null);
 }
 
 const pick = (onSelect, gid, text, testid) => el('button', { type: 'button', class: 'link', 'data-testid': testid, 'data-gid': gid, title: '이 항목의 카드를 엽니다', onclick: () => onSelect(gid) }, text);
 
 /** 인수인계 공간: 담당 공백 업무(최대 5) */
-export function gapBox(g, onSelect) {
-  return listBox('ws-gaps', '담당 공백 업무', { ...g, unit: '개', lack: '담당 기록이 부족해 셀 수 없음', none: '없음', more: '「매주 점검」의 인사이트 「밀집·공백」 탭에서 모두 봅니다' },
+export function gapBox(g, onSelect, onMore) {
+  return listBox('ws-gaps', '담당 공백 업무', { ...g, onMore, unit: '개', lack: '담당 기록이 부족해 셀 수 없음', none: '없음', more: '「매주 점검」의 인사이트 「밀집·공백」 탭에서 모두 봅니다' },
     (r) => el('li', { 'data-testid': 'ws-gap-row' }, pick(onSelect, r.gid, r.label, 'ws-gap-pick'), el('span', { class: 'muted small' }, ` ${r.text}`)));
 }
 
 /** 인수인계 공간·매주 점검(묶지 않은 지도): 혼자만 아는 일 상위 5 */
-export function soloBox(sg, onSelect) {
-  return listBox('ws-solo', '혼자만 아는 일', { ...sg, unit: '개', lack: '담당 기록이 부족해 셀 수 없음', none: '없음', more: '「매주 점검」의 인사이트 「인수인계 위험」 탭에서 모두 봅니다' },
+export function soloBox(sg, onSelect, onMore) {
+  return listBox('ws-solo', '혼자만 아는 일', { ...sg, onMore, unit: '개', lack: '담당 기록이 부족해 셀 수 없음', none: '없음', more: '「매주 점검」의 인사이트 「인수인계 위험」 탭에서 모두 봅니다' },
     (r) => el('li', { 'data-testid': 'ws-solo-row', 'data-level': r.level },
       pick(onSelect, r.work_gid, r.work, 'ws-solo-pick'), el('span', { class: 'muted small' }, ' — '),
       // 사람 이름은 눌러서 그 사람 카드를 연다(R11 FU6-8: 위험 목록에서 바로 연락처·맡은 업무를 보게)
@@ -68,8 +69,8 @@ export function soloBox(sg, onSelect) {
 }
 
 /** 매주 점검(묶지 않은 지도): 일이 몰린 사람 상위 5 */
-export function denseBox(dg, onSelect) {
-  return listBox('ws-dense', '일 몰린 사람', { ...dg, unit: '명', lack: '담당 기록이 부족해 셀 수 없음', none: '없음', more: '「밀집·공백」 탭에서 모두 봅니다' },
+export function denseBox(dg, onSelect, onMore) {
+  return listBox('ws-dense', '일 몰린 사람', { ...dg, onMore, unit: '명', lack: '담당 기록이 부족해 셀 수 없음', none: '없음', more: '「밀집·공백」 탭에서 모두 봅니다' },
     (r) => el('li', { 'data-testid': 'ws-dense-row' }, pick(onSelect, r.gid, r.label, 'ws-dense-pick'), el('span', { class: 'muted small' }, ` 지금 맡은 업무 ${r.count}개`)));
 }
 

@@ -327,7 +327,7 @@ test('R20-7 개수 줄: 연결이 닿지 않는 지도의 항목은 세지 않�
   assert.equal(d.q('text-add-count').textContent, '넣을 항목 0개(새로 만듦)·연결 0개');
   assert.equal(d.q('text-add-check-note').textContent, '지도에 있는 두 항목 사이에 새로 넣을 연결이 없습니다'); // R21-3: 단추를 눌렀는데 체크된 연결이 없는 이유
   d.q('text-add-save').click();
-  assert.equal(d.q('text-add-message').textContent, '넣을 항목이 없습니다. 항목을 체크하세요.');
+  assert.equal(d.q('text-add-message').textContent, '넣을 것이 없습니다. 항목이나 연결을 체크하세요.');
 }));
 
 test('R20-3 화면: Claude 읽기에서 부정이 든 원문 문장의 연결은 상태 칸에 확인 이유가 보이고 체크되어 있지 않다', withDom(async () => {
@@ -340,5 +340,5 @@ test('R20-3 화면: Claude 읽기에서 부정이 든 원문 문장의 연결은
   assert.match(d.q('text-add-edge-status-0').textContent, /^넣지 않음 · 원문 문장에 부정·조건 등이 있어 확인 필요\(.+\)$/);
   assert.equal(d.q('text-add-edge-status-0').dataset.state, 'hold');
   d.q('text-add-save').click();
-  assert.equal(d.q('text-add-message').textContent, '넣을 항목이 없습니다. 항목을 체크하세요.');
+  assert.equal(d.q('text-add-message').textContent, '넣을 것이 없습니다. 항목이나 연결을 체크하세요.');
 }));

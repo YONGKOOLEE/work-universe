@@ -30,8 +30,11 @@ export const LINK_KEYS = TABLE_COLUMNS.filter((c) => c.link).map((c) => c.key);
 const KEYS = TABLE_COLUMNS.map((c) => c.key);
 const squash = (s) => String(s).replace(/\s+/g, '');
 
+// 입력 별칭(FU9-1): 메뉴 이름이 「사람·업무·문서 추가」라 「문서」라고 쓰는 사람이 많다. 저장은 기존 산출물 유형 그대로
+const TYPE_ALIASES = [['문서', 'artifact'], ['파일', 'artifact'], ['보고서', 'artifact'], ['자료', 'artifact'], ['서류', 'artifact'], ['산출', 'artifact']];
 const TYPE_BY_NAME = new Map([
   ...Object.entries(NODE_TYPES).filter(([k]) => k !== 'root').flatMap(([k, name]) => [[name, k], [k, k]]),
+  ...TYPE_ALIASES,
 ]);
 
 /** 유형 칸 글 → core_type. 모르면 null, 비었으면 '' */

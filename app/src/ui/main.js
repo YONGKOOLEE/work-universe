@@ -192,7 +192,7 @@ function wireCreateDialog(app, $, getAuthorName = () => undefined) {
     }
     if (starter.work.trim()) input.starter = starter;
     const same = input.name.trim() && input.level.trim() ? app.findSameUniverse(input.name, input.level) : null;
-    if (same && !window.confirm(`같은 이름·단위의 업무 지도「${same.name}」(${same.level})가 이미 있습니다. 그래도 새로 만들까요?`)) return;
+    if (same && !window.confirm(`같은 이름·단위의 「${same.name}」(${same.level}) 업무 지도가 이미 있습니다. 그래도 새로 만들까요?`)) return;
     const r = app.createUniverse(input);
     if (!r.ok) {
       // 작성 주체가 비면 쓸 말을 알려 준다(점검 3회차). 오류 코드(E-REQUIRED)와 만들지 않는 동작은 그대로(R-12 ②)
@@ -1503,6 +1503,8 @@ function start() {
     const r = app.hideNode(node.id);
     if (!r.ok) return window.alert(messageFor(r.error));
     afterSave(r, null);
+    if (exploreNote) { exploreNote = null; renderExploreStatus(); } // 숨긴 항목을 가리키던 「찾음: …」 표시는 지운다(FU9-8)
+    notify('hidden-done', { label: node.label });
   }
 
   // 연결·이력이 없는 노드(막 만든 실수 노드)는 바로 지운다. 그 밖의 노드는 숨긴 뒤 「숨긴 노드」 목록에서 완전히 삭제한다(CR-13 D)
@@ -1705,7 +1707,9 @@ function start() {
           const r = app.restoreNode(id);
           if (r.ok) {
             hiddenOpen = false;
+            const back = app.findNode(id);
             afterSave(r, toGid(currentId(), id));
+            notify('confirm', { text: `「${back ? back.label : ''}」${josa(back ? back.label : '', '을/를')} 되살렸습니다.`, nodeGid: toGid(currentId(), id) }); // FU9-8
           }
           return r;
         },
@@ -2052,8 +2056,8 @@ function start() {
       draft: () => el('div', { class: 'row' }, el('button', { type: 'button', class: 'primary', 'data-testid': 'btn-draft-universe', onclick: () => openDraft(rootGid) }, '인수인계 초안 만들기')),
       // 묶은 지도에서는 담당을 넘길 수 없다(업무가 하위 지도에 있다) — 그 지도를 열어서 하라고 안내(R11 RV11-5)
       'assignee-hint': () => el('p', { class: 'muted small', 'data-testid': 'handover-assignee-hint' }, grouped ? '담당을 넘기려면 그 업무가 있는 팀·업무 지도를 열어서 하세요' : '업무 하나의 담당만 바꾸려면 그래프에서 업무를 고른 뒤 「담당 넘기기」'),
-      gaps: () => gapBox(gapWorkRows(view, { asOf: asOfDate, n }), pickGid),
-      solo: () => soloBox(soloRows(view, { asOf: asOfDate }), pickGid),
+      gaps: () => gapBox(gapWorkRows(view, { asOf: asOfDate, n }), pickGid, () => openInsight('', 'density')),
+      solo: () => soloBox(soloRows(view, { asOf: asOfDate }), pickGid, () => openInsight('', 'risk')),
       docs: () => docsBox(recentHandoverDocs(view), pickGid),
       // 묶은 지도 「매주 점검」 → 통합 확인 대기가 있으면 「지도 관리」로 가는 한 줄(FU7-12). 배지 규칙은 그대로
       'merge-link': () => {
@@ -2062,7 +2066,7 @@ function start() {
         return el('p', { class: 'notice small', 'data-testid': 'check-merge-link' }, `통합 확인할 것 ${plan.counts.pending}건 `,
           el('button', { type: 'button', class: 'link', 'data-testid': 'check-merge-go', title: '「지도 관리」의 통합 확인 목록으로 갑니다', onclick: () => goSpace('edit') }, '→ 지도 관리'));
       },
-      'map-risk': () => [soloBox(soloRows(view, { asOf: asOfDate }), pickGid), denseBox(denseRows(view, { asOf: asOfDate, n }), pickGid), gapBox(gapWorkRows(view, { asOf: asOfDate, n }), pickGid)],
+      'map-risk': () => [soloBox(soloRows(view, { asOf: asOfDate }), pickGid, () => openInsight('', 'risk')), denseBox(denseRows(view, { asOf: asOfDate, n }), pickGid, () => openInsight('', 'density')), gapBox(gapWorkRows(view, { asOf: asOfDate, n }), pickGid, () => openInsight('', 'density'))],
       'group-hint': () => el('p', { class: 'muted small', 'data-testid': 'check-ungrouped-note' }, '지난 점검과 비교하고 저장하는 매주 점검은 팀·부서로 묶은 지도에서 합니다 → 「지도 관리」의 「업무 지도 묶기」'),
       insight: () => insightRow(),
       'add-open': () => el('div', { class: 'row' }, el('button', { type: 'button', 'data-testid': 'goal-add-open', title: '화면 아래의 「사람·업무·문서 추가」를 펼칩니다', onclick: openAddForm }, '사람·업무·문서 추가'), el('span', { class: 'muted small' }, '하나씩 · 표로 · 글로 추가')),
@@ -2133,6 +2137,7 @@ function start() {
   function goNotice(g) {
     if (g.type === 'history') showHistory(g.nodeGid, g.gids);
     else if (g.type === 'node') focus(g.nodeGid);
+    else if (g.type === 'hidden') { rememberOpener(); hiddenOpen = true; renderPanel(); } // 숨긴 항목 목록(되살리기)
     else if (g.type === 'space') {
       goSpace(g.space);
       if (g.merge && app.mergePlan()) openMerge();
@@ -2206,6 +2211,13 @@ function start() {
   function runNodeFeature(action) {
     if (action === 'assignee') return openDetailBox('assignee-change');
     if (action === 'collab') return openDetailBox('collab-quick');
+    if (action === 'hide') { // 「⋯」 메뉴를 열어 「숨기기」를 강조한다(FU9-24)
+      const menu = $('detail').querySelector('details.more-tools');
+      if (menu) menu.open = true;
+      const btn = $('detail').querySelector('[data-testid=btn-hide]');
+      if (btn) { flash(btn); focusSoft(btn); }
+      return undefined;
+    }
     editing = { kind: action === 'event' ? 'event' : action === 'edge' ? 'edge' : 'node' };
     renderPanel();
     $('detail').parentElement.scrollTop = 0;
@@ -2878,10 +2890,11 @@ function start() {
     app,
     onSaved: (r) => {
       const last = r.created[r.created.length - 1] || r.updated[r.updated.length - 1];
-      afterSave(r, last ? toGid(currentId(), last.id) : selected);
+      // 새로 넣은 표는 마지막 항목 카드 대신 지도 전체(선택 없음)로 두고 알림에 개수를 알린다(FU9-12)
+      afterSave(r, r.created.length ? null : (last ? toGid(currentId(), last.id) : selected));
       renderAddForm(r.summary || `표에서 ${r.created.length}개를 추가하고 ${r.updated.length}개를 고쳤습니다.`); // 연결 칸을 썼으면 연결 요약(CR-13 C)
       const lastNew = r.created[r.created.length - 1];
-      if (lastNew) notify('table-add', { count: r.created.length, summary: r.summary || '', nodeGid: toGid(currentId(), lastNew.id), core: lastNew.core_type });
+      if (lastNew) notify('table-saved', { count: r.created.length, summary: r.summary || '' });
       else notify('table-edit', { summary: r.summary || `표에서 ${r.updated.length}개를 고쳤습니다.`, nodeGid: last ? toGid(currentId(), last.id) : '' });
     },
   });
@@ -3133,6 +3146,10 @@ function start() {
         onClose: () => helpBox.close(),
       }));
       if (!helpBox.open) helpBox.showModal();
+      // 처음 열면 맨 위부터 읽게 하고 초점은 제목에 둔다(FU9-27: 아래 단추에 초점이 가 중간부터 열리던 것)
+      helpBox.scrollTop = 0;
+      const title = helpBox.querySelector('#help-title');
+      if (title) title.focus({ preventScroll: true });
     });
   }
 
@@ -3158,6 +3175,8 @@ function start() {
     const strip = groupedStrip(app.mergePlan(), { name: app.doc.universe.name, auto: doneAuto });
     notify('group', { text: strip.text, pending: strip.pending });
   } else if (doneFlag === 'import') {
+    // FU9-5: 가져온 판은 이미 파일이 있는 판이므로 아직 받아 두지 않은 변경은 가져온 뒤부터 0건으로 센다
+    if (storage && !app.readOnly) { settings.backupDismissedAt = nowIso(); saveSettings(storage, settings); showBackupNudge(); }
     notify('import', { name: app.doc.universe.name, nodes: describeUniverse(view).node_total });
   }
   if (tour && tourId && scenarioOf(tourId).universeId === currentId()) {

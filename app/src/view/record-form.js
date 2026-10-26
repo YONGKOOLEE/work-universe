@@ -159,6 +159,10 @@ export function successNotice(kind, d) {
       return { testid: 'add-one-done', text: `${d.count > 1 ? `${d.count}개 추가` : '1개 추가'} · 「${d.label}」${d.extra ? ` ${d.extra}` : ''}`, goto: node(d.nodeGid), goLabel: d.core === 'work' ? '업무 보기' : '' };
     case 'table-add': // 표로 추가·글로 추가
       return { testid: 'table-add-done', text: `${d.count}개 추가${d.summary ? ` · ${d.summary}` : ''}`, goto: node(d.nodeGid), goLabel: d.core === 'work' ? '업무 보기' : '' };
+    case 'hidden-done': // 항목 숨기기 뒤(FU9-8): 되살리는 길을 알리고 숨긴 항목 목록으로 바로 간다
+      return { testid: 'hidden-done', text: `「${d.label}」${josa(d.label, '을/를')} 숨겼습니다 — 되살리기는 「지도 관리」의 「숨긴 항목」에서 합니다.`, goto: { type: 'hidden' }, goLabel: '되살리기', long: true };
+    case 'table-saved': // 표로 추가 저장 뒤(FU9-12): 지도 전체를 그대로 두고 개수만 알린다
+      return { testid: 'table-add-done', text: `${d.count}개를 넣었습니다${d.summary ? ` · ${d.summary}` : ''}`, goto: null };
     case 'table-edit':
       return { testid: 'table-add-done', text: d.summary || '표에서 고친 내용을 저장했습니다.', goto: node(d.nodeGid) };
     case 'import':

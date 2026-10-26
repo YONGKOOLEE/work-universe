@@ -138,6 +138,7 @@ const PLAIN_PERSON_RE = /^[가-힣]{3}$/;
 /** 규칙 한 줄 설명(화면 도움말·단위 테스트용). 읽는 모양 표 */
 export const TEXT_PATTERN_DOC = Object.freeze([
   { id: 'perform_sv', relation: 'performs', shape: 'X(이/가/은/는) Y(을/를) 맡는다·맡고 있다·담당한다·처리한다·진행한다 (현재형만)', example: '서하늘이 대사 확인을 맡는다' },
+  { id: 'perform_ws', relation: 'performs', shape: 'Y(은/는) X(이/가) 맡는다·담당한다·처리한다·진행한다 (현재형만, 대상이 앞)', example: '대사 확인은 서하늘이 맡는다' },
   { id: 'perform_vs', relation: 'performs', shape: 'Y 담당(은/는/:) X (X 뒤는 문장 끝이나 「이다」뿐)', example: '대사 확인 담당: 서하늘' },
   { id: 'produce', relation: 'produces', shape: 'Y(에서/으로/로) Z(을/를) 만든다·작성한다·산출한다·낸다', example: '보고에서 월말 정산 보고서를 만든다' },
   { id: 'precedes_a', relation: 'precedes', shape: 'Y(이/가) 끝나면·끝난 뒤·다음에·뒤에·후에 Z', example: '대사 확인이 끝나면 보고를 한다' },
@@ -145,6 +146,7 @@ export const TEXT_PATTERN_DOC = Object.freeze([
   { id: 'belongs_a', relation: 'belongs_to', shape: 'X(은/는) T 소속 · T 소속 X(T가 팀·실·부·과·센터·본부로 끝날 때)', example: '도하람은 감사팀 소속이다' },
   { id: 'belongs_b', relation: 'belongs_to', shape: 'T의 X(T가 팀·실·부·과·센터·본부로 끝날 때) — 같은 문장에 다른 모양(맡는다 등)이 함께 있어야 한다', example: '감사팀의 도하람이 보고를 맡는다' },
   { id: 'reference', relation: 'references', shape: 'X에게 공유·문의·협업·보고·전달 (그 문장의 업무가 하나일 때, 없으면 바로 앞 문장이 읽혔고 업무가 하나일 때, 또는 「X에게 <지도에 있는 업무 이름> 결과·내용·현황을 공유한다」)', example: '서하늘이 보고를 맡는다. 도하람에게 결과를 공유한다' },
+  { id: 'reference_doc', relation: 'references', shape: 'Y에서 Z(을/를) 참고한다·참조한다 (Z가 지침·보고서·양식처럼 문서로 끝날 때)', example: '대사 확인에서 처리 지침을 참고한다' },
   { id: 'emp_no', relation: null, shape: '이름(V-1234) → 사번이 있는 사람', example: '서하늘(V-1003)이 대사 확인을 맡는다' },
 ]);
 
@@ -644,6 +646,48 @@ function runPerformSV(sc) {
   return undefined;
 }
 
+/** FU9-3: 「A는 X가 맡는다·담당한다」 — 대상(업무)이 앞에서 은/는, 사람이 이/가, 목적어(을/를) 없이 동사 */
+function runPerformWS(sc) {
+  const { T } = sc;
+  for (let i = 2; i < T.length; i += 1) {
+    if (!TEXT_WORDS.performVerb.test(T[i].core) || OBJ.has(T[i - 1].josa)) continue;
+    const pj = T[i - 1].josa;
+    if (pj !== '이' && pj !== '가') continue;
+    const k = i - 2;
+    if (T[k].josa !== '은' && T[k].josa !== '는') continue;
+    if (!performOk(T, i)) { sc.miss(); continue; }
+    const who = personSpec(T[i - 1], sc);
+    const ys = backStart(T, k, TEXT_LIMITS.nameTokens);
+    const what = workSpec(phraseOf(T, ys, k));
+    if (!who || !what) { sc.miss(); continue; }
+    sc.edge(sc.node(who), sc.node(what), 'performs');
+    sc.use(ys, i);
+  }
+  return undefined;
+}
+
+const REFERENCE_DOC_SUFFIXES = ['지침', '규정', '매뉴얼', '가이드', '규칙', '기준'];
+
+/** FU9-3: 「A에서 B를 참고한다」 — 업무 A가 문서(산출물처럼 끝나는 이름) B를 참조한다 */
+function runReferenceDoc(sc) {
+  const { T } = sc;
+  for (let v = 2; v < T.length; v += 1) {
+    if (!/^(?:참고|참조)/.test(T[v].core) || !OBJ.has(T[v - 1].josa)) continue;
+    if (!/^(?:참고|참조)(?:한다|합니다|해요|하고|하며)$/.test(T[v].core)) { sc.miss(); continue; }
+    const oe = v - 1;
+    let k = oe - 1;
+    while (k >= 0 && bare(T[k]) && !isClauseVerb(T[k]) && oe - k <= TEXT_LIMITS.nameTokens) k -= 1;
+    if (k < 0 || isClauseVerb(T[k]) || !(T[k].josa === '에서' || T[k].josa === '에서는') || oe - k > TEXT_LIMITS.nameTokens) { sc.miss(); continue; }
+    const ys = backStart(T, k, TEXT_LIMITS.nameTokens);
+    const from = workSpec(phraseOf(T, ys, k));
+    const bp = phraseOf(T, k + 1, oe);
+    if (!from || !bp || hasDemonstrative(bp.label) || !(looksArtifact(bp.label) || endsWithAny(bp.label, REFERENCE_DOC_SUFFIXES))) { sc.miss(); continue; }
+    sc.edge(sc.node(from), sc.node({ type: 'artifact', label: bp.label, ...(bp.alts.length ? { alts: bp.alts } : {}) }), 'references');
+    sc.use(ys, v);
+  }
+  return undefined;
+}
+
 function runPerformVS(sc) {
   const { T } = sc;
   for (let i = 1; i < T.length - 1; i += 1) {
@@ -892,6 +936,7 @@ function runEmpNo(sc) {
 /** 읽는 모양 표. 순서가 곧 읽는 순서다(참조는 같은 문장의 업무를 먼저 알아야 하므로 맨 뒤쪽) */
 export const TEXT_PATTERNS = Object.freeze([
   { id: 'perform_sv', run: runPerformSV },
+  { id: 'perform_ws', run: runPerformWS },
   { id: 'perform_vs', run: runPerformVS },
   { id: 'produce', run: runProduce },
   { id: 'precedes_a', run: runPrecedesA },
@@ -899,6 +944,7 @@ export const TEXT_PATTERNS = Object.freeze([
   { id: 'belongs_a', run: runBelongsA },
   { id: 'belongs_b', run: runBelongsB },
   { id: 'reference', run: runReference },
+  { id: 'reference_doc', run: runReferenceDoc },
   { id: 'emp_no', run: runEmpNo },
 ]);
 

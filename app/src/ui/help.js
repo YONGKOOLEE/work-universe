@@ -16,6 +16,14 @@ export const HELP_SPACES = [
 ];
 // 메뉴 옆 숫자 배지의 뜻(R11 FU6-16)
 export const HELP_SPACES_BADGE = '메뉴 옆 숫자: 「기록」은 미해결 건수, 「매주 점검」은 혼자만 아는 일 개수입니다(0이면 숫자가 없습니다).';
+// 실수했을 때(FU9-28): 되돌리는 길 넷을 한곳에
+export const HELP_MISTAKES_TITLE = '실수했을 때';
+export const HELP_MISTAKES = [
+  { term: '항목을 숨겼다', desc: '「지도 관리」의 「숨긴 항목」에서 「되살리기」를 누릅니다.' },
+  { term: '고치기 전으로', desc: '「지도 관리」의 「편집 되감기」에서 그 시점으로 돌아갑니다(묶은 지도에서는 쓸 수 없고, 하위 업무 지도를 열어서 합니다).' },
+  { term: '통합 확인 답을 바꾸기', desc: '「통합 확인」에서 고른 답 옆의 「다시 묻기」를 누릅니다.' },
+  { term: '모두 처음으로', desc: '「가상 데이터 초기화」는 만든 지도까지 전부 지웁니다. 먼저 내보내기로 파일을 받아 두세요.' },
+];
 export const HELP_TERMS_TITLE = '용어';
 export const HELP_TERMS = [
   { term: '업무 지도', desc: '업무와 담당자·문서가 어떻게 이어지는지 그린 지도 한 장입니다.' },
@@ -45,7 +53,7 @@ export const HELP_CLOSE_LABEL = '닫기';
 
 /** 도움말 글에 나오는 「…」 이름 목록(화면에 실제로 있는 이름과 맞는지 단위 테스트가 확인) */
 export function helpTexts() {
-  return [HELP_INTRO, HELP_SPACES_BADGE, ...HELP_SPACES.map((t) => t.desc), ...HELP_TERMS.map((t) => t.desc), ...HELP_GEN.map((t) => t.desc), ...HELP_SECURITY.map((t) => t.desc), HELP_TOUR_LABEL, HELP_CLOSE_LABEL];
+  return [HELP_INTRO, HELP_SPACES_BADGE, ...HELP_SPACES.map((t) => t.desc), ...HELP_MISTAKES.map((t) => t.desc), ...HELP_TERMS.map((t) => t.desc), ...HELP_GEN.map((t) => t.desc), ...HELP_SECURITY.map((t) => t.desc), HELP_TOUR_LABEL, HELP_CLOSE_LABEL];
 }
 
 /**
@@ -55,11 +63,13 @@ export function helpTexts() {
 export function helpPanel(o) {
   const list = (items, testid, attrs = {}) => el('dl', { 'data-testid': testid, ...attrs }, ...items.flatMap((t) => [el('dt', {}, t.term), el('dd', {}, t.desc)]));
   return el('div', { 'data-testid': 'help-content' },
-    el('h2', { id: 'help-title' }, HELP_TITLE),
+    el('h2', { id: 'help-title', tabindex: '-1' }, HELP_TITLE),
     el('p', { 'data-testid': 'help-intro' }, HELP_INTRO),
     el('h3', {}, HELP_SPACES_TITLE),
     list(HELP_SPACES, 'help-spaces'),
     el('p', { class: 'muted small', 'data-testid': 'help-badge' }, HELP_SPACES_BADGE),
+    el('h3', {}, HELP_MISTAKES_TITLE),
+    list(HELP_MISTAKES, 'help-mistakes'),
     el('h3', {}, HELP_TERMS_TITLE),
     list(HELP_TERMS, 'help-terms'),
     // 문장 생성 방식 3항목은 처음에는 접어 둔다(도움말을 길게 만들지 않으려고)
