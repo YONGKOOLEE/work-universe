@@ -135,7 +135,9 @@ export function startScreen(o) {
       ...previewLines().map((l) => el('i', { class: 'pv-line', style: `left:${l.left}px;top:${l.top}px;width:${l.length}px;transform:rotate(${l.angle}deg)` })),
       ...PREVIEW_NODES.map(dot)),
     el('div', { class: 'pv-cards', 'data-testid': 'start-preview-cards' }, ...PREVIEW_CARDS.map((c) => el('div', { class: 'pv-card' },
-      el('b', { style: `width:${c.title}%` }), ...c.lines.map((w) => el('u', { style: `width:${w}%` }))))));
+      el('b', { style: `width:${c.title}%` }), ...c.lines.map((w) => el('u', { style: `width:${w}%` }))))),
+    // 그림임을 눈으로도 알린다(R12 FU7-11: 메뉴처럼 보여 눌러 보는 사람이 있었다). 칸을 차지하지 않는 작은 표시
+    el('span', { class: 'pv-tag', 'data-testid': 'start-preview-tag', 'aria-hidden': 'true' }, '화면 미리 보기 · 그림'));
 
   // 「더 보기」 하나: 작은 단추(바로 시작)·용어·처음 순서·샘플 목록. 기본 접힘이라 첫 화면의 선택은 세 갈래뿐이다
   const more = () => el('details', { class: 'start-more', 'data-testid': 'start-more' }, el('summary', {}, '더 보기'),

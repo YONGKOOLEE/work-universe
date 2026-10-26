@@ -13,7 +13,8 @@ export const HISTORY_COLLAPSE_OVER = 15; // 이 수를 넘을 때만 접는다(�
 // justAdded: 방금 기록한 이벤트 전역 ID들(CR-21 B-1). 그 줄에 data-just-added를 달아 강조한다
 function historyItem(h, justAdded) {
   const attrs = { ...(h.after ? { class: 'after', title: '기준일 이후의 이력' } : {}), 'data-ev-gid': h.gid, ...(justAdded && justAdded.includes(h.gid) ? { 'data-just-added': '1' } : {}) };
-  return el('li', attrs, el('time', {}, h.date), el('span', { class: 'chip' }, h.type_label), el('span', { class: 'text' }, h.text));
+  // 종류 칩과 같은 글이면 한쪽만(R12 FU7-14: 「생성 / 생성」 반복)
+  return el('li', attrs, el('time', {}, h.date), el('span', { class: 'chip' }, h.type_label), h.text === h.type_label ? null : el('span', { class: 'text' }, h.text));
 }
 
 function historyList(items, justAdded = null) {

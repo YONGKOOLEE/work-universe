@@ -149,13 +149,16 @@ export function historyRows(history, openGids = null) {
  * 이력 표 거르기: 범주(전체면 거르지 않음) · 기간(올해·작년·전체, today의 해 기준) · 찾기 글(내용·범주·날짜에서 부분 일치, 대소문자 무시)
  * @param {{group?:string, period?:string, q?:string}} f
  */
+// 지도 전체 기록 표 줄(fields가 있는 줄)의 찾기: 기록 찾기(view/recent-records.js)와 같은 규칙 — 조각마다 따로, 대소문자·공백 무시(R12 RV12C-4)
+const matchFields = (fields, q) => { const w = String(q ?? '').replace(/\s+/g, ''); return !w || fields.some((x) => String(x ?? '').toLowerCase().replace(/\s+/g, '').includes(w)); };
+
 export function filterHistory(rows, f = {}, today = '') {
   const group = HISTORY_GROUPS.includes(f.group) ? f.group : '';
   const year = Number(String(today).slice(0, 4)) || 0;
   const want = f.period === '올해' ? String(year) : f.period === '작년' ? String(year - 1) : '';
   const q = String(f.q || '').trim().toLowerCase();
   return rows.filter((r) => (!group || r.group === group) && (!want || String(r.date).startsWith(want))
-    && (!q || `${r.text} ${r.type_label} ${r.status} ${r.date} ${r.target || ''}`.toLowerCase().includes(q)));
+    && (!q || (Array.isArray(r.fields) ? matchFields(r.fields, q) : `${r.text} ${r.type_label} ${r.status} ${r.date} ${r.target || ''}`.toLowerCase().includes(q))));
 }
 
 /**

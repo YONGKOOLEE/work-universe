@@ -453,7 +453,21 @@ function start() {
     const g = toGid(currentId(), id);
     const linked = view.edges.some((e) => !e.hidden && (e.source === g || e.target === g));
     const used = view.events.some((e) => e.type !== 'created' && e.node_gids.includes(g));
-    if (!linked && !used) app.hideNode(id);
+    if (linked || used) return;
+    const r = app.hideNode(id);
+    // 숨긴 뒤에는 평소 저장 뒤와 같은 후처리(afterSave와 같은 refresh + 폴더 거울) — 그래프·카드에 숨긴 사람이 남지 않게(R12 RV12C-2). 따라 하기의 「저장함」 표시(tourSaved)는 건드리지 않는다
+    if (r && r.ok) {
+      refresh();
+      if (folder) folder.mirror();
+    }
+  }
+  // 초안 화면이 끝나는 모든 길의 공통 정리(R12 RV12C-1): 닫기·Esc 말고 다른 항목 고르기·공간 메뉴·인사이트/미해결/통합 확인/설정/되감기 열기 같은 길에서도
+  // 「인수인계서까지」로 먼저 만든 사람(확정 안 함)이 연결 0개로 남지 않게 한다. 확정(onConfirm)은 사람이 쓰이므로 이 함수를 쓰지 않는다
+  function closeDraft() {
+    if (!drafting) return;
+    const id = drafting.createdPerson;
+    drafting = null;
+    dropUnusedPerson(id);
   }
   function closeSidePanel() {
     if (histTable) closeHistTable();
@@ -462,10 +476,8 @@ function start() {
     else if (insight) insight = null;
     else if (merging) merging = false;
     else if (settingsOpen) settingsOpen = false;
-    else if (drafting) {
-      dropUnusedPerson(drafting.createdPerson);
-      drafting = null;
-    } else return false;
+    else if (drafting) closeDraft();
+    else return false;
     renderPanel();
     graph.highlight(selected);
     restoreOpener();
@@ -878,7 +890,7 @@ function start() {
     settingsOpen = false;
     merging = false;
     editing = null;
-    drafting = null;
+    closeDraft();
     insight = null;
     issues = { target: targetGid };
     renderPanel();
@@ -936,7 +948,7 @@ function start() {
     settingsOpen = false;
     merging = false;
     editing = null;
-    drafting = null;
+    closeDraft();
     issues = null;
     // D-6: 업무를 고른 채 열면 그 업무를 「유사 경험자」 탭에서 미리 골라 둔다
     const picked = !workGid && selected ? view.getNode(view.canonical(selected)) : null;
@@ -1210,7 +1222,7 @@ function start() {
 
   function openMerge() {
     noteOpener();
-    merging = true; insight = null; issues = null; drafting = null; editing = null; settingsOpen = false;
+    merging = true; insight = null; issues = null; closeDraft(); editing = null; settingsOpen = false;
     renderPanel();
   }
 
@@ -1406,7 +1418,7 @@ function start() {
     cardState.reset(gid);
     const node = view.getNode(gid);
     const own = isOwn(gid);
-    const editable = own && !app.readOnly && !rw;
+    const editable = own && !app.readOnly && !rw && !(node && node.hidden); // 숨긴 항목 카드에는 「수정에서…」 안내를 두지 않는다(R12 RV12C-7)
     const data = cardData(view, gid, { asOf: asOf(), past: !!viewDate, rootGid: app.rootGid(), n: currentDenseN(), history: d.history });
     const alerts = [];
     const addAlert = (testid, elmt, chip = false) => { if (elmt) alerts.push({ testid, label: ALERT_LABEL[testid], el: elmt, chip }); };
@@ -1703,6 +1715,15 @@ function start() {
     if (merging) {
       const plan = app.mergePlan();
       if (plan) {
+        // 「사번 없음」 줄마다 하위 지도 전체를 검사하지 않도록, 이 화면을 한 번 그리는 동안 지도별 결과를 한 번만 계산한다(R12 RV12C-10, 판정은 같음)
+        const ownerCheck = new Map();
+        const ownerState = (universeId) => {
+          if (!ownerCheck.has(universeId)) {
+            const ownerDoc = universeId === currentId() ? app.doc : app.docOf(universeId);
+            ownerCheck.set(universeId, { ownerDoc, ownerReadOnly: !!ownerDoc && validateDocument(ownerDoc).readOnly });
+          }
+          return ownerCheck.get(universeId);
+        };
         panel.replaceChildren(mergePanel({
           view, plan, links: app.doc.identity_links || [], provider, readOnly: app.readOnly,
           onDecide: (item, status) => {
@@ -1724,8 +1745,8 @@ function start() {
           canEmpNo: (p) => {
             const n = view.rawNode(p.a);
             if (!n) return false;
-            const ownerDoc = n.universe_id === currentId() ? app.doc : app.docOf(n.universe_id);
-            return canInlineEmpNo(p, { readOnly: app.readOnly || !!rw, ownerDoc, ownerReadOnly: !!ownerDoc && validateDocument(ownerDoc).readOnly });
+            const { ownerDoc, ownerReadOnly } = ownerState(n.universe_id);
+            return canInlineEmpNo(p, { readOnly: app.readOnly || !!rw, ownerDoc, ownerReadOnly });
           },
           onEmpNo: (p, value) => {
             const n = view.rawNode(p.a);
@@ -1752,7 +1773,7 @@ function start() {
       return;
     }
     if (insight) {
-      panel.replaceChildren(insightPanel({ view, provider, mapName: app.doc.universe.name, baseline: riskPick().base, baselineToday: riskPick().savedToday, work: insight.work, kind: insight.kind, asOf: asOf(), today: todayLocal(), onTime: setViewDate, onKind: (k) => { insight.kind = k; tourHook(); }, onWork: (w) => { insight.work = w; }, onFocus: showInGraph, onClose: closeSidePanel }));
+      panel.replaceChildren(insightPanel({ view, provider, mapName: app.doc.universe.name, baseline: riskPick().base, baselineToday: riskPick().savedToday, work: insight.work, kind: insight.kind, asOf: asOf(), today: todayLocal(), onTime: setViewDate, onKind: (k) => { insight.kind = k; tourHook(); }, onWork: (w) => { insight.work = w; }, onFocus: showInGraph, onCard: (g) => { reveal(g); select(view.canonical(g)); }, onClose: closeSidePanel }));
       focusClose('insight-close');
       return;
     }
@@ -1889,10 +1910,12 @@ function start() {
     renderWorkspaceNav($('workspace-nav'), {
       current: space,
       badges: spaceBadges({ issues: issuesFor(view, rootGid, rootGid).length, solo: risk.solo }),
-      onPick: (k) => {
+      onPick: (k, byKey = false) => {
         if (tour) tour.cancelPendingSpace(); // 직접 고른 공간을 따라 하기가 되돌리지 않게(R11 RV11C-5)
         if (rw && k === space) return; // 되감기 중 지금 공간을 다시 눌러도 되감기는 끝나지 않는다(R11 RV11C-9)
         goSpace(k);
+        // 키보드로 골랐으면 초점을 공간 제목으로(R12 FU7-8: 메뉴에 남으면 바뀐 화면을 읽으려고 Tab을 여러 번 눌러야 했다). 마우스는 그대로
+        if (byKey) focusSoft($('detail').querySelector('[data-testid=ws-title]') || $('detail').querySelector('h2'));
       },
     });
   }
@@ -1929,7 +1952,7 @@ function start() {
         renderExploreStatus();
       }
     }
-    if (plan.closeScreens.includes('draft')) drafting = null;
+    if (plan.closeScreens.includes('draft')) closeDraft();
     if (plan.closeScreens.includes('insight')) insight = null;
     if (plan.closeScreens.includes('merge')) merging = false;
     if (plan.closeScreens.includes('issues')) issues = null;
@@ -1973,6 +1996,13 @@ function start() {
       gaps: () => gapBox(gapWorkRows(view, { asOf: asOfDate, n }), pickGid),
       solo: () => soloBox(soloRows(view, { asOf: asOfDate }), pickGid),
       docs: () => docsBox(recentHandoverDocs(view), pickGid),
+      // 묶은 지도 「매주 점검」 → 통합 확인 대기가 있으면 「지도 관리」로 가는 한 줄(FU7-12). 배지 규칙은 그대로
+      'merge-link': () => {
+        const plan = app.mergePlan();
+        if (!plan || !plan.counts.pending) return null;
+        return el('p', { class: 'notice small', 'data-testid': 'check-merge-link' }, `통합 확인할 것 ${plan.counts.pending}건 `,
+          el('button', { type: 'button', class: 'link', 'data-testid': 'check-merge-go', title: '「지도 관리」의 통합 확인 목록으로 갑니다', onclick: () => goSpace('edit') }, '→ 지도 관리'));
+      },
       'map-risk': () => [soloBox(soloRows(view, { asOf: asOfDate }), pickGid), denseBox(denseRows(view, { asOf: asOfDate, n }), pickGid), gapBox(gapWorkRows(view, { asOf: asOfDate, n }), pickGid)],
       'group-hint': () => el('p', { class: 'muted small', 'data-testid': 'check-ungrouped-note' }, '지난 점검과 비교하고 저장하는 매주 점검은 팀·부서로 묶은 지도에서 합니다 → 「지도 관리」의 「업무 지도 묶기」'),
       insight: () => insightRow(),
@@ -2024,7 +2054,7 @@ function start() {
     if (changed) { editing = null; baselineNote = ''; notices.clear(); }
     settingsOpen = false;
     merging = false;
-    drafting = null;
+    closeDraft();
     insight = null;
     issues = null;
     hiddenOpen = false;
@@ -2162,16 +2192,34 @@ function start() {
     }
     return undefined;
   }
+  // 초점을 안전하게 옮긴다: 초점을 받을 수 없는 요소(제목·줄)는 tabindex -1을 달고, 접힌 상자(details)는 제목줄(summary)로
+  function focusSoft(node) {
+    const t = node && node.tagName === 'DETAILS' ? node.querySelector('summary') || node : node;
+    if (!t || typeof t.focus !== 'function') return;
+    if (!t.matches('button, a[href], input, select, textarea, summary, [tabindex]')) t.setAttribute('tabindex', '-1');
+    t.focus({ preventScroll: true });
+  }
+  // 기능 찾기 결과를 골라 이동한 뒤 초점이 body로 빠지지 않게(R12 FU7-7): 이동한 곳의 강조 요소 → 방금 기록한 이력 줄 → 패널 제목 순서
+  function focusAfterFeature() {
+    const a = document.activeElement;
+    if (a && a !== document.body && !$('feature-box').contains(a)) return; // 이동하면서 이미 어딘가로 옮겼다(양식 칸·창 등)
+    focusSoft(document.querySelector('.goal-flash') || $('detail').querySelector('[data-just-added="1"]') || $('detail').querySelector('[data-testid=ws-title]') || $('detail').querySelector('h2'));
+  }
+  const goFeatureFocused = (r) => {
+    const out = goFeature(r);
+    if (!out || !out.pick) focusAfterFeature();
+    return out;
+  };
   featureFind({
     container: $('feature-box'),
     search: (q) => searchFeatures(q, featureCtx()),
-    onGo: goFeature,
-    onPick: (gid, r) => { focus(gid); runNodeFeature(r.go.split(':')[1]); },
+    onGo: goFeatureFocused,
+    onPick: (gid, r) => { focus(gid); runNodeFeature(r.go.split(':')[1]); focusAfterFeature(); },
     // 쓴 것 찾기(R11 FU6-4): 기능 결과가 없거나 적으면 아래에 「기록에서 낱말 n건」(읽기만, 최대 8건)
     records: (q) => searchRecords(view, q),
     recordFew: RECORD_SEARCH.FEATURE_FEW,
-    onRecord: (row) => showHistory(row.target_gid, [row.gid]),
-    onRecordsAll: (q) => openMapHistTable(q),
+    onRecord: (row) => { showHistory(row.target_gid, [row.gid]); focusAfterFeature(); },
+    onRecordsAll: (q) => { openMapHistTable(q); focusAfterFeature(); },
   });
 
   // ── 시간 슬라이더(02-design 탐색 화면, R-14) ──
@@ -2388,7 +2436,7 @@ function start() {
     rwGraphSnap = graph.snapshot(); // FU5-7: 나올 때 이 배치·배율로 되돌린다
     nbhd = null;
     editing = null;
-    drafting = null;
+    closeDraft();
     insight = null;
     issues = null;
     hiddenOpen = false;
@@ -2525,6 +2573,21 @@ function start() {
     if (nbhd) { leaveNbhd(); return; }
     if (selected && !rw && !editing && !drafting && !merging && !settingsOpen && !insight && !issues && !hiddenOpen) select(null);
     graph.fit();
+  });
+
+  // 카드 안의 작은 양식(담당 넘기기·협업자 추가)은 Esc로 닫고 초점은 「⋯」로(R12 FU7-13). 입력 칸 안의 Esc도 여기서 먼저 처리한다(한글 조합 중에는 건너뜀)
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || e.defaultPrevented || e.isComposing) return;
+    const slot = e.target && e.target.closest ? e.target.closest('[data-testid=card-forms]') : null;
+    if (!slot) return;
+    e.preventDefault();
+    for (const box of slot.children) {
+      if (box.open) box.open = false;
+      box.hidden = true;
+    }
+    slot.hidden = true;
+    const sm = $('detail').querySelector('details.more-tools > summary');
+    if (sm) sm.focus({ preventScroll: true });
   });
 
   // Esc: 노드 선택 해제(R-17 ⑧). 입력 칸·대화상자·펼친 메뉴 안에서는 그쪽이 먼저 처리한다(찾기 칸은 stopPropagation)
@@ -2691,7 +2754,7 @@ function start() {
     merging = false;
     insight = null;
     issues = null;
-    drafting = null;
+    closeDraft();
     editing = null;
     renderPanel();
   });

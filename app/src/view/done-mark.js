@@ -6,11 +6,14 @@ export const DONE_KEY = 'wu.done-mark';
 export const DONE_KINDS = ['group', 'import'];
 /** 표지가 유효한 시간(밀리초): 열린 직후에 쓰이는 일회용이라 짧다 */
 export const DONE_MAX_AGE_MS = 5 * 60 * 1000;
+/** 자동으로 이은 사람 수의 상한(만들 때와 읽을 때 같이 쓴다 — 조작된 표지가 알림 글에 엄청난 숫자를 넣지 못하게, R12 RV12S-2) */
+export const DONE_AUTO_MAX = 100000;
+const cleanAuto = (v) => (Number.isFinite(v) && v > 0 ? Math.min(Math.floor(v), DONE_AUTO_MAX) : 0);
 
 /** 표지 글(JSON). 종류를 모르면 null */
 export function makeDoneMark(kind, mapId, nowMs = Date.now(), auto = 0) {
   if (!DONE_KINDS.includes(kind) || !mapId) return null;
-  const n = Number.isFinite(auto) && auto > 0 ? Math.floor(auto) : 0;
+  const n = cleanAuto(auto);
   return JSON.stringify({ kind, map: String(mapId), at: nowMs, ...(n ? { auto: n } : {}) }); // auto: 묶을 때 사번이 같아 자동으로 이은 사람 수(R11 RV11C-12)
 }
 
@@ -18,7 +21,7 @@ export function makeDoneMark(kind, mapId, nowMs = Date.now(), auto = 0) {
 export function doneMarkAuto(raw) {
   try {
     const m = JSON.parse(raw);
-    return m && Number.isFinite(m.auto) && m.auto > 0 ? Math.floor(m.auto) : 0;
+    return m ? cleanAuto(m.auto) : 0;
   } catch {
     return 0;
   }

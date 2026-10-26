@@ -8,6 +8,10 @@ import { isTopicOnlyCandidate } from '../merge/merge.js';
 import { el } from './dom.js';
 import { evidenceChips as chips } from './evidence.js';
 
+// 접힌 「주제만 겹친 후보」 묶음의 펼침 상태(R12 FU7-5): 판정하면 패널을 다시 그리므로 지도(묶음)마다 여기에 둔다. 닫으면 지운다
+const topicOnlyOpen = new Set();
+export const TOPIC_ONLY_CHIP = '주제 하나만 겹침';
+
 export const AI_CANDIDATES_WAIT = 'AI가 업무를 비교하는 중… (최대 60초)';
 
 /**
@@ -174,11 +178,11 @@ function renderMerge(o, plan, aiHead) {
     : el('p', { class: 'muted small' }, '확인할 사람이 없습니다.');
 
   // 업무 후보 한 줄. AI 후보(규칙 후보에 없는 쌍)는 점수가 없고 이유가 AI의 것이다: 칩 「AI 후보」 + 이유·인용. 규칙 후보와 겹친 쌍은 기존 내용 그대로 + 칩 + 덧붙임
-  const workItem = (w) => {
+  const workItem = (w, topicOnlyRow = false) => {
     const aiOnly = w.source === 'ai';
     const r = aiOnly ? null : candidateReason(view, w, o.provider);
     return el('li', { 'data-type': 'work', 'data-source': aiOnly ? 'ai' : null },
-      el('div', { class: 'who' }, el('strong', {}, w.title), aiOnly ? null : el('span', { class: 'chip' }, `${w.score}점`),
+      el('div', { class: 'who' }, el('strong', {}, w.title), aiOnly ? null : topicOnlyRow ? el('span', { class: 'chip', 'data-testid': 'topic-only-chip', title: `점수 ${w.score}점은 주제 하나가 겹쳐서 나온 값입니다` }, TOPIC_ONLY_CHIP) : el('span', { class: 'chip' }, `${w.score}점`),
         w.ai ? el('span', { class: 'chip', 'data-testid': 'candidate-ai-chip', title: 'Claude API가 찾은 후보입니다. 두 업무의 글에서 인용이 확인된 쌍만 보입니다. 같은 업무인지는 사람이 정합니다' }, AI_CANDIDATE_LABEL) : null),
       r ? el('div', { class: 'small' }, ...r.sentences.map((s) => el('div', {}, s.text)), el('span', { class: `method-chip ${r.method}`, title: METHOD_LABELS[r.method] }, METHOD_LABELS[r.method].replace(/\(.*\)$/, ''))) : null,
       w.ai ? aiBlock(view, w) : null,
@@ -194,10 +198,10 @@ function renderMerge(o, plan, aiHead) {
         ? el('ul', { class: 'patterns', 'data-testid': 'merge-works' }, ...mainWorks.map(workItem))
         : el('p', { class: 'muted small', 'data-testid': 'merge-works-none' }, '주제 말고도 겹친 후보는 없습니다. 아래 접힌 묶음에서 주제만 겹친 후보를 볼 수 있습니다.'),
       topicOnly.length
-        ? el('details', { class: 'topic-only-candidates', 'data-testid': 'merge-works-topic-only' },
+        ? el('details', { class: 'topic-only-candidates', 'data-testid': 'merge-works-topic-only', open: topicOnlyOpen.has(view.universe_id), ontoggle: (e) => { if (e.target.open) topicOnlyOpen.add(view.universe_id); else topicOnlyOpen.delete(view.universe_id); } },
           el('summary', {}, `주제만 겹친 후보 ${topicOnly.length}건`),
-          el('p', { class: 'muted small' }, '겹친 근거가 같은 주제 하나뿐이라 같은 업무일 가능성이 낮아 아래로 내렸습니다. 판정은 같은 방법으로 합니다.'),
-          el('ul', { class: 'patterns', 'data-testid': 'merge-works-topic-list' }, ...topicOnly.map(workItem)))
+          el('p', { class: 'muted small' }, '주제 하나만 겹친 쌍은 점수와 상관없이 같은 업무일 가능성이 낮아 아래로 내렸습니다. 판정은 같은 방법으로 합니다.'),
+          el('ul', { class: 'patterns', 'data-testid': 'merge-works-topic-list' }, ...topicOnly.map((w) => workItem(w, true))))
         : null,
     ].filter(Boolean)
     : [el('p', { class: 'muted small' }, '확인할 업무 후보가 없습니다.')];
@@ -210,7 +214,7 @@ function renderMerge(o, plan, aiHead) {
     : el('p', { class: 'muted small' }, '아직 없습니다.');
 
   return el('div', { class: 'insight', 'data-testid': 'merge-panel' },
-    el('div', { class: 'row panel-head' }, el('h2', {}, '통합 확인'), el('button', { type: 'button', 'data-testid': 'merge-close', onclick: o.onClose }, '닫기')),
+    el('div', { class: 'row panel-head' }, el('h2', {}, '통합 확인'), el('button', { type: 'button', 'data-testid': 'merge-close', onclick: () => { topicOnlyOpen.delete(view.universe_id); o.onClose(); } }, '닫기')),
     el('p', { class: 'muted small' }, '같은 사번·이름의 사람은 자동으로 하나로 이었습니다. 아래는 사람이 확인할 항목입니다. 확인하지 않아도 이 업무 지도는 그대로 볼 수 있습니다. 판정만으로는 원래 업무 지도가 바뀌지 않습니다(「사번 넣기」는 그 사람이 있는 원래 지도에 사번을 넣습니다).'),
     plan.auto.length && !o.readOnly ? el('p', { class: 'notice', 'data-testid': 'merge-auto' }, `사번·이름이 같은 사람 ${plan.auto.length}명을 아직 잇지 않았습니다. `,
       el('button', { type: 'button', class: 'link', onclick: o.onApplyAuto }, '사번 자동 연결 적용')) : null,

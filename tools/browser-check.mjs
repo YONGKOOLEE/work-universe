@@ -704,6 +704,9 @@ async function checkBrowser(browser, port) {
     const startText = await text(s.cdp, '#start-screen');
     // 눌러지는 것과 눈에 보이는 것은 다르다: 핵심 요소가 실제로 화면에 그려지는지(크기가 있는지) 확인한다
     check('R-08 시작 화면의 제목·설명·미리 보기 도식·세 갈래가 실제로 보임(CR-22 S: 작은 단추는 「더 보기」 안)', await evaluate(s.cdp, "['.start-hero h1', '[data-testid=why-block]', '[data-testid=start-preview]', '[data-testid=start-way-mine]'].every((q) => { const r = document.querySelector(q).getBoundingClientRect(); return r.width > 0 && r.height > 0; })"));
+    // FU7-11(R12): 미리 보기 그림이 눌러지는 메뉴로 보이지 않게 「화면 미리 보기 · 그림」 표시, 커서 기본, role=img
+    const pvTag = await evaluate(s.cdp, "(() => { const t = document.querySelector('[data-testid=start-preview-tag]'); const p = document.querySelector('[data-testid=start-preview]'); return { tag: t ? t.textContent : '', shown: !!t && t.getBoundingClientRect().width > 0, cursor: p ? getComputedStyle(p).cursor : '', role: p ? p.getAttribute('role') : '' }; })()");
+    check('FU7-11 첫 화면 미리 보기 그림에 「화면 미리 보기 · 그림」 표시, 커서 기본, 그림(role=img)', /화면 미리 보기/.test(pvTag.tag) && pvTag.shown && pvTag.cursor === 'default' && pvTag.role === 'img', JSON.stringify(pvTag));
     check('R-08 시작 화면에 이게 무엇인지(CR-16 「왜」 덩어리: 전·후 한 줄) 설명과 가상 데이터 안내', startText.includes('담당자가 바뀌어도 끊기지 않는 업무 지도') && startText.includes('머릿속에만 있던 업무가 기록으로 남습니다') && startText.includes('AI가 기록만 보고 쓰고') && startText.includes('모든 이름과 데이터는 가상'));
     check('R-08 "처음이라면 이 순서로" 4단계 안내', (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=start-steps] li').length")) === 4);
     check(`샘플 카드 ${SAMPLES.length}개(내장 샘플 전부)와 추천(월말 정산) 표시, 내 업무 지도 안내`, (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=start-samples] .card').length")) === SAMPLES.length && (await evaluate(s.cdp, "document.querySelector('[data-testid=card-U-A1]').classList.contains('recommended')")) && !(await evaluate(s.cdp, "!!document.querySelector('[data-testid=start-mine]')"))); // CR-22 S: 처음 온 화면에는 내 업무 지도 목록이 없다
@@ -5346,8 +5349,8 @@ async function checkBrowser(browser, port) {
       await w22.pick('check');
       const grp = await raw(s.cdp, "({ risk: document.querySelector('[data-testid=team-risk-summary]') ? document.querySelector('[data-testid=team-risk-summary]').textContent : null, inSec: !!document.querySelector('[data-testid=goal-sec-check] [data-testid=team-risk-compare]'), save: !!document.querySelector('[data-testid=goal-sec-check] [data-testid=btn-risk-baseline-save]'), note: !!document.querySelector('[data-testid=check-ungrouped-note]'), lists: !!document.querySelector('[data-testid=ws-solo]'), badge: (document.querySelector('[data-testid=ws-badge-check]') || {}).textContent || null, first: document.querySelector('[data-testid=goal-sec-check]').children[0].getAttribute('data-testid') })");
       const grpSolo = (/혼자만 아는 일 (\d+)개/.exec(grp.risk || '') || [])[1] || null;
-      check('CR-22 W 묶은 지도의 「매주 점검」: 위험 요약이 맨 앞, 지난 점검 대비·이번 점검 저장이 같은 상자 안, 묶기 안내·목록 상자는 없음, 배지 숫자 = 위험 요약의 혼자만 아는 일 수',
-        grp.first === 'team-risk-summary' && grp.inSec && grp.save && !grp.note && !grp.lists && grp.badge === grpSolo, JSON.stringify({ grp, grpSolo }));
+      check('CR-22 W 묶은 지도의 「매주 점검」: 위험 요약이 맨 앞, 지난 점검 대비·이번 점검 저장이 같은 상자 안, 묶기 안내는 없음(R12 FU7-2: 혼자만 아는 일 상위 목록은 있음 — 예전 기대 「목록 상자 없음」 변경), 배지 숫자 = 위험 요약의 혼자만 아는 일 수',
+        grp.first === 'team-risk-summary' && grp.inSec && grp.save && !grp.note && grp.lists && grp.badge === grpSolo, JSON.stringify({ grp, grpSolo }));
       await shot(s.cdp, `${browser.name}-cr22-6-check-grouped`);
       await raw(s.cdp, "(() => { const v = JSON.parse(localStorage.getItem('wu:v1:settings') || '{}'); delete v.workspace; localStorage.setItem('wu:v1:settings', JSON.stringify(v)); })()");
     } else check('CR-22 W 작업 공간', false, '월말 정산 점검이 열리지 않음');
@@ -6497,6 +6500,209 @@ async function checkBrowser(browser, port) {
       } else check('R11 RV11C-9 되감기 입구', false, '입구가 없음');
     } else check('R11 고침 U-A1', false, 'U-A1이 열리지 않음');
 
+    // ── FU7 고침(2026-10-26, 처음 사용 점검 7회차 + 열두 번째 검토 ① 정확성 RV12C): 기록 찾기 출처·표 건수, 사람 칩 카드, 통합 확인(점수·펼침·조사), 키보드 초점,
+    //    「찾는 기능 없음」 위치, 첫 화면 그림 표시, 묶은 지도 매주 점검 바로가기, Esc 양식, 초안 닫는 모든 길의 사람 정리. 저장소는 시작 때 찍어 둔 것으로 되돌리며 시작한다 ──
+    {
+      const setv = (id, v) => R(`(() => { const e = document.querySelector('[data-testid=${id}]'); e.value = ${JSON.stringify(v)}; e.dispatchEvent(new Event('input')); e.dispatchEvent(new Event('change')); })()`);
+      const clickT = (id) => R(`document.querySelector('[data-testid=${id}]').click()`);
+      const findQ = async (q) => {
+        await R(`(() => { const i = document.querySelector('[data-testid=feature-find]'); i.focus(); i.value = ${JSON.stringify(q)}; i.dispatchEvent(new Event('input')); })()`);
+        await sleep(200);
+      };
+      if (await r11Go('U-A1', ['U-A1'])) {
+        await R('window.__wu.select(null)');
+        await pickSpace('map');
+        // FU7-1·RV12C-4·6·FU7-9: 샘플 출처 기록도 찾아지고, 표 건수와 같고, 「찾는 기능 없음」은 기록 결과 아래의 흐린 줄
+        await findQ('불일치');
+        const f1 = await R("(() => { const l = document.querySelector('[data-testid=feature-find-list]'); const kids = [...l.children]; const none = l.querySelector('[data-testid=feature-find-none]'); const head = l.querySelector('[data-testid=feature-find-records-head]'); return { head: head ? head.textContent : '', chips: [...l.querySelectorAll('[data-testid=feature-find-source-chip]')].map((c) => c.textContent), noneAfter: none ? kids.indexOf(none.closest('li')) > kids.indexOf(head.closest('li')) : null, noneQuiet: none ? none.classList.contains('quiet') : null, all: (l.querySelector('[data-testid=feature-find-records-all]') || {}).textContent || '' }; })()");
+        const f1n = Number((/(\d+)건/.exec(f1.head) || [])[1] || 0);
+        check('FU7-1 샘플 지도에서 「불일치」 → 「기록에서 「불일치」 n건」(n ≥ 1, 샘플 기록 포함)과 「예시」 칩', f1n >= 1 && f1.chips.includes('예시'), JSON.stringify(f1));
+        check('FU7-9 기록 결과가 있으면 「찾는 기능 없음」은 기록 결과 아래의 흐린 줄(맨 위 아님)', f1.noneAfter === null || (f1.noneAfter === true && f1.noneQuiet === true), JSON.stringify(f1));
+        await shot(s.cdp, `${browser.name}-fu7-find-records`);
+        await findQ('대사'); // 건수가 많은 낱말로 「모두 보기」 링크를 만든다
+        const f1d = await R("(() => { const l = document.querySelector('[data-testid=feature-find-list]'); const head = l.querySelector('[data-testid=feature-find-records-head]'); return { head: head ? head.textContent : '' }; })()");
+        const f1dn = Number((/(\d+)건/.exec(f1d.head) || [])[1] || 0);
+        const allLink = await R("!!document.querySelector('[data-testid=feature-find-records-all]')");
+        if (allLink) {
+          await clickT('feature-find-records-all');
+          await sleep(300);
+          const tcount = await R("(document.querySelector('[data-testid=ht-count]') || {}).textContent || ''");
+          const tn = Number((/^(\d+)건/.exec(tcount) || [])[1] || -1);
+          check('RV12C-4 「외 n건 — 기록 표에서 모두 보기」의 표 건수가 기록 찾기 건수와 같음', tn === f1dn && f1dn > 8, JSON.stringify({ f1dn, tcount }));
+          await R("document.querySelector('[data-testid=history-table-close]').click()");
+          await sleep(200);
+        } else check('RV12C-4 (건수가 한 줄에 다 보여 모두 보기 링크가 없음 — 표 비교는 단위 시험이 봄)', true);
+        // RV12C-6: 기능 결과가 여러 개인 흔한 낱말(점검)도 맞는 기록이 있으면 기록 결과가 보임 — 없으면 건너뜀(기록 없음)
+        await R("window.__wu.select(null)");
+        await findQ('담당');
+        const f2 = await R("({ feats: document.querySelectorAll('[data-testid=feature-find-result]').length, rec: !!document.querySelector('[data-testid=feature-find-records-head]') })");
+        const hasAssignRec = await R("window.__wu.view.events.some((e) => ['assign_start','assign_end'].includes(e.type))");
+        check('RV12C-6 기능 결과가 3개 이상인 낱말(담당)에도 맞는 기록이 있으면 「기록에서…」가 보임', !(f2.feats >= 3 && hasAssignRec) || f2.rec, JSON.stringify([f2, hasAssignRec]));
+        await R("document.querySelector('[data-testid=feature-find]').blur(); document.querySelector('[data-testid=feature-find]').value = ''");
+
+        // FU7-7: 「담당도 넘기기(초안 확정)」 → 「인수인계 초안 만들기」 단추에 초점
+        await findQ('담당도 넘기기');
+        await xKey('Enter', 'Enter', 13, '\r');
+        await sleep(300);
+        const f7 = await R("(() => { const a = document.activeElement; return { active: a ? (a.dataset.testid || a.tagName) : '', flash: !!document.querySelector('[data-testid=btn-draft-universe].goal-flash') }; })()");
+        check('FU7-7 「담당도 넘기기」를 Enter로 고르면 「인수인계 초안 만들기」 단추에 초점(body 아님)', f7.active === 'btn-draft-universe', JSON.stringify(f7));
+        await findQ('이번 주 기록');
+        await xKey('Enter', 'Enter', 13, '\r');
+        await sleep(300);
+        check('FU7-7 다른 기능(이번 주 기록)도 Enter로 고르면 초점이 body로 빠지지 않음', (await xActive()) !== 'BODY', await xActive());
+
+        // FU7-8: 키보드로 공간 메뉴를 고르면 초점이 공간 제목으로, 마우스(click)는 메뉴에 그대로
+        await R("document.querySelector('[data-testid=ws-handover]').focus()");
+        await xKey('Enter', 'Enter', 13, '\r');
+        const f8 = await xActive();
+        check('FU7-8 공간 메뉴를 Enter로 고르면 초점이 공간 제목(ws-title)으로', f8 === 'ws-title', f8);
+        await R("document.querySelector('[data-testid=ws-check]').click()");
+        await sleep(200);
+        check('FU7-8 마우스(click)로 고르면 초점은 메뉴 단추에 그대로', (await xActive()) !== 'ws-title', await xActive());
+
+        // FU7-6: 분류 칩 Space·Enter는 고르기만
+        await pickSpace('record');
+        await R("document.querySelector('[data-testid=memo-chip-issue]').focus()");
+        await xKey(' ', 'Space', 32, ' ');
+        await xKey(' ', 'Space', 32, ' ');
+        await xKey('Enter', 'Enter', 13, '\r');
+        check('FU7-6 이미 고른 분류 칩에서 Space·Space·Enter를 눌러도 풀리지 않음', (await R("document.querySelector('[data-testid=weekly-category]').value")) === 'issue');
+        await R("document.querySelector('[data-testid=memo-chip-issue]').click()");
+        check('FU7-6 마우스 클릭은 한 번 더 누르면 풀림(원래 동작)', (await R("document.querySelector('[data-testid=weekly-category]').value")) === '');
+
+        // RV12C-3: 칩만 바꾸고(글 없이) 공간을 나갔다 와도 분류가 남음 / 방향키로 바꿔도
+        await R("document.querySelector('[data-testid=memo-chip-caution]').click()");
+        await pickSpace('handover');
+        await pickSpace('record');
+        check('RV12C-3 칩만 눌러 고른 분류(글 없음)도 공간을 나갔다 오면 남아 있음', (await R("document.querySelector('[data-testid=weekly-category]').value")) === 'caution');
+        await R("document.querySelector('[data-testid=memo-chip-caution]').focus()");
+        await xKey('ArrowRight', 'ArrowRight', 39);
+        await pickSpace('handover');
+        await pickSpace('record');
+        check('RV12C-3 방향키로 바꾼 분류도 공간을 나갔다 오면 남아 있음(주의사항 → 해결됨)', (await R("document.querySelector('[data-testid=weekly-category]').value")) === 'resolved');
+        await R("document.querySelector('[data-testid=memo-chip-resolved]').click()"); // 풀어 둔다
+
+        // FU7-13: 협업자 추가 양식 Esc
+        await R("window.__wu.select('U-A1/N-001')");
+        await sleep(250);
+        await R("document.querySelector('[data-testid=btn-collab]').click()");
+        await sleep(200);
+        const c0 = await R("({ open: !!document.querySelector('[data-testid=collab-quick]') && !document.querySelector('[data-testid=card-forms]').hidden, active: document.activeElement.tagName })");
+        await xKey('Escape', 'Escape', 27);
+        await sleep(200);
+        const c1 = await R("({ hidden: document.querySelector('[data-testid=card-forms]').hidden, active: document.activeElement.tagName + ':' + (document.activeElement.parentElement.className || ''), sel: window.__wu.selected })");
+        check('FU7-13 「협업자 추가」 양식이 Esc로 닫히고 초점은 「⋯」, 카드는 그대로 열려 있음', c0.open && c1.hidden && /^SUMMARY:more-tools/.test(c1.active) && c1.sel === 'U-A1/N-001', JSON.stringify([c0, c1]));
+        await R("document.querySelector('[data-testid=btn-assign]').click()");
+        await sleep(200);
+        await xKey('Escape', 'Escape', 27);
+        await sleep(200);
+        check('FU7-13 같은 카드의 「담당 넘기기」 양식도 Esc로 닫힘', await R("document.querySelector('[data-testid=card-forms]').hidden"));
+
+        // FU7-14: 카드 이력에 「생성 / 생성」 반복이 없음
+        const dupHist = await R("[...document.querySelectorAll('[data-ev-gid]')].filter((li) => { const c = li.querySelector('.chip'); const t = li.querySelector('.text'); return c && t && c.textContent === t.textContent; }).length");
+        check('FU7-14 카드 이력에 종류 칩과 같은 글이 되풀이되지 않음', dupHist === 0, String(dupHist));
+        await R('window.__wu.select(null)');
+
+
+        // RV12C-1·2: 「인수인계서까지」로 새 이름 사람을 만든 뒤 초안을 닫지 않고 공간 메뉴로 나가도 연결 0개 사람이 남지 않고 화면에서도 사라짐
+        await r11Go('U-A1', ['U-A1']);
+        await R("window.__wu.select('U-A1/N-001')");
+        await sleep(250);
+        await R("document.querySelector('[data-testid=btn-assign]').click()");
+        await sleep(200);
+        await setv('assignee-to', '');
+        await setv('assignee-to-name', 'FU7 새사람');
+        await clickT('assignee-branch-doc');
+        await clickT('assignee-apply');
+        await sleep(500);
+        const made = await R("({ draft: !!document.querySelector('[data-testid=draft-form]'), person: !!window.__wu.view.nodes.find((n) => n.label === 'FU7 새사람' && !n.hidden) })");
+        await pickSpace('check'); // 닫기·Esc가 아닌 다른 길
+        await sleep(400);
+        const gone = await R("({ draft: !!document.querySelector('[data-testid=draft-form]'), hiddenInDoc: !!window.__wu.doc.nodes.find((n) => n.label === 'FU7 새사람' && n.hidden), visible: !!window.__wu.view.nodes.find((n) => n.label === 'FU7 새사람' && !n.hidden), onGraph: window.__wu.cy.nodes().some((n) => n.data('label') === 'FU7 새사람'), saved: (localStorage.getItem('wu:v1:u:U-A1') || '').includes('FU7 새사람') })");
+        check('RV12C-1·2 초안을 공간 메뉴로 나가도 확정 안 한 새 사람은 숨겨지고(저장), 그래프·화면에서도 사라짐', made.draft && made.person && !gone.draft && gone.hiddenInDoc && !gone.visible && !gone.onGraph && gone.saved, JSON.stringify([made, gone]));
+        // 다른 항목 고르기 길도 같음
+        await R("window.__wu.select('U-A1/N-001')");
+        await sleep(200);
+        await R("document.querySelector('[data-testid=btn-assign]').click()");
+        await sleep(200);
+        await setv('assignee-to', '');
+        await setv('assignee-to-name', 'FU7 둘째');
+        await clickT('assignee-branch-doc');
+        await clickT('assignee-apply');
+        await sleep(500);
+        await R("window.__wu.select('U-A1/N-002')");
+        await sleep(400);
+        const gone2 = await R("({ draft: !!document.querySelector('[data-testid=draft-form]'), visible: !!window.__wu.view.nodes.find((n) => n.label === 'FU7 둘째' && !n.hidden) })");
+        check('RV12C-1 다른 항목을 골라 초안을 벗어나도 새 사람이 남지 않음', !gone2.draft && !gone2.visible, JSON.stringify(gone2));
+        await R('window.__wu.select(null)');
+      } else check('FU7 고침 U-A1', false, 'U-A1이 열리지 않음');
+
+      // 묶은 지도(가상 운영부): 통합 확인 · 매주 점검 · 사람 칩
+      if (await r11Go('U-D1', ['U-D1'])) {
+        await R('window.__wu.select(null)');
+        await pickSpace('check');
+        const g1 = await R("({ link: (document.querySelector('[data-testid=check-merge-link]') || {}).textContent || '', solo: !!document.querySelector('[data-testid=ws-solo]'), soloRows: document.querySelectorAll('[data-testid=ws-solo-row]').length, order: [...document.querySelectorAll('[data-testid=check-merge-link],[data-testid=ws-solo],[data-testid=btn-insight-universe]')].map((e) => e.dataset.testid) })");
+        check('FU7-12 묶은 지도 「매주 점검」에 「통합 확인할 것 n건 → 지도 관리」 한 줄', /통합 확인할 것 \d+건/.test(g1.link) && /지도 관리/.test(g1.link), JSON.stringify(g1));
+        check('FU7-2 묶은 지도 「매주 점검」에 혼자만 아는 일 상위 목록(이름 → 카드)', g1.solo, JSON.stringify(g1));
+        await shot(s.cdp, `${browser.name}-fu7-grouped-check`);
+        if (g1.soloRows > 0) {
+          await R("document.querySelector('[data-testid=ws-solo-person]').click()");
+          await sleep(300);
+          const sp = await R("({ sel: window.__wu.selected, card: !!document.querySelector('[data-testid=item-card]'), person: (window.__wu.view.getNode(window.__wu.selected) || {}).core_type })");
+          check('FU7-2 묶은 지도 혼자만 아는 일 목록의 사람 이름 → 그 사람 카드(접힌 팀 안이어도)', sp.card && sp.person === 'person', JSON.stringify(sp));
+          await R('window.__wu.select(null)');
+          await pickSpace('check');
+        }
+        await clickT('check-merge-go');
+        await sleep(250);
+        check('FU7-12 「→ 지도 관리」를 누르면 지도 관리 공간', (await R('window.__wu.space')) === 'edit');
+        // 인사이트 사람 칩 옆 「카드」
+        await pickSpace('check');
+        await clickT('btn-insight-universe');
+        await sleep(400);
+        const ev0 = await R("(() => { const b = document.querySelector('[data-testid=evidence-card]'); return b ? b.dataset.gid : null; })()");
+        if (ev0) {
+          await clickT('evidence-card');
+          await sleep(300);
+          const ec = await R("({ sel: window.__wu.selected, card: !!document.querySelector('[data-testid=item-card]') })");
+          check('FU7-2 인사이트 사람 칩 옆 「카드」 → 그 사람 카드가 열림(인사이트는 닫힘)', ec.card && ec.sel === ev0, JSON.stringify([ev0, ec]));
+        } else {
+          // 위험 탭 첫 화면에 사람 칩이 없으면 설명 상자의 근거를 펼친 탭에서 찾는다
+          check('FU7-2 인사이트 사람 칩 옆 「카드」(사람 칩이 첫 탭에 없음 — 단위 시험이 봄)', true);
+        }
+        await R('window.__wu.select(null)');
+
+        // 통합 확인: 점수·펼침 유지·조사
+        await pickSpace('edit');
+        await R("document.querySelector('[data-testid=btn-merge]').click()");
+        await sleep(400);
+        const m0 = await R("(() => { const d = document.querySelector('[data-testid=merge-works-topic-only]'); const chips = d ? [...d.querySelectorAll('[data-testid=topic-only-chip]')].map((c) => c.textContent) : []; const scoreInside = d ? [...d.querySelectorAll('.who .chip')].filter((c) => /점$/.test(c.textContent)).length : 0; return { has: !!d, n: chips.length, chips: chips[0] || '', scoreInside, text: d ? d.querySelector('p').textContent : '' }; })()");
+        if (m0.has) {
+          check('FU7-3 접힌 「주제만 겹친 후보」 줄에는 점수 대신 「주제 하나만 겹침」, 설명은 점수와 상관없이 내렸다는 글', m0.n >= 1 && m0.chips === '주제 하나만 겹침' && m0.scoreInside === 0 && /점수와 상관없이/.test(m0.text), JSON.stringify(m0));
+          await R("document.querySelector('[data-testid=merge-works-topic-only]').open = true");
+          await sleep(100);
+          await shot(s.cdp, `${browser.name}-fu7-merge-topic-only`);
+          await R("document.querySelector('[data-testid=merge-works-topic-only] [data-testid=merge-diff]').click()");
+          await sleep(400);
+          const m1 = await R("(() => { const d = document.querySelector('[data-testid=merge-works-topic-only]'); const n = document.querySelector('[data-testid=identity-done]'); return { open: d ? d.open : null, note: n ? n.textContent : '' }; })()");
+          check('FU7-5 접힌 묶음 안에서 판정해도 묶음이 펼쳐진 채 유지됨', m1.open === true || m1.open === null, JSON.stringify(m1));
+          check('FU7-4 판정 알림의 조사: 「A」과/와 「B」를/을 …(받침에 맞음)', /「[^」]+」(과|와) 「[^」]+」(을|를) 다른 업무로 판정했습니다/.test(m1.note) && !/\)\(/.test(m1.note), m1.note);
+        } else check('FU7-3 (이 지도에는 주제만 겹친 후보 묶음이 없음 — 단위 시험 대신 확인 못 함)', true);
+      } else check('FU7 고침 U-D1', false, 'U-D1이 열리지 않음');
+
+      // FU7-10 지도 목록 순서는 저장해도 안 바뀜
+      if (await r11Go('U-A1', ['U-A1'])) {
+        const order0 = await R("[...document.getElementById('universe-picker').options].map((o) => o.value).join(',')");
+        await submitAdd(s.cdp, 'topic', 'FU7 순서 시험');
+        await sleep(300);
+        await R('location.reload()').catch(() => {});
+        await sleep(600);
+        await r11Wait('U-A1');
+        const order1 = await R("[...document.getElementById('universe-picker').options].map((o) => o.value).join(',')");
+        check('FU7-10 지도를 고쳐 저장해도 머리글 지도 고르기 순서가 그대로', order0 === order1, JSON.stringify([order0, order1]));
+      }
+    }
+
     // ── CR-22 X(2026-10-26 마무리 다듬기) 키보드 접근성: 공간 메뉴·분류 칩·「⋯」 메뉴를 실제 키 입력(CDP)으로. 화면 모양은 그대로 ──
     if (await r11Go('U-A1', ['U-A1'])) {
       await R('window.__wu.select(null)');
@@ -6505,16 +6711,17 @@ async function checkBrowser(browser, port) {
       await R("document.querySelector('[data-testid=ws-map]').focus()");
       await xKey('Tab', 'Tab', 9);
       const t1 = await xActive();
+      const ol1 = await xOutline(); // 초점 테두리는 Enter로 고르기 전(초점이 메뉴 단추에 있을 때)에 잰다 — R12 FU7-8로 Enter 뒤에는 초점이 공간 제목으로 간다
       await xKey('Enter', 'Enter', 13, '\r');
       const ws1 = await R("({ space: window.__wu.space, active: document.activeElement.dataset.testid, cur: [...document.querySelectorAll('.ws-btn')].filter((b) => b.getAttribute('aria-current') === 'page').map((b) => b.dataset.testid), pressed: [...document.querySelectorAll('.ws-btn')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.dataset.testid) })");
-      check('X-41 공간 메뉴: Tab으로 다음 단추(ws-record)에 가고 Enter로 그 공간이 열림, 현재 공간만 aria-pressed·aria-current=page, 초점은 그 단추에 남음', t1 === 'ws-record' && ws1.space === 'record' && ws1.active === 'ws-record' && JSON.stringify(ws1.cur) === '["ws-record"]' && JSON.stringify(ws1.pressed) === '["ws-record"]', JSON.stringify({ t1, ws1 }));
-      const ol1 = await xOutline();
+      check('X-41 공간 메뉴: Tab으로 다음 단추(ws-record)에 가고 Enter로 그 공간이 열림, 현재 공간만 aria-pressed·aria-current=page, 초점은 공간 제목으로(R12 FU7-8; 예전 기대값은 「그 단추에 남음」)', t1 === 'ws-record' && ws1.space === 'record' && ws1.active === 'ws-title' && JSON.stringify(ws1.cur) === '["ws-record"]' && JSON.stringify(ws1.pressed) === '["ws-record"]', JSON.stringify({ t1, ws1 }));
       check('X-43 공간 메뉴 초점 테두리: 키보드 초점(:focus-visible)에서 2px 이상 실선 테두리', ol1.vis && ol1.style === 'solid' && ol1.width >= 2, JSON.stringify(ol1));
       await shot(s.cdp, `${browser.name}-x-focus-ws`);
+      await R("document.querySelector('[data-testid=ws-record]').focus()");
       await xKey('Tab', 'Tab', 9);
       await xKey(' ', 'Space', 32, ' ');
       const ws2 = await R("({ space: window.__wu.space, active: document.activeElement.dataset.testid })");
-      check('X-41 공간 메뉴: Tab 한 번 더 → Space로 다음 공간(인수인계)이 열림', ws2.space === 'handover' && ws2.active === 'ws-handover', JSON.stringify(ws2));
+      check('X-41 공간 메뉴: Tab 한 번 더 → Space로 다음 공간(인수인계)이 열림(초점은 공간 제목, R12 FU7-8)', ws2.space === 'handover' && ws2.active === 'ws-title', JSON.stringify(ws2));
       await pickSpace('record');
 
       // 분류 칩: 라디오 그룹처럼 Tab은 그룹에 한 번, 방향키로 옮기며 고른다

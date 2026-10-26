@@ -61,8 +61,12 @@ export function createStore(storage) {
     // 본문을 쓴 뒤 목록 쓰기가 실패하면 본문을 이전 값으로 되돌린다(보이지 않는 키가 남지 않게). 예외는 그대로 던진다
     saveUniverse(doc) {
       const { id, name } = doc.universe;
-      const index = readIndex().filter((e) => e.id !== id);
-      index.push({ id, name });
+      // 이미 있는 지도는 제자리에서 이름만 갱신, 새 지도만 끝에 붙인다(R12 FU7-10: 고칠 때마다 목록 맨 뒤로 가서 머리글 지도 고르기 순서가 바뀌었다). 목록 모양(배열·{id,name})은 그대로
+      const read = readIndex();
+      const at = read.findIndex((e) => e.id === id);
+      const index = read.filter((e, i) => e.id !== id || i === at); // 중복 항목이 있으면 첫 자리 하나만
+      if (at >= 0) index[at] = { id, name };
+      else index.push({ id, name });
       const before = storage.getItem(universeKey(id));
       storage.setItem(universeKey(id), JSON.stringify(doc));
       try {

@@ -17,12 +17,17 @@ const button = (gid, label, onclick, full = label) => el('button', { type: 'butt
  * @param {(gid:string)=>void} onFocus
  * @param {{unknown?:boolean}} [opt] unknown: 찾지 못한 근거도 ID 글자 그대로 버튼으로 보인다(초안). 기본은 null(그리지 않음)
  */
-export function evidenceChip(view, gid, onFocus, { unknown = false, onShow = null } = {}) {
+export function evidenceChip(view, gid, onFocus, { unknown = false, onShow = null, onCard = null } = {}) {
   const hit = view.lookup(gid);
   let btn;
   const after = (fn) => () => { fn(); if (onShow) onShow(gid, btn); };
   if (hit.found) {
     btn = button(gid, displayName(hit.node), after(() => onFocus(hit.node.gid)));
+    // 사람 칩은 눌러도 그래프 강조뿐이라 카드가 안 열렸다(R12 FU7-2). onCard가 있으면 옆에 작은 「카드」 단추를 둔다 — 칩 동작(근거 글·강조)은 그대로
+    if (onCard && hit.node.core_type === 'person') {
+      return el('span', { class: 'evidence-person' }, btn,
+        el('button', { type: 'button', class: 'link small evidence-card', 'data-testid': 'evidence-card', 'data-gid': hit.node.gid, title: `${displayName(hit.node)}의 카드를 엽니다(연락처·맡은 업무)`, onclick: () => onCard(hit.node.gid) }, '카드'));
+    }
     return btn;
   }
   const ev = view.events.find((e) => e.gid === gid);
@@ -50,9 +55,9 @@ export function readableEvidence(view, gid) {
  *   showText: 칩을 누르면 이 칩 묶음 맨 아래에 근거 글 한 줄(data-testid=evidence-text)을 보인다. 같은 칩을 다시 누르면 접히고, 다른 칩을 누르면 글이 바뀐다.
  *     textOf: 글을 만드는 함수(gid → 문자열). 없으면 view로 만든 readableEvidence
  */
-export function evidenceChips(view, ids, onFocus, { tag = 'span', dedupe = true, unknown = false, showText = false, textOf = null } = {}) {
+export function evidenceChips(view, ids, onFocus, { tag = 'span', dedupe = true, unknown = false, showText = false, textOf = null, onCard = null } = {}) {
   const list = dedupe ? [...new Set(ids)] : ids;
-  if (!showText) return el(tag, { class: 'evidence-list' }, ...list.map((g) => evidenceChip(view, g, onFocus, { unknown })).filter(Boolean));
+  if (!showText) return el(tag, { class: 'evidence-list' }, ...list.map((g) => evidenceChip(view, g, onFocus, { unknown, onCard })).filter(Boolean));
   const slot = el('span', { class: 'evidence-slot' }); // 비어 있으면 CSS가 감춘다
   const text = textOf || ((g) => readableEvidence(view, g));
   let shown = null; // 글을 보이고 있는 칩
@@ -67,5 +72,5 @@ export function evidenceChips(view, ids, onFocus, { tag = 'span', dedupe = true,
     btn.setAttribute('aria-pressed', 'true');
     slot.replaceChildren(el('span', { class: 'evidence-text', 'data-testid': 'evidence-text' }, text(gid)));
   };
-  return el(tag, { class: 'evidence-list' }, ...list.map((g) => evidenceChip(view, g, onFocus, { unknown, onShow })).filter(Boolean), slot);
+  return el(tag, { class: 'evidence-list' }, ...list.map((g) => evidenceChip(view, g, onFocus, { unknown, onShow, onCard })).filter(Boolean), slot);
 }

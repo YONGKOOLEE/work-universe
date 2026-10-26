@@ -16,19 +16,36 @@ export function memoParts(o) {
   select.value = '';
   const gate = el('span', { class: 'muted small memo-gate', 'data-testid': 'memo-gate', role: 'status' }, CATEGORY_REQUIRED_TEXT);
   const warn = el('p', { class: 'notice small', 'data-testid': 'memo-resolve-warn', role: 'status', hidden: true });
+  // 칩으로 분류를 바꿀 때도 select의 change를 내보낸다 — 쓰던 글·분류 보관(FU6-3)이 select의 change를 듣기 때문(R12 RV12C-3: 칩만 바꾸면 보관이 안 됐다).
+  // change를 받는 select 쪽 refresh가 칩·안내를 다시 그린다
+  const setCat = (v) => {
+    select.value = v;
+    if (typeof select.dispatchEvent === 'function') select.dispatchEvent(new Event('change'));
+    else if (typeof select.fire === 'function') select.fire('change'); // 시험용 가짜 DOM
+    else refresh();
+  };
   const chips = MEMO_CHIP_ORDER.map((k) => el('button', {
     type: 'button', class: 'chip chip-btn', role: 'radio', 'aria-checked': 'false', 'data-testid': `memo-chip-${k}`, 'data-cat': k,
-    onclick: () => { select.value = select.value === k ? '' : k; refresh(); },
+    onclick: () => setCat(select.value === k ? '' : k),
   }, MEMO_CATEGORIES[k]));
   // 분류를 안 고르고 막힌 「기록」을 눌렀을 때(FU6-5): 칩 줄 바로 위에 크게 안내하고 칩 줄을 깜빡인다. 고르면 사라진다
   // 방향키: ← ↑ 이전, → ↓ 다음(끝에서 처음으로), Home·End. 옮기면 그 칩을 고른다(라디오 그룹과 같음, X-41)
+  // Space·Enter: 라디오처럼 고르기만 한다(이미 고른 칩이면 그대로 — 풀리지 않는다, R12 FU7-6). 마우스로 한 번 더 누르면 푸는 동작은 그대로.
+  // keydown·keyup 둘 다 막아 브라우저가 만드는 click(토글)이 나가지 않게 한다
+  chips.forEach((c) => {
+    c.addEventListener('keydown', (e) => {
+      if (e.key !== ' ' && e.key !== 'Enter') return;
+      e.preventDefault();
+      if (select.value !== c.dataset.cat) setCat(c.dataset.cat);
+    });
+    c.addEventListener('keyup', (e) => { if (e.key === ' ' || e.key === 'Enter') e.preventDefault(); });
+  });
   chips.forEach((c, i) => c.addEventListener('keydown', (e) => {
     const to = { ArrowLeft: i - 1, ArrowUp: i - 1, ArrowRight: i + 1, ArrowDown: i + 1, Home: 0, End: chips.length - 1 }[e.key];
     if (to === undefined) return;
     e.preventDefault();
     const next = chips[(to + chips.length) % chips.length];
-    select.value = next.dataset.cat;
-    refresh();
+    setCat(next.dataset.cat);
     next.focus();
   }));
   const hint = el('p', { class: 'memo-pick-hint', 'data-testid': 'memo-pick-hint', role: 'alert', hidden: true }, CATEGORY_REQUIRED_TEXT);

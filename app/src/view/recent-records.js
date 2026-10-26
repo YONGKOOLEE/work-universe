@@ -15,7 +15,7 @@ export const RECENT_RECORDS = {
 export const RECORD_SEARCH = {
   LIMIT: 8, // 한 번에 보이는 건수
   MIN_CHARS: 2, // 공백을 뺀 낱말이 이 글자 수 미만이면 찾지 않는다(한 글자는 거의 다 맞는다)
-  FEATURE_FEW: 2, // 기능 결과가 이 수 이하일 때만 기록 결과를 아래에 더한다(기능이 충분하면 기능이 먼저)
+  FEATURE_FEW: Infinity, // 기능 결과가 이 수 이하일 때만 기록 결과를 아래에 더한다. Infinity = 맞는 기록이 있으면 기능 결과 수와 상관없이 늘 아래에 보인다(R12 RV12C-6, 메인 결정; 예전 값 2)
 };
 
 const instant = (s) => {
@@ -82,17 +82,40 @@ export function historyFocus(items, gids, { show, collapseOver }) {
 /** 대소문자·공백을 무시하고 비교하려고 접은 글 */
 export const foldText = (s) => String(s ?? '').toLowerCase().replace(/\s+/g, '');
 
-/** 사용자가 직접 남긴 기록 이벤트(recentRecords와 같은 기준)와 그 기록이 걸린 대상 */
+// 사용자가 쓴 것이 아닌 기록 줄에 붙이는 출처 칩(R12 FU7-1). 값이 없는 source는 SOURCE_CHIP_OTHER. 바꾸기 쉬운 값은 한 곳에
+export const SOURCE_CHIP = { sample: '예시' };
+export const SOURCE_CHIP_OTHER = '가져옴';
+
+/** 줄에 붙일 출처 칩 글자. 사용자가 쓴 기록이면 null */
+export const sourceChipOf = (ev) => (ev.source === 'user' ? null : SOURCE_CHIP[ev.source] || SOURCE_CHIP_OTHER);
+
+/**
+ * 기록 종류(USER_EVENT_TYPES) 이벤트와 그 기록이 걸린 대상. source와 상관없이 모두 — 샘플 지도의 카드 이력에 보이는 기록이
+ * 찾기·전체 기록 표에서만 빠지던 결함(R12 FU7-1). 「최근 기록」(recentRecords)은 CR-21 B-2대로 user만 쓴다.
+ */
 function* userRecords(view) {
   for (const ev of view.events) {
-    if (ev.source !== 'user' || !USER_EVENT_TYPES.includes(ev.type)) continue;
+    if (!USER_EVENT_TYPES.includes(ev.type)) continue;
     const node = recordTarget(view, ev);
     if (node) yield { ev, node };
   }
 }
 
 /**
- * 기록에서 낱말 찾기: 사용자 기록의 메모 내용(note)과 내용 글(eventText)에서 대소문자·공백을 무시하고 부분 일치.
+ * 기록 한 건에서 낱말을 찾을 글 조각들: 메모 내용(note), 내용 글, 걸린 대상 이름. 필드마다 따로 비교한다 —
+ * 이어 붙여 공백을 지우면 경계를 넘는 글(「대사확인」에서 「확인대사」)도 맞던 결함(R12 RV12C-5).
+ * 기록 찾기와 지도 전체 기록 표(view/card.js filterHistory가 row.fields를 본다)가 같은 규칙을 쓰게 한 곳에 둔다(RV12C-4)
+ */
+export function recordFields(view, ev, node) {
+  const body = ev.type === 'memo' ? ev.note || '' : eventText(view, ev);
+  return [ev.note || '', body, displayName(node)];
+}
+
+/** 접은 글에 낱말(접은 것)이 들어 있는 조각이 하나라도 있는가 */
+export const fieldsMatch = (fields, foldedQuery) => fields.some((f) => foldText(f).includes(foldedQuery));
+
+/**
+ * 기록에서 낱말 찾기: 기록 종류 이벤트(출처 무관, 사용자가 쓴 것이 아니면 source_chip)의 메모 내용(note)과 내용 글(eventText)에서 대소문자·공백을 무시하고 부분 일치.
  * 기록 시각이 늦은 순 최대 limit건. 낱말이 너무 짧으면(MIN_CHARS 미만) 찾지 않는다.
  * @returns {{query:string, total:number, rows:{gid:string, date:string, recorded_at:string, target_gid:string, target:string, kind:string, text:string}[]}}
  */
@@ -103,8 +126,7 @@ export function searchRecords(view, query, { limit = RECORD_SEARCH.LIMIT, textMa
   const hits = [];
   for (const { ev, node } of userRecords(view)) {
     const isMemo = ev.type === 'memo';
-    const body = isMemo ? ev.note || '' : eventText(view, ev);
-    if (!foldText(`${ev.note || ''} ${body}`).includes(q)) continue;
+    if (!fieldsMatch(recordFields(view, ev, node), q)) continue;
     hits.push({
       gid: ev.gid,
       date: ev.occurred_at,
@@ -113,6 +135,7 @@ export function searchRecords(view, query, { limit = RECORD_SEARCH.LIMIT, textMa
       target: displayName(node),
       kind: isMemo ? MEMO_CATEGORIES[memoCategoryOf(ev.payload)] || eventTypeLabel(ev.type) : eventTypeLabel(ev.type),
       text: clip(isMemo ? ev.note || '메모' : eventText(view, ev), textMax),
+      source_chip: sourceChipOf(ev),
     });
   }
   hits.sort((a, b) => instant(b.recorded_at) - instant(a.recorded_at) || b.gid.localeCompare(a.gid));
@@ -136,6 +159,8 @@ export function mapHistoryRows(view) {
       after: false,
       target: displayName(node),
       target_gid: node.gid,
+      source_chip: sourceChipOf(ev),
+      fields: recordFields(view, ev, node),
     });
   }
   return rows;

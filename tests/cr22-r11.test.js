@@ -33,11 +33,13 @@ test('R11 4 기록 찾기: 메모 내용에서 대소문자·공백을 무시하
   const view = docWith(events);
   const r = searchRecords(view, '  RE TRY ');
   assert.equal(r.query, 'RE TRY');
-  assert.equal(r.total, 2, '사용자 기록만, 공백·대소문자 무시');
-  assert.deepEqual(r.rows.map((x) => x.gid), ['U-T/E-2', 'U-T/E-1'], '기록 시각이 늦은 것이 먼저');
-  assert.equal(r.rows[0].target, '정산 점검');
-  assert.equal(r.rows[0].kind, '진행 중');
-  assert.equal(r.rows[0].target_gid, 'U-T/N-W2');
+  // R12 FU7-1: 기록 종류면 source와 상관없이 찾는다(예전 기대값 2 = user만 → 3). 샘플 기록(E-4)이 카드 이력에는 보이는데 찾기에서만 빠지던 결함. 자동 기록(system 종류 E-5)은 여전히 뺀다
+  assert.equal(r.total, 3, '기록 종류 전부(샘플 포함), 공백·대소문자 무시');
+  assert.deepEqual(r.rows.map((x) => x.gid), ['U-T/E-4', 'U-T/E-2', 'U-T/E-1'], '기록 시각이 늦은 것이 먼저');
+  assert.deepEqual(r.rows.map((x) => x.source_chip), ['예시', null, null], '사용자가 쓴 것이 아니면 출처 칩(sample → 예시), 사용자 기록은 칩 없음');
+  assert.equal(r.rows[1].target, '정산 점검');
+  assert.equal(r.rows[1].kind, '진행 중');
+  assert.equal(r.rows[1].target_gid, 'U-T/N-W2');
   assert.equal(foldText(' A b\nC '), 'abc');
 });
 

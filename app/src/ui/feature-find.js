@@ -40,6 +40,8 @@ export function featureFind(o) {
     input.blur();
   }
 
+  const noneRow = (q, quiet) => el('li', { class: quiet ? 'none quiet muted small' : 'none', role: 'status', 'data-testid': 'feature-find-none' }, `찾는 기능 없음: 「${q}」 — 다른 낱말(예: 담당, 미해결, 점검, 글로)로 찾아 보세요`);
+
   function show() {
     const q = input.value.trim();
     if (!q) {
@@ -47,12 +49,12 @@ export function featureFind(o) {
       return close();
     }
     hits = o.search(q);
-    const rec = o.records && hits.length <= (o.recordFew ?? 2) ? o.records(q) : null;
+    const rec = o.records && hits.length <= (o.recordFew ?? Infinity) ? o.records(q) : null;
     const recordItems = rec && rec.rows.length ? [
       el('li', { class: 'rec-head', 'data-testid': 'feature-find-records-head' }, `기록에서 「${rec.query}」 ${rec.total}건`),
       ...rec.rows.map((r) => el('li', { class: 'rec-row' }, el('button', { type: 'button', class: 'feature-hit', 'data-testid': 'feature-find-record', 'data-gid': r.gid, onclick: () => { close(); input.value = ''; o.onRecord(r); } },
         el('span', { class: 'feat-name' }, `${r.date} · ${r.target}`),
-        el('span', { class: 'feat-where' }, `[${r.kind}] ${r.text}`),
+        el('span', { class: 'feat-where' }, `[${r.kind}] ${r.text}`, r.source_chip ? el('span', { class: 'chip muted small src-chip', 'data-testid': 'feature-find-source-chip' }, r.source_chip) : null),
         el('span', { class: 'feat-go' }, '보기'))))
       , rec.total > rec.rows.length && o.onRecordsAll
         ? el('li', { class: 'rec-more' }, el('button', { type: 'button', class: 'link', 'data-testid': 'feature-find-records-all', onclick: () => { close(); input.value = ''; o.onRecordsAll(q); } }, `외 ${rec.total - rec.rows.length}건 — 기록 표에서 모두 보기`))
@@ -63,7 +65,8 @@ export function featureFind(o) {
         el('span', { class: 'feat-name' }, h.name),
         el('span', { class: 'feat-where' }, h.blocked ? `이 화면에서는 쓸 수 없음(${h.blocked})` : h.where),
         el('span', { class: 'feat-go' }, '바로 가기'))))
-      : [el('li', { class: 'none', role: 'status', 'data-testid': 'feature-find-none' }, `찾는 기능 없음: 「${q}」 — 다른 낱말(예: 담당, 미해결, 점검, 글로)로 찾아 보세요`)]).concat(recordItems));
+      // 기록 결과가 있으면 「찾는 기능 없음」은 흐린 작은 줄로 기록 결과 아래에 둔다(R12 FU7-9: 맨 위 노란 줄이 먼저 눈에 띄어 기록을 못 봤다)
+      : recordItems.length ? [] : [noneRow(q, false)]).concat(recordItems, !hits.length && recordItems.length ? [noneRow(q, true)] : []));
     list.hidden = false;
   }
 
