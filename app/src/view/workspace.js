@@ -13,10 +13,10 @@ export const WORKSPACE = {
 
 /** 공간 5개(순서 = 메뉴 순서). testid는 메뉴 단추 이름이다 */
 export const WORKSPACES = [
-  { key: 'map', label: '지도 보기', testid: 'ws-map', desc: '그래프로 업무 지도를 둘러봅니다. 항목을 누르면 속성·연결·이력이 여기에 보입니다' },
+  { key: 'map', label: '지도 보기', testid: 'ws-map', desc: '업무·사람·문서가 이어진 지도를 둘러봅니다. 도형을 누르면 그 항목의 내용·연결·기록이 오른쪽에 보입니다' },
   { key: 'record', label: '기록', testid: 'ws-record', desc: '업무에 메모·진행 상황을 남기고, 끝난 일을 해결로 표시합니다' },
-  { key: 'handover', label: '인수인계', testid: 'ws-handover', desc: '담당자가 바뀔 때 기록으로 초안을 만들고 확정합니다' },
-  { key: 'check', label: '매주 점검', testid: 'ws-check', desc: '인수인계 위험을 보고, 묶은 지도는 점검을 저장해 지난번과 비교합니다' },
+  { key: 'handover', label: '인수인계', testid: 'ws-handover', desc: '담당자가 바뀔 때 넘겨줄 글(초안)을 기록에서 만들고 확정합니다' },
+  { key: 'check', label: '매주 점검', testid: 'ws-check', desc: '혼자만 아는 일·일 몰린 사람·담당 없는 업무를 보고, 팀·부서로 묶은 지도는 점검을 저장해 지난번과 비교합니다' },
   { key: 'edit', label: '지도 관리', testid: 'ws-edit', desc: '항목을 더하고 고치고, 지도를 만들고 묶고 내보내고, 이전 모습으로 되돌립니다' },
 ];
 export const WORKSPACE_KEYS = WORKSPACES.map((w) => w.key);

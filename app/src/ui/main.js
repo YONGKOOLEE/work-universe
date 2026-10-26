@@ -609,12 +609,12 @@ function start() {
     });
     // 다른 유니버스의 노드면 바꾼 값이 그 노드의 원래 유니버스에 저장된다(CR-4, D2-4 가)
     const owner = own ? null : (view.universes.get(uid) || { name: uid }).name;
-    const where = own ? `「${parents.map((p) => p.name).join('」·「')}」` : '상위 업무 지도';
+    const where = own ? `「${parents.map((p) => p.name).join('」·「')}」` : '이 지도를 묶은 팀·부서 지도';
     // el()은 null 자식을 걸러 내므로 box.append(…, null)처럼 "null" 글자가 들어가지 않는다(검토5 U-1)
     box.append(el('div', {},
       el('label', { class: 'check' }, cb, ` ${where} 화면에서도 이 항목 보이기`),
       el('div', { class: 'muted small' }, `지금 적용: ${exp.explicit ? '직접 지정' : '기본 규칙'}(${exp.reason})`),
-      own ? el('div', { class: 'muted small' }, `${where}${josa(where, '은/는')} 이 업무 지도를 묶은 상위 업무 지도입니다.`) : null,
+      own ? el('div', { class: 'muted small' }, `${where}${josa(where, '은/는')} 이 업무 지도를 묶은 팀·부서 지도입니다.`) : null,
       owner ? el('div', { class: 'muted small', 'data-testid': 'exposed-owner' }, `바꾸면 원본 업무 지도 「${owner}」에 저장됩니다.`) : null,
     ));
     return box;
@@ -970,7 +970,7 @@ function start() {
     // 담당 기록이 한 번도 없는 사람(조직관리의 사람 등)에게는 표시하지 않는다
     if (!load || !view.edges.some((e) => !e.hidden && e.core_type === 'performs' && e.source === view.canonical(gid))) return null;
     const when = viewDate ? `${viewDate} 기준` : '지금';
-    const text = load.count === 0 ? `${when} 맡은 업무 없음` : `${when} 맡은 업무 ${load.count}개 — ${load.dense ? `밀집 기준(${load.n}개 이상)에 해당` : `밀집 기준(${load.n}개 이상) 아래`}`;
+    const text = load.count === 0 ? `${when} 맡은 업무 없음` : `${when} 맡은 업무 ${load.count}개 — ${load.dense ? `일이 몰림(밀집 기준 ${load.n}개 이상)` : `몰리지 않음(밀집 기준 ${load.n}개 이상)`}`;
     return el('p', { class: load.dense ? 'notice' : 'muted small', 'data-testid': 'person-load' }, text, ' ',
       el('button', { type: 'button', class: 'link', 'data-testid': 'btn-person-density', onclick: () => openInsight('', 'density') }, '밀집·공백 보기'));
   }
@@ -1102,7 +1102,7 @@ function start() {
     const summary = el('summary', { title: '지금 담당을 끝내고 새 담당을 시작합니다. 이력만 남길지, 인수인계서까지 남길지 고릅니다' }, '담당 넘기기');
     if (!holders.length) {
       return el('details', { class: 'assignee-change', 'data-testid': 'assignee-change' }, summary,
-        el('p', { class: 'muted small', 'data-testid': 'assignee-none' }, '지금 담당 중인(진행 중인 수행 연결이 있는) 사람이 없습니다. 담당을 넣으려면 「기록 남기기」의 「담당 시작」을 쓰세요.'));
+        el('p', { class: 'muted small', 'data-testid': 'assignee-none' }, '지금 이 업무를 맡은 사람이 없습니다. 담당을 넣으려면 「기록 남기기」의 「담당 시작」을 쓰세요.'));
     }
     const persons = ownNodes().filter((n) => n.core_type === 'person');
     const fromSel = el('select', { 'data-testid': 'assignee-from', 'aria-label': '지금 담당' }, ...holders.map((h) => el('option', { value: h.id }, h.label)));
@@ -1186,7 +1186,7 @@ function start() {
         el('label', {}, rDoc, ` ${BRANCH_LABELS[BRANCH_DOC]}`)),
       docNote,
       el('div', { class: 'row' }, handoverRow, apply),
-      el('p', { class: 'muted small' }, '「담당만 바꾸기」는 한 번의 기록으로 지금 담당의 수행을 끝내고(그 날짜까지) 새 담당의 수행을 시작합니다(그 날짜부터). 문서까지 남기려면 「인수인계서까지」를 고르세요 — 초안 화면의 「담당도 넘기기」와 같은 일입니다.'),
+      el('p', { class: 'muted small' }, '「담당만 바꾸기」는 한 번의 기록으로 지금 담당자의 담당을 그 날짜까지로 끝내고 새 담당자가 그 날짜부터 맡게 합니다. 문서까지 남기려면 「인수인계서까지」를 고르세요 — 초안 화면의 「담당도 넘기기」와 같은 일입니다.'),
       msg);
   }
 
@@ -1197,7 +1197,7 @@ function start() {
     const hits = repeatPatternsFor(view, gid, asOf()); // 오늘 보기에서도 오늘 기준(검토5 I-2)
     if (!hits.length) return null;
     const kinds = [...new Set(hits.map((p) => (p.kind === 'handover_chain' ? '인수인계 반복' : '주제 반복')))].join('·');
-    return el('p', { class: 'notice', 'data-testid': 'repeat-note' }, `반복 비효율 패턴 ${hits.length}건에 포함(${kinds}) `,
+    return el('p', { class: 'notice', 'data-testid': 'repeat-note' }, `같은 설명·문제가 되풀이되는 곳(반복 비효율) ${hits.length}건에 포함(${kinds}) `,
       el('button', { type: 'button', class: 'link', 'data-testid': 'btn-repeat-note', onclick: () => openInsight('', 'repeat') }, '반복 비효율 보기'));
   }
 
@@ -1205,7 +1205,7 @@ function start() {
   function riskNote(gid) {
     const hit = riskNoteFor(view, gid, asOf());
     if (!hit) return null;
-    return el('p', { class: 'notice', 'data-testid': 'risk-note' }, `지식 집중 위험 높음 — ${hit.person.label}만 해 봤고 인수인계 기록이 없습니다 `,
+    return el('p', { class: 'notice', 'data-testid': 'risk-note' }, `혼자만 아는 일(위험 높음) — ${hit.person.label}만 해 봤고 인수인계 기록이 없습니다 `,
       el('button', { type: 'button', class: 'link', 'data-testid': 'btn-risk-note', onclick: () => openInsight('', 'risk') }, '인수인계 위험 보기'));
   }
 
@@ -1449,7 +1449,7 @@ function start() {
   }
 
   function hideSelected(node) {
-    if (!window.confirm(`「${node.label}」${josa(node.label, '을/를')} 숨깁니다. 그래프에서 사라지지만 이력과 근거로서의 내용은 남습니다. 다시 보이게 하려면 「지도 관리」 공간의 「숨긴 항목」에서 「되살리기」를 누르세요.`)) return;
+    if (!window.confirm(`「${node.label}」${josa(node.label, '을/를')} 숨길까요? 그래프에서 사라지지만 기록과 내용은 남습니다. 다시 보이게 하려면 「지도 관리」 공간의 「숨긴 항목」에서 「되살리기」를 누르세요.`)) return;
     const r = app.hideNode(node.id);
     if (!r.ok) return window.alert(messageFor(r.error));
     afterSave(r, null);
@@ -1457,7 +1457,7 @@ function start() {
 
   // 연결·이력이 없는 노드(막 만든 실수 노드)는 바로 지운다. 그 밖의 노드는 숨긴 뒤 「숨긴 노드」 목록에서 완전히 삭제한다(CR-13 D)
   function deleteSelected(node) {
-    if (!window.confirm(`「${node.label}」${josa(node.label, '을/를')} 지웁니다. 연결·이력이 없는 항목이라 바로 지워지고 되돌릴 수 없습니다.`)) return;
+    if (!window.confirm(`「${node.label}」${josa(node.label, '을/를')} 지울까요? 연결·이력이 없는 항목이라 바로 지워지고 되돌릴 수 없습니다.`)) return;
     const r = app.deleteNodeNow(node.id);
     if (!r.ok) return window.alert(messageFor(r.error));
     afterSave(r, null);
@@ -1470,7 +1470,7 @@ function start() {
     return el('div', { class: 'row link-tools' },
       el('button', { type: 'button', class: 'small-btn', title: '관계·상대·기간·메모 고치기', onclick: () => { editing = { kind: 'edge-edit', edgeId, title }; renderPanel(); } }, '연결 수정'),
       el('button', { type: 'button', class: 'small-btn danger', onclick: () => {
-        if (!window.confirm(`연결 「${title}」${josa(title, '을/를')} 숨깁니다. 기록은 남습니다.`)) return;
+        if (!window.confirm(`연결 「${title}」${josa(title, '을/를')} 숨길까요? 기록은 남습니다.`)) return;
         const r = app.hideEdge(edgeId);
         if (!r.ok) return window.alert(messageFor(r.error, { kind: 'edge' }));
         afterSave(r);
@@ -1643,8 +1643,8 @@ function start() {
           const n = hiddenNodesOf(app.doc).find((h) => h.id === id);
           const label = node ? node.label : '';
           const msg = app.canDeleteNow(id).ok
-            ? `「${label}」${josa(label, '을/를')} 완전히 지웁니다. 연결·이력이 없는 항목이라 되돌릴 수 없습니다.`
-            : `「${label}」${josa(label, '을/를')} 완전히 지웁니다. 연결 ${n ? n.edge_count : 0}개도 함께 지워지고 되돌릴 수 없습니다. 이 항목을 언급한 이력은 남고 「(삭제된 항목)」으로 보입니다.`;
+            ? `「${label}」${josa(label, '을/를')} 완전히 지울까요? 연결·이력이 없는 항목이라 되돌릴 수 없습니다.`
+            : `「${label}」${josa(label, '을/를')} 완전히 지울까요? 연결 ${n ? n.edge_count : 0}개도 함께 지워지고 되돌릴 수 없습니다. 이 항목을 언급한 이력은 남고 「(삭제된 항목)」으로 보입니다.`;
           if (!window.confirm(msg)) return { ok: true, cancelled: true };
           const r = app.purgeNode(id);
           if (r.ok) afterSave(r, selected);
@@ -1983,7 +1983,7 @@ function start() {
     const n = currentDenseN();
     const insightRow = () => [
       el('div', { class: 'row' }, el('button', { type: 'button', 'data-testid': 'btn-insight-universe', onclick: () => openInsight('', 'risk') }, '인사이트 보기')),
-      el('p', { class: 'muted small', 'data-testid': 'insight-hint' }, '인사이트(인수인계 위험 탭부터 열림): 인수인계 위험(혼자만 아는 업무, 준비도, 파급 영향) · 유사 경험자 · 반복 비효율 · 밀집·공백(일이 몰린 사람, 담당자 없는 업무) · 흐름 변화'),
+      el('p', { class: 'muted small', 'data-testid': 'insight-hint' }, '인사이트는 기록을 세어 손볼 곳을 보여 줍니다(인수인계 위험 탭부터 열림): 인수인계 위험(혼자만 아는 업무, 넘길 준비, 막히면 퍼지는 영향) · 유사 경험자(비슷한 일을 해 본 사람) · 반복 비효율(되풀이되는 설명) · 밀집·공백(일이 몰린 사람, 담당자 없는 업무) · 흐름 변화(기간별 변화)'),
     ];
     // 조각 이름 → 요소(들). 여기서 null이면 그 조각은 그리지 않는다
     const build = {
@@ -2283,7 +2283,7 @@ function start() {
         last: el('span', { class: 'muted small' }),
         when: el('span', { class: 'when', 'data-testid': 'time-when' }),
         today: el('button', { type: 'button', class: 'small-btn', 'data-testid': 'time-today', onclick: () => setViewDate(null) }, '오늘로'),
-        note: el('span', { class: 'small' }, '이 날짜에 유효하지 않은 담당·소속 선은 빠지고 사람·조직은 흐리게 보입니다. 상세·인사이트도 이 날짜 기준(초안은 오늘 기준)'),
+        note: el('span', { class: 'small' }, '이 날짜에 맡고 있지 않던 담당·소속 선은 빠지고 사람·조직은 흐리게 보입니다. 카드·인사이트도 이 날짜 기준(초안은 오늘 기준)'),
       };
       bar.replaceChildren(el('span', {}, '시간 보기'), tb.first, tb.range, tb.last, tb.when, tb.today, tb.note);
     }
@@ -2556,7 +2556,7 @@ function start() {
   }
 
   function removeChild(childId, label) {
-    if (!window.confirm(`「${label}」${josa(label, '을/를')} 이 묶음에서 뺍니다. 원래 업무 지도는 그대로 남습니다.`)) return;
+    if (!window.confirm(`「${label}」${josa(label, '을/를')} 이 묶음에서 뺄까요? 원래 업무 지도는 그대로 남습니다.`)) return;
     const r = app.removeChild(childId);
     if (!r.ok) return window.alert(messageFor(r.error));
     expanded.delete(childId);
@@ -2974,7 +2974,7 @@ function start() {
     const mineText = mine.length ? `
 
 직접 만들거나 가져온 업무 지도 ${mine.length}개(${mine.map((u) => `「${u.name}」`).join(', ')})도 지워집니다. 남기려면 먼저 「가져오기·내보내기」에서 내보내세요.` : '';
-    if (!window.confirm(`모든 가상 데이터를 초기 샘플로 되돌립니다. 샘플에 추가한 항목과 직접 묶은 업무 지도는 사라집니다.${mineText}`)) return;
+    if (!window.confirm(`모든 가상 데이터를 처음 샘플 상태로 되돌릴까요? 샘플에 추가한 항목과 직접 묶은 업무 지도는 사라집니다.${mineText}`)) return;
     const r = app.resetAll();
     if (r && !r.ok) return window.alert(messageFor(r.error));
     $('import-dialog').close();

@@ -480,7 +480,7 @@ import { confirmText, diffText, doneText, failText, limitTexts, revertBlock, val
 test('화면 문구: 확인 창에 숨김·되살림·되돌림 개수와 사용자 기록 보존이 들어간다', () => {
   const counts = { hide_nodes: 2, restore_nodes: 1, update_nodes: 3, hide_edges: 1, add_edges: 1, update_edges: 0, hide_refs: 0, add_refs: 0, identity: 0 };
   const text = confirmText({ counts, limits: [{ code: 'purged_skip', id: 'N-1' }] }, '2026-10-23T14:05:00+09:00');
-  assert.match(text, /2026-10-23 14:05 시점으로 되돌립니다/);
+  assert.match(text, /2026-10-23 14:05 시점으로 되돌릴까요/);
   assert.match(text, /3개는 숨겨집니다/);
   assert.match(text, /2개는 다시 보입니다/);
   assert.match(text, /3건은 그때 값/);
@@ -663,6 +663,6 @@ test('pointLabeler: 분이 겹치지 않으면 기존 분 표시 그대로, 겹�
   assert.equal(pointText(pt('2026-10-23T14:05:10+09:00'), mixed), '2026-10-23 14:05:10 · 바뀐 1건');
   assert.equal(pointText(pt('2026-10-23T14:05:10+09:00')), '2026-10-23 14:05 · 바뀐 1건'); // labelOf를 안 주면 기존 표시
   const counts = { hide_nodes: 0, restore_nodes: 0, update_nodes: 1, hide_edges: 0, add_edges: 0, update_edges: 0, hide_refs: 0, add_refs: 0, identity: 0 };
-  assert.match(confirmText({ counts, limits: [] }, '2026-10-23T14:05:42+09:00', mixed), /2026-10-23 14:05:42 시점으로 되돌립니다/);
+  assert.match(confirmText({ counts, limits: [] }, '2026-10-23T14:05:42+09:00', mixed), /2026-10-23 14:05:42 시점으로 되돌릴까요/);
   assert.match(doneText('2026-10-23T14:05:42+09:00', counts, 0, mixed), /^2026-10-23 14:05:42 시점으로 되돌렸습니다/);
 });

@@ -146,7 +146,7 @@ export function successNotice(kind, d) {
     case 'identity': // 통합 확인의 같은 사람/다른 사람(같은 업무/다른 업무) 판정
     { // 조사는 josa로 붙인다 — 「다른 업무으로」 오류(R11 FU6-7): 업무는 받침이 없어 「로」, 사람은 받침 ㅁ이라 「으로」
       const what = d.kind === 'work' ? '업무' : '사람';
-      return { testid: 'identity-done', text: `${d.a}${josa(d.a, '과/와')} ${d.b}${josa(d.b, '을/를')} ${d.same ? '같은' : '다른'} ${what}${josa(what, '으로/로')} 판정했습니다.`, goto: node(d.nodeGid) };
+      return { testid: 'identity-done', text: `${d.a}${josa(d.a, '과/와')} ${d.b}${josa(d.b, '을/를')} ${d.same ? '같은' : '다른'} ${what}${josa(what, '으로/로')} 정했습니다.`, goto: node(d.nodeGid) };
     }
     case 'add-one': // 하나씩 추가
       return { testid: 'add-one-done', text: `${d.count > 1 ? `${d.count}개 추가` : '1개 추가'} · 「${d.label}」${d.extra ? ` ${d.extra}` : ''}`, goto: node(d.nodeGid), goLabel: d.core === 'work' ? '업무 보기' : '' };

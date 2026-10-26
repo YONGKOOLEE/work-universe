@@ -185,10 +185,10 @@ test('R11 18 ~done 표지: 지도 id·종류가 같고 오래되지 않았을 �
 // ── 7. 통합 확인 조사 ──
 test('R11 7 통합 확인 알림: 「다른 업무로」·「다른 사람으로」·「같은 업무로」 — 조사는 josa로', () => {
   const t = (kind, same) => successNotice('identity', { a: '「가」', b: '「나」', same, kind, nodeGid: 'U/N-1' }).text;
-  assert.match(t('work', false), /다른 업무로 판정했습니다/);
-  assert.match(t('work', true), /같은 업무로 판정했습니다/);
-  assert.match(t('person', false), /다른 사람으로 판정했습니다/);
-  assert.match(t('person', true), /같은 사람으로 판정했습니다/);
+  assert.match(t('work', false), /다른 업무로 정했습니다/);
+  assert.match(t('work', true), /같은 업무로 정했습니다/);
+  assert.match(t('person', false), /다른 사람으로 정했습니다/);
+  assert.match(t('person', true), /같은 사람으로 정했습니다/);
   assert.doesNotMatch(t('work', false), /업무으로/);
 });
 

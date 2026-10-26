@@ -423,7 +423,7 @@ export function textAddDialog(o) {
         TEXT_ADD.attach),
       messageLine,
       staleLine,
-      el('div', { class: 'row' }, saveBtn),
+      el('div', { class: 'row decide-row' }, el('span', { class: 'decide-q', 'data-testid': 'text-add-save-q' }, '체크한 항목·연결을 지도에 넣을까요?'), saveBtn),
       doneLine);
   }
 

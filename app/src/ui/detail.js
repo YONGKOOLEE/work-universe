@@ -78,7 +78,7 @@ export function renderNodeDetail(panel, d, { onFocus, extra = null, toolbar = nu
           el('span', { class: 'arrow', title: l.direction === 'out' ? '이 항목에서 나가는 연결' : '이 항목으로 들어오는 연결' }, l.direction === 'out' ? '→' : '←'),
           el('button', { type: 'button', class: 'link', onclick: () => onFocus(l.other.gid) }, l.other.label),
           el('span', { class: 'muted small' }, ` ${l.other.type_label}`),
-          l.status ? el('span', { class: `chip status-${l.status_key === 'current' ? 'current' : 'other'}`, title: l.status_key === 'handover' ? '이 날 다른 사람이 담당을 이어받았습니다. 판정(인사이트·초안)에서는 이 날까지 담당으로 셉니다' : null, 'data-testid': 'link-status' }, l.status) : null,
+          l.status ? el('span', { class: `chip status-${l.status_key === 'current' ? 'current' : 'other'}`, title: l.status_key === 'handover' ? '이 날 다른 사람이 담당을 이어받았습니다. 인사이트·초안을 셀 때는 이 날까지 담당으로 봅니다' : null, 'data-testid': 'link-status' }, l.status) : null,
           l.period ? el('div', { class: 'muted small' }, l.period) : null,
           l.note ? el('div', { class: 'muted small' }, l.note) : null,
           linkTools(l),
@@ -165,14 +165,14 @@ export function renderUniverseSummary(panel, s, shown = null, extras = {}) {
     el('summary', {}, '처음이면 읽어 보세요'),
     el('div', { class: 'hint', 'data-testid': 'hint' },
       empty
-        ? el('p', {}, '아직 항목이 없습니다. 아래 「사람·업무·문서 추가」에서 첫 업무를 추가하세요. 업무정의서가 있으면 「지도 관리」 공간의 「가져오기·내보내기」로 초벌을 만들 수도 있습니다.')
-        : el('p', {}, '그래프에서 항목을 클릭하면 속성, 연결된 항목, 이력이 여기에 보입니다.'),
+        ? el('p', {}, '아직 항목이 없습니다. 아래 「사람·업무·문서 추가」에서 첫 업무를 추가하세요. 업무정의서가 있으면 「지도 관리」 공간의 「가져오기·내보내기」로 밑그림을 만들 수도 있습니다.')
+        : el('p', {}, '그래프에서 항목을 클릭하면 내용, 연결된 항목, 기록이 여기에 보입니다.'),
       empty ? null : el('p', {}, '왼쪽 메뉴에서 하려는 일을 고르세요. 「인수인계」의 「인수인계 초안 만들기」와 「매주 점검」의 「인사이트 보기」도 눌러 보세요.'),
-      el('p', { class: 'muted small', 'data-testid': 'term-note' }, '업무 지도는 업무를 묶은 한 단위, 항목은 그래프의 도형 하나, 지도 중심은 업무 지도의 중심(연두색 큰 원)입니다.'))));
+      el('p', { class: 'muted small', 'data-testid': 'term-note' }, '업무 지도는 업무와 담당자·문서가 이어진 지도 한 장, 항목은 그 지도의 도형 하나, 지도 중심(연두색 큰 원)은 그 업무 지도 전체입니다.'))));
 }
 
 /** 「지도 보기」 안내 한 줄(CR-22 W). 공간 이름은 왼쪽 메뉴와 같다 */
-export const MAP_INTRO = '그래프를 둘러보고 항목을 누르면 속성·연결·이력이 여기에 보입니다. 하려는 일은 왼쪽 메뉴에서 고르세요 — 기록 · 인수인계 · 매주 점검 · 지도 관리.';
+export const MAP_INTRO = '그래프를 둘러보고 항목을 누르면 내용·연결·기록이 여기에 보입니다. 하려는 일은 왼쪽 메뉴에서 고르세요 — 기록 · 인수인계 · 매주 점검 · 지도 관리.';
 
 // 「매주 점검」 앞부분: 묶은 지도의 위험 요약 한 줄(FU-10). 인사이트 「인수인계 위험」·「밀집·공백」 탭과 같은 계산의 숫자. 문구와 「자세히」 동작은 부르는 쪽이 정한다
 function riskParts(extras) {

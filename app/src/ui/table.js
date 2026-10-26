@@ -159,7 +159,7 @@ export function tableDialog(o) {
       !existing ? el('div', { class: 'row' }, el('button', { type: 'button', 'data-testid': 'table-add-row', disabled: st.rows.length >= TABLE_RULES.maxRows, onclick: () => { st.rows = collect(); st.rows.push({ cells: emptyCells() }); render(); } }, '행 추가')) : null,
       attachBox,
       el('p', { class: 'error-text', 'data-testid': 'table-message', 'aria-live': 'polite' }, st.message),
-      el('div', { class: 'row' }, el('button', { type: 'button', class: 'primary', 'data-testid': 'table-save', onclick: save }, '저장')),
+      el('div', { class: 'row decide-row' }, el('span', { class: 'decide-q', 'data-testid': 'table-save-q' }, existing ? '바꾼 행을 지도에 저장할까요?' : '표의 행을 지도에 넣을까요?'), el('button', { type: 'button', class: 'primary', 'data-testid': 'table-save', onclick: save }, '저장')),
       el('datalist', { id: 'table-types' }, ...TYPE_CHOICES.map((t) => el('option', { value: t }))),
     ];
     if (bundled) {

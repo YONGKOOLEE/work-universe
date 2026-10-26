@@ -4,6 +4,8 @@
 
 /** 「해결로 표시」 옆 선택 입력의 이름 */
 export const RESOLVE_NOTE_LABEL = '해결 메모(선택)';
+/** 「해결로 표시」 앞의 묻는 말(질문형, 사용자 10-26 저녁) */
+export const RESOLVE_Q = '이 일이 끝났나요?';
 
 import { MEMO_CATEGORIES, TEXT_MAX, memoCategoryOf } from '../model/schema.js';
 import { groupIssues, memoTarget, openMemos } from '../rules/issues.js';
@@ -46,7 +48,7 @@ export function issuePanel(o) {
   msg.hidden = true;
   wrap.append(
     el('div', { class: 'row' }, el('h2', {}, `미해결 ${memos.length}건`), el('button', { type: 'button', 'data-testid': 'issue-close', onclick: o.onClose }, '닫기')),
-    el('p', { class: 'muted small' }, `${target ? `「${displayName(target)}」` : ''} 범위에서 이슈·진행 중 메모 중 뒤에 같은 대상의 「해결됨」 메모가 없는 것입니다. 「해결로 표시」는 같은 대상의 「해결됨」 메모를 이력에 새로 더하며, 원래 메모는 그대로 남습니다. 「해결 메모(선택)」에 적은 글은 해결됨 메모의 내용이 되고, 비우면 「해결: 원래 메모 앞부분」이 됩니다.`),
+    el('p', { class: 'muted small' }, `${target ? `「${displayName(target)}」에서 ` : ''}아직 끝났다고 표시하지 않은 이슈·진행 중 메모입니다. 끝난 일은 「해결로 표시」를 누르세요 — 같은 대상에 「해결됨」 메모가 새로 더해지고 원래 메모는 그대로 남습니다. 「해결 메모(선택)」에 적은 글이 그 메모의 내용이 됩니다(비우면 「해결: 원래 메모 앞부분」).`),
     msg,
   );
   if (!memos.length) {
@@ -74,7 +76,7 @@ export function issuePanel(o) {
         el('div', {}, el('span', { class: 'muted small' }, ev.occurred_at), ' ', el('span', { class: 'chip' }, MEMO_CATEGORIES[memoCategoryOf(ev.payload)]),
           g.target ? null : el('span', {}, ` ${whereOf(view, ev, o.universeId)}`)),
         el('div', {}, ev.note || '(내용 없음)'),
-        resolveBtn ? el('div', { class: 'row', 'data-testid': 'resolve-row' }, noteInput, resolveBtn) : null));
+        resolveBtn ? el('div', { class: 'row decide-row', 'data-testid': 'resolve-row' }, el('span', { class: 'decide-q', 'data-testid': 'resolve-q' }, RESOLVE_Q), noteInput, resolveBtn) : null));
     }
     const name = g.target ? whereOf(view, g.items[0], o.universeId) : '주제';
     const head = g.target

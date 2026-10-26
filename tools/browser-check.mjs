@@ -960,7 +960,7 @@ async function checkBrowser(browser, port) {
     const hb = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=help-box]'); if (!b) return null; const r = b.getBoundingClientRect(); const q = (id) => document.querySelector('[data-testid=' + id + ']'); const t = q('help-tour'); return { open: b.open, w: r.width, h: r.height, spaces: [...document.querySelectorAll('[data-testid=help-spaces] dt')].map((e) => e.textContent), genFold: (() => { const d = document.querySelector('[data-testid=help-gen-fold]'); return d ? { tag: d.tagName, open: d.open } : null; })(), terms: [...document.querySelectorAll('[data-testid=help-terms] dt')].map((e) => e.textContent), gen: [...document.querySelectorAll('[data-testid=help-gen] dt')].map((e) => e.textContent), intro: (q('help-intro') || {}).textContent || '', tour: t ? t.textContent : null, tourSize: t ? t.getBoundingClientRect().width > 0 : false, close: (q('help-close') || {}).textContent || '', text: b.textContent, inView: r.top >= 0 && r.bottom <= window.innerHeight }; })()");
     check('처음 사용 W2(FU-9) 「?」 → 도움말 상자가 열리고 크기가 있으며 화면 안에 들어옴(따라 하기는 아직 시작되지 않음)', !!hb && hb.open === true && hb.w > 0 && hb.h > 0 && hb.inView && (await tourInfo()).mode === 'off', JSON.stringify(hb && { ...hb, text: '' }));
     // CR-22 W: 「왼쪽 공간」 절 5줄을 더했고 용어에 묶은 지도·혼자만 아는 일·미해결을 더했으며(4 → 7), 문장 생성 방식 3항목은 접어 둔다
-    check('처음 사용 W2(FU-9)·CR-22 W 도움말 한 줄 설명 · 왼쪽 공간 5줄(지도 보기·기록·인수인계·매주 점검·지도 관리) · 용어 7개(업무 지도·항목·지도 중심·묶은 지도·혼자만 아는 일·미해결·근거 칩) · 접힌 문장 생성 방식 3개(사전 생성·규칙 기반·Claude API)', !!hb && hb.intro.includes('누가 언제 무엇을 했는지 기록해 두고') && hb.intro.includes('「혼자만 아는 업무」 경고') && JSON.stringify(hb.spaces) === JSON.stringify(['지도 보기', '기록', '인수인계', '매주 점검', '지도 관리']) && JSON.stringify(hb.terms) === JSON.stringify(['업무 지도', '항목', '지도 중심', '묶은 지도', '혼자만 아는 일', '미해결', '근거 칩']) && JSON.stringify(hb.gen) === JSON.stringify(['사전 생성', '규칙 기반', 'Claude API']) && hb.genFold && hb.genFold.tag === 'DETAILS' && hb.genFold.open === false, JSON.stringify(hb && { spaces: hb.spaces, terms: hb.terms, gen: hb.gen, genFold: hb.genFold })); // CR-18-2
+    check('처음 사용 W2(FU-9)·CR-22 W 도움말 한 줄 설명 · 왼쪽 공간 5줄(지도 보기·기록·인수인계·매주 점검·지도 관리) · 용어 7개(업무 지도·항목·지도 중심·묶은 지도·혼자만 아는 일·미해결·근거 칩) · 접힌 문장 생성 방식 3개(사전 생성·규칙 기반·Claude API)', !!hb && hb.intro.includes('누가 언제 무엇을 했는지 기록해 두고') && hb.intro.includes('「혼자만 아는 업무」 경고') && JSON.stringify(hb.spaces) === JSON.stringify(['지도 보기', '기록', '인수인계', '매주 점검', '지도 관리']) && JSON.stringify(hb.terms) === JSON.stringify(['업무 지도', '항목', '지도 중심', '묶은 지도', '혼자만 아는 일', '미해결', '근거 칩', '산출물', '인사이트', '통합 확인', '편집 되감기']) && JSON.stringify(hb.gen) === JSON.stringify(['사전 생성', '규칙 기반', 'Claude API']) && hb.genFold && hb.genFold.tag === 'DETAILS' && hb.genFold.open === false, JSON.stringify(hb && { spaces: hb.spaces, terms: hb.terms, gen: hb.gen, genFold: hb.genFold })); // CR-18-2
     check('처음 사용 W2(FU-9) 도움말 상자에 「따라 하기 다시 보기」(크기 있음)와 「닫기」 단추가 있고 "null" 글자가 없음', !!hb && hb.tour === '따라 하기 다시 보기' && hb.tourSize && hb.close === '닫기' && !hb.text.includes('null'));
     await shot(s.cdp, `${browser.name}-0c-help-box`);
     await s.cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
@@ -1579,7 +1579,7 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, "window.__wu.select(window.__wu.view.canonical('U-B/N-201'))");
     await sleep(200);
     const load = await text(s.cdp, '[data-testid=person-load]');
-    check('사람 상세: 도하람 "지금 맡은 업무 3개 — 밀집 기준(3개 이상)에 해당"', load.includes('지금 맡은 업무 3개') && load.includes('밀집 기준(3개 이상)에 해당'), load);
+    check('사람 상세: 도하람 "지금 맡은 업무 3개 — 밀집 기준(3개 이상)에 해당"', load.includes('지금 맡은 업무 3개') && load.includes('일이 몰림(밀집 기준 3개 이상)'), load);
     check('사람 상세의 한 줄이 실제로 그려짐(크기 있음)', (await evaluate(s.cdp, "(() => { const r = document.querySelector('[data-testid=person-load]').getBoundingClientRect(); return r.width > 50 && r.height > 10; })()")));
     await shot(s.cdp, `${browser.name}-9c-person-load`);
     await clickTestId(s.cdp, 'btn-person-density');
@@ -1590,7 +1590,7 @@ async function checkBrowser(browser, port) {
     await sleep(150);
     await evaluate(s.cdp, "window.__wu.select(window.__wu.view.canonical('U-B/N-201'))");
     await sleep(200);
-    check('N을 4로 바꾸면 사람 상세도 "밀집 기준(4개 이상) 아래"', (await text(s.cdp, '[data-testid=person-load]')).includes('밀집 기준(4개 이상) 아래'));
+    check('N을 4로 바꾸면 사람 상세도 "밀집 기준(4개 이상) 아래"', (await text(s.cdp, '[data-testid=person-load]')).includes('몰리지 않음(밀집 기준 4개 이상)'));
     // 접힌 하위 유니버스(카드승인) 안의 공백 업무 근거를 누르면 펼쳐서 보여 준다
     const hiddenGid = await evaluate(s.cdp, "window.__wu.view.nodes.find((n) => n.label === '요청 검증').gid");
     check('요청 검증(하위 단계 업무)은 접힌 유니버스 안이라 그래프에 없음', await evaluate(s.cdp, `window.__wu.cy.getElementById(${JSON.stringify(hiddenGid)}).empty()`));
@@ -2043,7 +2043,7 @@ async function checkBrowser(browser, port) {
   await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.cy.nodes().length > 0", 8000);
   const resetMsg = (await evaluate(s.cdp, "sessionStorage.getItem('__confirmMsg')").catch(() => '')) || '';
   await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
-  check('U-9: 초기화 확인 문구가 직접 만들거나 가져온 업무 지도도 지워진다고 알림', resetMsg.includes('초기 샘플로 되돌립니다') && resetMsg.includes('직접 만들거나 가져온 업무 지도') && resetMsg.includes('내보내세요'), resetMsg);
+  check('U-9: 초기화 확인 문구가 직접 만들거나 가져온 업무 지도도 지워진다고 알림', resetMsg.includes('처음 샘플 상태로 되돌릴까요?') && resetMsg.includes('직접 만들거나 가져온 업무 지도') && resetMsg.includes('내보내세요'), resetMsg);
   check('NFR 복구: 가상 데이터 초기화 → 샘플이 처음 상태(추가 노드 없음, 수정 되돌림, 쓰기 가능)', (await nodeCount(s.cdp)) === NODES && !(await hasLabel(s.cdp, newLabel)) && !(await evaluate(s.cdp, "window.__wu.readOnly")) && !(await evaluate(s.cdp, "(window.__wu.doc.nodes.find((n) => n.id === 'N-001').description || '').includes('(수정)')")));
 
   // ── CR-14 B 인수인계 위험(R-26): 초기화 직후 원본 월말 정산에서(앞 단계가 데이터를 고치므로 여기서) ──
@@ -2067,7 +2067,7 @@ async function checkBrowser(browser, port) {
   await evaluate(s.cdp, "window.__wu.select('U-A1/N-002')");
   await sleep(200);
   const riskNote = await text(s.cdp, '[data-testid=risk-note]');
-  check('R-26 ⑤: 업무 상세(자료 수집)에 「지식 집중 위험 높음 — 윤바다만 해 봤고」 한 줄', riskNote.includes('지식 집중 위험 높음') && riskNote.includes('윤바다'), riskNote);
+  check('R-26 ⑤: 업무 상세(자료 수집)에 「지식 집중 위험 높음 — 윤바다만 해 봤고」 한 줄', riskNote.includes('혼자만 아는 일(위험 높음)') && riskNote.includes('윤바다'), riskNote);
   await clickTestId(s.cdp, 'btn-risk-note');
   await sleep(250);
   check('R-26 ⑤: 「인수인계 위험 보기」 → 인사이트 「인수인계 위험」 탭이 열림', await evaluate(s.cdp, "!!document.querySelector('[data-testid=tab-risk].active') && !!document.querySelector('[data-testid=risk-body]')"));
@@ -2592,7 +2592,7 @@ async function checkBrowser(browser, port) {
     await evaluate(s.cdp, `[...document.querySelectorAll('[data-testid=hidden-item]')].find((x) => x.dataset.id === ${JSON.stringify(idB)}).querySelector('[data-testid=btn-purge]').click()`);
     await sleep(400);
     const msgB = await evaluate(s.cdp, 'window.__delMsgs.at(-1)');
-    check('삭제 (나) 확인 문구: 연결 n개도 함께 지워지고 이력은 「(삭제된 항목)」로 남음', typeof msgB === 'string' && msgB.includes('완전히 지웁니다') && /연결 \d+개도 함께/.test(msgB) && msgB.includes('(삭제된 항목)'), String(msgB)); // CR-18-2
+    check('삭제 (나) 확인 문구: 연결 n개도 함께 지워지고 이력은 「(삭제된 항목)」로 남음', typeof msgB === 'string' && msgB.includes('완전히 지울까요?') && /연결 \d+개도 함께/.test(msgB) && msgB.includes('(삭제된 항목)'), String(msgB)); // CR-18-2
     check('삭제 (나) 목록에서 사라짐(자리표시는 목록에 안 나옴)', await evaluate(s.cdp, `![...document.querySelectorAll('[data-testid=hidden-item]')].some((x) => x.dataset.id === ${JSON.stringify(idB)})`));
     check('삭제 (나) 문서: 저장 이름 「(삭제된 노드)」(화면은 「(삭제된 항목)」), deleted·hidden true, 내용·연결 제거, 이력(소속 변경)은 유지, 검증용 이벤트 1건', await evaluate(s.cdp, `(() => { const d = window.__wu.doc; const n = d.nodes.find((x) => x.id === ${JSON.stringify(idB)}); return !!n && n.label === '(삭제된 노드)' && n.deleted === true && n.hidden === true && !d.edges.some((e) => e.source === n.id || e.target === n.id) && d.events.some((e) => e.type === 'affiliation_change' && e.payload.person_id === n.id) && d.events.filter((e) => e.payload && e.payload.target_id === n.id && e.payload.after && e.payload.after.deleted === true).length === 1; })()`)); // CR-18-2
     check('삭제 (나) 그래프·찾기에 자리표시가 나오지 않음', !(await hasLabel(s.cdp, '(삭제된 항목)')) && !(await hasLabel(s.cdp, '(삭제된 노드)')) && !(await hasLabel(s.cdp, '삭제 시험 담당자'))); // CR-18-2
@@ -3920,7 +3920,7 @@ async function checkBrowser(browser, port) {
       await makeDraft('U-A1/N-001', 'U-A1/N-012', 'U-A1/N-010');
       await sleep(300);
       const waTr = await evaluate(s.cdp, `(() => { const c = document.querySelector('[data-testid=draft-transfer]'); const l = document.querySelector('[data-testid=draft-transfer-list]'); const b = document.querySelector('[data-testid=draft-transfer-box]'); const r = b ? b.getBoundingClientRect() : { width: 0, height: 0 }; const conf = document.querySelector('[data-testid=draft-confirm]').getBoundingClientRect(); return { has: !!c, checked: c && c.checked, disabled: c && c.disabled, w: r.width, h: r.height, above: r.bottom <= conf.top + 1, text: b ? b.textContent : '', list: l ? l.textContent : '' }; })()`);
-      check('W-A CR-18-6 확정 단추 위에 「담당도 넘기기 — 보내는 사람의 수행을 오늘로 끝내고 받는 사람이 오늘부터 맡습니다」 칸(크기 있음, 기본 꺼짐)과 넘길 업무 「대사 확인」 목록', waTr.has && waTr.checked === false && waTr.disabled === false && waTr.w > 0 && waTr.h > 0 && waTr.above && waTr.text.includes('담당도 넘기기 — 보내는 사람의 수행을 오늘로 끝내고 받는 사람이 오늘부터 맡습니다') && waTr.list.includes('「대사 확인」'), JSON.stringify(waTr));
+      check('W-A CR-18-6 확정 단추 위에 「담당도 넘기기 — 보내는 사람의 담당을 오늘로 끝내고 받는 사람이 오늘부터 맡습니다」 칸(크기 있음, 기본 꺼짐)과 넘길 업무 「대사 확인」 목록', waTr.has && waTr.checked === false && waTr.disabled === false && waTr.w > 0 && waTr.h > 0 && waTr.above && waTr.text.includes('담당도 넘기기 — 보내는 사람의 담당을 오늘로 끝내고 받는 사람이 오늘부터 맡습니다') && waTr.list.includes('「대사 확인」'), JSON.stringify(waTr));
       await shot(s.cdp, `${browser.name}-wa-transfer-box`);
       const waToday0 = await waToday();
       const waEdges0 = await evaluate(s.cdp, "JSON.stringify(window.__wu.doc.edges.filter((e) => e.core_type === 'performs').map((e) => [e.source, e.target, e.period, e.hidden]))");
@@ -6732,7 +6732,7 @@ async function checkBrowser(browser, port) {
           await sleep(400);
           const m1 = await R("(() => { const d = document.querySelector('[data-testid=merge-works-topic-only]'); const n = document.querySelector('[data-testid=identity-done]'); return { open: d ? d.open : null, note: n ? n.textContent : '' }; })()");
           check('FU7-5 접힌 묶음 안에서 판정해도 묶음이 펼쳐진 채 유지됨', m1.open === true || m1.open === null, JSON.stringify(m1));
-          check('FU7-4 판정 알림의 조사: 「A」과/와 「B」를/을 …(받침에 맞음)', /「[^」]+」(과|와) 「[^」]+」(을|를) 다른 업무로 판정했습니다/.test(m1.note) && !/\)\(/.test(m1.note), m1.note);
+          check('FU7-4 판정 알림의 조사: 「A」과/와 「B」를/을 …(받침에 맞음)', /「[^」]+」(과|와) 「[^」]+」(을|를) 다른 업무로 정했습니다/.test(m1.note) && !/\)\(/.test(m1.note), m1.note);
         } else check('FU7-3 (이 지도에는 주제만 겹친 후보 묶음이 없음 — 단위 시험 대신 확인 못 함)', true);
       } else check('FU7 고침 U-D1', false, 'U-D1이 열리지 않음');
 
@@ -6865,8 +6865,8 @@ async function checkBrowser(browser, port) {
         await R("(() => { const b = document.querySelector('[data-testid=merge-diff]'); if (b) b.click(); })()");
         await sleep(300);
         const idn = await R("(document.querySelector('[data-testid=identity-done]') || {}).textContent || ''");
-        check('R11 FU6-7 「다른 …」 판정에도 성공 알림이 뜨고 조사가 맞음(「업무으로」 없음)', /판정했습니다/.test(idn) && !/업무으로/.test(idn), idn);
-        check('R11 FU6-7 통합 확인 머리 문구: 판정만으로는 원래 업무 지도가 바뀌지 않는다는 말', /판정만으로는 원래 업무 지도가 바뀌지 않습니다/.test(await R("document.getElementById('detail').innerText")));
+        check('R11 FU6-7 「다른 …」 판정에도 성공 알림이 뜨고 조사가 맞음(「업무으로」 없음)', /로 정했습니다/.test(idn) && !/업무으로/.test(idn), idn);
+        check('R11 FU6-7 통합 확인 머리 문구: 판정만으로는 원래 업무 지도가 바뀌지 않는다는 말', /여기서 고른 답은 원래 업무 지도를 바꾸지 않습니다/.test(await R("document.getElementById('detail').innerText")));
         await R("(() => { const b = document.querySelector('[data-testid=merge-close]'); if (b) b.click(); })()");
       } else check('R11 FU6-7 통합 확인 입구', false, '입구가 없음');
       // RV11C-10 기능 찾기: 대상이 없을 때 이유 한 줄
@@ -6954,7 +6954,7 @@ async function checkBrowser(browser, port) {
   await clickTestId(s.cdp, 'btn-rewind-revert');
   await sleep(500);
   const rwDone = await evaluate(s.cdp, "(() => { const d = window.__wu.doc; const n = d.nodes.find((x) => x.id === 'N-002'); const last = d.events.slice(-3); const done = document.querySelector('[data-testid=rewind-done]'); const dr = done ? done.getBoundingClientRect() : { width: 0, height: 0 }; return { label: n.label, bandHidden: document.querySelector('[data-testid=rewind-band]').hidden, confirm: window.__cm, noted: last.some((e) => (e.note || '').startsWith('편집 되감기:')), grew: d.events.length, doneW: dr.width, doneH: dr.height, ro: window.__wu.readOnly }; })()");
-  check('CR-14 A 「이 시점으로 되돌리기」 → 확인 창(개수·사용자 기록 보존 안내) → 이름이 옛 이름으로, 되감기 끝, 완료 알림(크기 있음)', rwDone.label === rwOld && rwDone.bandHidden && rwDone.confirm.includes('시점으로 되돌립니다') && rwDone.confirm.includes('사용자 기록') && rwDone.doneW > 0 && rwDone.doneH > 0 && rwDone.ro === false && rwDone.grew > evBefore, JSON.stringify(rwDone));
+  check('CR-14 A 「이 시점으로 되돌리기」 → 확인 창(개수·사용자 기록 보존 안내) → 이름이 옛 이름으로, 되감기 끝, 완료 알림(크기 있음)', rwDone.label === rwOld && rwDone.bandHidden && rwDone.confirm.includes('시점으로 되돌릴까요?') && rwDone.confirm.includes('사용자 기록') && rwDone.doneW > 0 && rwDone.doneH > 0 && rwDone.ro === false && rwDone.grew > evBefore, JSON.stringify(rwDone));
   check('CR-14 A 되돌림이 이력에 「편집 되감기」 메모로 남음', rwDone.noted, JSON.stringify(rwDone));
   await evaluate(s.cdp, 'window.__wu.select(null)');
   await sleep(150);

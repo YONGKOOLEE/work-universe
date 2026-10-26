@@ -256,15 +256,15 @@ export function importDialog(o) {
       const ai = st.result.ai;
       if (ai) {
         blocks.push(el('p', { class: 'muted small', 'data-testid': 'import-method' },
-          el('span', { class: 'chip', 'data-testid': 'import-ai-chip', title: 'Claude API가 문서를 읽어 만든 초벌입니다. 앱이 항목마다 원문 인용이 원문에 있는지 확인했습니다' }, `AI 변환 · ${ai.model}`),
-          ' 만든 방식: Claude API(실시간) 초벌. 원문 인용이 확인된 항목만 담았지만 AI가 읽은 것이라 사람이 확인해야 합니다.'));
+          el('span', { class: 'chip', 'data-testid': 'import-ai-chip', title: 'Claude API가 문서를 읽어 만든 밑그림입니다. 앱이 항목마다 원문 인용이 원문에 있는지 확인했습니다' }, `AI 변환 · ${ai.model}`),
+          ' 만든 방식: Claude API(실시간) 밑그림. 원문 인용이 확인된 항목만 담았지만 AI가 읽은 것이라 사람이 확인해야 합니다.'));
         blocks.push(ai.dropped.length
           ? el('details', { class: 'ai-dropped', 'data-testid': 'import-ai-dropped' },
             el('summary', {}, `원문 인용이 확인되지 않아 뺀 항목 ${ai.dropped.length}개`),
             el('ul', {}, ...ai.dropped.slice(0, 30).map((d) => el('li', { class: 'small' }, `${AI_KIND_LABEL[d.kind] || d.kind} 「${d.label}」 — ${d.reason}`)), ai.dropped.length > 30 ? el('li', { class: 'small' }, `외 ${ai.dropped.length - 30}개`) : null))
           : el('p', { class: 'muted small', 'data-testid': 'import-ai-dropped' }, '원문 인용이 확인되지 않아 뺀 항목 0개'));
       } else {
-        blocks.push(el('p', { class: 'muted small', 'data-testid': 'import-method' }, `만든 방식: ${METHOD_LABELS[st.result.method] || st.result.method} 초벌(규칙 ${report ? report.rules_version : '-'}). 원문 구조를 규칙으로 옮긴 것이라 사람이 확인해야 합니다.`));
+        blocks.push(el('p', { class: 'muted small', 'data-testid': 'import-method' }, `만든 방식: ${METHOD_LABELS[st.result.method] || st.result.method} 밑그림(규칙 ${report ? report.rules_version : '-'}). 원문 구조를 규칙으로 옮긴 것이라 사람이 확인해야 합니다.`));
       }
       // 키가 없어 규칙 변환을 쓴 것은 고장이 아니므로 노란 띠가 아니라 조용한 한 줄(초안·인사이트와 같은 처리, 처음 사용 점검 FU-41)
       if (st.result.fallback) blocks.push(el('p', { class: st.result.fallback.keyless ? 'muted small' : 'notice', 'data-testid': 'import-fallback', ...(st.result.fallback.keyless ? { 'data-keyless': 'true' } : {}) }, st.result.fallback.reason));
@@ -302,10 +302,10 @@ export function importDialog(o) {
         // 노드가 적어도 업무 하나를 적은 문서면 정상이다: 실패처럼 읽히지 않게 한마디 붙인다
         const oneWork = (doc.nodes || []).filter((n) => n && n.core_type === 'work' && !n.hidden).length <= 1;
         const fit = report.node_count > max ? '많음' : report.node_count < min ? (oneWork ? '적음 — 업무 하나짜리 문서라면 정상' : '적음') : '맞음';
-        summary.append(el('dt', {}, '세분화'), el('dd', { 'data-testid': 'import-granularity' }, `월말 정산 수준(항목 ${min}~${max}개) — ${fit}`));
+        summary.append(el('dt', {}, '항목 수 기준'), el('dd', { 'data-testid': 'import-granularity' }, `월말 정산 수준(항목 ${min}~${max}개) — ${fit}`));
       }
-      if (p.source) summary.append(el('dt', {}, '원문 근거'), el('dd', { 'data-testid': 'import-source' }, `항목 ${p.source.with}/${p.source.total}개`));
-      summary.append(el('dt', {}, '표시 보존'), el('dd', { 'data-testid': 'import-marks' }, `[미확인] 항목 ${p.marks.미확인}개, [가정] 항목 ${p.marks.가정}개`));
+      if (p.source) summary.append(el('dt', {}, '원문 위치가 적힌 항목'), el('dd', { 'data-testid': 'import-source' }, `항목 ${p.source.with}/${p.source.total}개`));
+      summary.append(el('dt', {}, '[미확인]·[가정] 표시'), el('dd', { 'data-testid': 'import-marks' }, `[미확인] 항목 ${p.marks.미확인}개, [가정] 항목 ${p.marks.가정}개`));
       blocks.push(summary);
 
       // 작성 주체만 비어 있는 것은 실패가 아니라 "입력할 차례"다: 빨간 오류 대신 안내로 둔다(여섯 번째 검토 U-6). 가져오기 버튼은 그대로 막힌다
@@ -372,7 +372,8 @@ export function importDialog(o) {
     }
 
     const can = p.ok && !o.app.readOnly;
-    blocks.push(el('div', { class: 'row import-actions' },
+    blocks.push(el('div', { class: 'row import-actions decide-row' },
+      can ? el('span', { class: 'decide-q', 'data-testid': 'import-confirm-q' }, '이 내용으로 업무 지도를 가져올까요?') : null,
       el('button', { type: 'button', class: 'primary', 'data-testid': 'import-confirm', disabled: !can, onclick: () => doImport(p) }, '가져오기'),
       o.app.readOnly ? el('span', { class: 'muted small' }, '읽기 전용이라 가져올 수 없습니다.') : null));
     slot.replaceChildren(...blocks);
@@ -409,7 +410,7 @@ export function importDialog(o) {
     aiLive = aiBtn ? el('p', { class: 'muted small', 'data-testid': 'ai-convert-live', 'aria-live': 'polite' }, st.aiBusy ? AI_CONVERT_WAIT : '') : null;
     const body = st.tab === 'folder' ? folderTab(o, render) : st.tab === 'export' ? exportBody() : st.tab === 'doc'
       ? el('div', { class: 'editor' },
-        el('p', { class: 'muted small' }, '업무정의서 같은 문서를 붙여 넣으면 제목(#)·표·번호 목록을 규칙으로 읽어 업무 지도 초벌을 만듭니다. 업무 흐름은 절차 속성으로, 요건·예외 같은 절은 주제 하나로 묶어 항목을 10~20개 정도로 만듭니다(월말 정산 수준).'),
+        el('p', { class: 'muted small' }, '업무정의서 같은 문서를 붙여 넣으면 제목(#)·표·번호 목록을 규칙으로 읽어 업무 지도 밑그림을 만듭니다. 업무 흐름은 업무의 「절차」 칸으로, 요건·예외 같은 절은 주제 하나로 묶어 항목을 10~20개 정도로 만듭니다(월말 정산 수준).'),
         el('p', { class: 'muted small', 'data-testid': 'import-plain-note' }, '한글·워드에서 복사한 일반 글(1. 개요 / 가. …)도 됩니다.'),
         el('textarea', { id: 'import-doc', rows: '9', 'aria-label': '문서 원문', placeholder: '# 업무 이름\n## 1. 개요\n| 항목 | 내용 |\n…', oninput: onDocInput }, st.docText),
         el('div', { class: 'row' },
