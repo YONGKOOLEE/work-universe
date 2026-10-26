@@ -11,6 +11,7 @@ import { firstViewZoom } from '../view/explore.js';
 import { GRAPH_COLORS, LOD, chooseVisibleLabels, labelModelPx, labelPriority, labelScreenPx, layoutSpan, nextZoom, pushOutOfBox, pushOutOfCenter, rootLabelSize, separateLabeled, shapeOf, wheelZoomFactor, TYPE_SHAPES } from '../view/graphlod.js';
 import { el } from './dom.js';
 
+export const COLLAPSED_HOVER_TITLE = '접힌 팀 — 두 번 누르면 펼침';
 // 노드 유형별 색(어두운 배경용 파스텔). 범례도 이 표를 쓴다
 export const TYPE_COLORS = {
   root: '#b9e07a',
@@ -386,17 +387,21 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
   cy.on('mouseover', 'node', (evt) => {
     evt.target.addClass('hover');
     container.style.cursor = 'pointer';
+    // 접힌 팀 도형은 올려 보면 펼치는 법을 알려 준다(R13 FU8-3). 그래프는 캔버스라 칸 전체의 title을 잠깐 쓴다
+    if (evt.target.data('collapsed')) container.title = COLLAPSED_HOVER_TITLE;
     focusOn(evt.target);
   });
   cy.on('mouseout', 'node', (evt) => {
     evt.target.removeClass('hover');
     container.style.cursor = '';
+    container.removeAttribute('title');
     focusOn(selectedGid ? cy.getElementById(selectedGid) : null);
   });
   // 마우스가 노드 위에서 그래프 밖으로 바로 나가면 노드의 mouseout이 오지 않을 수 있다: 키운 이름·강조를 되돌린다
   container.addEventListener('mouseleave', () => {
     cy.nodes('.hover').forEach((n) => n.removeClass('hover'));
     container.style.cursor = '';
+    container.removeAttribute('title');
     focusOn(selectedGid ? cy.getElementById(selectedGid) : null);
   });
 

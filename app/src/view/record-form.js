@@ -9,7 +9,7 @@
 import { MEMO_CATEGORIES, normalizeLabel } from '../model/schema.js';
 import { josa } from '../model/josa.js';
 import { newRowsToOps } from '../model/table.js';
-import { memoKey, openMemos } from '../rules/issues.js';
+import { OPEN_CATEGORIES, memoKey, openMemos } from '../rules/issues.js';
 
 /** 성공 알림이 저절로 사라지는 시간(밀리초). 닫기 단추로 먼저 닫을 수 있다 */
 export const NOTICE_MS = 10000;
@@ -73,6 +73,13 @@ export function memoRecordInput({ workId, category, note, date, topicIds = [], p
 export const BRANCH_ONLY = 'only';
 export const BRANCH_DOC = 'doc';
 export const BRANCH_LABELS = { [BRANCH_ONLY]: '담당만 바꾸기(이력만 남김)', [BRANCH_DOC]: '인수인계서까지(초안 화면에서 이어서)' };
+// 갈래마다 무엇이 남는지 한 줄(R13 FU8-11: 라디오 둘과 체크가 헷갈림)
+export const BRANCH_WHAT = {
+  [BRANCH_ONLY]: '남는 것: 담당 바뀜 기록(누가 언제까지·언제부터 맡았는지)만. 인수인계서 문서는 만들지 않습니다.',
+  [BRANCH_DOC]: '남는 것: 담당 바뀜 + 인수인계서 문서(초안 화면에서 내용을 쓰고 확정할 때 한꺼번에 저장).',
+};
+export const HANDOVER_CHECK_WHAT = '체크하면 담당 바뀜 기록 말고 「인수인계」 이력이 한 줄 더 남습니다(누가 누구에게·날짜만, 쓴 글은 없고 문서도 아님).';
+export const BRIEF_HANDOVER_HINT = '휴가·부재·출장처럼 잠깐 맡기는 거면 담당을 넘기지 말고';
 
 /**
  * 「담당 넘기기」 상자의 갈래별 결과.
@@ -121,7 +128,7 @@ export function successNotice(kind, d) {
   switch (kind) {
     case 'record': { // 「이번 주 기록」·카드의 「기록 남기기」(메모)
       const when = d.date && d.today && d.date !== d.today ? `(${d.date}) ` : '';
-      return { testid: 'weekly-done', text: `「${d.label}」에 ${when}기록했습니다 — [${MEMO_CATEGORIES[d.category] || d.category}] ${d.note}`, goto: history(d.workGid, d.evGids) };
+      return { testid: 'weekly-done', text: `「${d.label}」에 ${when}기록했습니다 — [${MEMO_CATEGORIES[d.category] || d.category}] ${d.note}${OPEN_CATEGORIES.includes(d.category) ? ' — 미해결에 잡혔어요. 끝나면 「해결로 표시」하세요.' : ''}`, goto: history(d.workGid, d.evGids) };
     }
     case 'record-past': // 이미 끝난 일(이슈 + 해결됨 두 건)
       return { testid: 'past-resolved-done', text: '이슈와 그것을 닫는 해결됨 메모를 함께 남겼습니다 — 미해결에 쌓이지 않습니다.', goto: history(d.workGid, d.evGids) };
@@ -135,7 +142,7 @@ export function successNotice(kind, d) {
       const when = d.when;
       return {
         testid: 'assignee-done',
-        text: `「${d.work}」의 담당을 ${d.from} → ${d.to}${josa(d.to, '으로/로')} 바꿨습니다(${when}). ${d.from}의 수행은 ${when}에 끝나고 ${d.to}의 수행은 ${when}부터 시작됩니다.${d.created ? ` 「${d.to}」${josa(d.to, '은/는')} 새 사람으로 만들었습니다.` : ''}${d.handover ? ' 인수인계 기록도 남겼습니다.' : ''}`,
+        text: `「${d.work}」의 담당을 ${d.from} → ${d.to}${josa(d.to, '으로/로')} 바꿨습니다(${when}). ${d.from}의 담당은 ${d.today && when === d.today ? '오늘까지' : `${when}까지`}이고 ${d.to}의 담당은 ${d.today && when === d.today ? '오늘' : when}부터 시작됩니다.${d.created ? ` 「${d.to}」${josa(d.to, '은/는')} 새 사람으로 만들었습니다.` : ''}${d.handover ? ' 인수인계 기록도 남겼습니다.' : ''}`,
         goto: node(d.workGid),
       };
     }

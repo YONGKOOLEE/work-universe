@@ -252,17 +252,30 @@ const fmtDate = (d) => d;
  *   그보다 오래된 문서만 쓰면 중간에 쌓인 내용이 빠진 것으로 본다
  */
 function continuesPrevious(view, later, earlier) {
+  return continueBasis(view, later, earlier) !== null;
+}
+
+// 이어받았다고 본 근거(판정은 continuesPrevious와 같다 — 화면 글을 맞게 쓰려고 이유만 가른다, R13 FU8-27)
+//  'prev_ref' = 이 인수인계에 「이전 인수인계 참조」(previous_handover_id)가 바로 앞 인수인계로 걸려 있음(인수인계서와 무관)
+//  'same_doc' = 바로 앞(가장 최근 문서가 있는) 인수인계서를 같은 문서로 이어서 씀, 'doc_ref' = 이 인수인계서가 앞 인수인계서를 「참조」로 이음
+function continueBasis(view, later, earlier) {
   const prev = earlier[earlier.length - 1];
   const ref = later.payload.previous_handover_id;
-  if (ref && eventGidIn(later, ref) === prev.gid) return true;
+  if (ref && eventGidIn(later, ref) === prev.gid) return 'prev_ref';
   const art = later.payload.artifact_id ? view.canonical(eventGidIn(later, later.payload.artifact_id)) : null;
-  if (!art) return false;
+  if (!art) return null;
   const lastDoc = [...earlier].reverse().find((e) => e.payload.artifact_id);
-  if (!lastDoc) return false;
+  if (!lastDoc) return null;
   const lastArt = view.canonical(eventGidIn(lastDoc, lastDoc.payload.artifact_id));
-  if (art === lastArt) return true; // 같은 인수인계서를 이어서 씀
-  return view.edges.some((e) => !e.hidden && e.core_type === 'references' && e.source === art && e.target === lastArt);
+  if (art === lastArt) return 'same_doc'; // 같은 인수인계서를 이어서 씀
+  return view.edges.some((e) => !e.hidden && e.core_type === 'references' && e.source === art && e.target === lastArt) ? 'doc_ref' : null;
 }
+
+const CONTINUE_NOTES = {
+  prev_ref: ' — 앞 인수인계 기록을 이어받음(이 인수인계에 「이전 인수인계 참조」가 걸려 있음)',
+  same_doc: ' — 앞 인수인계와 같은 인수인계서를 이어서 씀',
+  doc_ref: ' — 이 인수인계서가 앞 인수인계서를 참조함',
+};
 
 /**
  * @param {object} view buildView 결과
@@ -296,7 +309,7 @@ export function repeatInefficiency(view, { asOf = null } = {}) {
       const art = ev.payload.artifact_id ? view.getNode(eventGidIn(ev, ev.payload.artifact_id)) : null;
       const nm = (id) => (id && view.getNode(eventGidIn(ev, id))?.label) || '(찾을 수 없는 항목)';
       const who = `${nm(ev.payload.from_person_id)} → ${nm(ev.payload.to_person_id)}`;
-      const note = i === 0 ? '' : referenced ? ' — 이전 인수인계서를 이어받음' : ' — 이전 인수인계서를 이어받지 않음';
+      const note = i === 0 ? '' : referenced ? CONTINUE_NOTES[continueBasis(view, ev, list.slice(0, i))] : ' — 이전 인수인계서를 이어받지 않음';
       return { event_gid: ev.gid, date: fmtDate(ev.occurred_at), referenced, text: `${ev.occurred_at} ${who}${art ? ` (인수인계서: ${art.label})` : ' (인수인계서 없음)'}${note}` };
     });
     const missed = steps.filter((s) => s.referenced === false).length;

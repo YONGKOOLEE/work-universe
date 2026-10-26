@@ -17,7 +17,7 @@ import { PANEL, clampPanelWidth, maxPanelWidth } from '../view/panel.js';
 import { DRAFT_TARGET_TYPES, MEMO_CATEGORIES, SUBTYPE_HANDOVER_DOC } from '../model/schema.js';
 import { validateDocument } from '../model/validate.js';
 import { BACKUP_NONE_TEXT, backupRows, collabPlan, draftCenterFor } from '../view/quick-input.js';
-import { addNodeOps, extraNames, extraSummary, groupedStrip, memoRecordInput, closeTargetWord, resolveCloseCount, successNotice, transferBranchPlan, canInlineEmpNo, BRANCH_DOC, BRANCH_LABELS, BRANCH_ONLY } from '../view/record-form.js';
+import { addNodeOps, extraNames, extraSummary, groupedStrip, memoRecordInput, closeTargetWord, resolveCloseCount, successNotice, transferBranchPlan, canInlineEmpNo, BRANCH_DOC, BRANCH_LABELS, BRANCH_ONLY, BRANCH_WHAT, BRIEF_HANDOVER_HINT, HANDOVER_CHECK_WHAT } from '../view/record-form.js';
 import { gateWrap, memoParts } from './memo-form.js';
 import { createNotices } from './notice.js';
 import { confirmedDoc, downloadWithNotice, printHtml } from './doc-output.js';
@@ -62,7 +62,7 @@ import { createTour } from './tour.js';
 import { helpPanel } from './help.js';
 import { scenarioOf } from '../rules/tour-steps.js';
 import { createFieldId, fillMineDefaults } from '../rules/new-universe.js';
-import { LEGEND_COLLAPSED_TEXT, OWNER_REQUIRED_TEXT, assignOps, keepDraftPick, mergePendingText, sameMark } from './flow-helpers.js';
+import { LEGEND_COLLAPSED_TEXT, LEGEND_LINES_TEXT, OWNER_REQUIRED_TEXT, assignOps, keepDraftPick, mergePendingText, sameMark } from './flow-helpers.js';
 import { FEATURE_WORK_LIMIT, commonFeatures, searchFeatures, searchMapItems } from '../view/feature-index.js';
 import { spaceMarks } from '../view/space-marks.js';
 import { WORKSPACES, cleanWorkspace, denseRows, followScreens, gapWorkRows, panelParts, planSwitch, recentHandoverDocs, soloRows, spaceBadges } from '../view/workspace.js';
@@ -574,6 +574,8 @@ function start() {
           : null,
         // 모양·크기·선 읽는 법(CR-22 G 8)
         // 한 줄로 두고 모자라면 줄임표(…)로 줄인다: 줄이 늘고 줄면 그래프 칸 높이가 바뀌어 폭을 바꿀 때 보던 가운데가 어긋난다
+        // 선 이름의 뜻(R13 FU8-3·18): 선 위 글자(수행·산출…)가 낯설다는 지적. 한 줄 ellipsis, 전부는 마우스를 올리면 title
+        el('li', { class: 'legend-note legend-visual', 'data-testid': 'legend-lines', title: LEGEND_LINES_TEXT }, el('span', {}, LEGEND_LINES_TEXT)),
         el('li', { class: 'legend-note legend-visual', 'data-testid': 'legend-visual', title: '크기 = 연결 수 · 화살표 = 시작 → 대상 · 흐린 점선 = 기준일에 맡은 일 없음 · 아주 옅은 선 = 지도 중심에 포함 · 휠 확대·축소, 빈 곳 끌기 이동' }, el('span', {}, '크기 = 연결 수 · 화살표 = 시작 → 대상 · 흐린 점선 = 맡은 일 없음')),
       ].filter(Boolean),
     );
@@ -707,12 +709,15 @@ function start() {
         // 상태(직접 해 봄·지금 담당 중·끝남)는 c.text 앞머리에 이미 있다 — 칩을 따로 달면 같은 말이 두 번 보였다
         el('span', { class: 'muted small' }, c.text + (c.note ? ` · ${c.note}` : '')))))
       : el('span', { class: 'muted small', 'data-testid': 'person-backup-none' }, BACKUP_NONE_TEXT));
-    return el('details', { class: 'person-backup', 'data-testid': 'person-backup' },
-      el('summary', {}, '이 사람 일, 누가 대신할 수 있나'),
-      el('p', { class: 'muted small' }, `${asOf()} 기준으로 진행 중인 업무마다 「유사 경험자」 계산의 상위 후보입니다(업무당 최대 3명, 그 업무를 직접 해 본 사람이 먼저). 후보의 이름을 누르면 그 사람이 선택됩니다.`),
-      el('table', { class: 'backup-table', 'data-testid': 'person-backup-table' },
-        el('thead', {}, el('tr', {}, el('th', {}, '맡은 업무'), el('th', {}, '대신할 수 있는 후보'))),
-        el('tbody', {}, ...rows.map((r) => el('tr', { 'data-testid': 'person-backup-row' }, el('td', {}, r.work.label), el('td', {}, cell(r)))))));
+    // 다른 묶음(카드의 접는 묶음)과 같은 모양: 제목 · 개수 · 한 줄 미리 보기(R13 FU8-22)
+    const withCands = rows.filter((r) => r.candidates.length).length;
+    return el('details', { class: 'card-group', 'data-testid': 'person-backup', 'data-group': 'person-backup' },
+      el('summary', {}, el('b', { class: 'cg-title' }, '이 사람 일, 누가 대신할 수 있나'), el('span', { class: 'cg-count' }, String(rows.length)), el('span', { class: 'cg-preview' }, withCands ? `후보 있는 업무 ${withCands}건` : '후보 없음')),
+      el('div', { class: 'cg-body' },
+        el('p', { class: 'muted small' }, `${asOf()} 기준으로 진행 중인 업무마다 「유사 경험자」 계산의 상위 후보입니다(업무당 최대 3명, 그 업무를 직접 해 본 사람이 먼저). 후보의 이름을 누르면 그 사람이 선택됩니다.`),
+        el('table', { class: 'backup-table', 'data-testid': 'person-backup-table' },
+          el('thead', {}, el('tr', {}, el('th', {}, '맡은 업무'), el('th', {}, '대신할 수 있는 후보'))),
+          el('tbody', {}, ...rows.map((r) => el('tr', { 'data-testid': 'person-backup-row' }, el('td', {}, r.work.label), el('td', {}, cell(r))))))));
   }
 
   // 업무 상세의 「협업자 추가」(CR-18 D-8): 이름·소속·연락처 세 칸으로 사람 노드 + 이 업무와의 「참조」 연결을 한 번의 묶음 명령(applyBatch)으로 저장한다. 같은 이름의 사람이 있으면 연결만
@@ -847,7 +852,7 @@ function start() {
       else notify('record', { label, date: m.input.occurred_at, today: todayLocal(), category: m.input.payload.category, note: m.input.note, workGid, evGids: evGidsOf(r) });
     };
     noteIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
-    addBtn = el('button', { type: 'button', 'data-testid': 'weekly-add', onclick: submit }, '기록');
+    addBtn = el('button', { type: 'button', 'data-testid': 'weekly-add', onclick: submit }, '기록하기'); // 왼쪽 메뉴의 「기록」(공간)과 구별(R13 FU8-7)
     addBtn.disabled = !parts.category();
     const addWrap = gateWrap(addBtn, () => parts.needCategory()); // 분류를 안 골라 막힌 「기록」을 눌러도 칩 줄을 짚어 준다(FU6-5)
     const row = (label, ...kids) => el('div', { class: 'memo-row' }, el('span', {}, label), ...kids);
@@ -1120,6 +1125,7 @@ function start() {
     const dateIn = el('input', { type: 'date', value: today, min: WEEKLY_DATE_MIN, max: today, 'data-testid': 'assignee-date', 'aria-label': '바뀐 날짜(기본 오늘)' });
     const handoverChk = el('input', { type: 'checkbox', 'data-testid': 'assignee-handover' });
     const handoverRow = el('label', { class: 'check', 'data-testid': 'assignee-handover-row' }, handoverChk, ' 인수인계 기록도 남기기');
+    const handoverWhat = el('p', { class: 'muted small', 'data-testid': 'assignee-handover-what' }, HANDOVER_CHECK_WHAT); // R13 FU8-11: 체크가 무엇을 남기는지
     const msg = el('span', { class: 'error-text', role: 'alert', 'data-testid': 'assignee-msg' });
     const fail = (text, code) => { msg.textContent = text; msg.dataset.code = code; };
     // 무엇을 남길까요? — 담당만(이력만) / 인수인계서까지. 처음은 담당만(지금 담당 바꾸기 동작 그대로)
@@ -1132,6 +1138,7 @@ function start() {
     const syncBranch = () => {
       const doc = branch() === BRANCH_DOC;
       handoverRow.hidden = doc;
+      handoverWhat.hidden = doc;
       dateIn.disabled = doc;
       docNote.hidden = !doc;
       apply.textContent = doc ? '인수인계 초안으로' : '담당 넘기기';
@@ -1178,7 +1185,7 @@ function start() {
       const to = r.to.label;
       const when = dateIn.value.trim();
       afterSave(r, gid); // refresh()가 상세를 다시 그린다(「현재 담당」이 바뀐다)
-      notify('assignee', { work: node.label, from, to, when, created: r.created, handover: r.handover, workGid: gid });
+      notify('assignee', { work: node.label, from, to, when, today: todayLocal(), created: r.created, handover: r.handover, workGid: gid });
       return undefined;
     };
     apply.addEventListener('click', submit);
@@ -1191,9 +1198,15 @@ function start() {
       el('div', { class: 'branch-pick', role: 'radiogroup', 'aria-label': '무엇을 남길까요?', 'data-testid': 'assignee-branch' },
         el('p', { class: 'small' }, el('strong', {}, '무엇을 남길까요?')),
         el('label', {}, rOnly, ` ${BRANCH_LABELS[BRANCH_ONLY]}`),
-        el('label', {}, rDoc, ` ${BRANCH_LABELS[BRANCH_DOC]}`)),
+        el('p', { class: 'muted small branch-what', 'data-testid': 'assignee-what-only' }, BRANCH_WHAT[BRANCH_ONLY]),
+        el('label', {}, rDoc, ` ${BRANCH_LABELS[BRANCH_DOC]}`),
+        el('p', { class: 'muted small branch-what', 'data-testid': 'assignee-what-doc' }, BRANCH_WHAT[BRANCH_DOC])),
       docNote,
       el('div', { class: 'row' }, handoverRow, apply),
+      handoverWhat,
+      // 잠깐 맡기는 경우(휴가·부재·출장)는 담당을 넘기지 않고 협업자로 둔다(R13 FU8-10)
+      el('p', { class: 'muted small', 'data-testid': 'assignee-brief' }, `${BRIEF_HANDOVER_HINT} `,
+        el('button', { type: 'button', class: 'link', 'data-testid': 'assignee-brief-collab', onclick: () => openFormBox('collab-quick') }, '협업자 추가'), '를 쓰세요.'),
       el('p', { class: 'muted small' }, '「담당만 바꾸기」는 한 번의 기록으로 지금 담당자의 담당을 그 날짜까지로 끝내고 새 담당자가 그 날짜부터 맡게 합니다. 문서까지 남기려면 「인수인계서까지」를 고르세요 — 초안 화면의 「담당도 넘기기」와 같은 일입니다.'),
       msg);
   }
@@ -1735,7 +1748,16 @@ function start() {
           return ownerCheck.get(universeId);
         };
         panel.replaceChildren(mergePanel({
-          view, plan, links: app.doc.identity_links || [], provider, readOnly: app.readOnly,
+          view, plan, links: app.doc.identity_links || [], provider, readOnly: app.readOnly, asOf: asOf(),
+          // 「다시 묻기」(R13 FU8-25): 그 연결을 아직 답하지 않은 상태(pending)로 되돌린다. 새 명령 없이 decideIdentity(status 'pending') — 이벤트 updated(before/after)가 남아 편집 되감기에 보인다
+          onReask: (l) => {
+            const r = app.decideIdentity({ a: l.a, b: l.b, kind: l.kind, status: 'pending', reason: l.reason, score: l.score });
+            if (!r.ok) return window.alert(messageFor(r.error));
+            refresh();
+            const nm = (g) => { const x = view.rawNode(g); return x ? `「${x.label}」` : ''; };
+            notify('plain', { testid: 'identity-reask-done', text: `${nm(l.a)}${nm(l.a) ? ' · ' : ''}${nm(l.b)} — 고른 답을 지웠습니다. 위 후보 목록에서 다시 고를 수 있습니다.`, nodeGid: l.a });
+            return undefined;
+          },
           onDecide: (item, status) => {
             const r = app.decideIdentity({ a: item.a, b: item.b, kind: item.kind, status, reason: item.reason, score: item.score });
             if (!r.ok) return window.alert(messageFor(r.error));
@@ -2029,7 +2051,8 @@ function start() {
     // 이름 목록(FU5-1): 저장할 때 같이 남기고 지난 점검과 비교한다. 숫자와 같은 기준일·밀집 기준의 같은 계산이라 숫자와 어긋나지 않는다
     // owners(M6): 업무별 지금 담당 이름. 기준에 함께 저장하고 「담당이 바뀐 업무」를 가린다
     const riskNames = riskNums ? { ...namesFromInspection(inspectionInput(view, { asOf: asOfDate, n, mapName: '' })), owners: currentOwnersByWork(view, asOfDate) } : null;
-    const riskSummary = riskNums ? { parts: teamRiskParts(riskNums), onMore: () => openInsight('', 'risk'), compare: riskCompareFor(riskNums, riskNames) } : null;
+    const denseNow = riskNums && riskNums.dense ? denseRows(view, { asOf: asOfDate, n }) : null;
+    const riskSummary = riskNums ? { parts: teamRiskParts(riskNums), onMore: () => openInsight('', 'risk'), compare: riskCompareFor(riskNums, riskNames), dense: denseNow && denseNow.rows.length ? { rows: denseNow.rows, total: denseNow.total, onPick: pickGid } : null } : null;
     renderUniverseSummary(panel, summary, display.nodes.length, {
       space, split, starter, universeId: app.doc.universe.id, riskSummary,
       onOpenFolder: folder && folder.state.supported && !rw && !app.readOnly ? openFolderTab : null,

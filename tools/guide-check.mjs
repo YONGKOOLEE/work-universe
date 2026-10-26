@@ -126,7 +126,7 @@ async function walk(browser, port) {
     const ok2a = await clickText(cdp, '기록 남기기', '#detail button');
     await sleep(300);
     const gateText = await panel(cdp);
-    const recDisabled = await ev(cdp, "(() => { const b = [...document.querySelectorAll('#detail button')].find((x) => x.offsetParent && x.textContent.trim() === '기록'); return b ? b.disabled : null; })()");
+    const recDisabled = await ev(cdp, "(() => { const b = [...document.querySelectorAll('#detail button')].find((x) => x.offsetParent && x.textContent.trim() === '기록하기'); return b ? b.disabled : null; })()");
     check('2단계: 「기록 남기기」 양식은 분류 칩 4개를 고르기 전에는 「분류를 고르세요」가 보이고 「기록」이 막힘', ok2a && ['진행 중', '이슈', '주의사항', '해결됨'].every((t) => gateText.includes(t)) && gateText.includes('분류를 고르세요') && recDisabled === true, `기록 단추 막힘=${recDisabled}`);
     const cancelOk = await clickText(cdp, '취소', '#detail button');
     const backOk = await clickText(cdp, '← 지도 전체', '#detail button');
