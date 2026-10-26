@@ -2491,7 +2491,7 @@ async function checkBrowser(browser, port) {
   // CR-22 K: 이력은 늘 최신 5건만(최신이 위) + 「모두 보기 →」(넓은 표, 20줄씩). 예전의 「15건 초과 → 10건」 접힘은 없어졌다
   await evaluate(s.cdp, "(() => { const g = document.querySelector('[data-group=history]'); if (g) g.open = true; })()");
   const hist = await evaluate(s.cdp, "({ li: document.querySelectorAll('[data-testid=history] li').length, count: (document.querySelector('[data-testid=history-count]') || {}).textContent || '', dates: [...document.querySelectorAll('[data-testid=history] li time')].map((t) => t.textContent) })");
-  check('이력 5건 초과 → 최신 5건만 최신이 위로 보이고 「모두 보기 →」 안내', hist.li === 5 && hist.count.includes('모두 보기 →') && hist.dates.every((d, i) => i === 0 || hist.dates[i - 1] >= d), JSON.stringify(hist));
+  check('이력 5건 초과 → 최근 3건만(사용자 의견 10-26 저녁, 예전 5건) 최신이 위로 보이고 「기록 모두 보기 →」 안내', hist.li === 3 && hist.count.includes('기록 모두 보기 →') && hist.dates.every((d, i) => i === 0 || hist.dates[i - 1] >= d), JSON.stringify(hist));
   await clickTestId(s.cdp, 'history-all');
   await sleep(200);
   const histAll = await evaluate(s.cdp, "({ rows: document.querySelectorAll('[data-testid=ht-row]').length, count: (document.querySelector('[data-testid=ht-count]') || {}).textContent || '', wide: document.querySelector('main').classList.contains('wide') })");
@@ -2597,7 +2597,12 @@ async function checkBrowser(browser, port) {
     check('삭제 (나) 문서: 저장 이름 「(삭제된 노드)」(화면은 「(삭제된 항목)」), deleted·hidden true, 내용·연결 제거, 이력(소속 변경)은 유지, 검증용 이벤트 1건', await evaluate(s.cdp, `(() => { const d = window.__wu.doc; const n = d.nodes.find((x) => x.id === ${JSON.stringify(idB)}); return !!n && n.label === '(삭제된 노드)' && n.deleted === true && n.hidden === true && !d.edges.some((e) => e.source === n.id || e.target === n.id) && d.events.some((e) => e.type === 'affiliation_change' && e.payload.person_id === n.id) && d.events.filter((e) => e.payload && e.payload.target_id === n.id && e.payload.after && e.payload.after.deleted === true).length === 1; })()`)); // CR-18-2
     check('삭제 (나) 그래프·찾기에 자리표시가 나오지 않음', !(await hasLabel(s.cdp, '(삭제된 항목)')) && !(await hasLabel(s.cdp, '(삭제된 노드)')) && !(await hasLabel(s.cdp, '삭제 시험 담당자'))); // CR-18-2
     await delSelect(`U-A1/${idB}`);
-    const histB = await text(s.cdp, '[data-testid=history]');
+    // 카드 기록은 최근 3줄뿐이라(사용자 의견 10-26 저녁) 옛 줄까지 보려고 「기록 모두 보기」 표를 연다
+    await clickTestId(s.cdp, 'history-all');
+    await sleep(250);
+    const histB = await text(s.cdp, '[data-testid=history-table]');
+    await clickTestId(s.cdp, 'history-table-close');
+    await sleep(200);
     check('삭제 (나) 그 노드를 가리킨 이력이 「(삭제된 항목)」로 보임', histB.includes('(삭제된 항목)') && !histB.includes('삭제 시험 담당자'), histB.slice(0, 160)); // CR-18-2
     await shot(s.cdp, `${browser.name}-cr13d-c-purged-history`);
     check('삭제 화면에 "null" 글자 없음', (await nullTextSpots(s.cdp)).length === 0, (await nullTextSpots(s.cdp)).join(','));
@@ -5559,7 +5564,7 @@ async function checkBrowser(browser, port) {
       await evaluate(s.cdp, 'window.__wu.select(null)');
       await sleep(200);
       const geo = await evaluate(s.cdp, "(() => { const i = document.querySelector('[data-testid=feature-find]'); const p = document.getElementById('universe-picker'); const h = document.querySelector('body > header'); const ir = i ? i.getBoundingClientRect() : null; const pr = p.getBoundingClientRect(); return { has: !!i, ph: i && i.placeholder, left: ir && ir.left, pright: pr.right, w: ir && ir.width, h: ir && ir.height, headerH: h.getBoundingClientRect().height, aria: i && i.getAttribute('aria-label'), top: ir && ir.top, ptop: pr.top }; })()");
-      check('CR-21 A 머리글 업무 지도 선택 오른쪽에 「무엇을 할까요?」 검색 칸(placeholder 「무엇을 할까요? 예: 담당, 미해결, 점검」), 같은 줄·크기 있음, 머리글은 한 줄', geo.has && geo.ph === '무엇을 할까요? 예: 담당, 미해결, 점검' && geo.left >= geo.pright - 1 && geo.w >= 120 && geo.h > 10 && Math.abs(geo.top - geo.ptop) < 20 && geo.headerH < 70, JSON.stringify(geo));
+      check('CR-21 A 머리글 업무 지도 선택 오른쪽에 「무엇을 할까요?」 검색 칸(placeholder 「무엇을 할까요? 예: 메모 남기기, 대사 확인」), 같은 줄·크기 있음, 머리글은 한 줄', geo.has && geo.ph === '무엇을 할까요? 예: 메모 남기기, 대사 확인' && geo.left >= geo.pright - 1 && geo.w >= 120 && geo.h > 10 && Math.abs(geo.top - geo.ptop) < 20 && geo.headerH < 70, JSON.stringify(geo));
       // 담당 → 담당 바꾸기 (업무를 고르지 않은 상태)
       await c21Type('담당');
       const hits = await c21Hits();
@@ -5626,7 +5631,7 @@ async function checkBrowser(browser, port) {
       await sleep(300);
       check('CR-21 A Enter는 첫 결과(이번 주 기록)로 간다: 개요의 이번 주 기록 상자가 강조', (await c21Flash('[data-testid=weekly-quick]')) && (await evaluate(s.cdp, "document.querySelector('[data-testid=feature-find]').value")) === '');
       await c21Type('zzqqxx');
-      check('CR-21 A 맞는 기능이 없으면 「찾는 기능 없음」 안내', (await text(s.cdp, '[data-testid=feature-find-none]')).includes('찾는 기능 없음'));
+      check('CR-21 A 맞는 기능이 없으면 「못 찾았어요 · 이렇게 쳐 보세요」 안내 + 자주 하는 일(사용자 의견 10-26 저녁, 예전 「찾는 기능 없음」)', (await text(s.cdp, '[data-testid=feature-find-none]')).includes('이렇게 쳐 보세요') && (await evaluate(s.cdp, "document.querySelectorAll('[data-testid=feature-find-common]').length")) === 6);
       await c21Type('');
     } else check('CR-21 A 기능 찾기', false, '월말 정산 점검이 열리지 않음');
 
@@ -5712,7 +5717,7 @@ async function checkBrowser(browser, port) {
         // 묶음: 5줄 이하는 기본 펼침, 연결이 같은 줄 모양, 시험 이름 유지
         const grp = await kQ("(() => [...document.querySelectorAll('#detail .card-group')].map((g) => g.dataset.group + (g.open ? '+' : '-')).join(' '))()");
         const assignOrder = await kQ("[...document.querySelectorAll('[data-testid=card-group-assign] [data-testid=link-status]')].map((x) => x.textContent).join()");
-        check('CR-22 K 작은 지도는 작은 묶음이 기본 펼침(내용·담당·산출물), 이력은 5건을 넘어 접힘, 관리는 접힘', /content\+/.test(grp) && /assign\+/.test(grp) && /outputs\+/.test(grp) && /history-/.test(grp) && /manage-/.test(grp), grp);
+        check('CR-22 K 카드 첫 화면(사용자 의견 10-26 저녁): 기록만 펼침, 내용·담당·산출물·관리는 접힘(예전: 작은 묶음은 펼침)', /content-/.test(grp) && /assign-/.test(grp) && /outputs-/.test(grp) && /history\+/.test(grp) && /manage-/.test(grp), grp);
         check('CR-22 K 담당 묶음 순서: 지금 → 지난(끝난 날 최신 먼저), 상태 칩 순서가 현재 → 종료', assignOrder.indexOf('현재') >= 0 && assignOrder.indexOf('현재') < assignOrder.indexOf('종료'), assignOrder);
         const hist = await kQ("[...document.querySelectorAll('[data-testid=history] li time')].map((t) => t.textContent)");
         check('CR-22 K 이력은 최신이 위(날짜가 내려가는 순서)', hist.length > 0 && hist.length <= 5 && hist.every((d, i) => i === 0 || hist[i - 1] >= d), JSON.stringify(hist));
@@ -5739,7 +5744,7 @@ async function checkBrowser(browser, port) {
         const split2 = await kQ("(document.querySelector('[data-testid=issue-split]') || {}).textContent || ''");
         check('CR-22 K 「미해결 n건」 옆에 이 업무·같은 주제 수가 나뉘어 보임(같은 주제 3건)', /이 업무 \d+ · 같은 주제 3\)/.test(split2), split2);
         const grp2 = await kQ("(() => [...document.querySelectorAll('#detail .card-group')].map((g) => g.dataset.group + (g.open ? '+' : '-') + (g.querySelector('.cg-count') ? g.querySelector('.cg-count').textContent : '')).join(' '))()");
-        check('CR-22 K 큰 묶음은 접힌 채 머리에 개수(담당 15·산출물 11·앞뒤 업무·관련 주제·기타 14·이력 200건 넘음)', /assign-15/.test(grp2) && /outputs-11/.test(grp2) && /around-14/.test(grp2) && /history-2\d\d/.test(grp2) && /content\+/.test(grp2), grp2);
+        check('CR-22 K 큰 묶음은 접힌 채 머리에 개수(담당 15·산출물 11·앞뒤 업무·관련 주제·기타 14·이력 200건 넘음)', /assign-15/.test(grp2) && /outputs-11/.test(grp2) && /around-14/.test(grp2) && /history\+2\d\d/.test(grp2) && /content-/.test(grp2), grp2);
         const prev = await kQ("(() => [...document.querySelectorAll('[data-testid=card-group-assign] .cg-preview, [data-testid=card-group-around] .cg-preview')].map((e) => e.textContent).join(' / '))()");
         check('CR-22 K 묶음 머리 미리보기: 담당은 「지금 n · 지난 n」, 앞뒤 업무·관련 주제는 개수', /지금 1/.test(prev) && /지난 14/.test(prev) && /앞뒤 업무 6/.test(prev) && /관련 주제 7/.test(prev), prev);
         // 담당 묶음 펼치기: 5줄 + 「모두 15개」, 지금이 먼저, 모두 누르면 15줄
@@ -5751,11 +5756,9 @@ async function checkBrowser(browser, port) {
         await sleep(100);
         const a15 = await kQ("(() => { const g = document.querySelector('[data-testid=card-group-assign]'); const periods = [...g.querySelectorAll('li')].map((li) => (li.querySelector('.status-other') ? li.querySelector('div.muted.small') : null)).filter(Boolean).map((e) => e.textContent.split(' ~ ')[1] || ''); return { lis: g.querySelectorAll('li').length, more: !!g.querySelector('[data-testid=group-all]'), ends: periods }; })()");
         check('CR-22 K 「모두 15개」 → 15줄, 지난 담당은 끝난 날이 최신인 것부터', a15.lis === 15 && !a15.more && a15.ends.length >= 10 && a15.ends.every((e, i) => i === 0 || a15.ends[i - 1] >= e), JSON.stringify(a15));
-        // 이력: 접힘 → 펼침 → 최신 5건, 날짜 내림차순, 「모두 보기 →」
-        await raw(s.cdp, "document.querySelector('[data-testid=card-group-history] summary').click()");
-        await sleep(100);
+        // 이력: 처음부터 펼침 → 최근 3건, 날짜 내림차순, 「기록 모두 보기 →」(사용자 의견 10-26 저녁, 예전 접힘+5건)
         const h5 = await kQ("(() => { const dates = [...document.querySelectorAll('[data-testid=history] li time')].map((t) => t.textContent); return { n: dates.length, dates, all: !!document.querySelector('[data-testid=history-all]'), count: document.querySelector('[data-testid=history-count]').textContent }; })()");
-        check('CR-22 K 이력 묶음 펼침: 최신 5건이 날짜 내림차순으로 + 「모두 보기 →」, 「최신이 위 · n건」', h5.n === 5 && h5.dates.every((d, i) => i === 0 || h5.dates[i - 1] >= d) && h5.all && /최신이 위 · 2\d\d건/.test(h5.count), JSON.stringify(h5));
+        check('CR-22 K 이력 묶음: 최근 3건이 날짜 내림차순으로 + 「기록 모두 보기 →」, 「최신이 위 · n건」', h5.n === 3 && h5.dates.every((d, i) => i === 0 || h5.dates[i - 1] >= d) && h5.all && /최신이 위 · 2\d\d건/.test(h5.count), JSON.stringify(h5));
         // 이력 표
         await raw(s.cdp, "document.querySelector('[data-testid=history-all]').click()");
         await sleep(250);
@@ -5812,7 +5815,7 @@ async function checkBrowser(browser, port) {
         await kSelect('U-A1/N-002');
         await kSelect('U-A1/N-001');
         const reset = await kQ("(() => document.querySelector('[data-testid=card-group-assign]').open)()");
-        check('CR-22 K 펼친 묶음은 같은 항목을 다시 그릴 때 남고(저장 뒤에도), 다른 항목을 고르고 돌아오면 기본값(15줄이라 접힘)으로', keep === true && reset === false, JSON.stringify({ keep, reset }));
+        check('CR-22 K 펼친 묶음은 같은 항목을 다시 그릴 때 남고(저장 뒤에도), 같은 종류(업무) 다른 항목을 고르고 돌아와도 그대로(종류별 탭 메모리, 사용자 의견 10-26 저녁 — 예전: 다른 항목을 고르면 기본값)', keep === true && reset === true, JSON.stringify({ keep, reset }));
 
         // 사람 카드: 서하늘(업무 8개)
         await kSelect('U-A1/N-012');
@@ -6500,6 +6503,7 @@ async function checkBrowser(browser, port) {
       await r11Wait('U-A1');
       await R("window.__wu.select('U-A1/N-001')");
       await sleep(250);
+      await R("(() => { const g = document.querySelector('[data-group=content]'); if (g) g.open = true; })()"); // 내용 묶음은 접혀 있다(사용자 의견 10-26 저녁): 펼친 뒤 읽는다
       const stamp = await R("document.getElementById('detail').innerText");
       check('R11 FU6-15 카드의 ISO 시각이 「2026-10-26 03:52」로 보임(원문 T…+09:00 없음)', stamp.includes('2026-10-26 03:52') && !stamp.includes('03:52:28+09:00'), stamp.slice(0, 200));
       await R('window.__wu.select(null)');
@@ -6891,6 +6895,113 @@ async function checkBrowser(browser, port) {
         await pickSpace('record');
         check('R11 RV11-4 이번 주 기록 양식이 없는 화면(읽기 전용)의 빈 최근 기록은 「아직 남긴 기록이 없습니다」만', (await R("(document.querySelector('[data-testid=recent-empty]') || {}).textContent || ''")) === '아직 남긴 기록이 없습니다');
       } else check('R11 읽기 전용', false, '열리지 않음');
+    }
+
+    // ── 사용자 의견 10-26 저녁(3개): ① 카드 첫 화면은 요약만·나머지 접기 ② 「지금 볼 것」 누르면 그 자리로 ③ 찾기: 빈 칸 자주 하는 일·일상말·항목 이름·안 맞을 때 안내 ──
+    {
+      const findBox = async (q) => {
+        await R(`(() => { const i = document.querySelector('[data-testid=feature-find]'); i.focus(); i.value = ${JSON.stringify(q)}; i.dispatchEvent(new Event('input')); })()`);
+        await sleep(200);
+      };
+      const listText = () => R("(document.querySelector('[data-testid=feature-find-list]') || {}).innerText || ''");
+      const firstIds = () => R("[...document.querySelectorAll('[data-testid=feature-find-result]')].map((b) => b.dataset.id).slice(0, 3).join()");
+      if (await r11Go('U-A1', ['U-A1'])) {
+        await R('window.__wu.select(null)');
+        await pickSpace('map');
+        // ①
+        await R("window.__wu.select('U-A1/N-001')");
+        await sleep(300);
+        await shot(s.cdp, `${browser.name}-u3-01-card-first`);
+        const c1 = await R("(() => { const g = [...document.querySelectorAll('#detail .card-group')]; return { open: g.filter((x) => x.open).map((x) => x.dataset.group), closed: g.filter((x) => !x.open).map((x) => x.dataset.group + ':' + ((x.querySelector('.cg-count') || {}).textContent || '')), hist: document.querySelectorAll('[data-testid=history] li').length, all: (document.querySelector('[data-testid=history-all]') || {}).textContent || '', hint: (document.querySelector('[data-testid=now-hint]') || {}).textContent || '', summaries: g.filter((x) => !x.open).every((x) => x.querySelector('summary').offsetHeight < 60) }; })()");
+        check('U3-1 카드 첫 화면: 펼쳐 있는 묶음은 기록 하나, 나머지는 머리글 한 줄+건수로 접힘, 기록은 최근 3줄 + 「기록 모두 보기 →」', c1.open.join() === 'history' && c1.closed.length >= 3 && c1.closed.filter((x) => !x.startsWith('manage')).every((x) => /:.+/.test(x)) && c1.hist === 3 && c1.all === '기록 모두 보기 →' && c1.summaries, JSON.stringify(c1));
+        check('U3-1 「지금 볼 것」 머리글 아래 「누르면 그 자리로 갑니다」', c1.hint === '누르면 그 자리로 갑니다', c1.hint);
+        // ② 미해결 줄 → 기록의 그 줄로(접힌 묶음이면 펼침)
+        await R("(() => { const g = document.querySelector('[data-group=history]'); g.open = false; })()");
+        await sleep(100);
+        // 미해결 줄이 아래에 다 보이면 「미해결 n건」 머리 줄은 없다(메인 10-26 저녁 — 같은 말 두 번). 미해결 한 줄을 눌러 간다
+        const head = await R("({ head: !!document.querySelector('[data-testid=now-issues-head]'), lines: document.querySelectorAll('[data-testid=now-issue]').length })");
+        check('U3-2 「지금 볼 것」 미해결 줄이 보이고(누를 수 있음), 다 보이면 겹치는 머리 줄 없음', head.lines >= 1 && !head.head, JSON.stringify(head));
+        await R("document.querySelector('[data-testid=now-issue] button.now-text').click()");
+        await sleep(500);
+        const go1 = await R("(() => { const g = document.querySelector('[data-group=history]'); const li = document.querySelector('.goal-flash, [data-just-added=\"1\"]'); return { open: g.open, flash: !!li, tag: li ? li.tagName : '' }; })()");
+        check('U3-2 미해결 줄을 누르면 접혀 있던 기록 묶음이 펼쳐지고 그 기록 줄이 강조됨', go1.open && go1.flash, JSON.stringify(go1));
+        // 알림 줄 → 알림 묶음 펼침, 인수인계 기록 없음 → 초안 열기
+        await R("window.__wu.select(null)");
+        await R("window.__wu.select('U-A1/N-001')");
+        await sleep(300);
+        const lines = await R("[...document.querySelectorAll('[data-testid=card-now] .now-item')].map((x) => x.textContent.replace(/\\s+/g, ' ').trim())");
+        check('U3-2 「지금 볼 것」 줄마다 무엇을 볼지 동사(보기 →·만들기 →)로 끝나는 줄이 있음', lines.some((t) => /보기 →$/.test(t)), JSON.stringify(lines));
+        const alertBtn = await R("(() => { const b = document.querySelector('[data-testid=now-alert][data-note=repeat-note] button'); return !!b; })()");
+        if (alertBtn) {
+          await R("document.querySelector('[data-testid=now-alert][data-note=repeat-note] button').click()");
+          await sleep(300);
+          check('U3-2 「반복 비효율 — 무엇이 반복되나 보기 →」를 누르면 알림 묶음이 펼쳐지고 그 알림이 강조됨', await R("(() => { const g = document.querySelector('[data-group=alerts]'); return g.open && !!g.querySelector('[data-testid=repeat-note].goal-flash'); })()"));
+        }
+        const riskBtn = await R("!!document.querySelector('[data-testid=now-alert][data-note=risk-note] button')");
+        if (riskBtn) {
+          await R("document.querySelector('[data-testid=now-alert][data-note=risk-note] button').click()");
+          await sleep(400);
+          check('U3-2 「인수인계 기록 없음 — 인수인계서 만들기 →」를 누르면 초안 창이 열림', await R("!!document.querySelector('#detail .draft, [data-testid=draft-panel], [data-testid=draft-close]')"));
+          await R('window.__wu.select(null)');
+          await R("window.__wu.select('U-A1/N-001')");
+          await sleep(300);
+        }
+        // 펼침은 같은 종류 카드끼리 이 탭 메모리에만(저장소 안 씀)
+        await R("document.querySelector('[data-testid=card-group-content] summary').click()");
+        await sleep(100);
+        const snapBefore = await R('JSON.stringify(Object.entries(localStorage))');
+        await R("window.__wu.select('U-A1/N-002')");
+        await sleep(300);
+        const mem = await R("document.querySelector('[data-testid=card-group-content]').open");
+        await R("window.__wu.select('U-A1/N-012')");
+        await sleep(300);
+        const memPerson = await R("document.querySelector('[data-testid=card-group-content]').open");
+        const snapAfter = await R('JSON.stringify(Object.entries(localStorage))');
+        check('U3-1 한 번 펼친 묶음은 같은 종류(업무) 다른 카드에서도 펼쳐져 있고 사람 카드는 따로, 펼침 상태는 저장소에 쓰지 않음', mem === true && memPerson === false && snapBefore === snapAfter, JSON.stringify({ mem, memPerson, same: snapBefore === snapAfter }));
+        await R("window.__wu.select('U-A1/N-001')");
+        await sleep(300);
+        await shot(s.cdp, `${browser.name}-u3-02-card-after-open`);
+        await R('window.__wu.select(null)');
+        await pickSpace('map');
+        // ③ 빈 칸을 누르면 자주 하는 일
+        await R("(() => { const i = document.querySelector('[data-testid=feature-find]'); i.value = ''; i.focus(); i.dispatchEvent(new Event('focus')); })()");
+        await sleep(250);
+        const common = await R("[...document.querySelectorAll('[data-testid=feature-find-common]')].map((b) => b.querySelector('.feat-name').textContent)");
+        await shot(s.cdp, `${browser.name}-u3-03-find-empty`);
+        check('U3-3 찾기 칸을 누르면(빈 칸) 「자주 하는 일」 6개', common.join() === '메모 남기기,인수인계서 만들기,담당 넘기기,쓴 것 찾기,이번 주 점검,업무·사람 더 넣기', common.join());
+        await xKey('ArrowDown', 'ArrowDown', 40);
+        const act = await xActive();
+        await xKey('ArrowDown', 'ArrowDown', 40);
+        const act2 = await R("document.activeElement.querySelector ? (document.activeElement.querySelector('.feat-name') || {}).textContent : ''");
+        check('U3-3 자주 하는 일은 키보드 ↓로 들어가 ↓로 옮겨 감', act === 'feature-find-common' && act2 === '인수인계서 만들기', JSON.stringify([act, act2]));
+        await xKey('Escape', 'Escape', 27);
+        // 일상말
+        const daily = [['퇴사', 'assignee'], ['어디 썼지', 'recent'], ['엑셀 붙여넣기', 'table-add'], ['실수로 지웠어', 'rewind']];
+        for (const [q, want] of daily) {
+          await findBox(q);
+          const ids = await firstIds();
+          check(`U3-3 일상말 「${q}」를 치면 ${want}가 1~3위`, ids.split(',').includes(want), ids);
+        }
+        await findBox('어디 썼지');
+        await shot(s.cdp, `${browser.name}-u3-04-find-daily`);
+        // 항목 이름
+        await findBox('대사');
+        const items = await R("({ head: (document.querySelector('[data-testid=feature-find-items-head]') || {}).textContent || '', names: [...document.querySelectorAll('[data-testid=feature-find-item] .feat-name')].map((x) => x.textContent), n: document.querySelectorAll('[data-testid=feature-find-item]').length })");
+        check('U3-3 「대사」를 치면 「지도에서」 묶음에 항목 이름이 최대 5개', /^지도에서 \d+건$/.test(items.head) && items.n >= 1 && items.n <= 5 && items.names.every((n) => n.includes('대사')), JSON.stringify(items));
+        const order = await R("(() => { const l = [...document.querySelector('[data-testid=feature-find-list]').children]; const idx = (sel) => { const e = document.querySelector(sel); return e ? l.indexOf(e.closest('li')) : -1; }; return { f: idx('[data-testid=feature-find-result]'), i: idx('[data-testid=feature-find-items-head]'), r: idx('[data-testid=feature-find-records-head]') }; })()");
+        check('U3-3 결과 순서: 기능 → 지도에서 → 기록에서', (order.f < 0 || order.f < order.i) && (order.r < 0 || order.i < order.r), JSON.stringify(order));
+        await shot(s.cdp, `${browser.name}-u3-05-find-items`);
+        await R("document.querySelector('[data-testid=feature-find-item]').click()");
+        await sleep(400);
+        check('U3-3 항목 이름을 누르면 그 카드가 열림', (await R('window.__wu.selected')) !== null && (await R("(document.querySelector('#detail h2') || {}).textContent || ''")).includes('대사'));
+        // 안 맞을 때
+        await findBox('zzqqxx');
+        const none = await R("({ t: (document.querySelector('[data-testid=feature-find-none]') || {}).textContent || '', common: document.querySelectorAll('[data-testid=feature-find-common]').length })");
+        check('U3-3 아무것도 안 맞으면 「이렇게 쳐 보세요」 + 자주 하는 일', none.t.includes('이렇게 쳐 보세요') && !none.t.includes('찾는 기능 없음') && none.common === 6, JSON.stringify(none));
+        await shot(s.cdp, `${browser.name}-u3-06-find-none`);
+        await R("(() => { const i = document.querySelector('[data-testid=feature-find]'); i.value = ''; i.blur(); })()");
+        await R('window.__wu.select(null)');
+      } else check('U3 사용자 의견 10-26 저녁', false, 'U-A1이 열리지 않음');
     }
 
     // 저장소를 블록 시작 때 상태로 되돌린다

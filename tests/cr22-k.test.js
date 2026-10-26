@@ -67,11 +67,11 @@ test('CR-22 K 연결 묶음: 업무는 담당·산출물·앞뒤 업무·관련 
   assert.equal(other[0].items.length, 3);
 });
 
-test('CR-22 K 묶음 펼침·줄 제한: 5줄 이하는 기본 펼침, 직접 바꾼 값이 먼저, 5줄만 먼저 + 모두', () => {
-  assert.equal(CARD.OPEN_MAX, 5);
-  assert.equal(groupOpen(5), true);
+test('CR-22 K 묶음 펼침·줄 제한: 건수가 있는 묶음은 기본 접힘(사용자 의견 10-26 저녁, 예전 5줄 이하 펼침), 직접 바꾼 값이 먼저, 5줄만 먼저 + 모두', () => {
+  assert.equal(CARD.OPEN_MAX, 0);
+  assert.equal(groupOpen(1), false);
+  assert.equal(groupOpen(5), false);
   assert.equal(groupOpen(6), false);
-  assert.equal(groupOpen(0), true);
   assert.equal(groupOpen(6, true), true);
   assert.equal(groupOpen(2, false), false);
   const many = Array.from({ length: 12 }, (_, i) => i);
@@ -140,15 +140,16 @@ test('CR-22 K 쪽 나누기: 20줄씩 누적, 마지막 쪽은 남은 만큼, �
   assert.equal(pageRows(rows, 1, 5).shown.length, 5);
 });
 
-test('CR-22 K 카드 이력 미리보기: 최신 5건, 방금 기록한 줄이 더 옛것이면 따로 한 줄(나머지 수는 그만큼 줄어든다)', () => {
+test('CR-22 K 카드 이력 미리보기: 최신 3건(예전 5), 방금 기록한 줄이 더 옛것이면 따로 한 줄(나머지 수는 그만큼 줄어든다)', () => {
+  assert.equal(CARD.HISTORY_SHOWN, 3);
   const rows = Array.from({ length: 12 }, (_, i) => ({ gid: `g${i}`, date: `2026-01-${String(20 - i).padStart(2, '0')}` }));
   const a = historyPreview(rows, null);
-  assert.deepEqual([a.shown.length, a.extra, a.rest], [5, null, 7]);
+  assert.deepEqual([a.shown.length, a.extra, a.rest], [3, null, 9]);
   const b = historyPreview(rows, ['g1']);
-  assert.deepEqual([b.shown.length, b.extra, b.rest], [5, null, 7], '이미 보이는 줄이면 그대로');
+  assert.deepEqual([b.shown.length, b.extra, b.rest], [3, null, 9], '이미 보이는 줄이면 그대로');
   const c = historyPreview(rows, ['g9']);
   assert.equal(c.extra.gid, 'g9');
-  assert.equal(c.rest, 6);
+  assert.equal(c.rest, 8);
   assert.deepEqual(historyPreview(rows.slice(0, 3), ['zz']), { shown: rows.slice(0, 3), extra: null, rest: 0 });
 });
 
@@ -309,15 +310,20 @@ test('CR-22 K 업무 카드: 이름 h2는 이름만, 상태 줄(담당 이름 �
   moreBtn.click();
   assert.equal(outputs.querySelectorAll('li').length, 7);
   assert.equal(outputs.querySelector('[data-testid=group-all]'), null);
-  // 담당 묶음은 1줄이라 펼침
-  assert.notEqual(q(panel, 'card-group-assign').getAttribute('open'), null);
-  // 이력: 12건 → 5건(최신이 위) + 모두 보기, 묶음 닫힘, 머리에 id(이력으로 가는 곳)
+  // 담당 묶음은 1줄이어도 접힘(첫 화면은 요약만, 사용자 의견 10-26 저녁). 머리글 한 줄 + 건수
+  assert.equal(q(panel, 'card-group-assign').getAttribute('open'), null);
+  assert.match(q(panel, 'card-group-assign').querySelector('summary').textContent, /담당.*1/);
+  assert.equal(q(panel, 'card-group-content').getAttribute('open'), null, '내용도 접힘');
+  // 이력: 12건 → 최근 3건(최신이 위) + 기록 모두 보기, 묶음은 펼침, 머리에 id(이력으로 가는 곳)
   const hist = q(panel, 'card-group-history');
-  assert.equal(hist.getAttribute('open'), null);
+  assert.notEqual(hist.getAttribute('open'), null);
   const lis = hist.querySelectorAll('[data-testid=history] li');
-  assert.equal(lis.length, 5);
+  assert.equal(lis.length, 3);
   assert.equal(lis[0].querySelector('time').textContent, '2026-09-12');
-  assert.equal(lis[4].querySelector('time').textContent, '2026-09-08');
+  assert.equal(lis[2].querySelector('time').textContent, '2026-09-10');
+  assert.match(q(panel, 'history-all').textContent, /기록 모두 보기/);
+  // 접힌 묶음 수: 첫 화면에서 펼쳐진 묶음은 기록 하나뿐
+  assert.deepEqual(['content', 'assign', 'outputs', 'history'].filter((k) => q(panel, `card-group-${k}`).getAttribute('open') !== null), ['history']);
   assert.ok(q(panel, 'history-all'));
   assert.equal(q(panel, 'history-heading').getAttribute('id'), 'history-heading');
   assert.match(q(panel, 'history-count').textContent, /최신이 위 · 12건/);
@@ -336,7 +342,7 @@ test('CR-22 K 카드: 방금 기록한 옛 줄은 이력이 닫혀 있어도 펼
   body.append(panel);
   renderNodeDetail(panel, d, { onFocus() {}, linkTools: () => null, justAdded: ['U-R/E-1'], card: cardOpts(view, 'U-R/E-1'.replace('E-1', 'N-W1'), d) });
   assert.notEqual(q(panel, 'card-group-history').getAttribute('open'), null, '방금 기록한 줄이 있으면 이력 묶음을 펼친다');
-  assert.equal(panel.querySelectorAll('[data-testid=history] li').length, 5);
+  assert.equal(panel.querySelectorAll('[data-testid=history] li').length, 3);
   const extra = q(panel, 'history-extra').querySelectorAll('li');
   assert.equal(extra.length, 1);
   assert.equal(extra[0].getAttribute('data-just-added'), '1');

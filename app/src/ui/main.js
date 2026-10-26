@@ -63,7 +63,7 @@ import { helpPanel } from './help.js';
 import { scenarioOf } from '../rules/tour-steps.js';
 import { createFieldId, fillMineDefaults } from '../rules/new-universe.js';
 import { LEGEND_COLLAPSED_TEXT, OWNER_REQUIRED_TEXT, assignOps, keepDraftPick, mergePendingText, sameMark } from './flow-helpers.js';
-import { FEATURE_WORK_LIMIT, searchFeatures } from '../view/feature-index.js';
+import { FEATURE_WORK_LIMIT, commonFeatures, searchFeatures, searchMapItems } from '../view/feature-index.js';
 import { spaceMarks } from '../view/space-marks.js';
 import { WORKSPACES, cleanWorkspace, denseRows, followScreens, gapWorkRows, panelParts, planSwitch, recentHandoverDocs, soloRows, spaceBadges } from '../view/workspace.js';
 import { RECENT_RECORDS, RECORD_SEARCH, mapHistoryRows, recentRecords, searchRecords } from '../view/recent-records.js';
@@ -393,13 +393,21 @@ function start() {
   let insight = null; // 인사이트 화면: {work, kind}
   let issues = null; // 미해결 이슈 목록 화면(R-20): {target}
   let histTable = null; // 기록(이력) 표 화면(CR-22 K): {gid, state:{group,period,q,page}, wasWide} — 카드의 「모두 보기 →」로 연다
-  // 항목 카드의 접힘·「모두 n개」 기억(CR-22 K). 같은 항목을 다시 그릴 때만 남고 다른 항목을 고르면 지운다. 기본값과 다르게 바꾼 것만 담는다
-  const cardState = { gid: null, open: new Map(), all: new Set(),
+  // 항목 카드의 접힘·「모두 n개」 기억(CR-22 K). 접힘은 항목 종류(업무·사람 …)별로 이 탭 메모리에만 기억한다 — 저장소에 쓰지 않는다(사용자 의견 10-26 저녁: 카드 첫 화면은 요약만, 한 번 연 묶음은 같은 종류 카드에서 열려 있음).
+  // 「모두 n개」는 예전처럼 다른 항목을 고르면 지운다. 기본값과 다르게 바꾼 것만 담는다
+  const cardState = { gid: null, type: null, byType: new Map(), open: new Map(), all: new Set(),
     isOpen(key, dflt) { return this.open.has(key) ? this.open.get(key) : dflt; },
     setOpen(key, open, dflt) { if (open === dflt) this.open.delete(key); else this.open.set(key, open); },
     isAll(key) { return this.all.has(key); },
     setAll(key) { this.all.add(key); },
-    reset(gid) { if (this.gid !== gid) { this.gid = gid; this.open.clear(); this.all.clear(); } } };
+    reset(gid, type = '') {
+      if (this.gid !== gid) { this.gid = gid; this.all.clear(); }
+      if (this.type !== type) {
+        this.type = type;
+        if (!this.byType.has(type)) this.byType.set(type, new Map());
+        this.open = this.byType.get(type);
+      }
+    } };
   let hiddenOpen = false; // 숨긴 항목 목록 화면(R-21)
   let rwGraphSnap = null; // 편집 되감기에 들어가기 전 그래프 배치·배율(FU5-7)
   let rw = null; // 편집 되감기 중이면 {at}(CR-14 A). 옛 지도를 읽기 전용으로 본다. 저장하지 않는다
@@ -1004,7 +1012,7 @@ function start() {
           if (m === RELATED_DOC_ITEM) { openRelatedDocForm(gid); return; }
           if (m !== '담당') { editing = { kind: 'node', focus: m }; renderPanel(); return; }
           box.hidden = !box.hidden;
-          if (!box.hidden) box.querySelector('[data-testid=form-assign-name]').focus();
+          if (!box.hidden) { openCardGroups(box); box.querySelector('[data-testid=form-assign-name]').focus(); } // 이 줄이 든 「내용」 묶음이 접혀 있어도 칸이 보이게
         } }, m)
       : m]);
     const line = el('p', { class: 'muted small', 'data-testid': 'form-missing', title: '업무를 넣는 표준 양식(절차·주기·마감·주의사항·관련 문서·담당·설명)과 비교한 결과입니다. 저장은 막지 않습니다' },
@@ -1415,8 +1423,8 @@ function start() {
 
   // 카드 하나를 그리는 데 필요한 값·요소(ui/card.js의 renderCard로 넘어간다)
   function cardOptions(gid, d) {
-    cardState.reset(gid);
     const node = view.getNode(gid);
+    cardState.reset(gid, node ? node.core_type : '');
     const own = isOwn(gid);
     const editable = own && !app.readOnly && !rw && !(node && node.hidden); // 숨긴 항목 카드에는 「수정에서…」 안내를 두지 않는다(R12 RV12C-7)
     const data = cardData(view, gid, { asOf: asOf(), past: !!viewDate, rootGid: app.rootGid(), n: currentDenseN(), history: d.history });
@@ -1445,6 +1453,8 @@ function start() {
       onResolve: (g) => resolveMemoNow(g),
       onOpenIssues: () => openIssues(gid),
       onHistoryAll: () => openHistTable(),
+      onShowRecord: (evGid) => showHistory(gid, [evGid]), // 「지금 볼 것」 줄: 처음 3건 밖의 기록 줄로(방금 기록한 줄과 같은 강조)
+      onDraft: () => { const n = view.getNode(gid); if (n) openDraft(n.gid); }, // 「인수인계 기록 없음 — 인수인계서 만들기」
     };
   }
 
@@ -2130,10 +2140,15 @@ function start() {
     if (typeof target.scrollIntoView === 'function') target.scrollIntoView({ block: 'start' });
     flash(target);
   }
+  // 카드의 접힌 묶음 안 요소로 데려갈 때는 그 묶음을 먼저 펼친다(기능 찾기·「거기로 가기」)
+  function openCardGroups(node) {
+    for (let g = node && node.parentElement ? node.parentElement.closest('details.card-group') : null; g; g = g.parentElement ? g.parentElement.closest('details.card-group') : null) g.open = true;
+  }
   // 고른 항목의 상세에서 접힌 상자(담당 바꾸기·협업자 추가)를 펼쳐 강조한다
   function openDetailBox(testid) {
     const box = openFormBox(testid) || $('detail').querySelector(`[data-testid=${testid}]`);
     if (!box) return;
+    openCardGroups(box);
     box.open = true;
     if (typeof box.scrollIntoView === 'function') box.scrollIntoView({ block: 'center' });
     flash(box);
@@ -2213,6 +2228,9 @@ function start() {
   featureFind({
     container: $('feature-box'),
     search: (q) => searchFeatures(q, featureCtx()),
+    common: () => commonFeatures(featureCtx()), // 빈 칸을 누르면 보이는 「자주 하는 일」
+    items: (q) => searchMapItems(view, q), // 지도 안 항목 이름(그래프 「항목 찾기」와 같은 찾기 함수)
+    onItem: (row) => { goTo(row.gid); },
     onGo: goFeatureFocused,
     onPick: (gid, r) => { focus(gid); runNodeFeature(r.go.split(':')[1]); focusAfterFeature(); },
     // 쓴 것 찾기(R11 FU6-4): 기능 결과가 없거나 적으면 아래에 「기록에서 낱말 n건」(읽기만, 최대 8건)
