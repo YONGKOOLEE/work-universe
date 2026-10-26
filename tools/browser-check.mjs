@@ -7189,7 +7189,7 @@ async function checkBrowser(browser, port) {
         await sleep(300);
         const lg = await R("(() => { const l = document.querySelector('[data-testid=legend-lines]'); const b = document.querySelector('[data-testid=ws-badge-check]'); const btn = document.querySelector('[data-testid=ws-check]'); const nav = document.querySelector('[data-testid=workspace-nav]'); const br = b ? b.getBoundingClientRect() : null; const nr = nav.getBoundingClientRect(); const lr = l ? l.getBoundingClientRect() : null; return { lines: l ? l.textContent : null, lv: !!l && l.checkVisibility() && lr.width > 0, title: l ? l.title : '', word: b ? getComputedStyle(b, '::before').content : null, num: b ? b.textContent : null, inNav: br ? br.right <= nr.right + 1 && br.left >= nr.left - 1 : null, over: btn.scrollWidth > btn.clientWidth + 1 }; })()");
         check('FU8-3·18 범례에 「선 이름: 선후행 = 앞뒤 순서 · 산출 = 만든 문서 · … · 수행 = 담당」 한 줄이 보임(크기 있음, 전체는 title)', lg.lv && lg.lines.includes('선후행 = 앞뒤 순서') && lg.lines.includes('산출 = 만든 문서') && lg.lines.includes('수행 = 담당') && lg.title === lg.lines, JSON.stringify(lg));
-        check('FU8-2 메뉴 「매주 점검」 숫자 옆에 낱말(혼자만 아는 일)이 붙고 메뉴 폭 안에 들어감(숫자 글은 그대로)', lg.num === null || (/혼자만 아는 일/.test(lg.word) && /^\d+$/.test(lg.num) && lg.inNav === true && lg.over === false), JSON.stringify(lg));
+        check('FU8-2 메뉴 「매주 점검」 숫자 옆에 낱말(혼자만)이 붙고 메뉴 폭 안에 들어감(숫자 글은 그대로)', lg.num === null || (/혼자만/.test(lg.word) && /^\d+$/.test(lg.num) && lg.inNav === true && lg.over === false), JSON.stringify(lg));
         await shot(s.cdp, `${browser.name}-fu8b-01-check-legend`);
         const hv = await R("(() => { const cy = window.__wu.cy; const g = document.getElementById('graph'); const n = cy.nodes().filter((x) => x.data('collapsed')); if (!n.length) return null; n[0].emit('mouseover'); const t = g.title; n[0].emit('mouseout'); return { t, after: g.title, n: n.length }; })()");
         check('FU8-3 접힌 팀 도형에 마우스를 올리면 「접힌 팀 — 두 번 누르면 펼침」 title이 붙고 떼면 사라짐', hv === null || (hv.t === '접힌 팀 — 두 번 누르면 펼침' && hv.after === ''), JSON.stringify(hv));
@@ -7311,6 +7311,90 @@ async function checkBrowser(browser, port) {
         await clickT('insight-close');
         await sleep(150);
       } else check('FU8 ② U-A1', false, 'U-A1이 열리지 않음');
+    }
+
+    // ── 8회차 남은 것(2026-10-27): 담당 넘기기 폼 순서·자세히 접기, 인사이트 탭 한 줄 결론·접힌 「어떻게 셌나요?」(FU8-20), 지도 고르기 키보드(FU8-31), 메뉴 배지 한 줄 ──
+    {
+      const clickT = (id) => R(`document.querySelector('[data-testid=${id}]').click()`);
+      const waitDoc = async (id) => { for (let i = 0; i < 20; i += 1) { await sleep(300); try { if (await r11Wait(id)) return true; } catch { /* 다시 불러오는 중 */ } } return false; };
+      // A. 지도 고르기: 키보드 ↑↓는 바꾸지 않고, Enter 또는 칸을 떠날 때 바뀜. 마우스(값을 고르고 change)는 바로
+      if (await r11Go('U-A1', ['U-A1'])) {
+        const ids = await R("[...document.getElementById('universe-picker').options].map((o) => o.value)");
+        const other = ids.find((x) => x !== 'U-A1');
+        if (other) {
+          await R("document.getElementById('universe-picker').focus()");
+          const idxBefore = await R("document.getElementById('universe-picker').selectedIndex");
+          await xKey('ArrowDown', 'ArrowDown', 40);
+          await sleep(500);
+          const k1 = await R("({ id: window.__wu.doc.universe.id, hash: location.hash, idx: document.getElementById('universe-picker').selectedIndex, focus: document.activeElement && document.activeElement.id })");
+          check('FU8-31 지도 칸에서 ↑↓로 훑으면 지도가 바로 바뀌지 않음(칸 값만 바뀌고 초점 그대로)', k1.id === 'U-A1' && k1.hash === '#U-A1' && k1.idx !== idxBefore && k1.focus === 'universe-picker', JSON.stringify([idxBefore, k1]));
+          const want = await R("document.getElementById('universe-picker').value");
+          await xKey('Enter', 'Enter', 13, '\r');
+          check('FU8-31 Enter를 누르면 고른 지도가 열림', await waitDoc(want) && (await R('window.__wu.doc.universe.id')) === want, want);
+          // 칸을 떠날 때(blur) 확정
+          await r11Go('U-A1', ['U-A1']);
+          await R("document.getElementById('universe-picker').focus()");
+          await xKey('ArrowDown', 'ArrowDown', 40);
+          await sleep(300);
+          const want2 = await R("document.getElementById('universe-picker').value");
+          const still = await R('window.__wu.doc.universe.id');
+          await R("document.getElementById('universe-picker').blur()");
+          check('FU8-31 ↑↓ 뒤 칸을 떠나면(blur) 고른 지도가 열림(떠나기 전엔 그대로)', still === 'U-A1' && (await waitDoc(want2)) && (await R('window.__wu.doc.universe.id')) === want2, JSON.stringify([still, want2]));
+          // 마우스처럼 고르면 바로
+          await r11Go('U-A1', ['U-A1']);
+          await R(`(() => { const p = document.getElementById('universe-picker'); p.value = ${JSON.stringify(other)}; p.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+          check('FU8-31 마우스로 고르면(키보드 입력 없음) 바로 열림', await waitDoc(other), other);
+        } else check('FU8-31 지도 고르기 키보드', false, '다른 지도 없음');
+      } else check('FU8-31 U-A1 열기', false, 'U-A1이 열리지 않음');
+
+      // B. 담당 넘기기 폼 순서 + 인사이트 첫 화면
+      if (await r11Go('U-A1', ['U-A1'])) {
+        await R("window.__wu.select('U-A1/N-001')");
+        await sleep(300);
+        await clickT('btn-assign');
+        await sleep(300);
+        const fo = await R("(() => { const q = (i) => document.querySelector('[data-testid=' + i + ']'); const t = (i) => { const e = q(i); return e && e.checkVisibility() ? Math.round(e.getBoundingClientRect().top) : null; }; const more = q('assignee-more'); const longP = more ? more.querySelector('p') : null; return { from: t('assignee-from'), to: t('assignee-to'), date: t('assignee-date'), branch: t('assignee-branch'), chk: t('assignee-handover-row'), what: t('assignee-handover-what'), apply: t('assignee-apply'), brief: t('assignee-brief'), more: t('assignee-more'), moreOpen: more ? more.open : null, longVis: longP ? longP.checkVisibility() : null, applyText: q('assignee-apply').textContent }; })()");
+        const ordered = [fo.from, fo.date, fo.branch, fo.chk, fo.apply, fo.brief, fo.more].every((v, i, a) => v !== null && (i === 0 || v >= a[i - 1]));
+        check('8회차 남은 것 담당 넘기기 폼 순서: 지금 담당 → 새 담당·날짜 → 무엇을 남길까요 → 체크 → 「담당 넘기기」 단추 → 휴가·부재 안내 → 「자세히」', ordered && fo.what !== null && fo.what <= fo.apply && fo.chk < fo.apply && fo.applyText === '담당 넘기기', JSON.stringify(fo));
+        check('8회차 남은 것 맨 끝 긴 설명은 접힌 「자세히」 안(처음엔 안 보이고, 열면 보임)', fo.moreOpen === false && fo.longVis === false && (await R("(() => { const d = document.querySelector('[data-testid=assignee-more]'); d.open = true; return d.querySelector('p').checkVisibility() && d.querySelector('summary').textContent === '자세히'; })()")));
+        await R("document.querySelector('[data-testid=assignee-more]').open = false");
+        await R("document.querySelector('[data-testid=assignee-change]').scrollIntoView({ block: 'center' })");
+        await shot(s.cdp, `${browser.name}-fu8c-01-assignee-form`);
+        await R("document.querySelector('[data-testid=assignee-branch-doc]').click()");
+        await sleep(150);
+        const fd = await R("(() => { const q = (i) => document.querySelector('[data-testid=' + i + ']'); return { line: q('assignee-handover-line').checkVisibility(), label: q('assignee-apply').textContent, apply: q('assignee-apply').checkVisibility() }; })()");
+        check('8회차 남은 것 「인수인계서까지」를 고르면 체크 줄은 숨고 단추 이름이 「인수인계 초안으로」', fd.line === false && fd.label === '인수인계 초안으로' && fd.apply, JSON.stringify(fd));
+        await R("document.querySelector('[data-testid=assignee-branch-only]').click()");
+
+        // 인사이트 첫 화면
+        await R('window.__wu.select(null)');
+        await pickSpace('check');
+        await R("document.querySelector('[data-testid=btn-insight-universe]').click()");
+        await sleep(400);
+        for (const tab of ['risk', 'repeat', 'similar', 'density', 'flow']) {
+          await clickT(`tab-${tab}`);
+          await sleep(300);
+          const ig = await R("(() => { const h = document.querySelector('[data-testid=insight-body] [data-testid=insight-headline]'); const how = document.querySelector('[data-testid=insight-body] [data-testid=insight-how]'); const p = how ? how.querySelector('p') : null; return { head: h ? h.textContent : null, vis: !!h && h.checkVisibility(), how: !!how, open: how ? how.open : null, sum: how ? how.querySelector('summary').textContent : null, pVis: p ? p.checkVisibility() : null }; })()");
+          check(`8회차 남은 것(FU8-20) 인사이트 「${tab}」 탭: 맨 위 한 줄 결론이 보이고 설명 문단은 접힌 「어떻게 셌나요?」 안`, ig.vis && ig.head.length > 4 && ig.how && ig.open === false && ig.sum === '어떻게 셌나요?' && ig.pVis === false, JSON.stringify(ig));
+          if (tab === 'risk' || tab === 'repeat') await shot(s.cdp, `${browser.name}-fu8c-02-insight-${tab}`);
+        }
+        await clickT('tab-risk');
+        await sleep(250);
+        const rk = await R("(() => { const h = document.querySelector('[data-testid=insight-headline]').textContent; const first = document.querySelector('[data-testid=risk-concentration-list] li strong'); return { h, list: !!document.querySelector('[data-testid=risk-concentration-list]'), first: first ? first.textContent : null }; })()");
+        check('8회차 남은 것(FU8-20) 인수인계 위험 탭 결론 「혼자만 아는 업무 n개 — 가장 급한 곳: 「…」」, 근거 목록은 그대로', /^혼자만 아는 업무 \d+개( — 가장 급한 곳: 「.+」)?$/.test(rk.h) && (!rk.first || rk.h.includes(rk.first)) && rk.list, JSON.stringify(rk));
+        await clickT('insight-close');
+        await sleep(150);
+      } else check('8회차 남은 것 U-A1', false, 'U-A1이 열리지 않음');
+
+      // C. 메뉴 배지 한 줄
+      if (await r11Go('U-D1', ['U-D1'])) {
+        await R('window.__wu.select(null)');
+        await pickSpace('check');
+        await sleep(300);
+        const mb = await R("(() => { const b = document.querySelector('[data-testid=ws-badge-check]'); const btn = document.querySelector('[data-testid=ws-check]'); if (!b) return null; const r = b.getBoundingClientRect(); const nav = document.querySelector('[data-testid=workspace-nav]').getBoundingClientRect(); return { lines: b.getClientRects().length, h: Math.round(r.height), btnH: Math.round(btn.getBoundingClientRect().height), inNav: r.right <= nav.right + 1, word: getComputedStyle(b, '::before').content, title: b.title, aria: btn.getAttribute('aria-label') }; })()");
+        check('8회차 남은 것 메뉴 「매주 점검」 배지는 메뉴 폭 안 한 줄(보이는 낱말은 짧게, title·aria-label은 긴 말)', mb === null || (mb.lines === 1 && mb.h < 22 && mb.inNav && /혼자만/.test(mb.word) && mb.title.includes('혼자만 아는 일') && (mb.aria || '').includes('혼자만 아는 일')), JSON.stringify(mb));
+        await shot(s.cdp, `${browser.name}-fu8c-03-menu`);
+      } else check('8회차 남은 것 U-D1', false, 'U-D1이 열리지 않음');
     }
 
     // 저장소를 블록 시작 때 상태로 되돌린다

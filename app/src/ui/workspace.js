@@ -4,7 +4,7 @@ import { WORKSPACES } from '../view/workspace.js';
 
 const BADGE_TITLE = { record: (n) => `미해결 ${n}건`, check: (n) => `혼자만 아는 일 ${n}개` };
 // 숫자 옆에 보이는 작은 낱말(R13 FU8-2: 숫자만 있으면 무슨 숫자인지 title을 올려 봐야 했음). 글자는 CSS가 data-word로 붙인다 — 숫자 글(textContent)은 그대로
-const BADGE_WORD = { record: '미해결', check: '혼자만 아는 일' };
+const BADGE_WORD = { record: '미해결', check: '혼자만' }; // 메뉴 폭 안 한 줄: 보이는 낱말은 짧게, 긴 말은 title·aria-label(8회차 남은 것)
 
 /**
  * 메뉴를 그린다. 같은 단추를 다시 만들어 끼우므로 부를 때마다 처음부터 그린다(눌림 표시·배지가 늘 지금 값).

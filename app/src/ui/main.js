@@ -543,7 +543,12 @@ function start() {
     picker.append(el('option', { value: u.id, selected: u.id === app.doc.universe.id }, `${u.name} (${u.level})`));
   }
   picker.title = picker.selectedOptions[0] ? picker.selectedOptions[0].textContent : ''; // 좁은 화면에서 잘린 이름 전체(재검증)
-  picker.addEventListener('change', () => openUniverse(picker.value));
+  // 지도 고르기(FU8-31): 키보드 ↑↓로 훑는 동안은 바꾸지 않고, Enter를 누르거나 칸을 떠날 때 확정한다. 마우스로 고르면 바로
+  let pickerByKey = false;
+  picker.addEventListener('keydown', (e) => { if (e.key === 'Enter') { pickerByKey = false; if (picker.value !== app.doc.universe.id) { e.preventDefault(); openUniverse(picker.value); } } else if (['ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key) || e.key.length === 1) pickerByKey = true; });
+  picker.addEventListener('mousedown', () => { pickerByKey = false; });
+  picker.addEventListener('change', () => { if (pickerByKey && document.activeElement === picker) return; pickerByKey = false; if (picker.value !== app.doc.universe.id) openUniverse(picker.value); });
+  picker.addEventListener('blur', () => { if (pickerByKey) { pickerByKey = false; if (picker.value !== app.doc.universe.id) openUniverse(picker.value); } });
 
   const graph = createGraph($('graph'), { onSelect: select, onToggle: toggle, getFilter: (d) => filterDisplay(d, filterState), onFlow: (on) => $('flowlayout').setAttribute('aria-pressed', String(on)) });
 
@@ -1133,6 +1138,7 @@ function start() {
     const handoverChk = el('input', { type: 'checkbox', 'data-testid': 'assignee-handover' });
     const handoverRow = el('label', { class: 'check', 'data-testid': 'assignee-handover-row' }, handoverChk, ' 인수인계 기록도 남기기');
     const handoverWhat = el('p', { class: 'muted small', 'data-testid': 'assignee-handover-what' }, HANDOVER_CHECK_WHAT); // R13 FU8-11: 체크가 무엇을 남기는지
+    const handoverLine = el('div', { class: 'row handover-line', 'data-testid': 'assignee-handover-line' }, handoverRow, handoverWhat);
     const msg = el('span', { class: 'error-text', role: 'alert', 'data-testid': 'assignee-msg' });
     const fail = (text, code) => { msg.textContent = text; msg.dataset.code = code; };
     // 무엇을 남길까요? — 담당만(이력만) / 인수인계서까지. 처음은 담당만(지금 담당 바꾸기 동작 그대로)
@@ -1145,6 +1151,7 @@ function start() {
     const syncBranch = () => {
       const doc = branch() === BRANCH_DOC;
       handoverRow.hidden = doc;
+      handoverLine.hidden = doc;
       handoverWhat.hidden = doc;
       dateIn.disabled = doc;
       docNote.hidden = !doc;
@@ -1209,13 +1216,14 @@ function start() {
         el('label', {}, rDoc, ` ${BRANCH_LABELS[BRANCH_DOC]}`),
         el('p', { class: 'muted small branch-what', 'data-testid': 'assignee-what-doc' }, BRANCH_WHAT[BRANCH_DOC])),
       docNote,
-      el('div', { class: 'row' }, handoverRow, apply),
-      handoverWhat,
+      handoverLine,
+      el('div', { class: 'row' }, apply, msg),
       // 잠깐 맡기는 경우(휴가·부재·출장)는 담당을 넘기지 않고 협업자로 둔다(R13 FU8-10)
       el('p', { class: 'muted small', 'data-testid': 'assignee-brief' }, `${BRIEF_HANDOVER_HINT} `,
         el('button', { type: 'button', class: 'link', 'data-testid': 'assignee-brief-collab', onclick: () => openFormBox('collab-quick') }, '협업자 추가'), '를 쓰세요.'),
-      el('p', { class: 'muted small' }, '「담당만 바꾸기」는 한 번의 기록으로 지금 담당자의 담당을 그 날짜까지로 끝내고 새 담당자가 그 날짜부터 맡게 합니다. 문서까지 남기려면 「인수인계서까지」를 고르세요 — 초안 화면의 「담당도 넘기기」와 같은 일입니다.'),
-      msg);
+      // 긴 설명은 접어 둔다(FU8 남은 것: 버튼을 설명 위로)
+      el('details', { class: 'small', 'data-testid': 'assignee-more' }, el('summary', {}, '자세히'),
+        el('p', { class: 'muted small' }, '「담당만 바꾸기」는 한 번의 기록으로 지금 담당자의 담당을 그 날짜까지로 끝내고 새 담당자가 그 날짜부터 맡게 합니다. 문서까지 남기려면 「인수인계서까지」를 고르세요 — 초안 화면의 「담당도 넘기기」와 같은 일입니다.')));
   }
 
   // 카드 「지금 볼 것」의 「반복 비효율」: 알림 칸을 거치지 않고 인사이트의 「반복 비효율」 탭을 열고, 이 업무가 든 패턴 줄을 강조한다(FU8-5)

@@ -220,7 +220,7 @@ test('FU8-2 메뉴 숫자 배지에 낱말(data-word)이 붙고 숫자 글은 �
   renderWorkspaceNav(nav, { current: 'map', badges: { record: 3, check: 2 }, onPick() {} });
   assert.equal(q(nav, 'ws-badge-record').textContent, '3');
   assert.equal(q(nav, 'ws-badge-record').getAttribute('data-word'), '미해결');
-  assert.equal(q(nav, 'ws-badge-check').getAttribute('data-word'), '혼자만 아는 일');
+  assert.equal(q(nav, 'ws-badge-check').getAttribute('data-word'), '혼자만');
 }));
 
 test('FU8-12 업무 카드 「담당」 묶음 머리 글: 넘긴 날 끝나는 사람은 「지금」에 세지 않고 「오늘까지」로 따로(줄 세우기는 그대로)', () => {
