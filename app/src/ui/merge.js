@@ -13,6 +13,7 @@ import { evidenceChips as chips } from './evidence.js';
 // 접힌 「주제만 겹친 후보」 묶음의 펼침 상태(R12 FU7-5): 판정하면 패널을 다시 그리므로 지도(묶음)마다 여기에 둔다. 닫으면 지운다
 const topicOnlyOpen = new Set();
 export const TOPIC_ONLY_CHIP = '주제 하나만 겹침';
+export const SAMPLE_ANSWER_CHIP = '샘플에 미리 넣은 답'; // FU9-19: 이 브라우저에서 사람이 고른 것이 아니라 샘플 데이터에 처음부터 들어 있던 답
 
 export const AI_CANDIDATES_WAIT = 'AI가 업무를 비교하는 중… (최대 60초)';
 
@@ -250,12 +251,30 @@ function renderMerge(o, plan, aiHead) {
 
   const decided = (o.links || []).filter((l) => l.status !== 'pending');
   const raw = (g) => { const n = view.rawNode(g); return n ? `${n.label}(${n.universe_name})` : g; };
+  // RV13-1: 「다시 묻기」로 답을 지운(pending) 쌍 중 위 후보 목록에 없는 것은 여기서 다시 고른다(후보 규칙은 그대로라 같은 지도 업무끼리 등은 후보에 오르지 않는다)
+  const listed = new Set([...plan.works, ...plan.persons].filter((x) => x.b).map((x) => pairKey(x.a, x.b)));
+  const reasks = o.readOnly ? [] : (o.links || []).filter((l) => l.status === 'pending' && l.method === 'human' && !listed.has(pairKey(l.a, l.b)));
+  const reaskRows = reasks.length
+    ? el('div', { 'data-testid': 'merge-reask-box' },
+      el('h3', {}, `다시 물어볼 답 ${reasks.length}건`),
+      el('p', { class: 'muted small' }, '「다시 묻기」로 지운 답입니다. 위 후보 목록에 오르지 않아 여기서 다시 고릅니다.'),
+      el('ul', { class: 'patterns', 'data-testid': 'merge-reasks' }, ...reasks.map((l) => {
+        const person = l.kind === 'person';
+        const item = { a: l.a, b: l.b, kind: l.kind, reason: l.reason, score: l.score };
+        return el('li', { 'data-type': person ? 'person' : 'work', 'data-testid': 'merge-reask-row' },
+          el('div', { class: 'who' }, el('strong', {}, `${raw(l.a)} ↔ ${raw(l.b)}`), el('span', { class: 'chip' }, '다시 묻는 중')),
+          l.reason ? el('div', { class: 'muted small' }, l.reason) : null,
+          sideLines(item),
+          decideButtons(item, person ? '같은 사람' : '같은 업무', person ? '다른 사람' : '다른 업무'));
+      })))
+    : null;
   const history = decided.length
     ? el('ul', { class: 'small', 'data-testid': 'merge-decided' }, ...decided.map((l) => el('li', {},
       `${raw(l.a)} · ${raw(l.b)} — ${l.status === 'confirmed' ? '같음' : '다름'}${l.method === 'emp_no_auto' ? '(사번 자동)' : ''}${l.decided_at ? ` · ${l.decided_at.slice(0, 10)}` : ''}`,
+      o.isSampleAnswer && o.isSampleAnswer(l) ? el('span', { class: 'chip', style: 'margin-left:6px', 'data-testid': 'merge-sample-answer', title: '이 브라우저에서 고른 답이 아니라, 샘플 데이터에 처음부터 들어 있던 답입니다' }, SAMPLE_ANSWER_CHIP) : null,
       // 잘못 고른 답은 「다시 묻기」로 아직 답하지 않은 상태로 되돌린다(R13 FU8-25). 사번이 같아 자동으로 이은 것은 되돌리지 않는다(다음 묶기에서 다시 이어짐)
       !o.readOnly && o.onReask && l.method === 'human'
-        ? el('span', {}, ' ', el('button', { type: 'button', class: 'link', 'data-testid': 'merge-reask', title: '이 답을 지우고 위 후보 목록에서 다시 묻습니다(되감기 이력에는 남습니다)', onclick: () => o.onReask(l) }, '다시 묻기'))
+        ? el('span', {}, ' ', el('button', { type: 'button', class: 'link', 'data-testid': 'merge-reask', title: '이 답을 지우고 다시 묻습니다', onclick: () => o.onReask(l) }, '다시 묻기'))
         : null)))
     : el('p', { class: 'muted small' }, '아직 없습니다.');
 
@@ -273,6 +292,7 @@ function renderMerge(o, plan, aiHead) {
     plan.works.length ? el('p', { class: 'muted small' }, '서로 다른 업무 지도에서 같은 일로 보이는 업무 쌍입니다. 점수는 겹친 수(주제 3, 산출물 유형 2, 이름 낱말 1)를 더한 것으로, 높을수록 비슷합니다.') : null,
     plan.hidden_candidates ? el('p', { class: 'muted small' }, `점수가 낮은 후보 ${plan.hidden_candidates}건은 목록에서 뺐습니다.`) : null,
     ...workList,
+    reaskRows,
     el('h3', {}, `지금까지 고른 답 ${decided.length}건`),
     history,
     el('p', { class: 'muted small' }, '「같은 사람」·「같은 업무」를 고르면 그래프에서 한 항목으로 보입니다. 「다른 사람」·「다른 업무」를 고른 둘은 다시 묻지 않습니다.'),

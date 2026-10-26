@@ -21,6 +21,7 @@ export function teamRiskSummary(view, { asOf, n }) {
     solo_high: soloOk ? c.counts.high : null,
     dense: denseOk ? d.dense.length : null,
     gaps: denseOk ? d.gaps.length : null,
+    works: c.counts.works, // 분모: 기준일에 진행 중인 업무 수(FU9-17). 혼자만 아는 일의 「업무 n개 중」
     insufficient: !soloOk && !denseOk,
   };
 }
@@ -65,8 +66,89 @@ export function inspectionInput(view, { asOf, n, mapName }) {
     solo: s.solo,
     dense: s.dense,
     gaps: s.gaps,
+    works: s.works,
     soloItems: c.insufficient ? [] : c.items.map((x) => ({ work: x.work.label, person: x.person.label, level: x.level })),
     denseItems: d.status === 'insufficient' ? [] : d.dense.map((p) => ({ person: p.label, count: p.count })),
     gapItems: d.status === 'insufficient' ? [] : d.gaps.map((g) => ({ work: g.label })),
   };
+}
+
+// ── 팀(바로 아래 하위 지도)별 묶음(처음 사용 9회차 FU9-17·22) ──
+// 새 판정은 없다. 위의 knowledgeConcentration·densityGaps 결과(전체 지도 하나를 한 번 계산한 것)의 항목을 항목이 속한 지도 → 그 지도가 속한 팀으로 나눠 셀 뿐이다.
+// 그래서 팀 숫자를 모두 더하면(사람은 여러 팀에 걸칠 수 있어 일 몰린 사람만 빼고) 위 전체 숫자와 같다.
+
+/** universe id → 묶은 지도의 바로 아래 하위 지도 id(팀). 묶은 지도 자신이면 그 id, 묶음에 속하지 않으면 자기 자신 */
+export function teamOfFn(view) {
+  const parentOf = new Map((view.ref_links || []).map((l) => [l.child, l.parent]));
+  const root = view.universe_id;
+  return (uid) => {
+    if (uid === root) return root;
+    let u = uid;
+    for (let guard = 0; guard < 50; guard += 1) {
+      const p = parentOf.get(u);
+      if (!p || p === root) return u;
+      u = p;
+    }
+    return uid;
+  };
+}
+
+/**
+ * 팀별 숫자. works: 기준일 진행 중 업무 수(밀집·공백 탭의 조직별 「업무」와 같은 값을 팀으로 더함), solo·gaps: 팀 안 업무 수, dense: 팀 안 업무를 지금 맡은 일 몰린 사람 수(같은 사람은 한 번).
+ * 숫자를 못 세면 해당 칸은 null. 업무가 없는 팀은 뺀다. 묶은 지도가 아니면(팀이 하나뿐이면) 빈 배열.
+ * @returns {{id:string, name:string, works:number|null, solo:number|null, dense:number|null, gaps:number|null}[]}
+ */
+export function teamRiskRows(view, { asOf, n }) {
+  const teamOf = teamOfFn(view);
+  const c = knowledgeConcentration(view, { asOf });
+  const d = densityGaps(view, { asOf, n });
+  const rows = new Map();
+  const row = (uid) => {
+    const id = teamOf(uid);
+    if (!rows.has(id)) rows.set(id, { id, name: (view.universes.get(id) || { name: id }).name, works: 0, solo: c.insufficient ? null : 0, dense: d.status === 'insufficient' ? null : new Set(), gaps: d.status === 'insufficient' ? null : 0 });
+    return rows.get(id);
+  };
+  for (const g of d.groups || []) row(g.universe_id).works += g.works;
+  if (!c.insufficient) for (const x of c.items) { const w = view.getNode(x.work.gid); if (w) row(w.universe_id).solo += 1; }
+  if (d.status !== 'insufficient') {
+    for (const g of d.gaps) row(g.universe_id).gaps += 1;
+    for (const p of d.dense) for (const w of p.works) { const node = view.getNode(w.gid); if (node) row(node.universe_id).dense.add(p.gid); }
+  }
+  const out = [...rows.values()].filter((r) => r.works > 0 || r.solo).map((r) => ({ ...r, works: d.status === 'insufficient' ? null : r.works, dense: r.dense === null ? null : r.dense.size }));
+  return out.length > 1 ? out : [];
+}
+
+/** 팀 한 줄: 「가상정산팀 — 업무 47개 중 혼자만 5 · 일 몰린 1명 · 빈 일 2개」 (세지 못한 칸은 「?」) */
+export function teamRowText(r) {
+  const v = (x) => (x === null ? '?' : String(x));
+  return `${r.name} — 업무 ${v(r.works)}개 중 혼자만 ${v(r.solo)}개 · 일 몰린 ${v(r.dense)}명 · 빈 일 ${v(r.gaps)}개`;
+}
+
+/**
+ * 밀집·공백 표(인사이트 「밀집·공백」 탭)의 조직별 줄에 팀 합계 줄을 끼운다. 한 팀 안에 지도가 둘 이상일 때만(팀 하나가 지도 하나면 그 줄이 곧 팀 줄).
+ * @param {{universe_id:string,name:string,works:number,people:number,gaps:number,dense:number,insufficient:boolean}[]} groups densityGaps 결과의 groups
+ * @param {{gid:string, works:{gid:string}[]}[]} denseList densityGaps 결과의 dense(같은 사람을 팀에서 한 번만 세려고)
+ * @returns {{kind:'team'|'map', name:string, works:number, gaps:number, dense:number, insufficient?:boolean, people?:number, universe_id?:string}[]}
+ */
+export function groupRowsWithTeams(view, groups, denseList = []) {
+  const teamOf = teamOfFn(view);
+  const order = [];
+  const by = new Map();
+  for (const g of groups) {
+    const t = teamOf(g.universe_id);
+    if (!by.has(t)) { by.set(t, []); order.push(t); }
+    by.get(t).push(g);
+  }
+  const out = [];
+  for (const t of order) {
+    const members = by.get(t);
+    if (members.length > 1 && t !== view.universe_id) {
+      const ok = members.filter((g) => !g.insufficient);
+      const ids = new Set(members.map((g) => g.universe_id));
+      const dense = denseList.filter((p) => p.works.some((w) => { const nd = view.getNode(w.gid); return nd && ids.has(nd.universe_id); })).length;
+      out.push({ kind: 'team', name: (view.universes.get(t) || { name: t }).name, works: members.reduce((a, g) => a + g.works, 0), gaps: ok.reduce((a, g) => a + g.gaps, 0), dense, insufficient: ok.length === 0 });
+    }
+    for (const g of members) out.push({ kind: 'map', ...g });
+  }
+  return out;
 }

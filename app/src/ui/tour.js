@@ -13,7 +13,7 @@ export const END_GUIDE = '예시를 봤으면, 내 업무 이름 하나로 작�
 // 끝 카드의 권유 한 줄은 시나리오의 목적에 맞춘다(CR-22 W): 인수인계를 따라 한 사람에게 「도구 더 보기」는 맞지 않는다
 const END_HINTS = {
   handover: () => '인수인계는 왼쪽 「인수인계」 공간에서, 업무에 남기는 기록은 「기록」 공간에서 언제든 할 수 있어요.',
-  team: (toolsClosed) => `${toolsClosed ? '큰 지도는 「도구 더 보기」의 흐름 정렬·거르기로 좁혀 보고, ' : ''}매주 점검은 왼쪽 「매주 점검」 공간에서 이어 하세요.`,
+  team: (toolsClosed) => `${toolsClosed ? '큰 지도는 「도구 더 보기」에서 사람·종류별로 골라 좁혀 보고, ' : ''}매주 점검은 왼쪽 「매주 점검」 공간에서 이어 하세요.`,
 };
 /** 끝 카드 권유 한 줄. toolsClosed: 「도구 더 보기」가 아직 접혀 있음 */
 export function endHint(scenarioId, toolsClosed = false) {

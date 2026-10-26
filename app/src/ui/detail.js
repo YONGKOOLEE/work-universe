@@ -174,13 +174,20 @@ export function renderUniverseSummary(panel, s, shown = null, extras = {}) {
 /** 「지도 보기」 안내 한 줄(CR-22 W). 공간 이름은 왼쪽 메뉴와 같다 */
 export const MAP_INTRO = '그래프를 둘러보고 항목을 누르면 내용·연결·기록이 여기에 보입니다. 하려는 일은 왼쪽 메뉴에서 고르세요 — 기록 · 인수인계 · 매주 점검 · 지도 관리.';
 
+const TEAM_ROWS_SHOW = 8; // 팀별 한 줄 요약에 보이는 팀 수
 // 「매주 점검」 앞부분: 묶은 지도의 위험 요약 한 줄(FU-10). 인사이트 「인수인계 위험」·「밀집·공백」 탭과 같은 계산의 숫자. 문구와 「자세히」 동작은 부르는 쪽이 정한다
 function riskParts(extras) {
   const risk = [];
   if (!extras.riskSummary) return risk;
   const r = extras.riskSummary;
-  risk.push(el('p', { class: 'risk-summary', 'data-testid': 'team-risk-summary' }, r.parts.join(' · '), ' ',
+  risk.push(el('p', { class: 'risk-summary', 'data-testid': 'team-risk-summary' }, r.denom ? el('strong', { 'data-testid': 'team-risk-denom' }, `${r.denom} `) : null, r.parts.join(' · '), ' ',
     el('button', { type: 'button', class: 'link', 'data-testid': 'btn-team-risk-more', onclick: r.onMore }, '자세히')));
+  // 팀(바로 아래 하위 지도)별 한 줄(FU9-17): 같은 계산을 팀으로 나눠 센 숫자. 많으면 앞 TEAM_ROWS_SHOW개만
+  if (r.teams && r.teams.length) {
+    risk.push(el('ul', { class: 'risk-summary risk-teams', 'data-testid': 'team-risk-teams', 'aria-label': '팀별 요약' },
+      ...r.teams.slice(0, TEAM_ROWS_SHOW).map((t) => el('li', { 'data-testid': 'team-risk-team', 'data-id': t.id }, t.text)),
+      r.teams.length > TEAM_ROWS_SHOW ? el('li', { class: 'muted small' }, `외 ${r.teams.length - TEAM_ROWS_SHOW}팀 — 「자세히」의 「밀집·공백」 탭에서 모두 봅니다`) : null));
+  }
   // 일 몰린 사람 이름(R13 FU8-19): 숫자만 있어 누구부터 볼지 알 수 없었다. 이름을 누르면 그 사람 카드(상위 몇 명만, 나머지는 「자세히」)
   if (r.dense && r.dense.rows.length) {
     const names = r.dense.rows.flatMap((p, i) => [i ? ', ' : null, el('button', { type: 'button', class: 'link', 'data-testid': 'team-risk-dense-person', 'data-gid': p.gid, title: `${p.label}의 카드를 엽니다`, onclick: () => r.dense.onPick(p.gid) }, `${p.label}(${p.count}개)`)]).filter(Boolean);

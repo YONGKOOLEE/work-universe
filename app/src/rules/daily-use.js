@@ -446,13 +446,14 @@ const top = (list, fmt, all = false) => {
 
 /**
  * 점검 요약 글. 입력은 view/risk-summary.js의 inspectionInput 결과와 compareRisk 결과.
- * @param {{mapName:string, asOf:string, solo:number|null, dense:number|null, gaps:number|null, soloItems:{work:string,person:string,level:string}[], denseItems:{person:string,count:number}[], gapItems:{work:string}[]}} d
+ * @param {{mapName:string, asOf:string, works?:number, solo:number|null, dense:number|null, gaps:number|null, soloItems:{work:string,person:string,level:string}[], denseItems:{person:string,count:number}[], gapItems:{work:string}[]}} d
  * @param {ReturnType<typeof compareRisk>|null} cmp
  */
 export function inspectionSummaryText(d, cmp, { all = false } = {}) {
   const lines = [
     `점검 요약 — ${d.mapName}`,
     `기준일: ${d.asOf}`,
+    ...(typeof d.works === 'number' && d.works > 0 ? [`센 범위: 기준일에 진행 중인 업무 ${d.works}개 중`] : []), // FU9-17: 아래 숫자의 분모
     '',
     countLine(d.solo, '혼자만 아는 일', '개'),
     ...(d.solo ? top(d.soloItems, (x) => `  - 「${x.work}」 (${x.person}${x.level === 'high' ? ', 높음' : ', 주의'})`, all) : []),
