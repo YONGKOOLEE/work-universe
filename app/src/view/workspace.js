@@ -79,7 +79,8 @@ export function panelParts(space, c) {
     case 'handover':
       return ['draft', ...(c.readOnly ? [] : ['assignee-hint']), 'gaps', 'solo', 'docs'];
     case 'check':
-      return c.grouped ? ['risk', 'insight'] : ['map-risk', 'group-hint', 'insight'];
+      // 묶은 지도: 위험 요약 + 혼자만 아는 일 상위 목록(이름 → 카드, 인수인계 공간과 같은 계산, R12 FU7-2) + 통합 확인 대기 바로가기(FU7-12, 대기가 있을 때만)
+      return c.grouped ? ['risk', 'solo', 'merge-link', 'insight'] : ['map-risk', 'group-hint', 'insight'];
     case 'edit':
       return [
         ...(c.readOnly ? [] : ['add-open']),

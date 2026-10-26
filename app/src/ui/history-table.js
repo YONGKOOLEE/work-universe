@@ -45,7 +45,7 @@ export function historyTablePanel(o) {
           el('td', { class: 'muted small nowrap' }, r.date),
           el('td', {}, el('span', { class: 'chip' }, r.type_label)),
           o.onOpenRow ? el('td', {}, el('button', { type: 'button', class: 'link', 'data-testid': 'ht-open-row', title: '그 업무 카드의 이 기록 줄로 갑니다', onclick: (e) => { e.stopPropagation(); o.onOpenRow(r); } }, r.target || '보기')) : null,
-          el('td', {}, r.text),
+          el('td', {}, r.text, r.source_chip ? el('span', { class: 'chip muted small src-chip', 'data-testid': 'ht-source-chip', title: '사용자가 이 화면에서 쓴 기록이 아닙니다' }, r.source_chip) : null),
           el('td', { class: 'nowrap' },
             r.status === '미해결' ? el('span', { class: 'chip warn', 'data-testid': 'ht-open' }, '미해결') : r.status ? el('span', { class: 'muted small' }, r.status) : null,
             r.status === '미해결' && !o.readOnly && (!o.canResolve || o.canResolve(r)) ? el('button', { type: 'button', class: 'small-btn', 'data-testid': 'ht-resolve', onclick: (e) => { e.stopPropagation(); o.onResolve(r.gid); } }, '해결로 표시') : null)))))

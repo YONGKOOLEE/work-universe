@@ -13,6 +13,7 @@ export function renderWorkspaceNav(nav, o) {
   // 키보드로 단추를 눌러 다시 그려져도 초점이 사라지지 않게 같은 공간의 새 단추로 옮긴다
   const active = typeof document !== 'undefined' ? document.activeElement : null;
   const keep = active && active.dataset && nav.contains(active) ? active.dataset.space : null;
+  let byKey = false;
   nav.replaceChildren(...WORKSPACES.map((w) => {
     const n = o.badges ? o.badges[w.key] : null;
     return el('button', {
@@ -25,7 +26,10 @@ export function renderWorkspaceNav(nav, o) {
       title: n && BADGE_TITLE[w.key] ? `${w.desc} — ${BADGE_TITLE[w.key](n)}` : w.desc,
       // 배지의 뜻을 스크린리더에도(R11 FU6-16): 「기록, 미해결 3건」
       'aria-label': n && BADGE_TITLE[w.key] ? `${w.label}, ${BADGE_TITLE[w.key](n)}` : null,
-      onclick: () => o.onPick(w.key),
+      // 키보드(Enter·Space)로 눌렀는지 알려 준다 — 키보드일 때만 공간 첫 화면으로 초점을 옮긴다(R12 FU7-8). 마우스·프로그램 click은 false
+      onkeydown: (e) => { byKey = e.key === 'Enter' || e.key === ' '; },
+      onmousedown: () => { byKey = false; },
+      onclick: () => { const k = byKey; byKey = false; o.onPick(w.key, k); },
     }, el('span', { class: 'ws-label' }, w.label), n ? el('span', { class: 'ws-badge', 'data-testid': `ws-badge-${w.key}`, title: BADGE_TITLE[w.key] ? BADGE_TITLE[w.key](n) : null }, String(n)) : null);
   }));
   if (keep) {

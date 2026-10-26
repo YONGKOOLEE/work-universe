@@ -92,7 +92,7 @@ test('CR-22 W 패널 구성: 공간마다 위에서부터 보일 조각(읽기 �
   assert.deepEqual(panelParts('record', ctx({ rewinding: true })), ['issues', 'recent']);
   assert.deepEqual(panelParts('handover', ctx()), ['draft', 'assignee-hint', 'gaps', 'solo', 'docs']);
   assert.deepEqual(panelParts('handover', ctx({ readOnly: true })), ['draft', 'gaps', 'solo', 'docs']);
-  assert.deepEqual(panelParts('check', ctx({ grouped: true })), ['risk', 'insight']);
+  assert.deepEqual(panelParts('check', ctx({ grouped: true })), ['risk', 'solo', 'merge-link', 'insight']); // R12 FU7-2·FU7-12: 묶은 지도 매주 점검에 혼자만 아는 일 목록·통합 확인 바로가기 추가
   assert.deepEqual(panelParts('check', ctx({ grouped: false })), ['map-risk', 'group-hint', 'insight'], '묶지 않은 지도: 이 지도의 위험 목록 + 묶기 안내');
   assert.deepEqual(panelParts('edit', ctx()), ['add-open', 'admin', 'rewind', 'hidden']);
   assert.deepEqual(panelParts('edit', ctx({ readOnly: true, grouped: true, folder: true, conflicts: true, stale: true })), ['admin', 'rewind', 'hidden', 'merge', 'folder', 'conflicts', 'stale']);

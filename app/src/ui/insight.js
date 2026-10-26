@@ -21,7 +21,9 @@ let denseN = DENSE_DEFAULT_N;
 export const currentDenseN = () => denseN;
 
 // 근거 칩 묶음(인사이트는 div.evidence-list). 칩을 누르면 그 묶음 아래에 근거 글 한 줄이 보인다(FU-29, evidence.js의 showText — 글은 view로 만든 기본 함수)
-const chips = (view, ids, onFocus) => evidenceChips(view, ids, onFocus, { tag: 'div', showText: true });
+// 사람 칩 옆의 「카드」 단추가 여는 곳(R12 FU7-2). 인사이트 화면은 한 번에 하나라 모듈 값으로 둔다(insightPanel이 부를 때마다 갱신, 없으면 단추 없음)
+let openCard = null;
+const chips = (view, ids, onFocus) => evidenceChips(view, ids, onFocus, { tag: 'div', showText: true, onCard: openCard });
 
 // 인사이트 설명(역할 b): 공급자 결과(사전 생성)가 있으면 그 문장, 없으면 규칙 기반 문장. 문장마다 근거 버튼
 // same: 아래 카드가 이미 보여 주는 문장(Set). 규칙 기반 설명이 이 문장들과 같으면 같은 글을 두 번 보이지 않는다(반복 비효율 탭, 3회차)
@@ -72,6 +74,7 @@ function fillExplain(box, view, r, o, note, same = null) {
  */
 export function insightPanel(o) {
   const { view } = o;
+  openCard = o.onCard || null;
   let kind = o.kind || 'similar';
   const past = o.asOf && o.today && o.asOf < o.today;
   // 사전 생성 설명은 오늘 데이터 기준으로 쓴 문장이라 지난 날짜에는 쓰지 않는다(검토3 RULES-6)

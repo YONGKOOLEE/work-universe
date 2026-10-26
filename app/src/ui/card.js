@@ -51,7 +51,8 @@ function linkItem(l, o) {
 // 이력 한 줄(예전 모양 그대로 + 최신이 위)
 function historyItem(h, justAdded) {
   const attrs = { ...(h.after ? { class: 'after', title: '기준일 이후의 이력' } : {}), 'data-ev-gid': h.gid, ...(justAdded && justAdded.includes(h.gid) ? { 'data-just-added': '1' } : {}) };
-  return el('li', attrs, el('time', {}, h.date), el('span', { class: 'chip' }, h.type_label), el('span', { class: 'text' }, h.text));
+  // 종류 칩과 같은 글이면 한쪽만(R12 FU7-14: 「생성 / 생성」 반복)
+  return el('li', attrs, el('time', {}, h.date), el('span', { class: 'chip' }, h.type_label), h.text === h.type_label ? null : el('span', { class: 'text' }, h.text));
 }
 
 // 속성 표(예전 「속성」 dl). 긴 값(절차·주의사항 등)은 한 번 더 접는다
