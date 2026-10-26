@@ -11,6 +11,11 @@ gates:
   plan:approved: approved
   planning:complete: recorded 2026-09-30 (최종 점검 통과, CR-2 승인 후 재확정)
 approvals:   # 형식: gate / 대상 문서 / 사용자 승인 표현(원문) / 시각·시간대(확인 가능한 경우만) / 조건
+  - change: 저녁 확인 답 — Q27-1(초안을 확정하지 않고 끝내면 그 흐름에서 새로 만든 연결 없는 사람 숨김) 지금대로. 함께 받은 화면 의견 2건(기록이 찾아지는데 「찾는 기능 없음」이 보임, 통합 확인 판정 단추를 못 찾음)은 메인이 바로 고침
+    documents: docs/decisions-pending.md 27절 Q27-1, .tmp/guide/저녁-확인-가이드-20261026.html
+    user_expression: "(Q27-1, 비차단) 지금대로" / "불일치 쳤는데 찾는기는 없음은 왜 나오는거야? 찾아지는데?" / "e통합확인) 판정단추가 무엇인지? 못찾겠음"
+    time: 2026-10-26 저녁(a043b21 뒤)
+    condition: 없음
   - change: 열두 번째 검토(변경분 945d71f → 최종, 4관점 — 정확성·회귀, 보안·제출물, 문서 정합, 처음 사용 7회차)를 새 압축 전에 하기 — 전체 재검토 대신 변경분 집중
     documents: docs/review-2026-10-26.md 뒤 이을 새 검토 기록
     user_expression: "진행시키고 내가 오늘 저녁에 확인할게"

@@ -65,8 +65,8 @@ export function featureFind(o) {
         el('span', { class: 'feat-name' }, h.name),
         el('span', { class: 'feat-where' }, h.blocked ? `이 화면에서는 쓸 수 없음(${h.blocked})` : h.where),
         el('span', { class: 'feat-go' }, '바로 가기'))))
-      // 기록 결과가 있으면 「찾는 기능 없음」은 흐린 작은 줄로 기록 결과 아래에 둔다(R12 FU7-9: 맨 위 노란 줄이 먼저 눈에 띄어 기록을 못 봤다)
-      : recordItems.length ? [] : [noneRow(q, false)]).concat(recordItems, !hits.length && recordItems.length ? [noneRow(q, true)] : []));
+      // 기록 결과가 있으면 「찾는 기능 없음」은 보이지 않는다(사용자 2026-10-26 저녁 "찾아지는데 왜 없음이 나와?" — FU7-9의 흐린 줄도 뺌)
+      : recordItems.length ? [] : [noneRow(q, false)]).concat(recordItems));
     list.hidden = false;
   }
 

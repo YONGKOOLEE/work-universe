@@ -149,7 +149,9 @@ export function mergePanel(o) {
 /** 패널 본문. aiHead: 「업무 후보」 제목 바로 아래에 둘 AI 요소(없으면 빈 배열 — 지금과 같은 화면) */
 function renderMerge(o, plan, aiHead) {
   const { view } = o;
-  const decideButtons = (item, sameLabel, diffLabel) => (o.readOnly || !item.b ? null : el('div', { class: 'row' },
+  // 판정은 묻는 말 + 답 단추 둘(사용자 2026-10-26 저녁 "판정 단추가 무엇인지 못 찾겠음" — 단추만 있으면 무엇을 고르는지 안 보임)
+  const decideButtons = (item, sameLabel, diffLabel) => (o.readOnly || !item.b ? null : el('div', { class: 'row decide-row' },
+    el('span', { class: 'decide-q', 'data-testid': 'merge-decide-q' }, `이 둘이 ${sameLabel}인가요?`),
     el('button', { type: 'button', class: 'small-btn', 'data-testid': 'merge-same', onclick: () => o.onDecide(decisionItem(item), 'confirmed') }, sameLabel),
     el('button', { type: 'button', class: 'small-btn', 'data-testid': 'merge-diff', onclick: () => o.onDecide(decisionItem(item), 'rejected') }, diffLabel)));
 
