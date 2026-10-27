@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>업무 유니버스 소개자료</title>
+<!-- 1차 제출 소개자료 초안(2026-10-27). 원본: docs/소개자료-본문-초안.md v0.7, docs/소개자료-AI활용-초안.md v0.4, docs/limits.md, docs/로드맵-1차이후.md.
+     화면 캡처: dist/index.html(main b5b9e62 시점 빌드), 헤드리스 Chrome 1366×768. 숫자 옆 「동결 뒤 확정」은 기능 동결 뒤 다시 센다. 모든 이름·데이터는 가상. -->
+<style>
+  @page { size: A4; margin: 0; }
+  :root {
+    --ink: #17202a; --sub: #4a5562; --line: #d5dbe1; --paper: #ffffff; --soft: #f3f6f2;
+    --green: #4f8a10; --green-bg: #eef6e3; --app: #141a14;
+    --c-rel: #2f6fb3; --c-spr: #8a5a00; --c-done: #5b4bb0; --c-ai: #b0306a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #e9ecef; }
+  body {
+    font-family: "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", sans-serif;
+    color: var(--ink); font-size: 10.5pt; line-height: 1.42;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    word-break: keep-all; overflow-wrap: anywhere;
+  }
+  .page {
+    width: 210mm; height: 297mm; padding: 10mm 12mm 9mm; margin: 0 auto 8mm;
+    background: var(--paper); position: relative; overflow: hidden;
+    display: flex; flex-direction: column; gap: 2.8mm;
+  }
+  @media print { html, body { background: #fff; } .page { margin: 0; break-after: page; } .page:last-child { break-after: auto; } }
+
+  /* 공통 */
+  h2 { font-size: 12.5pt; margin: 0; letter-spacing: -0.2px; }
+  .q { color: var(--green); font-weight: 700; }
+  b, strong { font-weight: 700; }
+  .ui { font-weight: 700; color: #1f3d06; background: var(--green-bg); border-radius: 3px; padding: 0 2px; white-space: nowrap; }
+  .block { position: relative; border: 1px solid var(--line); border-radius: 3mm; padding: 3mm 3.5mm; }
+  .tag { position: absolute; top: -2.3mm; right: 3mm; font-size: 8pt; font-weight: 700; color: #fff; padding: 0.3mm 2mm; border-radius: 2mm; letter-spacing: -0.2px; }
+  .tag.rel { background: var(--c-rel); } .tag.spr { background: var(--c-spr); } .tag.done { background: var(--c-done); } .tag.ai { background: var(--c-ai); }
+  .tag + .tag { right: auto; }
+  .small { font-size: 8.5pt; color: var(--sub); }
+
+  /* 1쪽 머리 */
+  .top { display: flex; justify-content: space-between; align-items: baseline; font-size: 8.5pt; color: var(--sub); border-bottom: 2px solid var(--ink); padding-bottom: 1.5mm; }
+  .title { display: flex; align-items: flex-end; gap: 5mm; }
+  .title h1 { font-size: 27pt; margin: 0; line-height: 1.1; letter-spacing: -1px; white-space: nowrap; }
+  .title h1 span { color: var(--green); }
+  .title .slogan { font-size: 14pt; font-weight: 700; color: var(--ink); padding-bottom: 1mm; }
+  .lead { font-size: 11pt; margin: 0; }
+  .chips { display: flex; gap: 2mm; flex-wrap: wrap; margin-top: 1.5mm; }
+  .chip { font-size: 9pt; border: 1px solid #9fc46a; background: var(--green-bg); color: #24400a; border-radius: 10mm; padding: 0.4mm 2.6mm; font-weight: 700; }
+
+  /* 지금은 */
+  .now { display: grid; grid-template-columns: 22mm 1fr 1fr 1fr; gap: 2.5mm; align-items: stretch; }
+  .now .lab { background: var(--ink); color: #fff; border-radius: 3mm; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12pt; }
+  .now .p { background: #f6f2ee; border: 1px solid #e6dcd2; border-radius: 3mm; padding: 2mm 3mm; font-size: 10pt; line-height: 1.38; }
+  .now .p b { display: block; font-size: 10.5pt; color: #7a2e12; }
+
+  /* 흐름도 */
+  .flow { display: grid; grid-template-columns: 1fr 7mm 1fr 7mm 1fr; align-items: stretch; }
+  .step { border: 1.5px solid var(--green); border-radius: 3mm; padding: 2.4mm 3mm; background: #fbfdf8; }
+  .step .n { display: inline-flex; width: 6mm; height: 6mm; border-radius: 50%; background: var(--green); color: #fff; font-weight: 700; align-items: center; justify-content: center; font-size: 10pt; margin-right: 1.5mm; }
+  .step h3 { margin: 0 0 1mm; font-size: 11.5pt; display: flex; align-items: center; }
+  .step p { margin: 0; font-size: 10pt; line-height: 1.4; }
+  .step.last { border-color: #b0306a; background: #fdf7fa; }
+  .step.last .n { background: #b0306a; }
+  .arrow { display: flex; align-items: center; justify-content: center; }
+  .nest { display: flex; align-items: center; gap: 1.5mm; margin-top: 1.2mm; font-size: 8.5pt; color: var(--sub); }
+
+  /* 화면 */
+  .shot { background: var(--app); border-radius: 2.5mm; padding: 1.6mm; border: 1px solid #0b0f0b; }
+  .shot img { display: block; width: 100%; height: auto; border-radius: 1.5mm; }
+  .hero { position: relative; }
+  .hero .pin { position: absolute; width: 6.4mm; height: 6.4mm; margin: -3.2mm 0 0 -3.2mm; border-radius: 50%; background: #ffd23f; color: #111; font-weight: 800; font-size: 10.5pt; display: flex; align-items: center; justify-content: center; border: 2px solid #111; box-shadow: 0 0 0 1.5px #ffd23f; }
+  .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2mm 5mm; margin-top: 2mm; font-size: 10pt; }
+  .legend div { display: flex; gap: 1.6mm; align-items: baseline; }
+  .legend .k { flex: none; width: 5mm; height: 5mm; border-radius: 50%; background: #ffd23f; border: 1.5px solid #111; font-weight: 800; font-size: 8.5pt; display: inline-flex; align-items: center; justify-content: center; position: relative; top: 0.6mm; }
+
+  /* 확산 띠 */
+  .spread { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; }
+  .spread .s { position: relative; padding: 1.6mm 3mm 1.6mm 5mm; background: #fbf6ea; border-top: 1px solid #e7d6ae; border-bottom: 1px solid #e7d6ae; font-size: 9.6pt; line-height: 1.35; }
+  .spread .s:first-child { border-left: 1px solid #e7d6ae; border-radius: 3mm 0 0 3mm; padding-left: 3mm; }
+  .spread .s:last-child { border-right: 1px solid #e7d6ae; border-radius: 0 3mm 3mm 0; }
+  .spread .s:not(:last-child)::after { content: ""; position: absolute; right: -3mm; top: 50%; margin-top: -3mm; border: 3mm solid transparent; border-left-color: #e7c983; z-index: 1; }
+  .spread .s b { display: block; color: #6b4600; font-size: 10.2pt; }
+
+  /* 2쪽 기능 4칸 */
+  .grid4 { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm 4mm; }
+  .card { position: relative; border: 1px solid var(--line); border-radius: 3mm; padding: 2.6mm; display: flex; flex-direction: column; gap: 1.6mm; }
+  .card .frame { background: var(--app); border-radius: 2mm; height: 47mm; display: flex; align-items: center; justify-content: center; padding: 1.4mm; overflow: hidden; }
+  .card .frame img { max-width: 100%; max-height: 100%; display: block; border-radius: 1mm; }
+  .card h3 { margin: 0; font-size: 11.5pt; letter-spacing: -0.3px; }
+  .card p { margin: 0; font-size: 10pt; line-height: 1.4; }
+  .card .tags { position: absolute; top: -2.3mm; right: 3mm; display: flex; gap: 1mm; }
+  .card .tags .tag { position: static; }
+
+  /* AI 상자 */
+  .ai { border: 1.5px solid var(--c-ai); background: #fdf7fa; }
+  .ai h2 { color: #8a1f50; margin-bottom: 1.6mm; }
+  .aiflow { display: grid; grid-template-columns: 0.8fr 5mm 1.1fr 5mm 1.55fr 5mm 0.85fr; align-items: stretch; }
+  .aiflow .b { background: #fff; border: 1px solid #e3b7cb; border-radius: 2.5mm; padding: 1.8mm 2.2mm; font-size: 9.8pt; line-height: 1.35; }
+  .aiflow .b b { display: block; font-size: 10.4pt; }
+  .aiflow .b.app { border: 1.5px solid #8a1f50; }
+  .aiflow .b ol { margin: 0.6mm 0 0; padding-left: 4mm; font-size: 9.4pt; }
+  .aiflow .arrow svg path { fill: #b0306a; }
+  .modes { display: grid; grid-template-columns: 1fr 1fr 1.3fr; gap: 2mm; margin-top: 2mm; font-size: 9.6pt; line-height: 1.35; }
+  .modes div { border-left: 3px solid #e3b7cb; padding-left: 2mm; }
+  .modes b { color: #8a1f50; }
+
+  /* 완성도 띠 */
+  .nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2mm; }
+  .num { background: #f4f2fb; border: 1px solid #d8d2f0; border-radius: 2.5mm; padding: 1.6mm 2.5mm; }
+  .num .v { font-size: 15pt; font-weight: 800; color: var(--c-done); line-height: 1.15; }
+  .num .v small { font-size: 9.5pt; font-weight: 700; }
+  .num .l { font-size: 9.6pt; line-height: 1.3; }
+  .fz { display: inline-block; font-size: 7pt; font-weight: 700; color: #6b5c00; background: #fff4c2; border: 1px solid #e5cf6a; border-radius: 1.5mm; padding: 0 1.2mm; vertical-align: 1.5px; margin-left: 1mm; white-space: nowrap; }
+
+  .limits { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; font-size: 9.6pt; line-height: 1.38; }
+  .limits ul { margin: 0.6mm 0 0; padding-left: 4mm; }
+  .limits li { margin: 0.3mm 0; }
+  .limits h3 { margin: 0; font-size: 10.5pt; }
+  .foot { margin-top: auto; display: flex; justify-content: space-between; font-size: 8pt; color: var(--sub); border-top: 1px solid var(--line); padding-top: 1.2mm; }
+  /* 2차 조정 */
+  .nest { flex-wrap: nowrap; gap: 1mm; font-size: 9pt; }
+  .nest .ar { color: var(--green); font-weight: 700; margin: 0 0.5mm; }
+  .num .v.sm { font-size: 12pt; }
+  .card .frame { height: auto; display: block; }
+  .card .frame .im { position: relative; }
+  .card .frame .im img { width: 100%; max-height: none; }
+  .hl { position: absolute; border: 2.2px solid #ffd23f; border-radius: 1.5mm; box-shadow: 0 0 0 1.5px rgba(0,0,0,.55); }
+  .now { grid-template-columns: 17mm 1fr 1fr 1fr; }
+  .now .p { padding: 1.6mm 2.6mm; }
+  .legend { gap: 0.8mm 5mm; }
+</style>
+</head>
+<body>
+
+<!-- ======================= 1쪽 ======================= -->
+<section class="page">
+  <div class="top"><span>AI 활용 과제 · 1차 소개자료</span><span>화면의 모든 이름·데이터는 가상입니다</span></div>
+
+  <div>
+    <div class="title"><h1>업무 <span>유니버스</span></h1><div class="slogan">담당자가 바뀌어도 끊기지 않는 업무 지도</div></div>
+    <p class="lead">일하면서 남긴 기록이 <b>업무 지도</b>로 쌓이고, 사람이 바뀔 때 <b>근거가 달린 인수인계 초안</b>과 <b>「혼자만 아는 일」 경고</b>를 만들어 줍니다.</p>
+    <div class="chips"><span class="chip">설치·서버·로그인 없이 파일 하나</span><span class="chip">AI는 선택 — 키가 없어도 전부 동작</span><span class="chip">AI 문장은 앱이 근거를 검사</span><span class="chip">확정은 사람</span></div>
+  </div>
+
+  <div class="block" style="padding:2.2mm">
+    <span class="tag rel">업무 관련성</span>
+    <div class="now">
+      <div class="lab">지금은</div>
+      <div class="p"><b>기억에 기댄 인수인계</b>구두 설명뿐, 떠나면 물어볼 곳이 없음</div>
+      <div class="p"><b>흩어진 업무 지식</b>문서·메신저·메모에 흩어져 해 온 일이 안 보임</div>
+      <div class="p"><b>반복되는 설명</b>담당이 바뀔 때마다 처음부터 다시 설명</div>
+    </div>
+  </div>
+
+  <div>
+    <h2 style="margin-bottom:1.4mm">이렇게 바꿉니다</h2>
+    <div class="flow">
+      <div class="step">
+        <h3><span class="n">1</span>일하면서 남김</h3>
+        <p>담당·메모·산출물을 「기록 남기기」로. 기록은 지우지 않고 쌓입니다.</p>
+      </div>
+      <div class="arrow"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 7h9V2l8 9-8 9v-5H3z" fill="#4f8a10"/></svg></div>
+      <div class="step">
+        <h3><span class="n">2</span>업무 지도로 쌓임</h3>
+        <p><b>업무 하나 = 작은 지도.</b> 팀·부서는 묶어서 접어 봅니다.</p>
+        <div class="nest" aria-label="업무를 팀으로, 팀을 부서로 묶는 그림">
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="6" fill="#b5e06b" stroke="#4f8a10"/></svg>업무
+          <span class="ar">→</span>
+          <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><circle cx="11" cy="11" r="9.5" fill="none" stroke="#4f8a10" stroke-width="1.5"/><circle cx="7.5" cy="9" r="3" fill="#b5e06b"/><circle cx="14" cy="13.5" r="3" fill="#b5e06b"/></svg>팀
+          <span class="ar">→</span>
+          <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12" fill="none" stroke="#4f8a10" stroke-width="2"/><circle cx="8.5" cy="10" r="4.5" fill="none" stroke="#4f8a10"/><circle cx="17" cy="16.5" r="4.5" fill="none" stroke="#4f8a10"/></svg>부서
+        </div>
+      </div>
+      <div class="arrow"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 7h9V2l8 9-8 9v-5H3z" fill="#4f8a10"/></svg></div>
+      <div class="step last">
+        <h3><span class="n">3</span>사람이 바뀌면</h3>
+        <p><b>근거 달린 인수인계 초안.</b> 한 사람만 해 보고 인수인계 기록이 없는 일은 「혼자만 아는 일」로 경고.</p>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="shot hero">
+      <img src="hero.jpg" alt="업무 유니버스 화면: 월말 정산 점검 업무 지도에서 대사 확인 항목 카드를 연 모습" width="1912" height="1075">
+      <span class="pin" style="left:11.2%;top:29%">1</span>
+      <span class="pin" style="left:47%;top:45.5%">2</span>
+      <span class="pin" style="left:70.4%;top:16%">3</span>
+      <span class="pin" style="left:68.5%;top:3.8%">4</span>
+    </div>
+    <div class="legend">
+      <div><span class="k">1</span><span><b>왼쪽 메뉴 5개</b> — 하려는 일로 고름: 「지도 보기」「기록」「인수인계」「매주 점검」「지도 관리」</span></div>
+      <div><span class="k">2</span><span><b>업무 지도</b> — 샘플 「월말 정산 점검」. 사람·업무·산출물·주제를 선으로 이음</span></div>
+      <div><span class="k">3</span><span><b>항목 카드</b> — 담당·미해결·경고가 먼저, 바로 「기록 남기기」「담당 넘기기」「인수인계 초안」</span></div>
+      <div><span class="k">4</span><span><b>「무엇을 할까요?」</b> — 낱말을 치면 기능과 예전에 쓴 기록을 찾아 줌(2쪽)</span></div>
+    </div>
+  </div>
+
+  <div class="block" style="padding:3.2mm 3mm 2.2mm">
+    <span class="tag spr">확산 가능성</span>
+    <div class="spread">
+      <div class="s"><b>파일 하나로 시작</b>index.html 더블클릭, 설치·서버·로그인 없음</div>
+      <div class="s"><b>업무 이름 하나부터</b>작은 지도가 생기고 「처음 할 일」이 안내</div>
+      <div class="s"><b>각자 → 팀 → 부서</b>내보낸 파일·폴더 연결로 서버 없이 묶음</div>
+      <div class="s"><b>조직 전체로</b>저장 계층만 서버·DB로, 묶기 구조는 그대로</div>
+    </div>
+  </div>
+
+  <div class="foot"><span>업무 유니버스 · 1차 소개자료 초안 (2026-10-27)</span><span>1 / 2</span></div>
+</section>
+
+<!-- ======================= 2쪽 ======================= -->
+<section class="page">
+  <h2>핵심 기능 4가지 <span class="small" style="font-weight:400">— 실제 화면(샘플 데이터)</span></h2>
+
+  <div class="grid4">
+    <div class="card">
+      <div class="tags"><span class="tag rel">업무 관련성</span><span class="tag ai">AI</span></div>
+      <div class="frame"><div class="im"><img src="draft.jpg" alt="인수인계 초안에서 근거 칩을 눌러 원래 기록 한 줄이 펼쳐진 모습"><span class="hl" style="left:3.4%;top:24%;width:94.5%;height:13%"></span></div></div>
+      <h3>근거 달린 인수인계 초안 → 확정</h3>
+      <p>근거 칩을 누르면 <b>원래 기록 한 줄</b>이 펼쳐집니다. 근거가 없으면 지어내지 않고 「이력 부족」.</p>
+    </div>
+    <div class="card">
+      <div class="tags"><span class="tag rel">업무 관련성</span></div>
+      <div class="frame"><div class="im"><img src="weekly.jpg" alt="묶은 지도 가상 운영부의 매주 점검 화면"><span class="hl" style="left:65.6%;top:14.3%;width:33.4%;height:10.5%"></span><span class="hl" style="left:4%;top:20%;width:17%;height:56%"></span></div></div>
+      <h3>매주 점검 — 묶은 지도 「가상 운영부」</h3>
+      <p>빨간 겹테두리가 「혼자만 아는 일」. 팀별로 세고, 저장하면 다음 점검부터 지난번과 비교.</p>
+    </div>
+    <div class="card">
+      <div class="tags"><span class="tag done">완성도</span></div>
+      <div class="frame"><div class="im"><img src="find.jpg" alt="무엇을 할까요 칸에 원천 시스템을 쳐서 기록을 찾은 모습"><span class="hl" style="left:2.5%;top:24.5%;width:54%;height:13.5%"></span></div></div>
+      <h3>쓴 것 다시 찾기 — 「무엇을 할까요?」</h3>
+      <p>기억나는 낱말로 <b>예전에 쓴 기록</b>을, 「메모」 같은 일상말로 기능 위치를 찾습니다.</p>
+    </div>
+    <div class="card">
+      <div class="tags"><span class="tag spr">확산 가능성</span></div>
+      <div class="frame"><div class="im"><img src="merge.jpg" alt="통합 확인에서 이 둘이 같은 사람인가요를 묻는 모습"><span class="hl" style="left:1.2%;top:40%;width:41%;height:9.5%"></span></div></div>
+      <h3>업무 → 팀 → 부서 묶기 · 통합 확인</h3>
+      <p>사번이 같으면 자동으로 잇고, 애매하면 「이 둘이 같은 사람인가요?」 — 답은 사람이.</p>
+    </div>
+  </div>
+
+  <div class="block ai">
+    <span class="tag ai">창의성 · AI 활용</span>
+    <h2>AI는 기록에 있는 것만 쓰고, 앱이 근거를 검사합니다</h2>
+    <div class="aiflow">
+      <div class="b"><b>① 기록에서 근거</b>규칙이 고름</div>
+      <div class="arrow"><svg width="14" height="16" viewBox="0 0 14 16" aria-hidden="true"><path d="M1 4h6V0l7 8-7 8v-4H1z"/></svg></div>
+      <div class="b"><b>② Claude가 문장으로</b>근거만 보고, 인용 구절과 함께</div>
+      <div class="arrow"><svg width="14" height="16" viewBox="0 0 14 16" aria-hidden="true"><path d="M1 4h6V0l7 8-7 8v-4H1z"/></svg></div>
+      <div class="b app"><b>③ 앱이 검사, 못 넘으면 뺌</b>JSON 모양·근거 지문·인용이 원문에 있나</div>
+      <div class="arrow"><svg width="14" height="16" viewBox="0 0 14 16" aria-hidden="true"><path d="M1 4h6V0l7 8-7 8v-4H1z"/></svg></div>
+      <div class="b"><b>④ 사람이 확정</b>뺀 개수도 화면에</div>
+    </div>
+    <div class="modes">
+      <div><b>「사전 생성」</b>(기본) 미리 받아 둔 Claude 문장, 열 때마다 근거 재검사</div>
+      <div><b>「규칙 기반만」</b> 키 없이 같은 화면, 밖으로 보내는 것 없음</div>
+      <div><b>「Claude API(키를 넣으면 실시간)」</b> 초안·문서 변환·같은 업무 후보·글로 추가 <span class="small">— 가짜 응답으로 점검, 실제 호출은 확인 전</span></div>
+    </div>
+    <p class="small" style="margin:1.2mm 0 0">만드는 과정도 AI: 설계·구현·검증을 Claude Code로 — 계획 문서는 사람이 승인하고, 작업마다 자동 시험으로 확인.</p>
+  </div>
+
+  <div class="block" style="padding:3mm 3mm 2mm">
+    <span class="tag done">완성도</span>
+    <div class="nums">
+      <div class="num"><div class="v">2,211<small>개</small><span class="fz">동결 뒤 확정</span></div><div class="l">자동 시험(단위)</div></div>
+      <div class="num"><div class="v sm">Chrome·Edge<span class="fz">동결 뒤 확정</span></div><div class="l">화면 자동 점검</div></div>
+      <div class="num"><div class="v">13<small>회</small><span class="fz">동결 뒤 확정</span></div><div class="l">전체 검토(하위 에이전트)</div></div>
+      <div class="num"><div class="v">9<small>회</small><span class="fz">동결 뒤 확정</span></div><div class="l">처음 사용 점검*</div></div>
+    </div>
+    <p class="small" style="margin:1.2mm 0 0">* 처음 사용 점검은 에이전트가 처음 쓰는 사람 역할을 맡은 점검이며, 실제 사람 관찰이 아닙니다.</p>
+  </div>
+
+  <div class="limits">
+    <div class="block" style="padding:2.2mm 3mm">
+      <h3>한계</h3>
+      <ul>
+        <li>가상 데이터로만 보임 — 실데이터는 보안 검토 먼저</li>
+        <li>실제 사람 관찰·실제 API 응답 확인은 아직</li>
+        <li>키는 브라우저에 평문 저장 — 공용 PC 금지</li>
+      </ul>
+    </div>
+    <div class="block" style="padding:2.2mm 3mm">
+      <h3>다음 단계</h3>
+      <ul>
+        <li>실제 사람 관찰 → 막힌 곳 고치기</li>
+        <li>화면 2차 → 실사용 전환(서버 저장·로그인·권한)</li>
+        <li>AI 확장 — 키 서버 중계·사내 LLM 연결</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="foot"><span>「동결 뒤 확정」 숫자는 기능 동결 뒤 다시 세어 고칩니다 · 화면 속 이름은 모두 가상</span><span>2 / 2</span></div>
+</section>
+
+</body>
+</html>
