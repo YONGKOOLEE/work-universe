@@ -43,7 +43,7 @@ const names = (doc, type) => doc.nodes.filter((n) => n.core_type === type && !n.
 
 // ── 규칙 읽기: 가상 문서 4개 ──
 
-test('CR-23 문서 2(2026 회의록): 문서 1·할 일 업무 5(공백뿐인 표)·담당 역할 6·메모(쟁점·추적 절 → caution)', () => {
+test('CR-23 문서 2(2026 회의록): 문서 1·할 일 업무 5(공백뿐인 표)·담당 역할 6·메모(추적 절 → caution 2건만, 「부서별 의견 및 쟁점」은 메모 아님)', () => {
   const r = read('2');
   assert.equal(r.ok, true);
   const p = r.plan;
@@ -60,7 +60,8 @@ test('CR-23 문서 2(2026 회의록): 문서 1·할 일 업무 5(공백뿐인 �
   ]);
   assert.deepEqual([...new Set(p.tasks.flatMap((t) => t.owners.map((o) => o.label)))], ['법무', '영업', '재무정산', '고객지원', '기술', '사업본부']);
   assert.ok(p.tasks.every((t) => !t.past), '모든 기한이 오늘(2026-10-28)·문서 날짜 뒤');
-  assert.ok(p.memos.length >= 2 && p.memos.every((m) => m.category === 'caution'));
+  assert.equal(p.memos.length, 2, p.memos.map((m) => m.section).join(' / '));
+  assert.ok(p.memos.every((m) => m.category === 'caution'));
   const trace = p.memos.filter((m) => m.section === '추적 관리 사항');
   assert.equal(trace.length, 2);
   assert.ok(trace[0].text.startsWith('[2026년 문자메시지 발송 수수료 조정 검토 회의록] 미동의 계약 수, 프로모션 잔여 고객'));

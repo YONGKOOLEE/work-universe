@@ -33,7 +33,7 @@ export const DOC_ATTACH_LIMITS = Object.freeze({
 export const DOC_ATTACH_WORDS = Object.freeze({
   decision: ['결정', '결론', '의결', '합의'],
   issue: ['미결', '미확정', '확인필요', '질문'], // → 메모 범주 issue
-  caution: ['유의', '주의', '추적', '쟁점', '리스크', '위험'], // → 메모 범주 caution
+  caution: ['유의', '주의', '추적', '리스크', '위험'], // → 메모 범주 caution. 「쟁점」은 넣지 않음(「부서별 의견 및 쟁점」의 부서 의견이 주의사항 메모로 쏟아짐 — 메인 2026-10-28)
   /** 할 일 표 머리줄: 세 낱말이 모두 있어야 한다(낱말 하나가 낱말 전체여야 하므로 문장은 걸리지 않는다) */
   head: Object.freeze({
     task: /^(?:과제|조치|할일|작업|실행과제|업무)(?:명|사항|내용|항목)?$/,
@@ -409,7 +409,7 @@ export function readDocumentRule(text, { doc, targetId, today = todayDefault() }
   const ownerKeys = [...new Set(tasks.flatMap((t) => t.owners.map((o) => normalizeLabel(o.label))))];
   if (ownerKeys.length > DOC_ATTACH_LIMITS.maxRoles) notes.push(`담당(사람·역할)이 ${DOC_ATTACH_LIMITS.maxRoles}개를 넘어 앞의 것만 만듭니다`);
 
-  // 3) 메모: 미결 절 → issue, 유의·추적·쟁점 절 → caution (미결이 우선)
+  // 3) 메모: 미결 절 → issue, 유의·추적 절 → caution (미결이 우선)
   const memos = [];
   const memoDate = docDate && docDate <= today ? docDate : today;
   const prefix = `[${clip(docLabel, DOC_ATTACH_LIMITS.memoNameMax)}] `;
