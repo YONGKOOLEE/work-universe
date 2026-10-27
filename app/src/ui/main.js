@@ -53,6 +53,8 @@ import { EMBED_WARNINGS, captureAppHtml, createEmbedApp, embedHtmlFor, importEmb
 import { tableDialog } from './table.js';
 import { textAddDialog } from './text-add.js';
 import { docAttachDialog } from './doc-attach.js';
+// 문서로 더한 뒤 배치를 다시 계산하는 조건: 새 항목이 minAdded개 이상이고 지도가 maxNodes개 이하일 때
+const DOC_ATTACH_RELAYOUT = { minAdded: 1, maxNodes: 80 };
 import { readDocumentAi } from '../llm/ai-doc-attach.js';
 import { TEXT_GROUPED_NOTE, isGroupedView } from '../rules/text-extract.js';
 import { convertDocument } from '../rules/doc-convert.js';
@@ -2959,6 +2961,9 @@ function start() {
     today: todayLocal,
     onSaved: (r, ctx) => {
       afterSave(r, toGid(currentId(), ctx.targetId)); // 대상 업무 카드를 연다
+      // 문서로 더하기는 한 번에 항목을 여럿 늘린다: 작은 지도에서는 기존 자리에 덧붙이면 역할이 한 줄로 늘어지고 업무 이름이 가려져
+      // 배치를 다시 계산한다(「다시 정렬」과 같음). 큰 지도는 익숙한 자리를 지키도록 그대로(메인 2026-10-28 C 캡처 확인)
+      if (r.ok && (r.created || []).length >= DOC_ATTACH_RELAYOUT.minAdded && app.doc.nodes.filter((n) => !n.hidden).length <= DOC_ATTACH_RELAYOUT.maxNodes) graph.relayout();
       renderAddForm(ctx.notice);
       notify('doc-attach', { testid: 'doc-attach-notice', text: ctx.notice, nodeGid: toGid(currentId(), ctx.targetId) }, { long: true, goLabel: '업무 보기' });
     },

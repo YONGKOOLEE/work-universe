@@ -4719,7 +4719,7 @@ async function checkBrowser(browser, port) {
         return {
           open: document.getElementById('doc-attach-dialog').open,
           stamps: new Set(mine.map((e) => e.recorded_at)).size,
-          memo: mine.filter((e) => e.type === 'memo' && e.payload.target_id === 'N-001' && e.payload.category === 'caution' && e.note.startsWith('[2026년')).length,
+          memo: mine.filter((e) => e.type === 'memo' && e.payload.target_id === 'N-001' && e.payload.category === 'caution' && e.note.includes('출처: 「2026년')).length,
           resolved: mine.filter((e) => e.type === 'memo' && ['resolved', 'in_progress'].includes(e.payload.category)).length,
           roles: doc.nodes.filter((n) => n.core_type === 'person' && n.subtype === '역할').map((n) => n.label),
           contains: doc.edges.filter((e) => e.core_type === 'contains' && e.source === 'N-001').length,

@@ -475,7 +475,8 @@ export function readDocumentRule(text, { doc, targetId, today = todayDefault() }
   const memos = [];
   const cautionDate = docDate && docDate <= today ? docDate : today;
   const nameForMemo = clip(docLabel.replace(/[[\]]/g, ''), DOC_ATTACH_LIMITS.memoNameMax);
-  const prefixOf = (category) => (category === 'issue' && docDate ? `[${nameForMemo} · 문서 날짜 ${docDate}] ` : `[${nameForMemo}] `);
+  // 내용을 앞에, 출처를 뒤에(카드 「지금 볼 것」은 앞부분만 보여서 출처가 앞이면 내용이 잘린다 — 메인 2026-10-28 C 캡처 확인)
+  const sourceOf = (category) => (category === 'issue' && docDate ? ` — 출처: 「${nameForMemo}」(문서 날짜 ${docDate})` : ` — 출처: 「${nameForMemo}」`);
   const usedMemoSections = [];
   let memoCapped = 0;
   for (const s of sections) {
@@ -486,7 +487,7 @@ export function readDocumentRule(text, { doc, targetId, today = todayDefault() }
     usedMemoSections.push(s.title);
     for (const sentence of itemsOf(s.lines, { speaker: true })) {
       if (memos.length >= DOC_ATTACH_LIMITS.maxMemos) { memoCapped += 1; continue; }
-      const note = `${prefixOf(category)}${clip(sentence, DOC_ATTACH_LIMITS.memoMax)}`;
+      const note = `${clip(sentence, DOC_ATTACH_LIMITS.memoMax)}${sourceOf(category)}`;
       const exists = (doc.events || []).some((e) => e.type === 'memo' && e.payload && e.payload.target_id === targetId && String(e.note || '').trim() === note);
       memos.push({ key: `m${memos.length + 1}`, category, text: note, date: category === 'issue' ? today : cautionDate, section: s.title, exists });
     }

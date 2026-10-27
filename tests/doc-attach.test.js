@@ -64,7 +64,7 @@ test('CR-23 문서 2(2026 회의록): 문서 1·할 일 업무 5(공백뿐인 �
   assert.ok(p.memos.every((m) => m.category === 'caution'));
   const trace = p.memos.filter((m) => m.section === '추적 관리 사항');
   assert.equal(trace.length, 2);
-  assert.ok(trace[0].text.startsWith('[2026년 문자메시지 발송 수수료 조정 검토 회의록] 미동의 계약 수, 프로모션 잔여 고객'));
+  assert.ok(trace[0].text.startsWith('미동의 계약 수, 프로모션 잔여 고객') && trace[0].text.endsWith(' — 출처: 「2026년 문자메시지 발송 수수료 조정 검토 회의록」'), trace[0].text);
   assert.equal(trace[0].date, '2026-10-27', '메모 날짜 = 문서 날짜');
   assert.deepEqual(p.unread, []);
 });
@@ -111,7 +111,7 @@ test('CR-23 문서 4(프로모션 이력 메모): 제목 줄 「제목:」·대�
   assert.ok(p.doc.description.includes('2024. 11. 5.: 10월 사용분 최초 유료 청구서 발행'));
   assert.deepEqual(p.tasks, []);
   assert.deepEqual(p.memos.map((m) => [m.category, m.section]), Array(3).fill(['caution', '사후 평가 및 향후 유의사항']));
-  assert.ok(p.memos[2].text.endsWith('재프로모션은 별도 승인 필수.'));
+  assert.ok(p.memos[2].text.startsWith('재프로모션은 별도 승인 필수. — 출처: 「'), p.memos[2].text);
 });
 
 test('CR-23 엉뚱한 항목 0: 4개 문서 모두 문장 조각·날짜·담당이 이름이 된 업무·역할이 없다, 메모 범주는 issue·caution뿐', () => {
@@ -217,7 +217,7 @@ test('CR-23 지도에 적용: 문서 2를 모두 체크해 applyBatch → 오류
   assert.ok(!r.doc.nodes.some((n) => n.created_at === NOW && n.core_type === 'root'));
   const memos = r.doc.events.filter((e) => e.type === 'memo' && e.recorded_at === NOW);
   assert.equal(memos.length, p.memos.length);
-  assert.ok(memos.every((e) => e.payload.target_id === TARGET && ['issue', 'caution'].includes(e.payload.category) && e.note.startsWith('[2026년')));
+  assert.ok(memos.every((e) => e.payload.target_id === TARGET && ['issue', 'caution'].includes(e.payload.category) && e.note.includes('출처: 「2026년')));
   assert.equal(attachNotice(r.created, r.memos.length, { issues: 0, assigns: r.assignments.length }), `문서 1·업무 5·메모 ${p.memos.length} 더함(담당 역할 6개 포함) — 되돌리려면 지도 관리 → 편집 되감기 (메모·담당 기록은 되감아도 남습니다)`); // RV-B-5: 사실대로
 });
 

@@ -121,14 +121,14 @@ test('RV-B-4 옛 문서의 미결(issue) 메모는 오늘 날짜·「[문서명 
   const before = openMemos(app.view).length;
   const r = readDocumentRule(FIX['1'], { doc: app.doc, targetId: 'N-001', today: TODAY });
   assert.ok(r.plan.memos.every((m) => m.category === 'issue' && m.date === TODAY));
-  assert.ok(r.plan.memos[0].text.startsWith('[2016년 문자메시지 발송 수수료 조정 회의록 · 문서 날짜 2016-11-17] 대형 고객의'));
+  assert.ok(r.plan.memos[0].text.startsWith('대형 고객의') && r.plan.memos[0].text.endsWith(' — 출처: 「2016년 문자메시지 발송 수수료 조정 회의록」(문서 날짜 2016-11-17)'), r.plan.memos[0].text);
   const a = app.applyBatch(planToOps(r.plan, defaultDocSelection(r.plan), app.doc).ops);
   assert.equal(a.ok, true);
   assert.equal(openMemos(app.view).length, before + 2, '샘플의 뒤쪽 해결됨 메모가 새 미결 2건을 닫지 않는다');
   const c = readDocumentRule(FIX['4'], { doc: app.doc, targetId: 'N-001', today: TODAY }).plan;
-  assert.ok(c.memos.every((m) => m.category === 'caution' && m.date === '2026-10-27' && m.text.startsWith('[대형 이용기관')));
+  assert.ok(c.memos.every((m) => m.category === 'caution' && m.date === '2026-10-27' && m.text.includes(' — 출처: 「대형 이용기관') && !m.text.includes('문서 날짜')));
   const nodate = rd('회의록\n1. 미결 사항\n하나 둘.').plan;
-  assert.ok(nodate.memos[0].text.startsWith('[회의록] 하나'), '문서 날짜가 없으면 「[문서명] 」');
+  assert.ok(nodate.memos[0].text.startsWith('하나') && nodate.memos[0].text.endsWith(' — 출처: 「회의록」'), '문서 날짜가 없으면 「출처: 「문서명」」');
 });
 
 // ── RV-B-5 알림 ──
@@ -181,7 +181,7 @@ test('RV-B-8 문서로 더하기 이벤트의 출처는 system(최근 기록·�
 test('RV-B-9 「[회의록]」뿐인 첫 줄은 대괄호를 떼고, 메모 머리에 이중 대괄호가 없다', () => {
   const p = rd('[회의록]\n1. 미결\n하나 둘.').plan;
   assert.equal(p.doc.label, '회의록');
-  assert.ok(p.memos[0].text.startsWith('[회의록] 하나'));
+  assert.ok(p.memos[0].text.startsWith('하나') && p.memos[0].text.endsWith('출처: 「회의록」'));
   assert.ok(!p.memos[0].text.includes('[['));
   const q = rd('[업무 메모]\n제목: 가상 안내\n1. 미결\n하나 둘.').plan;
   assert.equal(q.doc.label, '가상 안내');
