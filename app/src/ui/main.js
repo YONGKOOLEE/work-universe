@@ -209,9 +209,10 @@ function wireCreateDialog(app, $, getAuthorName = () => undefined) {
 }
 
 // 가져오기(T-17): 문서 초벌 변환(CR-5 ②)·JSON 파일 → 미리 보기 → 가져오기. 시작 화면과 본 화면이 함께 쓴다
-function wireImportDialog(app, $, getProvider, methodLabel, onExport = null, onReset = null, onExportHtml = null, folder = null) {
+function wireImportDialog(app, $, getProvider, methodLabel, onExport = null, onReset = null, onExportHtml = null, folder = null, docAttach = null) {
   const open = importDialog({
     folder,
+    docAttach, // {can, open}: 지금 연 지도에 문서를 더하는 「문서로 더하기」로 가는 길(조력자 의견 2026-10-28). 시작 화면이면 null
     onExport,
     onExportHtml,
     onReset,
@@ -348,7 +349,9 @@ function start() {
     backupSlot.before(tabNote);
     window.addEventListener('storage', (ev) => { if (otherTabChangedUniverse(ev, storage, currentId())) tabNote.hidden = false; });
   }
-  const openImport = wireImportDialog(app, $, () => provider, providerLabel, hashId() ? doExport : null, doReset, hashId() ? doExportHtml : null, folder);
+  // 「문서로 더하기」는 아래에서 만들어진다: 가져오기 창에서는 누를 때 찾는다
+  const docAttachHook = { can: () => false, open: () => {} };
+  const openImport = wireImportDialog(app, $, () => provider, providerLabel, hashId() ? doExport : null, doReset, hashId() ? doExportHtml : null, folder, hashId() ? docAttachHook : null);
 
   // 주소에 유니버스가 없으면(더블클릭으로 처음 열었을 때) 시작 화면을 보여 준다(R-08)
   if (!hashId()) { // 깨진 인코딩(#%E0)도 시작 화면(hashId의 주석대로, 여섯 번째 검토 C-16)
@@ -2960,6 +2963,9 @@ function start() {
       notify('doc-attach', { testid: 'doc-attach-notice', text: ctx.notice, nodeGid: toGid(currentId(), ctx.targetId) }, { long: true, goLabel: '업무 보기' });
     },
   });
+
+  docAttachHook.can = () => !app.readOnly && !isGroupedView(view);
+  docAttachHook.open = () => openDocAttach(selectedWorkId());
 
   // 노드 추가(R-02 ①): 저장하면 바로 그래프에 나타나고 선택된다
   // CR-18-5: 양식으로 저장에 성공하면 「사람·업무·문서 추가」를 접고 이 한 줄만 남긴다(양식 위쪽에서 패널이 길어지지 않게). 펼치면 사라진다
