@@ -4698,7 +4698,7 @@ async function checkBrowser(browser, port) {
       // 5) 글을 고치면 다시 읽기 전에는 저장 불가
       await d23Set('doc-attach-input', `${D23_TEXT} 고침`);
       const d23Stale = { save: (await d23Box('[data-testid=doc-attach-save]')).disabled, note: (await d23Box('[data-testid=doc-attach-stale]')) };
-      check('CR-23 읽은 뒤 글을 고치면 「글이나 대상 업무가 바뀌었습니다 — 다시 읽으세요」가 보이고 저장 단추가 잠김', d23Stale.save && !!d23Stale.note && !d23Stale.note.hidden && d23Stale.note.text.includes('다시 읽으세요'), JSON.stringify(d23Stale));
+      check('CR-23 읽은 뒤 글을 고치면 「대상이나 글이 바뀌었습니다 — 다시 읽어 주세요」가 보이고 저장 단추가 잠김', d23Stale.save && !!d23Stale.note && !d23Stale.note.hidden && d23Stale.note.text.includes("다시 읽어 주세요"), JSON.stringify(d23Stale));
       await d23Set('doc-attach-input', D23_TEXT);
       await clickTestId(s.cdp, 'doc-attach-read');
       await sleep(200);

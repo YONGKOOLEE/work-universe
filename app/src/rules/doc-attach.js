@@ -43,6 +43,16 @@ export const DOC_ATTACH_WORDS = Object.freeze({
   /** 담당 칸에 있어도 사람(역할)으로 만들지 않는 값 */
   noOwner: ['미정', '미지정', '미배정', '없음', 'tbd', 'n/a', '-', '해당없음', '전원', '전체', '각팀', '각자'],
   skipLine: /^※/,
+  /** 담당 칸에 오면 사람(역할)이 아닌 낱말(접속사·흔한 말) → 그 행을 읽지 않는다 */
+  stopOwner: ['그리고', '및', '예정', '등', '또는', '혹은', '이후', '이내', '별도', '공지', '모두', '기타', '관련', '해당', '위', '아래', '다음', '이상', '이하', '각', '및등'],
+  /** 공백뿐인 표에서 담당 낱말이 조직·역할 꼴인지 보는 끝말(세 글자 이상일 때) */
+  orgSuffix: /(?:팀|부서|본부|센터|파트|그룹|위원회|사업|담당|부|실|처|국|과)$/,
+  /** 과제 이름의 끝 낱말이 조직 꼴이면 담당이 과제 이름 끝에 붙은 것이다(「고객 안내문 배포 영업팀」) */
+  orgTail: /(?:팀|부서|본부|센터|파트|그룹|위원회)$/,
+  /** 과제 이름이 문장 꼴(…다/…함/…예정)이면 할 일 이름이 아니다 */
+  sentenceTail: /(?:다|함|음|임|됨|예정|것|중)\.?$/,
+  uncertainTokens: 7, // 공백뿐인 표에서 과제 이름이 이 낱말 수 이상이면 문장일 수 있어 「확인 필요」(처음 체크 해제)
+  issueQuestion: '질문', // 「질문」은 같은 제목에 「답변」이 있으면 미결이 아니다
 });
 
 /** 메모 범주: resolved·in_progress는 쓰지 않는다(resolved는 같은 대상의 열린 메모를 닫고, in_progress·issue는 매주 점검의 열린 항목으로 센다) */
@@ -54,6 +64,14 @@ const squash = (s) => String(s).replace(/\s+/g, '');
 const oneLine = (s) => String(s).replace(/\s+/g, ' ').trim();
 const clip = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 const hasWord = (title, words) => { const t = squash(title); return words.some((w) => t.includes(w)); };
+/** 절 제목 판정(한 절은 한 곳으로만): 미결 → issue, 유의·추적 → caution, 결정은 메모가 되지 않는 절만 */
+export const isIssueTitle = (t) => {
+  const sq = squash(t);
+  if (DOC_ATTACH_WORDS.issue.some((w) => w !== DOC_ATTACH_WORDS.issueQuestion && sq.includes(w))) return true;
+  return sq.includes(DOC_ATTACH_WORDS.issueQuestion) && !sq.includes('답'); // 「질문과 답변」은 이미 답이 있다
+};
+export const isCautionTitle = (t) => hasWord(t, DOC_ATTACH_WORDS.caution);
+export const isDecisionTitle = (t) => hasWord(t, DOC_ATTACH_WORDS.decision) && !isIssueTitle(t) && !isCautionTitle(t) && !hasWord(t, ['미결정', '미확정']);
 const BULLET = /^(?:[-·•▪‣◦*□○●■▶▷]|\(\d{1,2}\)|\d{1,2}\))\s+/;
 const CIRCLED = /[①-⑳]/;
 
@@ -97,8 +115,8 @@ const BRACKET_HEAD = /^\s*[[【][^\]】]{1,20}[\]】]\s*[:：\-–—]?\s*(?=\S)
 export function cleanTitle(raw) {
   let t = oneLine(raw).replace(/^#+\s*/, '').replace(/^제목\s*[:：]\s*/, '');
   const noHead = t.replace(BRACKET_HEAD, '').trim();
-  if (noHead && /[\p{L}\p{N}]/u.test(noHead) && noHead.length >= 2) t = noHead;
-  else if (WHOLE_BRACKET.test(t)) t = t.slice(1, -1).trim();
+  if (noHead !== t && /[\p{L}\p{N}]/u.test(noHead) && noHead.length >= 2) t = noHead;
+  else if (WHOLE_BRACKET.test(t)) t = t.slice(1, -1).trim(); // 「[회의록]」뿐인 줄은 대괄호만 뗀다
   return clip(t, LABEL_MAX);
 }
 
@@ -196,6 +214,7 @@ export function parseDue(raw) {
       if (!validYmd(y, m, d)) return null;
     } else d = lastDay(y, m); // 월 말·월만: 그 달의 마지막 날로 본다
     ends.push(`${y}-${pad2(m)}-${pad2(d)}`);
+    if (ends.length > 1 && ends[ends.length - 1] < ends[ends.length - 2]) return null; // 거꾸로 된 범위
     if (parts.length === 1 && hasDay && !/(이후|까지|이전|이내)$/.test(text)) iso = ends[0];
   }
   return { text, iso, end: ends[ends.length - 1] };
@@ -234,7 +253,7 @@ export function ownersOf(cell) {
   if (!pieces.length || pieces.length > DOC_ATTACH_LIMITS.ownersPerTask) return null;
   const out = [];
   for (const p of pieces) {
-    if (!NAME_PIECE.test(p) || /다$/.test(p)) return null;
+    if (!NAME_PIECE.test(p) || /다$/.test(p) || !/\p{L}/u.test(p) || DOC_ATTACH_WORDS.stopOwner.includes(p)) return null; // 숫자뿐·접속사는 담당이 아니다
     if (DOC_ATTACH_WORDS.noOwner.includes(p.toLowerCase())) continue;
     if (!out.includes(p)) out.push(p);
   }
@@ -244,11 +263,27 @@ export function ownersOf(cell) {
 /** 과제 이름으로 쓸 수 있는가: 글자가 있고 문장 끝(다.)이 아니다 */
 const taskNameOk = (s) => s.length >= 2 && s.length <= LABEL_MAX && /\p{L}/u.test(s) && !/다\.$/.test(s);
 
-/** 행 하나 → {task, owners, due}|{why} */
-function readRow(line, header) {
+/** 공백뿐인 표의 행 → {task, ownerCell, dueCell}|null (줄 끝의 기한 → 그 앞 낱말 → 나머지) */
+function splitSpaceRow(line) {
+  const m = DATE_TAIL.exec(line);
+  if (!m) return null;
+  const om = /^(.*\S)\s+(\S+)$/.exec(line.slice(0, m.index).trim());
+  return om ? { task: om[1].trim(), ownerCell: om[2], dueCell: m[0].trim() } : null;
+}
+
+const ownerPieces = (cell) => oneLine(cell).split(/\s*[/／,，、]\s*/).filter(Boolean);
+
+/**
+ * 행 하나 → {task, owners, due, uncertain?}|{why}|{skip}.
+ * 공백뿐인 표(ctx.counts·ctx.names)는 칸 구분이 없어 담당·과제 경계가 흐리다 — 확신이 있을 때만 읽는다:
+ *   담당 낱말이 「/」·「,」로 이은 덩어리이거나 · 지도에 있는 사람·조직 이름이거나 · 같은 표 다른 행에서도 담당이거나 · 세 글자 이상이고 조직 꼴(…팀·본부·사업 …)일 때,
+ *   과제 이름이 문장 꼴이 아니고 끝 낱말이 조직 꼴이 아닐 때. 과제 이름이 7낱말 이상이면 만들되 「확인 필요」.
+ */
+function readRow(line, header, ctx = {}) {
   let task;
   let ownerCell;
   let dueCell;
+  let spaced = false;
   if (header.cells) {
     const cells = cellsOf(line);
     if (!cells) return { why: '표의 칸으로 나뉘지 않는 줄' };
@@ -258,27 +293,34 @@ function readRow(line, header) {
     ownerCell = cells[header.order.indexOf('owner')];
     dueCell = cells[header.order.indexOf('due')];
   } else {
-    // 공백만 있는 표(PDF에서 복사한 글): 머리줄이 「과제 담당 기한」 순서일 때만 줄 끝의 기한 → 그 앞 낱말(담당) → 나머지(과제)
+    // 공백만 있는 표(PDF에서 복사한 글): 머리줄이 「과제 담당 기한」 순서일 때만
     if (header.order.join() !== 'task,owner,due') return { why: '공백만 있는 표는 「과제 담당 기한」 순서일 때만 읽음' };
-    const m = DATE_TAIL.exec(line);
-    if (!m) return { why: '줄 끝에서 기한을 찾지 못함' };
-    const before = line.slice(0, m.index).trim();
-    const om = /^(.*\S)\s+(\S+)$/.exec(before);
-    if (!om) return { why: '담당과 과제를 나눌 수 없음' };
-    task = om[1].trim();
-    ownerCell = om[2];
-    dueCell = m[0].trim();
+    const sp = splitSpaceRow(line);
+    if (!sp) return { why: DATE_TAIL.test(line) ? '담당과 과제를 나눌 수 없음' : '줄 끝에서 기한을 찾지 못함' };
+    ({ task, ownerCell, dueCell } = sp);
+    spaced = true;
   }
   task = oneLine(task || '');
   if (!taskNameOk(task)) return { why: '과제 이름을 읽을 수 없음' };
   const owners = ownersOf(ownerCell || '');
   if (owners === null) return { why: '담당을 사람·역할 이름으로 읽을 수 없음' };
+  let uncertain = false;
+  if (spaced) {
+    const W = DOC_ATTACH_WORDS;
+    const tokens = task.split(/\s+/);
+    if (W.sentenceTail.test(task)) return { why: '과제 이름이 문장 꼴이라 할 일로 읽지 않음' };
+    if (W.orgTail.test(tokens[tokens.length - 1]) || (tokens[tokens.length - 1].length >= 3 && /[부실처]$/.test(tokens[tokens.length - 1]))) return { why: '과제 이름 끝에 조직 이름이 붙어 담당과 나눌 수 없음' };
+    const pieces = ownerPieces(ownerCell);
+    const sure = pieces.length > 1 || pieces.every((p) => (ctx.names && ctx.names.has(normalizeLabel(p))) || (ctx.counts && ctx.counts.get(p) >= 2) || (p.length >= 3 && W.orgSuffix.test(p)));
+    if (owners.length && !sure) return { why: '담당이 사람·역할 이름인지 확신할 수 없음' };
+    uncertain = tokens.length >= W.uncertainTokens;
+  }
   let due = null;
   if (oneLine(dueCell || '')) {
     due = parseDue(dueCell);
     if (!due) return { why: '기한을 날짜로 읽을 수 없음' };
   }
-  return { task, owners, due };
+  return { task, owners, due, ...(uncertain ? { uncertain: true } : {}) };
 }
 
 // ── 계획 만들기 ──────────────────────────────────────────────────────────────
@@ -325,6 +367,7 @@ export function readDocumentRule(text, { doc, targetId, today = todayDefault() }
   const target = nodes.find((n) => n.id === targetId);
   if (!target || target.core_type !== 'work' || target.hidden) return { ok: false, reason: 'target' };
   const cands = docCandidates(doc);
+  const names = new Set(cands.filter((c) => c.core_type === 'person' || c.core_type === 'org').map((c) => normalizeLabel(c.label)));
   const { title, sections } = splitDocument(src);
   const docLabel = title || '문서';
   const docDate = docDateOf(src, title);
@@ -336,7 +379,7 @@ export function readDocumentRule(text, { doc, targetId, today = todayDefault() }
   const decisions = [];
   const history = [];
   for (const s of sections) {
-    if (s.title && hasWord(s.title, DOC_ATTACH_WORDS.decision)) decisions.push(...itemsOf(s.lines));
+    if (s.title && isDecisionTitle(s.title)) decisions.push(...itemsOf(s.lines));
     for (const l of s.lines) {
       if (/^[-·•▪‣◦*□○●■▶▷]\s*\d{4}\s*[.\-/년]\s*\d{1,2}/.test(l)) history.push(oneLine(l.replace(/^[-·•▪‣◦*□○●■▶▷]\s*/, '')));
     }
@@ -371,10 +414,26 @@ export function readDocumentRule(text, { doc, targetId, today = todayDefault() }
     if (hi < 0) continue;
     const header = taskHeader(s.lines[hi]);
     usedSections.push(s.title);
-    for (const line of s.lines.slice(hi + 1)) {
-      const r = readRow(line, header);
+    const rowsOf = s.lines.slice(hi + 1);
+    // 공백뿐인 표: 담당 낱말이 같은 표의 다른 행에서도 담당으로 쓰였는지 세어 둔다(행마다 한 번)
+    const counts = new Map();
+    if (!header.cells) {
+      for (const line of rowsOf) {
+        const sp = splitSpaceRow(line);
+        if (sp) for (const p of new Set(ownerPieces(sp.ownerCell))) counts.set(p, (counts.get(p) || 0) + 1);
+      }
+    }
+    const rowCtx = { counts, names };
+    let okRows = 0;
+    for (const line of rowsOf) {
+      const r = readRow(line, header, rowCtx);
       if (r.skip) continue;
-      if (r.why) { unread.push({ text: clip(line, 160), why: r.why, section: s.title }); continue; }
+      if (r.why) {
+        unread.push({ text: clip(line, 160), why: r.why, section: s.title });
+        if (okRows > 0) break; // 첫 성공 행 뒤에 읽지 못한 줄이 나오면 표는 거기서 끝난다(표 아래 산문을 할 일로 읽지 않게)
+        continue;
+      }
+      okRows += 1;
       const key = normalizeLabel(r.task);
       if (seenTask.has(key)) { notes.push(`같은 이름의 할 일 「${r.task}」이 한 번 더 나와 하나만 읽었습니다`); continue; }
       if (tasks.length >= DOC_ATTACH_LIMITS.maxTasks) { unread.push({ text: clip(line, 160), why: `할 일은 ${DOC_ATTACH_LIMITS.maxTasks}개까지 읽습니다`, section: s.title }); continue; }
@@ -393,8 +452,10 @@ export function readDocumentRule(text, { doc, targetId, today = todayDefault() }
         due: r.due ? { text: r.due.text, value: r.due.iso || r.due.text, end: r.due.end } : null,
         owners: r.owners.map((o) => {
           const f = findNode(cands, 'person', o);
-          return { label: o, match: f && !f.ambiguous ? f : null };
+          if (f && f.ambiguous) notes.push(`「${o}」: 지도에 같은 이름의 사람이 둘 이상 있어 어느 사람인지 몰라 담당으로 잇지 않았습니다(「수정」에서 직접 이으세요)`);
+          return { label: o, match: f && !f.ambiguous ? f : null, ...(f && f.ambiguous ? { ambiguous: true } : {}) };
         }),
+        ...(r.uncertain ? { uncertain: true } : {}),
         past,
         match: m,
         ambiguous,
@@ -409,28 +470,30 @@ export function readDocumentRule(text, { doc, targetId, today = todayDefault() }
   const ownerKeys = [...new Set(tasks.flatMap((t) => t.owners.map((o) => normalizeLabel(o.label))))];
   if (ownerKeys.length > DOC_ATTACH_LIMITS.maxRoles) notes.push(`담당(사람·역할)이 ${DOC_ATTACH_LIMITS.maxRoles}개를 넘어 앞의 것만 만듭니다`);
 
-  // 3) 메모: 미결 절 → issue, 유의·추적 절 → caution (미결이 우선)
+  // 3) 메모: 미결 절 → issue(날짜는 오늘), 유의·추적 절 → caution(날짜는 문서 날짜). 미결이 우선
+  // issue는 오늘 날짜로 넣는다: 문서 날짜(옛날)로 넣으면 이후 날짜의 「해결됨」 메모가 같은 대상의 미결을 바로 닫아 버린다(rules/issues.js openMemos)
   const memos = [];
-  const memoDate = docDate && docDate <= today ? docDate : today;
-  const prefix = `[${clip(docLabel, DOC_ATTACH_LIMITS.memoNameMax)}] `;
+  const cautionDate = docDate && docDate <= today ? docDate : today;
+  const nameForMemo = clip(docLabel.replace(/[[\]]/g, ''), DOC_ATTACH_LIMITS.memoNameMax);
+  const prefixOf = (category) => (category === 'issue' && docDate ? `[${nameForMemo} · 문서 날짜 ${docDate}] ` : `[${nameForMemo}] `);
   const usedMemoSections = [];
   let memoCapped = 0;
   for (const s of sections) {
     if (!s.title) continue;
-    const category = hasWord(s.title, DOC_ATTACH_WORDS.issue) ? 'issue' : hasWord(s.title, DOC_ATTACH_WORDS.caution) ? 'caution' : '';
+    const category = isIssueTitle(s.title) ? 'issue' : isCautionTitle(s.title) ? 'caution' : '';
     if (!category) continue;
     if (usedSections.includes(s.title)) continue; // 할 일 표가 있는 절의 줄은 메모로 읽지 않는다
     usedMemoSections.push(s.title);
     for (const sentence of itemsOf(s.lines, { speaker: true })) {
       if (memos.length >= DOC_ATTACH_LIMITS.maxMemos) { memoCapped += 1; continue; }
-      const note = `${prefix}${clip(sentence, DOC_ATTACH_LIMITS.memoMax)}`;
+      const note = `${prefixOf(category)}${clip(sentence, DOC_ATTACH_LIMITS.memoMax)}`;
       const exists = (doc.events || []).some((e) => e.type === 'memo' && e.payload && e.payload.target_id === targetId && String(e.note || '').trim() === note);
-      memos.push({ key: `m${memos.length + 1}`, category, text: note, date: memoDate, section: s.title, exists });
+      memos.push({ key: `m${memos.length + 1}`, category, text: note, date: category === 'issue' ? today : cautionDate, section: s.title, exists });
     }
   }
   if (memoCapped) notes.push(`메모는 ${DOC_ATTACH_LIMITS.maxMemos}건까지 읽습니다(${memoCapped}건은 읽지 않음)`);
 
-  const skippedSections = sections.filter((s) => s.title && !usedSections.includes(s.title) && !usedMemoSections.includes(s.title) && !hasWord(s.title, DOC_ATTACH_WORDS.decision)).map((s) => s.title);
+  const skippedSections = sections.filter((s) => s.title && !usedSections.includes(s.title) && !usedMemoSections.includes(s.title) && !isDecisionTitle(s.title)).map((s) => s.title);
   const plan = {
     title: docLabel,
     docDate,
@@ -441,8 +504,8 @@ export function readDocumentRule(text, { doc, targetId, today = todayDefault() }
     tasks,
     memos,
     unread,
-    sections: { tables: usedSections, memos: usedMemoSections, decisions: sections.filter((s) => s.title && hasWord(s.title, DOC_ATTACH_WORDS.decision)).map((s) => s.title), skipped: skippedSections },
-    notes,
+    sections: { tables: usedSections, memos: usedMemoSections, decisions: sections.filter((s) => s.title && isDecisionTitle(s.title)).map((s) => s.title), skipped: skippedSections },
+    notes: [...new Set(notes)], // 같은 알림은 한 번만
   };
   return { ok: true, source: 'rule', plan };
 }
@@ -453,7 +516,7 @@ export function readDocumentRule(text, { doc, targetId, today = todayDefault() }
 export function defaultDocSelection(plan) {
   const tasks = {};
   const memos = {};
-  for (const t of plan.tasks) tasks[t.key] = !t.past && !t.blocked && !t.exists;
+  for (const t of plan.tasks) tasks[t.key] = !t.past && !t.blocked && !t.exists && !t.uncertain; // 확인 필요(경계 행)도 처음 체크하지 않는다
   for (const m of plan.memos) memos[m.key] = !m.exists;
   return { doc: !plan.doc.exists, tasks, memos };
 }
@@ -483,7 +546,7 @@ export function planToOps(plan, selection, doc, { targetId = plan.targetId } = {
   let row = 1;
   const roleRef = new Map(); // 정규화한 역할 이름 → id 또는 '@행'
   const cands = docCandidates(doc);
-  const needRole = plan.tasks.some((t) => sel.tasks[t.key] && t.owners.some((o) => !o.match && !(findNode(cands, 'person', o.label))));
+  const needRole = plan.tasks.some((t) => sel.tasks[t.key] && t.owners.some((o) => !o.match && !o.ambiguous && !findNode(cands, 'person', o.label)));
   const hasSubtype = ((doc.universe && doc.universe.subtypes) || []).some((s) => s && s.core_type === 'person' && s.name === SUBTYPE_ROLE);
   if (needRole && !hasSubtype) ops.push({ op: 'addSubtype', aux: true, input: { core_type: 'person', name: SUBTYPE_ROLE } });
 
@@ -514,9 +577,11 @@ export function planToOps(plan, selection, doc, { targetId = plan.targetId } = {
     ops.push({ op: 'addEdge', row, key: `${t.key}-edge`, skipDup: true, input: { source: targetId, target: ref, core_type: 'contains' } });
     row += 1;
     for (const o of t.owners) {
+      if (o.ambiguous) continue; // 같은 이름 사람이 둘 이상: 어느 사람인지 몰라 잇지도, 새로 만들지도 않는다
       const k = normalizeLabel(o.label);
       if (!roleRef.has(k)) {
         const found = o.match || findNode(cands, 'person', o.label);
+        if (found && found.ambiguous) continue;
         if (found && found.id) roleRef.set(k, found.id);
         else if (counts.roles >= DOC_ATTACH_LIMITS.maxRoles) continue;
         else {
@@ -540,13 +605,18 @@ export function planToOps(plan, selection, doc, { targetId = plan.targetId } = {
   return { ops, counts };
 }
 
-/** 알림 문구(「문서 1·업무 n·메모 n 더함 — 되돌리려면 지도 관리 → 편집 되감기」). 메모는 되감아도 남으므로 메모가 있으면 한 줄 더 */
-export function attachNotice(created, memoCount) {
+/**
+ * 알림 문구(「문서 1·업무 n·메모 n 더함 — 되돌리려면 지도 관리 → 편집 되감기」).
+ * 메모·담당 기록(사용자 이력)은 편집 되감기로 지워지지 않는다 — 있으면 그 사실을 알리고, 이슈 메모가 있을 때만 「해결로 표시」로 닫을 수 있다고 덧붙인다
+ * @param {{issues?:number, assigns?:number}} [extra] 이슈 메모 수·담당 시작 기록 수
+ */
+export function attachNotice(created, memoCount, { issues = 0, assigns = 0 } = {}) {
   const works = created.filter((n) => n.core_type === 'work').length;
   const docs = created.filter((n) => n.core_type === 'artifact').length;
   const parts = [`문서 ${docs}`, `업무 ${works}`, `메모 ${memoCount}`];
   const roles = created.filter((n) => n.core_type === 'person').length;
-  const tail = memoCount ? ' (메모는 되감아도 남습니다 — 필요 없으면 「해결로 표시」로 닫으세요)' : '';
+  const kept = [memoCount ? '메모' : '', assigns ? '담당' : ''].filter(Boolean);
+  const tail = kept.length ? ` (${kept.join('·')} 기록은 되감아도 남습니다${issues ? ' — 이슈 메모는 「해결로 표시」로 닫을 수 있습니다' : ''})` : '';
   return `${parts.join('·')} 더함${roles ? `(담당 역할 ${roles}개 포함)` : ''} — 되돌리려면 지도 관리 → 편집 되감기${tail}`;
 }
 

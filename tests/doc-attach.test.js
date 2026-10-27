@@ -82,7 +82,7 @@ test('CR-23 문서 1(2016 회의록): 할 일 4(「2017. 3월 말」 포함, 기
   const def = defaultDocSelection(p);
   assert.ok(Object.values(def.tasks).every((v) => v === false), '기한 지남 → 기본 체크 해제');
   assert.deepEqual(p.memos.map((m) => m.category), ['issue', 'issue']);
-  assert.ok(p.memos.every((m) => m.section === '미결 사항' && m.date === '2016-11-17'));
+  assert.ok(p.memos.every((m) => m.section === '미결 사항' && m.date === TODAY)); // RV-B-4: issue 메모 날짜는 오늘(문서 날짜는 글 앞머리에)
   assert.ok(p.memos[0].text.includes('대형 고객의 할인 유지 기간') && p.memos[1].text.includes('발송 성공 판정 기준'));
   assert.ok(p.doc.description.includes('문서 날짜: 2016-11-17'));
   // 기한 지남 판정은 문서 날짜와 오늘 중 늦은 날 기준: 문서·오늘이 2016-12-01이면 12-20·12-23·2017-3월 말은 지나지 않았다
@@ -163,7 +163,7 @@ test('CR-23 파이프 표·탭 표·마크다운 제목: 칸이 나뉜 표도 �
   assert.equal(p.doc.label, '가상 점검 회의록');
   assert.deepEqual(p.tasks.map((t) => [t.label, t.owners.map((o) => o.label), t.due && t.due.value]), [['자료 정리', ['가상팀'], '2026-12-01'], ['보고서 초안', [], null]]);
   assert.deepEqual(p.unread.map((u) => u.text), ['| 칸이 모자란 줄 | 가상팀 |']);
-  assert.deepEqual(p.memos.map((m) => [m.category, m.date]), [['issue', '2026-10-20']]);
+  assert.deepEqual(p.memos.map((m) => [m.category, m.date]), [['issue', TODAY]]);
   const tab = ['탭 회의록', '1. 조치', '과제\t담당\t기한', '점검 수행\t가상팀\t2026-12-15'].join('\n');
   assert.deepEqual(readDocumentRule(tab, { doc: baseDoc(), targetId: TARGET, today: TODAY }).plan.tasks.map((t) => t.label), ['점검 수행']);
   // 공백뿐인 표인데 담당·기한 순서가 다르면 읽지 않는다(엉뚱한 업무를 만들지 않음)
@@ -218,7 +218,7 @@ test('CR-23 지도에 적용: 문서 2를 모두 체크해 applyBatch → 오류
   const memos = r.doc.events.filter((e) => e.type === 'memo' && e.recorded_at === NOW);
   assert.equal(memos.length, p.memos.length);
   assert.ok(memos.every((e) => e.payload.target_id === TARGET && ['issue', 'caution'].includes(e.payload.category) && e.note.startsWith('[2026년')));
-  assert.equal(attachNotice(r.created, r.memos.length), `문서 1·업무 5·메모 ${p.memos.length} 더함(담당 역할 6개 포함) — 되돌리려면 지도 관리 → 편집 되감기 (메모는 되감아도 남습니다 — 필요 없으면 「해결로 표시」로 닫으세요)`);
+  assert.equal(attachNotice(r.created, r.memos.length, { issues: 0, assigns: r.assignments.length }), `문서 1·업무 5·메모 ${p.memos.length} 더함(담당 역할 6개 포함) — 되돌리려면 지도 관리 → 편집 되감기 (메모·담당 기록은 되감아도 남습니다)`); // RV-B-5: 사실대로
 });
 
 test('CR-23 같은 문서를 두 번 더해도: 항목·연결·역할이 늘지 않고(skipDup·같은 이름은 하나), 같은 메모는 처음부터 체크하지 않는다', () => {

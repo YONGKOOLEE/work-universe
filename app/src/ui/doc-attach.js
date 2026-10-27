@@ -35,6 +35,12 @@ export const DOC_ATTACH = Object.freeze({
   unreadNote: '모양이 확실하지 않아 지어내지 않고 건너뛴 줄입니다.',
   skippedSections: (titles) => `만들지 않은 절: ${titles.join(' · ')}`,
   noTable: '「과제 담당 기한」 머리줄이 있는 표를 찾지 못해 할 일 업무는 만들지 않았습니다.',
+  tableUnread: '할 일 표의 머리줄은 찾았지만 행을 하나도 읽지 못했습니다 — 아래 「읽지 못한 줄」을 확인하세요(줄 끝이 날짜이고 담당이 팀·역할 이름이어야 읽습니다).',
+  unreadMore: (n) => `외 ${n}줄`,
+  noKeyReason: '키가 없습니다 — 「설정」에서 키를 넣으세요',
+  badText: '글자가 깨졌습니다 — 파일을 UTF-8로 저장하거나 글을 복사해 붙여 넣어 주세요',
+  uncertain: '확인 필요 — 과제 이름이 길어 문장일 수 있어 처음에는 체크하지 않았습니다',
+  ownerAmbiguous: '(같은 이름 사람이 둘 이상 — 잇지 않음)',
   noMemo: '「미결」「유의」「추적」 같은 제목의 절이 없어 메모는 만들지 않았습니다.',
   aiTitle: 'Claude가 더 찾은 항목·연결',
   aiNote: '규칙이 읽지 못한 문장에서 Claude가 따온 것입니다. 이름이 맞는 것만 체크하세요(처음에는 체크되어 있지 않습니다).',
@@ -48,7 +54,7 @@ export const DOC_ATTACH = Object.freeze({
   roleMap: '(지도에 있음)',
   checkAll: '모두 체크',
   uncheckAll: '모두 해제',
-  stale: '글이나 대상 업무가 바뀌었습니다 — 다시 읽으세요',
+  stale: '대상이나 글이 바뀌었습니다 — 다시 읽어 주세요',
   save: '지도에 더하기',
   saveQ: '체크한 것을 지도에 더할까요?',
   close: '닫기',
@@ -62,6 +68,8 @@ export const DOC_ATTACH = Object.freeze({
 const MEMO_LABEL = { issue: MEMO_CATEGORIES.issue, caution: MEMO_CATEGORIES.caution };
 const FILE_BAD = /\.(pdf|hwp|hwpx|docx?|pptx?|xlsx?)$/i;
 const FILE_MAX_BYTES = 2 * 1024 * 1024;
+const UNREAD_SHOW = 50; // 화면에 보이는 읽지 못한 줄 수(넘으면 「외 n줄」)
+const BAD_CHARS_MIN = 2; // 파일 글에 깨진 글자(U+FFFD)가 이만큼 이상이면 글 칸에 넣지 않는다
 
 /** 대상으로 고를 수 있는 업무(이 지도의 보이는 업무) */
 export const worksOf = (doc) => (doc.nodes || []).filter((n) => n.core_type === 'work' && !n.hidden && !n.deleted).map((n) => ({ id: n.id, label: n.label }));
@@ -79,10 +87,11 @@ function errorText(error, kind, relation) {
  * @returns {(targetId?:string)=>void} 대화상자를 여는 함수(대상 업무 id를 주면 미리 골라진다)
  */
 export function docAttachDialog(o) {
-  const st = { open: false, targetId: '', plan: null, sel: null, ai: null, method: '', model: '', chunks: 0, fallback: '', busy: false, run: 0, message: '', details: [], done: '', readText: '', readTarget: '', stale: false };
+  const st = { open: false, aiNotes: [], targetId: '', plan: null, sel: null, ai: null, method: '', model: '', chunks: 0, fallback: '', busy: false, run: 0, message: '', details: [], done: '', readText: '', readTarget: '', stale: false };
   let input;
   let select;
   let fileName;
+  let fileInput;
   let readBtn;
   let aiBtn;
   let busyLine;
@@ -97,15 +106,17 @@ export function docAttachDialog(o) {
   const updateStale = () => { st.stale = !!st.plan && (text() !== st.readText || st.targetId !== st.readTarget); };
 
   // ── 읽기 ─────────────────────────────────────────────────────────────────
-  function setPlan(plan, method, ai = null, model = '', chunks = 0) {
+  function setPlan(plan, method, ai = null, model = '', chunks = 0, snap = null, notes = []) {
     st.plan = plan;
+    st.aiNotes = [...new Set(notes)];
     st.sel = defaultDocSelection(plan);
     st.ai = ai ? { proposal: ai, sel: defaultSelection(ai, 'none') } : null;
     st.method = method;
     st.model = model;
     st.chunks = chunks;
-    st.readText = text();
-    st.readTarget = st.targetId;
+    // 읽기를 시작할 때의 글·대상으로 기록한다: Claude가 읽는 동안 바뀌었으면 응답이 와도 저장이 잠긴다(RV-B-2)
+    st.readText = snap ? snap.text : text();
+    st.readTarget = snap ? snap.target : st.targetId;
     st.message = '';
     st.details = [];
     st.done = '';
@@ -135,26 +146,30 @@ export function docAttachDialog(o) {
     if (st.busy || !o.aiReady()) return;
     const plan = ruleRead();
     if (!plan) return render();
+    const snap = { text: text(), target: st.targetId };
     const run = (st.run += 1);
     st.busy = true;
     st.message = '';
     st.fallback = '';
     render();
     let r;
+    let threw = false;
     try {
-      r = await o.readAi(text());
+      r = await o.readAi(snap.text);
     } catch {
       r = null;
+      threw = true;
     }
     if (run !== st.run || !st.open) return; // 그 사이 다시 읽었거나 창을 닫았다: 응답을 버린다
     st.busy = false;
     if (r && r.ok) {
       const deduped = dedupeAiProposal(r.proposal, plan);
-      setPlan(plan, 'claude_api', deduped.nodes.length || deduped.edges.length ? deduped : null, r.model, r.chunks);
+      setPlan(plan, 'claude_api', deduped.nodes.length || deduped.edges.length ? deduped : null, r.model, r.chunks, snap, r.proposal.notes || []);
       if (!st.ai) st.fallback = 'Claude가 규칙 결과 밖에서 더 찾은 항목이 없었습니다.';
     } else {
-      setPlan(plan, 'rule');
-      st.fallback = DOC_ATTACH.aiFail(r && r.fallback ? r.fallback.reason : '알 수 없는 오류');
+      setPlan(plan, 'rule', null, '', 0, snap);
+      // 키가 없어 null이 온 것(threw 아님)과 호출이 실패한 것을 구분한다(RV-B-13)
+      st.fallback = DOC_ATTACH.aiFail(r && r.fallback ? r.fallback.reason : threw ? '알 수 없는 오류' : r === null || r === undefined ? DOC_ATTACH.noKeyReason : '알 수 없는 오류');
     }
     render();
   }
@@ -162,7 +177,7 @@ export function docAttachDialog(o) {
   // ── 파일 ─────────────────────────────────────────────────────────────────
   async function onFile(e) {
     const f = e.target.files && e.target.files[0];
-    if (!f) return;
+    if (!f || st.busy) return;
     if (FILE_BAD.test(f.name)) {
       st.message = DOC_ATTACH.fileBad;
       e.target.value = '';
@@ -175,7 +190,14 @@ export function docAttachDialog(o) {
       return render();
     }
     try {
-      input.value = await f.text();
+      const body = await f.text();
+      if ((body.match(/\uFFFD/g) || []).length >= BAD_CHARS_MIN) {
+        st.message = DOC_ATTACH.badText; // UTF-8이 아닌 파일(옛 한글 인코딩 등) — 깨진 글을 지도에 넣지 않는다
+        e.target.value = '';
+        fileName.textContent = '';
+        return render();
+      }
+      input.value = body;
       fileName.textContent = `고른 파일: ${f.name}`;
       st.message = '';
     } catch {
@@ -201,7 +223,7 @@ export function docAttachDialog(o) {
       st.message = DOC_ATTACH.nothing;
       return render();
     }
-    const r = o.app.applyBatch(ops);
+    const r = o.app.applyBatch(ops, { source: 'system' }); // 사람이 직접 쓴 기록이 아니라 문서에서 읽어 온 것(문서 가져오기와 같은 출처)
     if (!r.ok) {
       if (r.errors && r.errors.length) {
         for (const e of r.errors) {
@@ -214,7 +236,8 @@ export function docAttachDialog(o) {
       } else st.message = errorText(r.error, 'node');
       return render();
     }
-    const notice = attachNotice(r.created, (r.memos || []).length);
+    const memoEvents = r.memos || [];
+    const notice = attachNotice(r.created, memoEvents.length, { issues: memoEvents.filter((e) => e.payload && e.payload.category === 'issue').length, assigns: (r.assignments || []).length });
     st.done = notice;
     const targetId = st.plan.targetId;
     st.plan = null;
@@ -239,7 +262,8 @@ export function docAttachDialog(o) {
     if (t.match) parts.push(t.exists ? `${DOC_ATTACH.exists} — 지도의 「${t.match.label}」이 이 업무 아래에 이어져 있음` : `${DOC_ATTACH.mapItem}(「${t.match.label}」)`);
     else parts.push(DOC_ATTACH.newItem);
     if (t.past) parts.push(DOC_ATTACH.past);
-    return { state: t.past ? 'past' : t.exists ? 'exists' : t.match ? 'match' : 'new', text: parts.join(' · ') };
+    if (t.uncertain) parts.push(DOC_ATTACH.uncertain);
+    return { state: t.past ? 'past' : t.uncertain ? 'uncertain' : t.exists ? 'exists' : t.match ? 'match' : 'new', text: parts.join(' · ') };
   };
 
   function check(id, label, checked, onchange, disabled = false) {
@@ -271,12 +295,13 @@ export function docAttachDialog(o) {
           return el('tr', { 'data-testid': `doc-attach-task-${i}`, 'data-state': s.state },
             el('td', {}, check(`doc-attach-task-check-${i}`, `${i + 1}번 할 일 넣기`, r.tasks[t.key], mark((v) => { st.sel.tasks[t.key] = v; }), !!t.blocked)),
             el('td', { 'data-testid': `doc-attach-task-label-${i}` }, t.label),
-            el('td', { class: 'small', 'data-testid': `doc-attach-task-owners-${i}` }, t.owners.length ? t.owners.map((x) => `${x.label}${x.match ? DOC_ATTACH.roleMap : DOC_ATTACH.roleNew}`).join(', ') : '—'),
+            el('td', { class: 'small', 'data-testid': `doc-attach-task-owners-${i}` }, t.owners.length ? t.owners.map((x) => `${x.label}${x.ambiguous ? DOC_ATTACH.ownerAmbiguous : x.match ? DOC_ATTACH.roleMap : DOC_ATTACH.roleNew}`).join(', ') : '—'),
             el('td', { class: 'small nw', 'data-testid': `doc-attach-task-due-${i}` }, t.due ? t.due.text : '—'),
             el('td', { class: 'small', 'data-testid': `doc-attach-task-status-${i}`, title: t.past ? DOC_ATTACH.pastTip : '' }, s.text),
             el('td', { class: 'small muted' }, `「${t.quote}」`));
         })))));
-    } else parts.push(el('p', { class: 'muted small', 'data-testid': 'doc-attach-no-table' }, DOC_ATTACH.noTable));
+    } else if (p.sections.tables.length) parts.push(el('p', { class: 'notice', 'data-testid': 'doc-attach-table-unread' }, DOC_ATTACH.tableUnread));
+    else parts.push(el('p', { class: 'muted small', 'data-testid': 'doc-attach-no-table' }, DOC_ATTACH.noTable));
     // 메모
     parts.push(el('h3', {}, DOC_ATTACH.memoTitle(p.memos.length)));
     if (p.memos.length) {
@@ -295,7 +320,8 @@ export function docAttachDialog(o) {
       parts.push(el('div', { 'data-testid': 'doc-attach-unread' },
         el('h3', {}, DOC_ATTACH.unreadTitle(p.unread.length)),
         el('p', { class: 'muted small' }, DOC_ATTACH.unreadNote),
-        el('ul', { class: 'small' }, ...p.unread.map((u, k) => el('li', { 'data-testid': `doc-attach-unread-${k}` }, `「${u.text}」`, el('span', { class: 'muted' }, ` — ${u.why}`))))));
+        el('ul', { class: 'small' }, ...p.unread.slice(0, UNREAD_SHOW).map((u, k) => el('li', { 'data-testid': `doc-attach-unread-${k}` }, `「${u.text}」`, el('span', { class: 'muted' }, ` — ${u.why}`)))),
+        p.unread.length > UNREAD_SHOW ? el('p', { class: 'muted small', 'data-testid': 'doc-attach-unread-more' }, DOC_ATTACH.unreadMore(p.unread.length - UNREAD_SHOW)) : null));
     }
     if (p.sections.skipped.length) parts.push(el('p', { class: 'muted small', 'data-testid': 'doc-attach-skipped' }, DOC_ATTACH.skippedSections(p.sections.skipped)));
     for (const n of p.notes) parts.push(el('p', { class: 'notice', 'data-testid': 'doc-attach-note' }, n));
@@ -351,6 +377,7 @@ export function docAttachDialog(o) {
       parts.push(el('p', { class: 'small', 'data-testid': 'doc-attach-summary' }, DOC_ATTACH.summary(1, p.tasks.length, p.memos.length, p.unread.length)));
       parts.push(el('p', { class: 'muted small', 'data-testid': 'doc-attach-method' }, st.method === 'claude_api' ? DOC_ATTACH.methodAi(st.model, st.chunks) : DOC_ATTACH.methodRule));
       if (st.fallback) parts.push(el('p', { class: 'notice', role: 'status', 'data-testid': 'doc-attach-fallback' }, st.fallback));
+      st.aiNotes.forEach((n, i) => parts.push(el('p', { class: 'notice', 'data-testid': `doc-attach-ai-note-${i}` }, n))); // Claude 덩어리 안내(상한·일부 실패)와 확인 안내
       parts.push(el('div', { class: 'row' },
         el('button', { type: 'button', 'data-testid': 'doc-attach-check-all', onclick: () => setAll(true) }, DOC_ATTACH.checkAll),
         el('button', { type: 'button', 'data-testid': 'doc-attach-uncheck-all', onclick: () => setAll(false) }, DOC_ATTACH.uncheckAll)));
@@ -373,6 +400,9 @@ export function docAttachDialog(o) {
     const busy = st.busy;
     if (readBtn) readBtn.disabled = busy;
     if (aiBtn) aiBtn.disabled = busy;
+    if (select) select.disabled = busy; // 읽는 동안 대상·글·파일은 바꾸지 못한다(RV-B-2)
+    if (input) input.disabled = busy;
+    if (fileInput) fileInput.disabled = busy;
     busyLine.textContent = busy ? DOC_ATTACH.aiBusy : '';
     renderPreview();
     if (st.plan && !busy) {
@@ -419,7 +449,7 @@ export function docAttachDialog(o) {
       el('label', { class: 'field' }, el('span', {}, DOC_ATTACH.step1), select),
       el('label', { class: 'field' }, el('span', {}, DOC_ATTACH.step2), input),
       el('div', { class: 'row' },
-        el('label', { class: 'file-pick' }, `${DOC_ATTACH.file} `, el('input', { type: 'file', accept: '.md,.txt,.markdown,.pdf,.hwp,.hwpx,.docx,text/plain,text/markdown', 'data-testid': 'doc-attach-file', onchange: onFile })),
+        el('label', { class: 'file-pick' }, `${DOC_ATTACH.file} `, (fileInput = el('input', { type: 'file', accept: '.md,.txt,.markdown,.pdf,.hwp,.hwpx,.docx,text/plain,text/markdown', 'data-testid': 'doc-attach-file', onchange: onFile }))),
         fileName),
       el('div', { class: 'row' }, readBtn, aiBtn, aiBtn ? null : el('span', { class: 'muted small', 'data-testid': 'doc-attach-ai-note' }, DOC_ATTACH.noKey)),
       busyLine,
