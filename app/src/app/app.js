@@ -253,8 +253,8 @@ export function createApp({ store, samples, currentId, now: rawNow, authorName, 
      * 노드 추가·수정 여러 개를 한 묶음으로 저장한다(T-19, D-18): 전부 아니면 전무, 브라우저 저장소 쓰기는 한 번.
      * 실패하면 문서·저장소 모두 그대로이고 {ok:false, errors:[{row, error}]} 또는 저장 실패(W-STORAGE)를 돌려준다.
      */
-    applyBatch(ops) {
-      return guard() || commit(applyBatch(doc, ops, { now: now() }));
+    applyBatch(ops, opts = {}) { // opts.source: 이벤트 출처(기본 'user'. 문서로 더하기는 'system' — 문서 가져오기와 같음, CR-23 RV-B-8)
+      return guard() || commit(applyBatch(doc, ops, { now: now(), ...(opts.source ? { source: opts.source } : {}) }));
     },
     hideNode(nodeId) {
       return guard() || commit(hideNode(doc, nodeId, { now: now() }));

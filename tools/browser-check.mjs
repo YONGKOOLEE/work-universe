@@ -4636,6 +4636,158 @@ async function checkBrowser(browser, port) {
     await crOpenMap(false); // 저장소를 블록 시작 때 찍어 둔 상태로 되돌린다
   }
 
+  // ── CR-23 문서로 더하기(2026-10-28): 월말 정산 점검(U-A1) → 「사람·업무·문서 추가」의 「문서로 더하기」 → 대상 업무 고르기 → 2026 회의록(공백뿐인 표) 붙여 넣기 → 읽어 보기 →
+  //    미리 보기(문서 1·할 일 5·메모) → 지도에 더하기 → 그래프에 노드가 늘고 대상 업무 카드가 열리고 알림 → 같은 문서를 또 읽으면 「이미 있음」 → 업무 카드 「⋯」 입구 → 묶은 지도에서는 안내 한 줄.
+  //    데이터를 바꾸므로 시작 때 저장소를 찍어 두었다가 끝에 되돌린다.
+  {
+    const d23Snap = await evaluate(s.cdp, 'JSON.stringify(Object.entries(localStorage))');
+    const D23_TEXT = await readFile(join(root, 'tests/fixtures/doc-attach/2_2026회의록.txt'), 'utf8');
+    const d23OpenMap = async (clean) => {
+      await evaluate(s.cdp, `(() => { const snap = JSON.parse(${JSON.stringify(d23Snap)}); localStorage.clear(); for (const [k, v] of snap) localStorage.setItem(k, v); ${clean ? "localStorage.removeItem('wu:v1:u:U-A1');" : ''} location.hash = 'U-A1'; location.reload(); })()`).catch(() => {});
+      await sleep(500);
+      return waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-A1' && window.__wu.cy.nodes().length > 0", 8000);
+    };
+    const d23Box = (sel) => evaluate(s.cdp, `(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect(); return { text: e.textContent, w: r.width, h: r.height, value: e.value, checked: e.checked, disabled: e.disabled, hidden: e.hidden }; })()`);
+    const d23Set = (testid, value) => evaluate(s.cdp, `(() => { const e = document.querySelector('[data-testid=${testid}]'); e.value = ${JSON.stringify(value)}; e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    const d23Counts = () => evaluate(s.cdp, '({ nodes: window.__wu.doc.nodes.length, edges: window.__wu.doc.edges.length, events: window.__wu.doc.events.length, cy: window.__wu.cy.nodes().length })');
+    const d23Open = () => evaluate(s.cdp, "document.getElementById('doc-attach-dialog').open === true");
+    const d23Close = async () => { await evaluate(s.cdp, "document.getElementById('doc-attach-dialog').open && document.querySelector('[data-testid=doc-attach-close]').click()"); await sleep(100); };
+
+    if (await d23OpenMap(true)) {
+      // 1) 입구: 「표로 추가」「글로 추가」와 같은 묶음에 「문서로 더하기」
+      await evaluate(s.cdp, "window.__wu.select(null); document.querySelector('details.add').open = true");
+      await sleep(150);
+      const d23Btn = await d23Box('[data-testid=btn-doc-attach]');
+      const d23Sib = await evaluate(s.cdp, "(() => { const b = document.querySelector('[data-testid=btn-doc-attach]'); return !!b && !!b.parentElement.querySelector('[data-testid=btn-table-add]') && !!b.parentElement.querySelector('[data-testid=btn-text-add]'); })()");
+      check('CR-23 「사람·업무·문서 추가」 묶음에 「표로 추가」「글로 추가」와 나란히 「문서로 더하기」 단추(크기 있음)', !!d23Btn && d23Btn.text === '문서로 더하기' && d23Btn.w > 20 && d23Btn.h > 10 && d23Sib, JSON.stringify(d23Btn));
+      const d23Note = await d23Box('[data-testid=add-tools-note]');
+      check('CR-23 추가 단추 설명 한 줄에 「문서로 더하기」 설명이 있음', !!d23Note && d23Note.text.includes('문서로 더하기: 회의록·매뉴얼 같은 문서를 업무 하나에 붙여'), d23Note && d23Note.text);
+      await clickTestId(s.cdp, 'btn-doc-attach');
+      await sleep(200);
+      check('CR-23 「문서로 더하기」를 누르면 대화상자가 열리고 대상 업무 고르기·문서 칸·파일 열기·「읽어 보기」가 있음(키 없음: 「Claude로 읽기」 대신 안내 한 줄)', (await d23Open()) && !!(await d23Box('[data-testid=doc-attach-target]')) && !!(await d23Box('[data-testid=doc-attach-input]')) && !!(await d23Box('[data-testid=doc-attach-file]')) && !!(await d23Box('[data-testid=doc-attach-read]')) && (await d23Box('[data-testid=doc-attach-ai]')) === null && ((await d23Box('[data-testid=doc-attach-ai-note]')) || {}).text === '「설정」에서 키를 넣으면 Claude가 읽습니다');
+      const d23Opts = await evaluate(s.cdp, "[...document.querySelectorAll('[data-testid=doc-attach-target] option')].map((o) => o.textContent)");
+      check('CR-23 고른 카드가 없고 업무가 여럿이면 대상은 「업무를 고르세요」로 열리고 목록은 이 지도의 업무 3개', (await d23Box('[data-testid=doc-attach-target]')).value === '' && d23Opts.join('|') === '업무를 고르세요|대사 확인|자료 수집|보고', d23Opts.join('|'));
+      // 2) 업무를 안 고르고 읽으면 막힘, 고르고 문서를 붙여 넣어 읽는다
+      await d23Set('doc-attach-input', D23_TEXT);
+      await clickTestId(s.cdp, 'doc-attach-read');
+      await sleep(150);
+      check('CR-23 대상 업무를 고르지 않고 「읽어 보기」를 누르면 「대상 업무를 고르세요」 안내가 보이고 미리 보기는 없음', ((await d23Box('[data-testid=doc-attach-message]')) || {}).text.startsWith('대상 업무를 고르세요') && (await d23Box('[data-testid=doc-attach-summary]')) === null);
+      await d23Set('doc-attach-target', 'N-001');
+      await clickTestId(s.cdp, 'doc-attach-read');
+      await sleep(250);
+      const d23P = await evaluate(s.cdp, `({
+        summary: (document.querySelector('[data-testid=doc-attach-summary]') || {}).textContent,
+        tasks: [...document.querySelectorAll('[data-testid^=doc-attach-task-label-]')].map((e) => e.textContent),
+        owners: [...document.querySelectorAll('[data-testid^=doc-attach-task-owners-]')].map((e) => e.textContent),
+        due: [...document.querySelectorAll('[data-testid^=doc-attach-task-due-]')].map((e) => e.textContent),
+        checks: [...document.querySelectorAll('[data-testid^=doc-attach-task-check-]')].map((e) => e.checked),
+        doc: (document.querySelector('[data-testid=doc-attach-doc-label]') || {}).textContent,
+        docChecked: (document.querySelector('[data-testid=doc-attach-doc-check]') || {}).checked,
+        memos: [...document.querySelectorAll('[data-testid^=doc-attach-memo-cat-]')].map((e) => e.textContent),
+        count: (document.querySelector('[data-testid=doc-attach-count]') || {}).textContent,
+        method: (document.querySelector('[data-testid=doc-attach-method]') || {}).textContent,
+        save: (document.querySelector('[data-testid=doc-attach-save]') || {}).disabled,
+      })`);
+      check('CR-23 읽어 보기 → 미리 보기: 문서 1개·할 일 업무 5개(공백뿐인 표에서 「계약별 인상 가능 여부 검토」…「최종 시행 승인 및 사후 모니터링」)·메모, 읽지 못한 줄 0개', d23P.summary.startsWith('문서 1개 · 할 일 업무 5개 · 메모 ') && d23P.summary.endsWith('읽지 못한 줄 0개') && d23P.tasks.length === 5 && d23P.tasks[0] === '계약별 인상 가능 여부 검토' && d23P.tasks[4] === '최종 시행 승인 및 사후 모니터링' && d23P.doc === '2026년 문자메시지 발송 수수료 조정 검토 회의록', JSON.stringify(d23P));
+      check('CR-23 미리 보기: 담당(역할)은 「법무(새 역할), 영업(새 역할)」처럼 보이고 마감은 원문 그대로(「2026. 11.~2027. 1.」「2027. 1. 25. 이후」), 기한이 지나지 않아 모두 체크됨, 메모는 모두 「주의사항」', d23P.owners[0] === '법무(새 역할), 영업(새 역할)' && d23P.due[2] === '2026. 11.~2027. 1.' && d23P.due[4] === '2027. 1. 25. 이후' && d23P.checks.every((c) => c) && d23P.docChecked && d23P.memos.length > 0 && d23P.memos.every((m) => m === '주의사항'), JSON.stringify(d23P));
+      check('CR-23 미리 보기 아래 요약 「더할 것: 문서 1개 · 할 일 업무 5개 · 역할 6개 · 메모 n건」·읽은 방식 「규칙으로 읽었습니다…」, 저장 단추가 켜짐', d23P.count.startsWith('더할 것: 문서 1개 · 할 일 업무 5개 · 역할 6개 · 메모 ') && d23P.method.startsWith('규칙으로 읽었습니다') && d23P.save === false, JSON.stringify(d23P));
+      // 3) 화면 확인용 스크린샷: 미리 보기 위쪽
+      await evaluate(s.cdp, "document.querySelector('[data-testid=doc-attach-step3]').scrollIntoView({ block: 'start' })");
+      await sleep(150);
+      await shot(s.cdp, 'cr23-doc-attach-preview');
+      // 4) 체크 하나를 풀면 요약이 바뀐다(마지막 할 일 → 업무 −1, 역할 −1)
+      await evaluate(s.cdp, "(() => { const e = document.querySelector('[data-testid=doc-attach-task-check-4]'); e.checked = false; e.dispatchEvent(new Event('change', { bubbles: true })); })()");
+      await sleep(100);
+      const d23Cnt2 = (await d23Box('[data-testid=doc-attach-count]')).text;
+      check('CR-23 할 일 체크를 풀면 요약이 바뀐다(업무 4개·역할 5개: 그 할 일에만 쓰인 「사업본부」는 만들지 않음)', d23Cnt2.startsWith('더할 것: 문서 1개 · 할 일 업무 4개 · 역할 5개'), d23Cnt2);
+      // 5) 글을 고치면 다시 읽기 전에는 저장 불가
+      await d23Set('doc-attach-input', `${D23_TEXT} 고침`);
+      const d23Stale = { save: (await d23Box('[data-testid=doc-attach-save]')).disabled, note: (await d23Box('[data-testid=doc-attach-stale]')) };
+      check('CR-23 읽은 뒤 글을 고치면 「대상이나 글이 바뀌었습니다 — 다시 읽어 주세요」가 보이고 저장 단추가 잠김', d23Stale.save && !!d23Stale.note && !d23Stale.note.hidden && d23Stale.note.text.includes("다시 읽어 주세요"), JSON.stringify(d23Stale));
+      await d23Set('doc-attach-input', D23_TEXT);
+      await clickTestId(s.cdp, 'doc-attach-read');
+      await sleep(200);
+      // 6) 지도에 더하기: 전부 한 번에(되감기 한 점), 그래프에 노드가 늘고 대상 업무 카드가 열리고 알림
+      const d23Before = await d23Counts();
+      await clickTestId(s.cdp, 'doc-attach-save');
+      await sleep(400);
+      const d23After = await d23Counts();
+      const d23Res = await evaluate(s.cdp, `(() => {
+        const doc = window.__wu.doc;
+        const mine = doc.events.slice(${d23Before.events});
+        return {
+          open: document.getElementById('doc-attach-dialog').open,
+          stamps: new Set(mine.map((e) => e.recorded_at)).size,
+          memo: mine.filter((e) => e.type === 'memo' && e.payload.target_id === 'N-001' && e.payload.category === 'caution' && e.note.startsWith('[2026년')).length,
+          resolved: mine.filter((e) => e.type === 'memo' && ['resolved', 'in_progress'].includes(e.payload.category)).length,
+          roles: doc.nodes.filter((n) => n.core_type === 'person' && n.subtype === '역할').map((n) => n.label),
+          contains: doc.edges.filter((e) => e.core_type === 'contains' && e.source === 'N-001').length,
+          refs: doc.edges.filter((e) => e.core_type === 'references' && e.source === 'N-001').length,
+          due: (doc.nodes.find((n) => n.label === '계약별 인상 가능 여부 검토') || { attrs: {} }).attrs.마감,
+          card: document.querySelector('[data-testid=item-card]') ? document.querySelector('[data-testid=item-card]').textContent.includes('대사 확인') : false,
+          selected: window.__wu.selected,
+          notice: (document.querySelector('[data-testid=doc-attach-notice]') || {}).textContent || '',
+          addDone: (document.querySelector('[data-testid=add-done]') || {}).textContent || '',
+        };
+      })()`);
+      check('CR-23 지도에 더하기: 항목 +12(문서 1·업무 5·역할 6)·이력은 한 번의 기록 시각, 대화상자는 닫힘, 그래프(cytoscape) 노드가 같은 수만큼 늘어남', d23After.nodes === d23Before.nodes + 12 && d23After.cy === d23Before.cy + 12 && d23Res.stamps === 1 && !d23Res.open, JSON.stringify([d23Before, d23After, d23Res]));
+      check('CR-23 대상 업무에 문서 참조 1·하위 업무 연결 5가 생기고, 「마감」 속성은 날짜(2026-11-13), 담당 역할 6개가 만들어짐(법무·영업·재무정산·고객지원·기술·사업본부)', d23Res.refs >= 1 && d23Res.contains === 5 && d23Res.due === '2026-11-13' && ['법무', '영업', '재무정산', '고객지원', '기술', '사업본부'].every((r) => d23Res.roles.includes(r)), JSON.stringify(d23Res));
+      check('CR-23 메모는 「주의사항」(caution)으로 대상 업무에 붙고 「[문서명] 」 출처가 앞에 있으며 해결됨·진행 중은 하나도 없음', d23Res.memo > 0 && d23Res.resolved === 0, JSON.stringify(d23Res));
+      check('CR-23 끝나면 대상 업무(대사 확인) 카드가 열리고 알림 「문서 1·업무 5·메모 n 더함 … 되돌리려면 지도 관리 → 편집 되감기」가 보임', d23Res.card && d23Res.selected === 'U-A1/N-001' && d23Res.notice.startsWith('문서 1·업무 5·메모 ') && d23Res.notice.includes('되돌리려면 지도 관리 → 편집 되감기') && d23Res.notice.startsWith(d23Res.addDone) && d23Res.addDone.length > 20, JSON.stringify(d23Res));
+      await shot(s.cdp, 'cr23-doc-attach-done');
+      // 7) 같은 문서를 한 번 더: 고른 카드의 업무(대사 확인)가 대상으로 미리 골라지고, 더한 것은 「이미 있음」으로 체크되지 않는다
+      await evaluate(s.cdp, "document.querySelector('details.add').open = true");
+      await sleep(100);
+      await clickTestId(s.cdp, 'btn-doc-attach');
+      await sleep(200);
+      const d23Pre = (await d23Box('[data-testid=doc-attach-target]')).value;
+      await d23Set('doc-attach-input', D23_TEXT);
+      await clickTestId(s.cdp, 'doc-attach-read');
+      await sleep(250);
+      const d23Again = await evaluate(s.cdp, `({
+        doc: (document.querySelector('[data-testid=doc-attach-doc-status]') || {}).textContent,
+        task: [...document.querySelectorAll('[data-testid^=doc-attach-task-status-]')].map((e) => e.textContent.slice(0, 5)),
+        checks: [...document.querySelectorAll('[data-testid^=doc-attach-task-check-]')].map((e) => e.checked),
+        count: (document.querySelector('[data-testid=doc-attach-count]') || {}).textContent,
+      })`);
+      check('CR-23 고른 카드의 업무가 대상으로 미리 골라져 열리고(대사 확인), 같은 문서를 다시 읽으면 문서와 할 일 5개 모두 「이미 있음」·체크 없음·「더할 것: 문서 0개 · 할 일 업무 0개 · 역할 0개 · 메모 0건」', d23Pre === 'N-001' && d23Again.doc.startsWith('이미 있음') && d23Again.task.length === 5 && d23Again.task.every((t) => t === '이미 있음') && d23Again.checks.every((c) => !c) && d23Again.count === '더할 것: 문서 0개 · 할 일 업무 0개 · 역할 0개 · 메모 0건', JSON.stringify([d23Pre, d23Again]));
+      await clickTestId(s.cdp, 'doc-attach-save');
+      await sleep(150);
+      const d23Same = await d23Counts();
+      check('CR-23 이미 있는 것만 있을 때 저장하면 「더할 것이 없습니다」이고 문서는 그대로', ((await d23Box('[data-testid=doc-attach-message]')) || {}).text === '더할 것이 없습니다. 항목을 체크하세요.' && d23Same.nodes === d23After.nodes && d23Same.edges === d23After.edges && d23Same.events === d23After.events, JSON.stringify([d23Same, d23After]));
+      await d23Close();
+      // 8) 파일: PDF는 읽지 않고 안내
+      await clickTestId(s.cdp, 'btn-doc-attach');
+      await sleep(150);
+      await evaluate(s.cdp, `(() => { const f = document.querySelector('[data-testid=doc-attach-file]'); const dt = new DataTransfer(); dt.items.add(new File(['x'], '회의록.pdf', { type: 'application/pdf' })); f.files = dt.files; f.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+      await sleep(200);
+      check('CR-23 PDF 파일을 고르면 읽지 않고 「PDF·한글·워드 파일은 글을 복사해 붙여 넣어 주세요」', ((await d23Box('[data-testid=doc-attach-message]')) || {}).text === 'PDF·한글·워드 파일은 글을 복사해 붙여 넣어 주세요' && (await d23Box('[data-testid=doc-attach-input]')).value === '');
+      await d23Close();
+      // 9) 카드 「⋯」 입구: 업무 카드에만, 대상이 미리 골라진 채 열림
+      await evaluate(s.cdp, "window.__wu.select('U-A1/N-003')");
+      await sleep(200);
+      const d23CardBtn = await d23Box('[data-testid=btn-doc-attach-card]');
+      check('CR-23 업무 카드의 「⋯」 메뉴에 「이 업무에 문서 더하기」가 있음', !!d23CardBtn && d23CardBtn.text === '이 업무에 문서 더하기', JSON.stringify(d23CardBtn));
+      await evaluate(s.cdp, "document.querySelector('[data-testid=btn-doc-attach-card]').click()");
+      await sleep(200);
+      check('CR-23 카드 메뉴로 열면 그 업무(보고)가 대상으로 미리 골라져 있음', (await d23Open()) && (await d23Box('[data-testid=doc-attach-target]')).value === 'N-003');
+      await d23Close();
+      await evaluate(s.cdp, "window.__wu.select('U-A1/N-012')");
+      await sleep(200);
+      check('CR-23 사람 카드에는 「이 업무에 문서 더하기」가 없음', (await d23Box('[data-testid=btn-doc-attach-card]')) === null);
+      await evaluate(s.cdp, 'window.__wu.select(null)');
+      // 10) 묶은 지도(가상 운영부 U-D1): 단추 대신 안내 한 줄
+      await evaluate(s.cdp, "location.hash = 'U-D1'; location.reload()").catch(() => {});
+      await sleep(500);
+      const d23Dept = await waitFor(s.cdp, "window.__wu && window.__wu.doc && window.__wu.doc.universe.id === 'U-D1' && window.__wu.cy.nodes().length > 0", 8000);
+      await evaluate(s.cdp, "window.__wu.select(null); document.querySelector('details.add').open = true");
+      await sleep(150);
+      const d23GNote = await d23Box('[data-testid=doc-attach-grouped-note]');
+      check('CR-23 묶은 지도(가상 운영부 U-D1)에서는 「문서로 더하기」 단추가 없고 「팀·업무 지도를 열어 넣으세요」 안내 한 줄(크기 있음)', d23Dept && (await d23Box('[data-testid=btn-doc-attach]')) === null && !!d23GNote && d23GNote.text.includes('팀·업무 지도를 열어 넣으세요') && d23GNote.w > 20 && d23GNote.h > 10, JSON.stringify(d23GNote));
+    } else check('CR-23 월말 정산 점검(U-A1)이 열림', false);
+    await d23OpenMap(false); // 저장소를 블록 시작 때 찍어 둔 상태로 되돌린다
+  }
+
   // ── 처음 사용 5회차(FU5, 2026-10-25, CR-18 범위 안 보완): A 매주 점검(바뀐 것 보기·저장 알림·점검 요약 미리 보기/내려받기 알림·점검 저장한 지도·유사 경험자 안내) + B 화면(전체 보기가 흐림을 풂·담당 넘긴 날 표시·
   //    오류 줄 지우기·「연두색 큰 원」·실패 흉내는 ?check에서만). 못 쓰는 관계는 고를 수 없음(FU5-9)은 연결 추가/수정·함께 잇기 점검 곳곳에서 고쳐 확인하고, 되감기 배치 되돌림(FU5-7)은 바로 아래 CR-14 A 블록 안에 있다.
   //    데이터·설정을 바꾸므로 시작 때 저장소를 찍어 두었다가 끝에서 되돌린다("일상 사용 G3" 블록과 같은 방식) ──
