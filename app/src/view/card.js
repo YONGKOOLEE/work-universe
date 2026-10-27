@@ -350,7 +350,7 @@ export function actionPlan(f) {
   if (t === 'person' && !f.readOnly) primary.push('personDraft');
   if (editable) {
     more.push('edit', 'edge');
-    if (t === 'work') more.push('collab');
+    if (t === 'work') more.push('collab', 'docAttach'); // CR-23: 이 업무에 문서 더하기
   }
   more.push('history');
   if (t === 'work') more.push('similar');

@@ -52,6 +52,8 @@ import { EMBED_HASH_PREFIX, embedFileName } from '../view/embed.js';
 import { EMBED_WARNINGS, captureAppHtml, createEmbedApp, embedHtmlFor, importEmbedToStorage, readEmbedFromDocument, renderEmbedBanner } from './embed-banner.js';
 import { tableDialog } from './table.js';
 import { textAddDialog } from './text-add.js';
+import { docAttachDialog } from './doc-attach.js';
+import { readDocumentAi } from '../llm/ai-doc-attach.js';
 import { TEXT_GROUPED_NOTE, isGroupedView } from '../rules/text-extract.js';
 import { convertDocument } from '../rules/doc-convert.js';
 import { convertDocumentWith, extractTextAsync, isLive } from '../llm/connector.js';
@@ -1405,6 +1407,7 @@ function start() {
       edit: () => edit('수정', 'node', 'btn-edit'),
       edge: () => edit('연결 추가', 'edge', 'btn-edge'),
       collab: () => el('button', { type: 'button', 'data-testid': 'btn-collab', onclick: () => openFormBox('collab-quick') }, '협업자 추가'),
+      docAttach: () => (isGroupedView(view) ? null : el('button', { type: 'button', 'data-testid': 'btn-doc-attach-card', title: '회의록·매뉴얼 같은 문서를 이 업무에 붙여 문서·할 일·메모로 지도를 키웁니다', onclick: () => openDocAttach(node.id) }, '이 업무에 문서 더하기')),
       history: () => historyJumpButton(),
       similar: () => insightButton(gid),
       insight: () => insightAllButton(),
@@ -2248,6 +2251,7 @@ function start() {
     else if (name === 'table-add') openTable('add');
     else if (name === 'table-edit') openTable('edit');
     else if (name === 'text-add') openTextAdd();
+    else if (name === 'doc-attach') openDocAttach(selectedWorkId());
   }
   // 업무(또는 항목)를 먼저 골라야 하는 기능: 지금 고른 것이 맞으면 바로, 아니면 업무 이름 목록을 돌려줘 고르게 한다
   function goNodeFeature(r) {
@@ -2938,6 +2942,25 @@ function start() {
     },
   });
 
+  // 문서로 더하기(CR-23): 문서 글 → 미리 보기(문서·할 일 업무·메모) → 체크 → 한 번의 묶음 저장. 대상 업무 하나가 미리 골라진 채 열릴 수 있다(카드의 「이 업무에 문서 더하기」)
+  const selectedWorkId = () => {
+    const n = selected && isOwn(selected) ? view.getNode(view.canonical(selected)) : null;
+    return n && !n.hidden && n.core_type === 'work' ? n.id : '';
+  };
+  const openDocAttach = docAttachDialog({
+    dialog: $('doc-attach-dialog'),
+    app,
+    getView: () => view,
+    aiReady: () => isLive(provider) && typeof provider.extract === 'function',
+    readAi: (text) => readDocumentAi(text, { provider, view }),
+    today: todayLocal,
+    onSaved: (r, ctx) => {
+      afterSave(r, toGid(currentId(), ctx.targetId)); // 대상 업무 카드를 연다
+      renderAddForm(ctx.notice);
+      notify('doc-attach', { testid: 'doc-attach-notice', text: ctx.notice, nodeGid: toGid(currentId(), ctx.targetId) }, { long: true, goLabel: '업무 보기' });
+    },
+  });
+
   // 노드 추가(R-02 ①): 저장하면 바로 그래프에 나타나고 선택된다
   // CR-18-5: 양식으로 저장에 성공하면 「사람·업무·문서 추가」를 접고 이 한 줄만 남긴다(양식 위쪽에서 패널이 길어지지 않게). 펼치면 사라진다
   function addFoldNote() {
@@ -2985,7 +3008,7 @@ function start() {
     note.hidden = false;
     document.querySelector('details.add').open = false;
   }
-  const ADD_TOOLS_NOTE = '표로 추가: 스프레드시트에서 복사한 표를 붙여 넣어 여러 개를 한 번에 · 글로 추가: 몇 문장짜리 글을 붙여 넣으면 사람·업무·산출물과 연결을 찾아 미리 보여 줍니다 · 표로 고치기: 지금 항목을 표로 펼쳐 한꺼번에 고침';
+  const ADD_TOOLS_NOTE = '표로 추가: 스프레드시트에서 복사한 표를 붙여 넣어 여러 개를 한 번에 · 글로 추가: 몇 문장짜리 글을 붙여 넣으면 사람·업무·산출물과 연결을 찾아 미리 보여 줍니다 · 문서로 더하기: 회의록·매뉴얼 같은 문서를 업무 하나에 붙여 문서·할 일·메모로 지도를 키웁니다 · 표로 고치기: 지금 항목을 표로 펼쳐 한꺼번에 고침';
   function renderAddForm(doneText) {
     const slot = $('add-slot');
     addFoldNote().hidden = true;
@@ -3002,6 +3025,9 @@ function start() {
         grouped
           ? el('span', { class: 'muted small', 'data-testid': 'text-add-grouped-note', title: TEXT_GROUPED_NOTE }, '글로 추가: 팀·업무 지도를 열어 넣으세요')
           : el('button', { type: 'button', 'data-testid': 'btn-text-add', title: '몇 문장짜리 글을 붙여 넣으면 사람·업무·산출물과 연결을 찾아 미리 보여 줍니다. 체크하고 고친 뒤 저장합니다', onclick: () => openTextAdd() }, '글로 추가'),
+        grouped
+          ? el('span', { class: 'muted small', 'data-testid': 'doc-attach-grouped-note', title: '묶은 지도에서는 문서로 더하기를 쓸 수 없습니다 — 팀·업무 지도를 열어 넣으세요' }, '문서로 더하기: 팀·업무 지도를 열어 넣으세요')
+          : el('button', { type: 'button', 'data-testid': 'btn-doc-attach', title: '회의록·매뉴얼·메모 같은 문서를 붙여 넣으면 업무 하나에 문서·할 일·메모로 더할 것을 미리 보여 줍니다. 체크한 것만 더합니다', onclick: () => openDocAttach(selectedWorkId()) }, '문서로 더하기'),
         el('button', { type: 'button', 'data-testid': 'btn-table-edit', title: '지금 업무 지도의 항목을 표로 펼쳐 한꺼번에 고칩니다', onclick: () => openTable('edit') }, '표로 고치기')),
       // 단추 설명을 눈에 보이는 글로(일상 사용 2회차 T6): 예전에는 마우스를 올려야 보이는 말풍선(title)에만 있어 읽히지 않았다. 말풍선도 그대로 둔다
       el('p', { class: 'muted small', 'data-testid': 'add-tools-note' }, ADD_TOOLS_NOTE),

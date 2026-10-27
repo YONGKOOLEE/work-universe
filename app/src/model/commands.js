@@ -672,6 +672,8 @@ export function decideIdentity(doc, input, ctx) {
  *   {op:'updateNode', row?:number, id:string, changes:object} |
  *   {op:'addEdge', row?:number, input:{source:string, target:string, core_type:string, subtype?:string, period?:object, note?:string}} |
  *   {op:'assign', row?:number, shown_row?:number, input:{person_id:string, work_id:string, occurred_at?:string}} |
+ *   {op:'addMemo', row?:number, input:{target_id:string, occurred_at:string, category?:string, note:string}} |  // CR-23: 메모 이벤트(대상은 '@행' 참조 허용)
+ *   {op:'addSubtype', aux?:true, input:{core_type:string, name:string}} |  // CR-23: 하위 유형 등록(이미 있으면 건너뜀)
  *   {op:'invalid', row?:number, error:{code:string}}
  * >} ops row는 화면의 행 번호(없으면 1부터 순서)
  * @param {{now:string, random?:()=>number, source?:string, occurred_at?:string}} ctx
@@ -707,6 +709,7 @@ export function applyBatch(doc, ops, ctx) {
   const failedRows = new Set(); // 실패한 행 번호(그 행을 가리키는 연결은 건너뜀)
   const createdEdges = [];
   const assignments = [];
+  const memos = [];
 
   ops.forEach((op, i) => {
     const row = op.row ?? i + 1;
@@ -714,6 +717,47 @@ export function applyBatch(doc, ops, ctx) {
     if (op.op === 'invalid') {
       failedRows.add(row);
       errors.push({ row, error: op.error });
+      return;
+    }
+    if (op.op === 'addSubtype') {
+      // 하위 유형 등록(설정 변경이라 이벤트는 남지 않는다). 이미 등록돼 있으면 건너뜀(오류 아님)
+      const r = addSubtype(work, op.input || {});
+      if (!r.ok) {
+        if (r.error.code === CODES.DUP) return;
+        failedRows.add(row);
+        errors.push({ row: shown, error: r.error });
+        return;
+      }
+      work = r.doc;
+      return;
+    }
+    if (op.op === 'addMemo') {
+      // 메모 이벤트 하나(CR-23 문서로 더하기). 대상은 노드 id 또는 같은 묶음 앞 행의 '@행'
+      const input = { ...(op.input || {}) };
+      const m = typeof input.target_id === 'string' ? /^@(\d+)$/.exec(input.target_id) : null;
+      if (m) {
+        const ref = Number(m[1]);
+        if (rowNode.has(ref)) input.target_id = rowNode.get(ref);
+        else if (failedRows.has(ref)) {
+          failedRows.add(row);
+          return;
+        } else {
+          failedRows.add(row);
+          errors.push({ row: shown, error: { code: CODES.SCHEMA, field: 'target_id', bad_ref: ref } });
+          return;
+        }
+      }
+      const payload = { target_id: input.target_id, category: input.category || 'issue', topic_ids: [] };
+      const r = addEvent(work, { type: 'memo', occurred_at: input.occurred_at, payload, note: input.note }, ctx);
+      if (!r.ok) {
+        failedRows.add(row);
+        errors.push({ row: shown, error: r.error });
+        return;
+      }
+      work = r.doc;
+      events.push(r.event);
+      memos.push(r.event);
+      rows.push({ row, kind: 'memo', event: r.event });
       return;
     }
     if (op.op === 'addNode') {
@@ -825,7 +869,7 @@ export function applyBatch(doc, ops, ctx) {
   });
 
   if (errors.length) return { ok: false, doc, errors, error: errors[0].error };
-  return { ok: true, doc: work, events, created, updated, edges: createdEdges, assignments, warnings, rows };
+  return { ok: true, doc: work, events, created, updated, edges: createdEdges, assignments, memos, warnings, rows };
 }
 
 // ── 담당 이력과 수행 연결(02-design 3절: 담당 시작·종료는 수행 연결이 생기거나 끝날 때 남는다) ──

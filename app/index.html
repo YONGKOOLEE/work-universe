@@ -277,6 +277,13 @@
   #text-add-dialog h3 { margin: 12px 0 4px; font-size: 14px; }
   #text-add-dialog textarea { width: 100%; box-sizing: border-box; font: inherit; }
   #text-add-dialog th { white-space: nowrap; } /* 「넣기」 머리글이 좁은 첫 칸에서 꺾이지 않게 */
+  #doc-attach-dialog { width: min(1100px, 96vw); } /* CR-23 문서로 더하기: 할 일·메모 미리 보기 표가 넓다 */
+  #doc-attach-dialog h3 { margin: 12px 0 4px; font-size: 14px; }
+  #doc-attach-dialog textarea { width: 100%; box-sizing: border-box; font: inherit; }
+  #doc-attach-dialog select { max-width: 100%; }
+  #doc-attach-dialog th { white-space: nowrap; }
+  #doc-attach-dialog th, #doc-attach-dialog td { text-align: left; vertical-align: top; } /* 표 글을 왼쪽 맞춤(공용 표 규칙은 오른쪽 맞춤) */
+  #doc-attach-dialog td.nw { white-space: nowrap; }
   #table-dialog { width: min(1240px, 96vw); } /* 검토7 U-4: 표 대화상자는 칸이 많아 넓게 */
   .graph-tools button[aria-pressed=true] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); } /* U-7: 흐름 정렬 눌림 */
   .batch-grid { min-width: 900px; }
@@ -710,6 +717,7 @@
 <dialog id="import-dialog" class="wide" aria-labelledby="import-title"></dialog>
 <dialog id="table-dialog" class="wide" aria-labelledby="table-title"></dialog>
 <dialog id="text-add-dialog" class="wide" aria-labelledby="text-add-title"></dialog>
+<dialog id="doc-attach-dialog" class="wide" aria-labelledby="doc-attach-title"></dialog>
 <script src="app.js"></script>
 </body>
 </html>

@@ -242,7 +242,7 @@ test('CR-22 K 유형별 동작 줄: 쓸 수 없는 단추는 뺀다(업무·사�
   const base = { own: true, readOnly: false, hidden: false, handoverDoc: false, canDelete: false };
   const work = actionPlan({ ...base, coreType: 'work', canDelete: true });
   assert.deepEqual(work.primary, ['record', 'assign', 'draft']);
-  assert.deepEqual(work.more, ['edit', 'edge', 'collab', 'history', 'similar', 'insight', 'nbhd', 'hide', 'delete']);
+  assert.deepEqual(work.more, ['edit', 'edge', 'collab', 'docAttach', 'history', 'similar', 'insight', 'nbhd', 'hide', 'delete']); // CR-23: 「이 업무에 문서 더하기」(docAttach)가 협업자 추가 다음에 들어감(영향 R: 문서로 더하기 입구)
   assert.ok(!actionPlan({ ...base, coreType: 'work' }).more.includes('delete'), '지울 수 없으면 삭제 단추 없음');
   const person = actionPlan({ ...base, coreType: 'person' });
   assert.deepEqual(person.primary, ['record', 'personDraft']);
