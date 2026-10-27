@@ -400,6 +400,8 @@
   .card button { justify-self: start; margin-top: 4px; }
   dialog.wide { width: min(900px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto; scrollbar-color: var(--line) var(--panel-2); }
   .import-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  /* 미리 보기가 길어도 「새 업무 지도 만들기」 단추 줄이 창 아래에 붙어 보이게(조력자 의견 2026-10-28) */
+  .import-actions { position: sticky; bottom: -18px; z-index: 2; background: var(--panel); border-top: 1px solid var(--line); padding: 10px 0 12px; margin: 12px 0 -6px; flex-wrap: wrap; gap: 6px 10px; }
   .import-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0 10px; }
   .import-notes { list-style: disc; padding-left: 18px; display: grid; gap: 4px; color: var(--warn-text); font-size: 13px; margin: 8px 0; }
   .import-sections th, .import-sections td { white-space: normal !important; width: auto !important; text-align: left !important; }

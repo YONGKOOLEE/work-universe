@@ -33,6 +33,8 @@ const KIND_TEXT = {
 // 한글은 UTF-8에서 글자당 3바이트라 상한 × 3바이트를 넘으면 글자 수 상한도 반드시 넘는다
 export const IMPORT_FILE_MAX_BYTES = IMPORT_MAX_CHARS * 3;
 export const fileTooBig = (size) => Number.isFinite(size) && size > IMPORT_FILE_MAX_BYTES;
+/** 글자로 읽을 수 없는 문서 파일(문서 붙여넣기 탭에서 고르면 읽지 않고 안내) */
+export const BINARY_DOC = /\.(pdf|hwp|hwpx|doc|docx|ppt|pptx|xls|xlsx)$/i;
 
 // 변환 결과가 「제목도 범위도 못 찾음」이면 업무정의서가 아닌 글을 붙였을 가능성이 크다(검토9 C-1·C-2)
 const AI_KIND_LABEL = { work: '업무', person: '사람', artifact: '산출물', topic: '주제', memo: '메모', edge: '연결' };
@@ -46,7 +48,7 @@ export function looksNotDefinition(report) {
 
 export function noteText(n) {
   switch (n.code) {
-    case 'C-NO-OWNER': return '원문에서 작성 주체를 읽지 못했습니다(「작성:」·「작성 부서:」 줄은 …팀·…부 같은 조직 이름이 있을 때만, 날짜뿐인 값은 읽지 않습니다). 위 「작성 주체」 칸에 팀·부서 이름을 입력해야 가져올 수 있습니다.';
+    case 'C-NO-OWNER': return '원문에서 작성 주체를 읽지 못했습니다(「작성:」·「작성 부서:」 줄은 …팀·…부 같은 조직 이름이 있을 때만, 날짜뿐인 값은 읽지 않습니다). 위 「작성 주체」 칸에 팀·부서 이름을 입력해야 새 업무 지도를 만들 수 있습니다.';
     case 'C-DATE-ASSUMED': return `원문에 작성일이 없어 메모(질문·리스크) 날짜를 변환한 날(${n.date})로 적었습니다.`;
     case 'C-TOPIC-GUESS': return `규칙에 없는 제목의 절 ${n.count}개를 주제로 만들었습니다(표에 「규칙 밖」 표시). 맞는지 확인하세요.`;
     case 'C-TOO-MANY': return `그래프 항목이 ${n.count}개로, 정한 세분화(월말 정산 수준, ${n.max}개 이하)보다 많습니다. 문서의 범위 항목을 묶을 수 있는지 확인하세요.`;
@@ -62,6 +64,7 @@ export function noteText(n) {
     case 'C-TRUNCATED': return `「${n.where}」 글이 너무 길어 ${n.max}자에서 잘랐습니다.`;
     case 'C-UNUSED': return `개요 표에서 쓰지 못한 칸이 있습니다(${n.refs.join(', ')}). 원문을 함께 보세요.`;
     case 'C-PEOPLE-PROSE': return `${n.ref}의 문장 ${n.count}줄은 사람 이름이 아니라서 역할로 만들지 않고 그 절의 주제 설명에 넣었습니다.`;
+    case 'C-SCOPE-PROSE': return `${n.ref}의 문장 ${n.count}줄은 업무 목록이 아니라 설명이라서 업무로 나누지 않고 그 절의 주제 설명에 넣었습니다.`;
     case 'C-ARTIFACT-PROSE': return `${n.ref}의 문장 ${n.count}줄은 문서 이름이 아니라서 산출물로 만들지 않고 그 절의 주제 설명에 넣었습니다.`;
     default: return n.code;
   }
@@ -133,6 +136,14 @@ export function importDialog(o) {
     const f = input.files && input.files[0];
     if (!f) return;
     cancelAi();
+    // PDF·한글·워드는 글자로 읽을 수 없다(읽으면 깨진 글이 들어간다): 읽지 않고 붙여 넣기를 안내
+    if (key === 'docText' && BINARY_DOC.test(f.name)) {
+      st.result = null;
+      st.message = `「${f.name}」은 PDF·한글·워드 같은 파일이라 바로 읽을 수 없습니다. 파일을 열어 글을 복사한 뒤 위 칸에 붙여 넣어 주세요.`;
+      input.value = '';
+      render();
+      return;
+    }
     if (fileTooBig(f.size)) {
       st.result = null;
       st.message = `파일이 너무 큽니다(${Math.round(f.size / 1048576).toLocaleString()}MB). 읽지 않았습니다 — 글 ${IMPORT_MAX_CHARS.toLocaleString()}자 이하의 파일만 가져올 수 있습니다.`;
@@ -329,7 +340,7 @@ export function importDialog(o) {
 
       // 작성 주체만 비어 있는 것은 실패가 아니라 "입력할 차례"다: 빨간 오류 대신 안내로 둔다(여섯 번째 검토 U-6). 가져오기 버튼은 그대로 막힌다
       if (st.result.from === 'doc' && p.errors.length && p.errors.every((e) => e.path === 'universe.owner')) {
-        blocks.push(el('p', { class: 'notice', 'data-testid': 'import-errors' }, '변환은 끝났습니다. 위의 「작성 주체」 칸에 이 업무 지도를 책임질 팀·부서 이름을 넣으면 「가져오기」를 누를 수 있습니다.'));
+        blocks.push(el('p', { class: 'notice', 'data-testid': 'import-errors' }, '변환은 끝났습니다. 위의 「작성 주체」 칸에 이 업무 지도를 책임질 팀·부서 이름을 넣으면 「새 업무 지도 만들기」를 누를 수 있습니다.'));
       } else if (p.errors.length) {
         blocks.push(el('div', { class: 'error-text', 'data-testid': 'import-errors' },
           el('strong', {}, `가져올 수 없습니다 — 고칠 것 ${p.errors.length}건`),
@@ -395,9 +406,15 @@ export function importDialog(o) {
     }
 
     const can = p.ok && !o.app.readOnly;
-    blocks.push(el('div', { class: 'row import-actions decide-row' },
-      can ? el('span', { class: 'decide-q', 'data-testid': 'import-confirm-q' }, '이 내용으로 업무 지도를 가져올까요?') : null,
-      el('button', { type: 'button', class: 'primary', 'data-testid': 'import-confirm', disabled: !can, onclick: () => doImport(p) }, '가져오기'),
+    // 문서는 새 업무 지도를 만든다(지금 지도에 더하지 않는다) — 단추 이름이 그 결과를 말한다(조력자 의견 2026-10-28: "업로드 버튼 같은게 안보여융").
+    // 단추 줄은 창 아래에 붙어 있어 긴 미리 보기를 내리지 않아도 보이고, 막혔으면 이유를 단추 옆에 적는다
+    const fromDoc = st.result.from === 'doc';
+    const ownerOnly = fromDoc && p.errors.length && p.errors.every((e) => e.path === 'universe.owner');
+    blocks.push(el('div', { class: 'row import-actions decide-row', 'data-testid': 'import-actions' },
+      can ? el('span', { class: 'decide-q', 'data-testid': 'import-confirm-q' }, fromDoc ? '이 내용으로 새 업무 지도를 만들까요?' : '이 내용으로 업무 지도를 가져올까요?') : null,
+      el('button', { type: 'button', class: 'primary', 'data-testid': 'import-confirm', disabled: !can, onclick: () => doImport(p) }, fromDoc ? '새 업무 지도 만들기' : '가져오기'),
+      !can && ownerOnly && !o.app.readOnly ? el('button', { type: 'button', class: 'link', 'data-testid': 'import-why', onclick: () => { const f = o.dialog.querySelector('#import-owner'); if (f) { f.scrollIntoView({ block: 'center' }); f.focus(); } } }, '위의 「작성 주체」 칸을 채우면 누를 수 있습니다') : null,
+      !can && !ownerOnly && !o.app.readOnly && !p.version_mismatch && p.errors.length ? el('span', { class: 'muted small', 'data-testid': 'import-why' }, `고칠 것 ${p.errors.length}건이 있어 아직 누를 수 없습니다(위 목록)`) : null,
       o.app.readOnly ? el('span', { class: 'muted small' }, '읽기 전용이라 가져올 수 없습니다.') : null));
     slot.replaceChildren(...blocks);
   }
@@ -434,10 +451,11 @@ export function importDialog(o) {
     const body = st.tab === 'folder' ? folderTab(o, render) : st.tab === 'export' ? exportBody() : st.tab === 'doc'
       ? el('div', { class: 'editor' },
         el('p', { class: 'muted small' }, '업무정의서 같은 문서를 붙여 넣으면 제목(#)·표·번호 목록을 규칙으로 읽어 업무 지도 밑그림을 만듭니다. 업무 흐름은 업무의 「절차」 칸으로, 요건·예외 같은 절은 주제 하나로 묶어 항목을 10~20개 정도로 만듭니다(월말 정산 수준).'),
-        el('p', { class: 'muted small', 'data-testid': 'import-plain-note' }, '한글·워드에서 복사한 일반 글(1. 개요 / 가. …)도 됩니다.'),
+        el('p', { class: 'muted small', 'data-testid': 'import-plain-note' }, '한글·워드에서 복사한 일반 글(1. 개요 / 가. …)도 됩니다. PDF·한글·워드 파일은 바로 열리지 않으니 글을 복사해 붙여 넣으세요.'),
+        el('p', { class: 'notice small', 'data-testid': 'import-new-map-note' }, '문서 하나로 새 업무 지도를 하나 만듭니다. 지금 연 지도에 더하는 것이 아닙니다.'),
         el('textarea', { id: 'import-doc', rows: '9', 'aria-label': '문서 원문', placeholder: '# 업무 이름\n## 1. 개요\n| 항목 | 내용 |\n…', oninput: onDocInput }, st.docText),
         el('div', { class: 'row' },
-          el('label', { class: 'file-pick' }, '파일 열기(.md, .txt) ', el('input', { type: 'file', accept: '.md,.txt,.markdown,text/plain,text/markdown', 'data-testid': 'import-doc-file', onchange: (e) => readFile(e.target, 'docText') })),
+          el('label', { class: 'file-pick' }, '파일 열기(.md, .txt) ', el('input', { type: 'file', accept: '.md,.txt,.markdown,text/plain,text/markdown,.pdf,.hwp,.hwpx,.doc,.docx' /* PDF·한글·워드도 고를 수는 있게(고르면 붙여 넣기 안내) */, 'data-testid': 'import-doc-file', onchange: (e) => readFile(e.target, 'docText') })),
           el('button', { type: 'button', 'data-testid': 'import-example', onclick: () => { cancelAi(); st.docText = o.example.text; st.result = null; st.message = ''; render(); } }, `예시 문서 넣기: ${o.example.title}`)),
         el('div', { class: 'row' },
           el('button', { type: 'button', class: 'primary', 'data-testid': 'import-convert', onclick: runConvert }, '읽어 보기'),

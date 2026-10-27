@@ -499,6 +499,16 @@ function isProse(t) {
   const s = stripMarks(String(t)).trim();
   return /다\.?$/.test(s) || (s.length > 20 && /[.?!]$/.test(s)) || s.length > CONVERT_RULES.roleLabelMax;
 }
+// 범위 절의 줄글: 「…다」로 끝나는 서술문(목록 줄은 이렇게 끝나지 않는다)
+const SCOPE_PROSE = /다\.?$/;
+const TIME_COLON = /\d{1,2}:\d{2}/;
+// 역할 절의 줄이 사람·역할 이름이 아닌 표 줄인지(PDF에서 복사해 칸이 공백으로 이어진 표, 조력자 문서 2026-10-28):
+// 괄호 밖에 날짜·금액·비율·시각(1일·20일·30원·10%·00:00)이 있거나, 낱말이 6개 이상이거나, 첫 낱말이 표 머리글(구분·항목…)이고 낱말이 3개 이상
+function notRoleLine(t) {
+  const s = stripMarks(String(t)).replace(/[(（][^)）]*[)）]/g, ' ').replace(/\s+/g, ' ').trim();
+  const words = s.split(' ').filter(Boolean);
+  return /\d+\s*(일|월|년|원|%|건|시|분|영업일)/.test(s) || TIME_COLON.test(s) || words.length >= 6 || (words.length >= 3 && TAB_HEADER.test(words[0]));
+}
 // 주제 노드 이름: 조문은 괄호까지, 그 밖은 괄호를 뗀 제목, 괄호뿐인 제목(「(참고)」)은 괄호 안 글자(재검증 R3·R10)
 function topicLabel(s) {
   if (ARTICLE.test(stripMarks(s.title))) return stripMarks(s.title);
@@ -804,7 +814,14 @@ export function convertDocument(text, ctx) {
         const wk = wk0 === '사용시스템' ? '사용 시스템' : wk0;
         if (!(wk in info.work_attrs)) info.work_attrs[wk] = truncate(v, TEXT_MAX, notes, wk); // 이미 있는 속성은 덮어쓰지 않는다(corpus F8). 긴 값은 잘라 알린다(검증 상한 2000자, C-6)
       }
-      else if (k === 'date') info.date = info.date || findDate(v);
+      else if (k === 'date') {
+        info.date = info.date || findDate(v);
+        // 「작성일: 2026. 10. 27. | 작성부서: 가상팀 | 이력번호: …」: 날짜 줄 안의 「작성 부서」 칸도 작성 주체로 읽는다(조력자 문서 2026-10-28)
+        if (sw.authorPickOrg && !info.owner && authorCells(key, v).some((c) => c.key === '작성부서')) {
+          const picked = orgOwnerOf(key, v);
+          if (picked) info.owner = picked;
+        }
+      }
       else if (k === 'owner' && isDateOnly(v)) {
         // 날짜뿐인 값은 어떤 키든 작성 주체가 아니다(R12-2) → 작성 주체는 입력받는다(C-NO-OWNER). 날짜는 스위치(authorDate)·키 「작성」일 때만 작성일로 읽는다(스위치가 켜진 W8 동작 그대로)
         if (sw.authorDate) info.date = info.date || findDate(v);
@@ -894,6 +911,7 @@ export function convertDocument(text, ctx) {
   };
 
   // 업무: 개요의 범위 + 범위 절의 목록
+  const scopeProse = []; // 범위 절의 줄글 {s, l} — 주제 설명으로(pushProseTopic이 정의된 뒤에 처리)
   for (const s of parsed.sections.filter((x) => x.kind === 'scope')) {
     readOverview(s.blocks, refOf(s), false);
     const lines = linesOf(s.blocks.filter((b) => !b.used));
@@ -901,6 +919,9 @@ export function convertDocument(text, ctx) {
     for (const l of lines) {
       // 「※ 수수료 계산은 이 문서에서 다루지 않음(별도 업무정의서)」: 범위 제외는 노드로 만들지 않는다(12.9 표 「범위 제외」)
       if (!l.cells && l.note && SCOPE_OUT_NOTE.test(l.text)) { info.scope_out.push(l.text); outCount += 1; continue; }
+      // 「본 매뉴얼은 …까지의 표준 절차를 규정한다.」처럼 「…다」로 끝나는 줄글은 업무 목록이 아니다: 쉼표마다 끊어 업무를 만들지 않고 그 절의 주제 설명으로(조력자 문서 2026-10-28)
+      // 글머리표·번호 줄은 작성자가 목록으로 쓴 것이라 예전대로 업무로 읽는다(스냅숏 W9c)
+      if (!l.cells && l.kind !== 'bullet' && l.n === undefined && SCOPE_PROSE.test(stripMarks(l.text).trim())) { scopeProse.push({ s, l }); outCount += 1; continue; }
       if (!l.cells) { info.scope.push({ text: l.text, ref: refOf(s), desc: null }); continue; }
       const { name: cellName, desc } = nameAndRest(l.cells, l.header, 'scope'); // 구분 열이 있는 표도 업무 이름 칸을 쓴다(검토5 V-1)
       if (!cellName) { notes.push({ code: 'C-ROW-NO-NAME', ref: refOf(s), row: l.row }); continue; }
@@ -1042,6 +1063,7 @@ export function convertDocument(text, ctx) {
     notes.push({ code, ref: refOf(s), count: prose.length });
     return true;
   };
+  for (const s of new Set(scopeProse.map((x) => x.s))) pushProseTopic(s, scopeProse.filter((x) => x.s === s).map((x) => x.l), 'C-SCOPE-PROSE');
 
   // 사람(역할): 개요의 이해관계자 + 이해관계자 절
   const roleItems = [];
@@ -1077,8 +1099,9 @@ export function convertDocument(text, ctx) {
       }
       else {
         // 「이름: 설명」, 「이름 — 설명」을 먼저 나눈다(재검증 R6: 「가상 정산 담당 — 매월 대사를 한다.」는 역할)
-        const kv = /^([^:：[]{1,30})[:：]\s*(.+)$/.exec(l.text) || /^([^—–[]{1,30}?)\s+(?:—|–|-)\s+(.+)$/.exec(l.text);
-        if (!kv && isProse(l.text)) { prose.push(l); continue; }
+        // 시각(00:00)의 콜론은 「이름: 설명」의 콜론이 아니다
+        const kv = (!TIME_COLON.test(l.text) && /^([^:：[]{1,30})[:：]\s*(.+)$/.exec(l.text)) || /^([^—–[]{1,30}?)\s+(?:—|–|-)\s+(.+)$/.exec(l.text);
+        if (!kv && (isProse(l.text) || notRoleLine(l.text))) { prose.push(l); continue; }
         roleItems.push(kv ? { text: kv[1], ref: refOf(s), desc: kv[2] } : { text: l.text, ref: refOf(s) });
       }
     }
