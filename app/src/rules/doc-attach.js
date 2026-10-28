@@ -418,6 +418,12 @@ function containsReach(edges, from, to) {
   return false;
 }
 
+/** 메모 뒤에 붙이는 출처. 내용을 앞에, 출처를 뒤에(카드 「지금 볼 것」은 앞부분만 보여서 출처가 앞이면 내용이 잘린다 — 메인 2026-10-28 C 캡처 확인) */
+const memoSource = (docLabel, category, docDate) => {
+  const name = clip(docLabel.replace(/[[\]]/g, ''), DOC_ATTACH_LIMITS.memoNameMax);
+  return category === 'issue' && docDate ? ` — 출처: 「${name}」(문서 날짜 ${docDate})` : ` — 출처: 「${name}」`;
+};
+
 const edgeExists = (edges, s, t, type) => edges.some((e) => !e.hidden && e.source === s && e.target === t && e.core_type === type);
 
 /**
@@ -552,9 +558,7 @@ export function readDocumentRule(text, { doc, targetId, today = todayDefault() }
   // issue는 오늘 날짜로 넣는다: 문서 날짜(옛날)로 넣으면 이후 날짜의 「해결됨」 메모가 같은 대상의 미결을 바로 닫아 버린다(rules/issues.js openMemos)
   const memos = [];
   const cautionDate = docDate && docDate <= today ? docDate : today;
-  const nameForMemo = clip(docLabel.replace(/[[\]]/g, ''), DOC_ATTACH_LIMITS.memoNameMax);
-  // 내용을 앞에, 출처를 뒤에(카드 「지금 볼 것」은 앞부분만 보여서 출처가 앞이면 내용이 잘린다 — 메인 2026-10-28 C 캡처 확인)
-  const sourceOf = (category) => (category === 'issue' && docDate ? ` — 출처: 「${nameForMemo}」(문서 날짜 ${docDate})` : ` — 출처: 「${nameForMemo}」`);
+  const sourceOf = (category) => memoSource(docLabel, category, docDate);
   const usedMemoSections = [];
   let memoCapped = 0;
   for (const s of sections) {
@@ -597,8 +601,8 @@ export function readDocumentRule(text, { doc, targetId, today = todayDefault() }
 export function defaultDocSelection(plan) {
   const tasks = {};
   const memos = {};
-  for (const t of plan.tasks) tasks[t.key] = !t.past && !t.blocked && !t.exists && !t.uncertain; // 확인 필요(경계 행)도 처음 체크하지 않는다
-  for (const m of plan.memos) memos[m.key] = !m.exists;
+  for (const t of plan.tasks) tasks[t.key] = !t.past && !t.blocked && !t.exists && !t.uncertain && !t.hold; // 확인 필요(경계 행)도 처음 체크하지 않는다
+  for (const m of plan.memos) memos[m.key] = !m.exists && !m.hold;
   return { doc: !plan.doc.exists, tasks, memos };
 }
 
@@ -613,6 +617,8 @@ export function resolveDocSelection(plan, selection) {
   return { doc: sel.doc !== undefined ? !!sel.doc : def.doc, tasks, memos };
 }
 
+const matchOf = (plan, key) => { const t = plan.tasks.find((x) => x.key === key); return t && t.match ? t.match.id : ''; };
+
 /**
  * 계획 + 체크 → app.applyBatch 명령(항목 먼저, 연결·담당·메모 나중). 한 번의 묶음이라 하나라도 오류면 아무것도 저장되지 않는다.
  *  - 지도에 이미 있는 항목(match)은 새로 만들지 않고 그 id로 잇는다. 새 항목은 '@행번호'로 가리킨다
@@ -626,8 +632,9 @@ export function planToOps(plan, selection, doc, { targetId = plan.targetId } = {
   const counts = { doc: 0, tasks: 0, roles: 0, memos: 0 };
   let row = 1;
   const roleRef = new Map(); // 정규화한 역할 이름 → id 또는 '@행'
+  const taskRef = new Map(); // 할 일 key → 업무 id 또는 '@행'(체크한 것만)
   const cands = docCandidates(doc);
-  const needRole = plan.tasks.some((t) => sel.tasks[t.key] && t.owners.some((o) => !o.match && !o.ambiguous && !findNode(cands, 'person', o.label)));
+  const needRole = plan.tasks.some((t) => sel.tasks[t.key] && t.owners.some((o) => o.role !== false && !o.match && !o.ambiguous && !findNode(cands, 'person', o.label)));
   const hasSubtype = ((doc.universe && doc.universe.subtypes) || []).some((s) => s && s.core_type === 'person' && s.name === SUBTYPE_ROLE);
   if (needRole && !hasSubtype) ops.push({ op: 'addSubtype', aux: true, input: { core_type: 'person', name: SUBTYPE_ROLE } });
 
@@ -649,14 +656,16 @@ export function planToOps(plan, selection, doc, { targetId = plan.targetId } = {
     let ref;
     if (t.match) ref = t.match.id;
     else {
-      const attrs = t.due ? { 마감: t.due.value } : undefined;
-      ops.push({ op: 'addNode', row, key: t.key, input: { core_type: 'work', label: t.label, description: clip(`문서 「${clip(plan.title, 40)}」의 ${t.section ? `「${t.section}」` : '표'}에서 가져옴`, TEXT_MAX), ...(attrs ? { attrs } : {}) } });
+      const attrs = { ...(t.attrs || {}), ...(t.due && t.due.value ? { 마감: t.due.value } : {}) }; // Claude 읽기: 절차·주기·주의사항·사용 시스템도 업무 속성으로(마감은 날짜로 읽은 것만)
+      const description = t.description || clip(`문서 「${clip(plan.title, 40)}」의 ${t.section ? `「${t.section}」` : '표'}에서 가져옴`, TEXT_MAX);
+      ops.push({ op: 'addNode', row, key: t.key, input: { core_type: 'work', label: t.label, description, ...(Object.keys(attrs).length ? { attrs } : {}) } });
       ref = `@${row}`;
       row += 1;
       counts.tasks += 1;
     }
     ops.push({ op: 'addEdge', row, key: `${t.key}-edge`, skipDup: true, input: { source: targetId, target: ref, core_type: 'contains' } });
     row += 1;
+    taskRef.set(t.key, ref);
     for (const o of t.owners) {
       if (o.ambiguous) continue; // 같은 이름 사람이 둘 이상: 어느 사람인지 몰라 잇지도, 새로 만들지도 않는다
       const k = normalizeLabel(o.label);
@@ -666,7 +675,7 @@ export function planToOps(plan, selection, doc, { targetId = plan.targetId } = {
         if (found && found.id) roleRef.set(k, found.id);
         else if (counts.roles >= DOC_ATTACH_LIMITS.maxRoles) continue;
         else {
-          ops.push({ op: 'addNode', row, key: `role-${k}`, input: { core_type: 'person', label: o.label, subtype: SUBTYPE_ROLE } });
+          ops.push({ op: 'addNode', row, key: `role-${k}`, input: { core_type: 'person', label: o.label, ...(o.role === false ? {} : { subtype: SUBTYPE_ROLE }) } }); // role === false: Claude가 이름 있는 사람으로 읽은 것(역할이 아님)
           roleRef.set(k, `@${row}`);
           row += 1;
           counts.roles += 1;
@@ -679,7 +688,7 @@ export function planToOps(plan, selection, doc, { targetId = plan.targetId } = {
 
   for (const m of plan.memos) {
     if (!sel.memos[m.key]) continue;
-    ops.push({ op: 'addMemo', row, key: m.key, input: { target_id: targetId, occurred_at: m.date, category: m.category, note: m.text } });
+    ops.push({ op: 'addMemo', row, key: m.key, input: { target_id: (m.task && taskRef.get(m.task)) || (m.task && matchOf(plan, m.task)) || targetId, occurred_at: m.date, category: m.category, note: m.text } });
     row += 1;
     counts.memos += 1;
   }
@@ -795,4 +804,170 @@ export function buildAttachOps(plan, selection, ai, doc, { targetId = plan.targe
     }
   }
   return { ops, counts };
+}
+
+
+// ── 문서 읽기(Claude)의 결과 kept → 같은 계획 모양 ────────────────────────────────
+
+/** Claude 읽기(kept)를 계획으로 바꿀 때의 값(바꾸려면 여기 한 곳만). attrKeys: 할 일 업무의 속성으로 옮기는 칸(마감은 날짜로 읽을 때만 따로) */
+export const DOC_ATTACH_KEPT = Object.freeze({
+  attrKeys: ['절차', '주기', '주의사항', '사용 시스템'],
+  holdPrefix: '검토: ', // 검토(두 번째 읽기)가 의심한 항목의 확인 사유 앞말
+});
+
+/**
+ * 「Claude로 읽기」 결과(llm/connector.convertDocumentAsync의 kept)를 문서로 더하기 계획으로 바꾼다. 순수 함수.
+ *  - 문서 항목·날짜·메모 출처는 규칙 계획(rulePlan)의 것을 그대로 쓴다(결정적이다)
+ *  - kept.works → 할 일 업무(대상 업무와 같은 이름은 만들지 않고, 비슷한 이름은 처음엔 체크 안 함). 담당 = 그 업무로 가는 performs 연결의 사람(역할 표시는 Claude가 읽은 role)
+ *  - kept.memos → 메모(issue·caution). 메모의 work가 할 일 업무면 그 업무에, 아니면 대상 업무에
+ *  - 나머지(산출물·주제·담당이 아닌 사람, 그들 사이의 연결)는 「Claude가 더 찾은 항목·연결」 제안(글로 추가와 같은 모양, 처음엔 체크 안 함)
+ *  - 업무·담당자와 이어지는 그 밖의 연결은 지도에 아직 없는 항목을 가리키므로 더하지 않고 plan.heldEdges로 알린다
+ *  - 검토(review.issues)가 의심한 항목은 hold(처음엔 체크 안 함)
+ * @param {object} kept verifyAiConvert().kept
+ * @param {object} rulePlan readDocumentRule의 plan(대상·문서·날짜를 가져온다)
+ * @param {object} doc 지금 지도의 문서(app.doc)
+ * @param {{review?:object|null}} [opt] review: convertDocumentAsync의 review 필드
+ * @returns {{plan:object, proposal:object|null, review:null|{ok:false, reason:string}|{ok:true, added:number, issues:object[]}}}
+ */
+export function keptToAttachPlan(kept, rulePlan, doc, { review = null } = {}) {
+  const edges = (doc && doc.edges) || [];
+  const { targetId, targetLabel, today, docDate } = rulePlan;
+  const cands = docCandidates(doc);
+  const nk = normalizeLabel;
+  const notes = rulePlan.notes.filter((n) => /산출물이 둘|문서 제목/.test(n));
+  const holds = new Map(); // 항목 이름 → 사유
+  const edgeHolds = new Map();
+  if (review && review.ok) {
+    for (const it of review.issues || []) {
+      const why = `${DOC_ATTACH_KEPT.holdPrefix}${it.reason}`;
+      if (it.kind === 'item') holds.set(nk(it.label), why);
+      else {
+        const parts = String(it.label).split(/\s*(?:→|->)\s*/);
+        if (parts.length === 2) edgeHolds.set(`${nk(parts[0])}\u0001${nk(parts[1])}`, why);
+      }
+    }
+  }
+  // 대상 업무와 이름이 같은 업무는 대상 업무 자신이다(만들지 않고 연결은 대상에 잇는다). 비슷한 이름은 사람이 보고 정하도록 처음엔 체크 안 함(hold)
+  const alias = new Set(kept.works.filter((w) => nk(w.label) === nk(targetLabel)).map((w) => nk(w.label)));
+  for (const w of kept.works) if (alias.has(nk(w.label))) notes.push(`Claude가 읽은 업무 「${w.label}」은 대상 업무 「${targetLabel}」와 같은 이름이라 새 업무로 만들지 않았습니다`);
+  const ownersOfWork = (label) => {
+    const out = [];
+    for (const e of kept.edges) {
+      if (e.relation === 'performs' && e.to.type === 'work' && nk(e.to.label) === nk(label) && e.from.type === 'person' && !out.includes(e.from.label)) out.push(e.from.label);
+    }
+    return out;
+  };
+
+  // 할 일 업무
+  const tasks = [];
+  const worksUsed = new Set(); // 할 일로 읽은 업무 이름
+  for (const w of kept.works) {
+    if (alias.has(nk(w.label))) continue;
+    if (tasks.length >= DOC_ATTACH_LIMITS.maxTasks) { notes.push(`할 일은 ${DOC_ATTACH_LIMITS.maxTasks}개까지 읽습니다(「${w.label}」 외는 읽지 않음)`); break; }
+    const match = findNode(cands, 'work', w.label);
+    const ambiguous = !!(match && match.ambiguous);
+    const m = match && !ambiguous ? match : null;
+    let blocked = '';
+    if (m && containsReach(edges, m.id, targetId)) blocked = '이미 대상 업무의 상위 업무입니다';
+    if (ambiguous) notes.push(`지도에 「${w.label}」 업무가 둘 이상 있어 새 업무로 만듭니다`);
+    const raw = String((w.attrs && w.attrs.마감) || '').trim();
+    const parsed = raw ? parseDue(raw) : null;
+    const due = parsed ? { text: parsed.text, value: parsed.iso || parsed.text, end: parsed.end } : raw ? { text: raw, value: '', end: '' } : null; // 날짜로 읽지 못한 마감은 글 그대로 보이고 속성에는 넣지 않는다
+    const attrs = {};
+    for (const k of DOC_ATTACH_KEPT.attrKeys) if (w.attrs && w.attrs[k]) attrs[k] = w.attrs[k];
+    const source = `문서 「${clip(rulePlan.title, 40)}」에서 Claude가 읽음`;
+    const description = clip([w.description, raw && !parsed ? `마감(원문): ${raw}` : '', source].filter(Boolean).join('\n'), TEXT_MAX);
+    const owners = ownersOfWork(w.label).slice(0, DOC_ATTACH_LIMITS.ownersPerTask).map((o) => {
+      const f = findNode(cands, 'person', o);
+      const person = kept.people.find((p) => nk(p.label) === nk(o));
+      if (f && f.ambiguous) notes.push(`「${o}」: 지도에 같은 이름의 사람이 둘 이상 있어 어느 사람인지 몰라 담당으로 잇지 않았습니다(「수정」에서 직접 이으세요)`);
+      return { label: o, role: person ? person.role : true, match: f && !f.ambiguous ? f : null, ...(f && f.ambiguous ? { ambiguous: true } : {}) };
+    });
+    const endDate = parsed ? parsed.end : '';
+    const hold = holds.get(nk(w.label)) || (similarName(w.label, targetLabel) ? `대상 업무와 비슷한 이름(「${targetLabel}」)` : '');
+    worksUsed.add(nk(w.label));
+    tasks.push({
+      key: `t${tasks.length + 1}`,
+      label: w.label,
+      due,
+      owners,
+      attrs,
+      description,
+      past: !!endDate && (endDate < today || (!!docDate && endDate < docDate)),
+      match: m,
+      ambiguous,
+      blocked,
+      exists: !!(m && !blocked && edgeExists(edges, targetId, m.id, 'contains')),
+      quote: clip(w.quote, 160),
+      section: '',
+      ...(hold ? { hold } : {}),
+    });
+  }
+  const ownerKeys = new Set(tasks.flatMap((t) => t.owners.map((o) => nk(o.label))));
+  if (ownerKeys.size > DOC_ATTACH_LIMITS.maxRoles) notes.push(`담당(사람·역할)이 ${DOC_ATTACH_LIMITS.maxRoles}개를 넘어 앞의 것만 만듭니다`);
+
+  // 메모
+  const memos = [];
+  const cautionDate = docDate && docDate <= today ? docDate : today;
+  let memoCapped = 0;
+  for (const m of kept.memos) {
+    if (memos.length >= DOC_ATTACH_LIMITS.maxMemos) { memoCapped += 1; continue; }
+    const category = m.kind === 'caution' ? 'caution' : 'issue';
+    const note = `${clip(m.text, DOC_ATTACH_LIMITS.memoMax)}${memoSource(rulePlan.title, category, docDate)}`;
+    const task = m.work ? tasks.find((t) => nk(t.label) === nk(m.work)) : null;
+    const forId = task ? (task.match ? task.match.id : '') : targetId;
+    const exists = !!forId && (doc.events || []).some((e) => e.type === 'memo' && e.payload && e.payload.target_id === forId && String(e.note || '').trim() === note);
+    memos.push({ key: `m${memos.length + 1}`, category, text: note, date: category === 'issue' ? today : cautionDate, section: '', exists, task: task ? task.key : '', forLabel: task ? task.label : targetLabel, quote: clip(m.quote, 160) });
+  }
+  if (memoCapped) notes.push(`메모는 ${DOC_ATTACH_LIMITS.maxMemos}건까지 읽습니다(${memoCapped}건은 읽지 않음)`);
+
+  // 나머지 → 제안(글로 추가와 같은 모양)
+  const owned = new Set([...ownerKeys].map((k) => `person|${k}`));
+  const taken = new Set([`artifact|${nk(rulePlan.doc.label)}`, ...owned]);
+  const pNodes = [];
+  const keyOf = new Map(); // `유형|이름` → 제안 항목 key
+  const addNode = (type, label, quote, extra = {}) => {
+    const id = `${type}|${nk(label)}`;
+    if (keyOf.has(id)) return keyOf.get(id);
+    if (taken.has(id)) return null;
+    const hold = holds.get(nk(label));
+    const n = { key: `n${pNodes.length + 1}`, type, label, quote: quote || '', match: null, ...(extra.description ? { description: extra.description } : {}), ...(hold ? { hold } : {}) };
+    pNodes.push(n);
+    keyOf.set(id, n.key);
+    return n.key;
+  };
+  for (const p of kept.people) addNode('person', p.label, p.quote, { description: [p.org ? `소속: ${p.org}` : '', p.duty].filter(Boolean).join(' / ') });
+  for (const a of kept.artifacts) addNode('artifact', a.label, a.quote, { description: a.description });
+  for (const t of kept.topics) addNode('topic', t.label, t.quote, { description: t.description });
+  const pEdges = [];
+  const heldEdges = [];
+  const nodeKey = (end, quote) => {
+    if (end.type === 'work' && alias.has(nk(end.label))) return addNode('work', targetLabel, quote); // 대상 업무와 비슷한 이름의 업무는 대상 업무로 본다
+    return keyOf.get(`${end.type}|${nk(end.label)}`) || null;
+  };
+  for (const e of kept.edges) {
+    if (e.relation === 'performs' && e.to.type === 'work' && worksUsed.has(nk(e.to.label)) && owned.has(`person|${nk(e.from.label)}`)) continue; // 할 일 업무의 담당으로 이미 읽음
+    const touchesTask = [e.from, e.to].some((x) => (x.type === 'work' && worksUsed.has(nk(x.label))) || owned.has(`${x.type}|${nk(x.label)}`));
+    const a = touchesTask ? null : nodeKey(e.from, e.quote);
+    const b = touchesTask ? null : nodeKey(e.to, e.quote);
+    if (!a || !b) { heldEdges.push({ text: `${e.from.label} → ${e.to.label}`, relation: e.relation, quote: e.quote }); continue; }
+    const hold = edgeHolds.get(`${nk(e.from.label)}\u0001${nk(e.to.label)}`);
+    pEdges.push({ key: `e${pEdges.length + 1}`, from: a, to: b, type: e.relation, quote: e.quote || '', ...(e.verb ? { verb: e.verb } : {}), ...(hold ? { hold } : {}) });
+  }
+  const proposal = pNodes.length || pEdges.length ? { method: 'claude_api', nodes: pNodes, edges: pEdges, unread: [], unreadWhy: [], partial: [], notes: [] } : null;
+
+  const plan = {
+    ...rulePlan,
+    source: 'claude',
+    tasks,
+    memos,
+    unread: [],
+    heldEdges,
+    sections: { tables: [], memos: [], decisions: [], skipped: [] },
+    notes: [...new Set(notes)],
+  };
+  const info = review && review.ok
+    ? { ok: true, added: review.added ? review.added.nodes + review.added.edges + review.added.memos + review.added.attrs : 0, issues: review.issues || [] }
+    : review && review.ok === false ? { ok: false, reason: review.reason } : null;
+  return { plan, proposal, review: info };
 }

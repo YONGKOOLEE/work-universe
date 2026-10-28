@@ -1,11 +1,15 @@
 // 문서로 더하기(CR-23): 지금 연 업무 지도의 업무 하나에 문서(회의록·매뉴얼·메모)를 붙여 넣으면
 // 문서 항목 1개 + 할 일 표의 업무(담당 역할 포함) + 미결·유의 절의 메모를 찾아 미리 보여 주고, 체크한 것만 app.applyBatch 한 번으로 더한다(전부 아니면 전무, 되감기 한 점).
-// 읽는 방식 두 가지: 규칙(키 없이, rules/doc-attach.js)과 Claude(키가 있을 때, llm/ai-doc-attach.js — 규칙 결과에 「Claude가 더 찾은 항목」을 보탠다).
+// 읽는 방식 두 가지: 규칙(키 없이, rules/doc-attach.js)과 Claude(키가 있을 때).
+//   Claude(convertAi, 현재): 문서 읽기(llm/connector.convertDocumentAsync) 결과를 규칙 결과 대신 보인다(rules/doc-attach.js keptToAttachPlan). 「규칙으로 읽은 결과 보기」로 되돌릴 수 있다.
+//   Claude(readAi, 이전 방식·convertAi가 없을 때만): 규칙 결과에 글로 추가의 Claude 읽기가 더 찾은 항목을 보탠다(llm/ai-doc-attach.js).
 import { el } from './dom.js';
 import { messageFor } from './messages.js';
 import { MEMO_CATEGORIES, NODE_TYPES, EDGE_TYPES } from '../model/schema.js';
 import { defaultSelection, docCandidates, resolveSelection } from '../rules/text-extract.js';
-import { DOC_ATTACH_AI_LINK, attachNotice, buildAttachOps, defaultDocSelection, dedupeAiProposal, readDocumentRule, resolveDocSelection } from '../rules/doc-attach.js';
+import { DOC_ATTACH_AI_LINK, attachNotice, buildAttachOps, defaultDocSelection, dedupeAiProposal, keptToAttachPlan, readDocumentRule, resolveDocSelection } from '../rules/doc-attach.js';
+import { AI_REVIEW } from '../llm/connector.js';
+import { busyText, reviewBox, reviewSummary } from './ai-read.js';
 
 /** 화면 문구(한 곳). 용어: 「항목」「지도」 */
 export const DOC_ATTACH = Object.freeze({
@@ -23,6 +27,18 @@ export const DOC_ATTACH = Object.freeze({
   ai: 'Claude로 읽기',
   noKey: '「설정」에서 키를 넣으면 Claude가 읽습니다',
   aiBusy: 'Claude가 읽는 중… (덩어리마다 최대 60초)',
+  methodClaude: (model) => `Claude가 문서 전체를 읽은 결과입니다(규칙 결과 대신${model ? `·${model}` : ''}). 원문 구절이 확인된 것만 보입니다. 문서 항목·날짜는 규칙으로 읽었습니다.`,
+  showRule: '규칙으로 읽은 결과 보기',
+  showClaude: 'Claude가 읽은 결과 다시 보기',
+  claudeSummary: (d, t, m, k) => `문서 ${d}개 · 할 일 업무 ${t}개 · 메모 ${m}건 · Claude 항목 ${k}개`,
+  noTaskClaude: 'Claude가 읽은 할 일 업무가 없습니다.',
+  noMemoClaude: 'Claude가 읽은 메모가 없습니다.',
+  claudeEmpty: 'Claude가 문서에서 더 읽은 항목이 없었습니다.',
+  heldEdgesTitle: (n) => `더하지 않은 연결 ${n}개`,
+  heldEdgesNote: '할 일 업무나 담당과 이어지는 연결입니다. 지도에 아직 없는 업무를 가리켜 이번에는 더하지 않았습니다 — 업무를 더한 뒤 「수정」에서 이으세요.',
+  aiClaudeTitle: 'Claude가 읽은 그 밖의 항목·연결',
+  aiClaudeNote: '문서에 나온 산출물·주제·사람과 그 연결입니다. 이름이 맞는 것만 체크하세요(처음에는 체크되어 있지 않습니다).',
+  holdTask: (why) => `처음엔 체크 안 함 · ${why}`,
   aiFail: (reason) => `Claude 읽기 실패: ${reason} — 규칙으로 읽은 결과를 보여 줍니다`,
   methodRule: '규칙으로 읽었습니다. 원문에 있는 것만 읽고, 확신이 없는 줄은 만들지 않았습니다.',
   methodAi: (model, chunks) => `규칙으로 읽은 결과에 Claude가 더 찾은 것을 보탰습니다${model ? `(${model}` : ''}${model && chunks > 1 ? `, ${chunks}덩어리` : ''}${model ? ')' : ''}. Claude가 읽은 것은 글에 있는 구절로 확인된 것만 보입니다.`,
@@ -87,7 +103,7 @@ function errorText(error, kind, relation) {
  * @returns {(targetId?:string)=>void} 대화상자를 여는 함수(대상 업무 id를 주면 미리 골라진다)
  */
 export function docAttachDialog(o) {
-  const st = { open: false, aiNotes: [], targetId: '', plan: null, sel: null, ai: null, method: '', model: '', chunks: 0, fallback: '', busy: false, run: 0, message: '', details: [], done: '', readText: '', readTarget: '', stale: false };
+  const st = { open: false, aiNotes: [], targetId: '', plan: null, sel: null, ai: null, method: '', model: '', chunks: 0, fallback: '', busy: false, run: 0, kc: null, rulePlan: null, view: '', stage: 'read', review: AI_REVIEW.on, reviewInfo: null, message: '', details: [], done: '', readText: '', readTarget: '', stale: false };
   let input;
   let select;
   let fileName;
@@ -95,6 +111,7 @@ export function docAttachDialog(o) {
   let readBtn;
   let aiBtn;
   let busyLine;
+  let reviewEl;
   let previewBox;
   let countLine;
   let messageLine;
@@ -120,6 +137,7 @@ export function docAttachDialog(o) {
     st.message = '';
     st.details = [];
     st.done = '';
+    st.reviewInfo = null;
     updateStale();
   }
 
@@ -137,8 +155,77 @@ export function docAttachDialog(o) {
     st.run += 1; // 기다리던 Claude 응답은 버린다
     st.busy = false;
     st.fallback = '';
+    st.kc = null;
+    st.rulePlan = null;
+    st.view = '';
     const plan = ruleRead();
     if (plan) setPlan(plan, 'rule');
+    render();
+  }
+
+  /** 지도의 보이는 항목(유형·이름): Claude에게 「이미 있는 이름」으로 알려 같은 것을 새로 만들지 않게 한다(상한은 보내는 쪽 AI_CONVERT_MAX_EXISTING) */
+  const existingItems = () => (o.app.doc.nodes || []).filter((n) => n.core_type !== 'root' && !n.hidden && !n.deleted).map((n) => ({ type: n.core_type, label: n.label }));
+
+  // 읽은 결과 보기: Claude 결과(st.kc)와 규칙 결과(st.rulePlan)를 오간다(체크는 새로 시작). 글·대상이 바뀐 뒤에도 읽을 때의 것으로 두어 저장이 잠기게 한다
+  function showClaude() {
+    const c = st.kc;
+    if (!c) return;
+    setPlan(c.plan, 'claude_doc', c.proposal, c.model, 0, { text: st.readText, target: st.readTarget }, []);
+    st.reviewInfo = c.review;
+    st.view = 'claude';
+    st.fallback = c.proposal || c.plan.tasks.length || c.plan.memos.length ? '' : DOC_ATTACH.claudeEmpty;
+    render();
+  }
+
+  function showRule() {
+    if (!st.rulePlan) return;
+    setPlan(st.rulePlan, 'rule', null, '', 0, { text: st.readText, target: st.readTarget });
+    st.view = 'rule';
+    st.fallback = '';
+    render();
+  }
+
+  // Claude로 읽기(문서 읽기): 문서 전체를 한 번에 보내고(검토가 켜져 있으면 두 번째 호출로 빠진 것을 더함) 그 결과를 규칙 결과 대신 보인다. 실패하면 규칙 결과
+  async function readClaude() {
+    if (st.busy || !o.aiReady()) return;
+    const plan = ruleRead();
+    if (!plan) return render();
+    const snap = { text: text(), target: st.targetId };
+    const run = (st.run += 1);
+    const review = st.review;
+    st.busy = true;
+    st.stage = 'read';
+    st.message = '';
+    st.fallback = '';
+    render();
+    let r;
+    let threw = false;
+    try {
+      r = await o.convertAi(snap.text, {
+        context: { target: plan.targetLabel, existing: existingItems() },
+        review,
+        onStage: (stage) => { if (run === st.run && st.open) { st.stage = stage; busyLine.textContent = busyText(stage, review); } },
+      });
+    } catch {
+      r = null;
+      threw = true;
+    }
+    if (run !== st.run || !st.open) return; // 그 사이 다시 읽었거나 창을 닫았다: 응답을 버린다
+    st.busy = false;
+    if (r && r.ok && r.kept) {
+      const c = keptToAttachPlan(r.kept, plan, o.app.doc, { review: r.review });
+      st.kc = { ...c, model: r.model };
+      st.rulePlan = plan;
+      st.readText = snap.text;
+      st.readTarget = snap.target;
+      showClaude();
+      return;
+    }
+    st.kc = null;
+    st.rulePlan = null;
+    st.view = '';
+    setPlan(plan, 'rule', null, '', 0, snap);
+    st.fallback = DOC_ATTACH.aiFail(r && r.fallback ? r.fallback.reason : threw ? '알 수 없는 오류' : r === null || r === undefined ? DOC_ATTACH.noKeyReason : '알 수 없는 오류');
     render();
   }
 
@@ -242,6 +329,8 @@ export function docAttachDialog(o) {
     const targetId = st.plan.targetId;
     st.plan = null;
     st.ai = null;
+    st.kc = null;
+    st.rulePlan = null;
     st.stale = false;
     st.method = '';
     st.fallback = '';
@@ -263,7 +352,8 @@ export function docAttachDialog(o) {
     else parts.push(DOC_ATTACH.newItem);
     if (t.past) parts.push(DOC_ATTACH.past);
     if (t.uncertain) parts.push(DOC_ATTACH.uncertain);
-    return { state: t.past ? 'past' : t.uncertain ? 'uncertain' : t.exists ? 'exists' : t.match ? 'match' : 'new', text: parts.join(' · ') };
+    if (t.hold) parts.push(DOC_ATTACH.holdTask(t.hold));
+    return { state: t.past ? 'past' : t.uncertain ? 'uncertain' : t.hold ? 'hold' : t.exists ? 'exists' : t.match ? 'match' : 'new', text: parts.join(' · ') };
   };
 
   function check(id, label, checked, onchange, disabled = false) {
@@ -300,7 +390,8 @@ export function docAttachDialog(o) {
             el('td', { class: 'small', 'data-testid': `doc-attach-task-status-${i}`, title: t.past ? DOC_ATTACH.pastTip : '' }, s.text),
             el('td', { class: 'small muted' }, `「${t.quote}」`));
         })))));
-    } else if (p.sections.tables.length) parts.push(el('p', { class: 'notice', 'data-testid': 'doc-attach-table-unread' }, DOC_ATTACH.tableUnread));
+    } else if (p.source === 'claude') parts.push(el('p', { class: 'muted small', 'data-testid': 'doc-attach-no-table' }, DOC_ATTACH.noTaskClaude));
+    else if (p.sections.tables.length) parts.push(el('p', { class: 'notice', 'data-testid': 'doc-attach-table-unread' }, DOC_ATTACH.tableUnread));
     else parts.push(el('p', { class: 'muted small', 'data-testid': 'doc-attach-no-table' }, DOC_ATTACH.noTable));
     // 메모
     parts.push(el('h3', {}, DOC_ATTACH.memoTitle(p.memos.length)));
@@ -312,9 +403,16 @@ export function docAttachDialog(o) {
           el('td', { class: 'small nw', 'data-testid': `doc-attach-memo-cat-${i}` }, MEMO_LABEL[m.category] || m.category),
           el('td', { class: 'small nw' }, m.date),
           el('td', { class: 'small', 'data-testid': `doc-attach-memo-text-${i}` }, m.text),
-          el('td', { class: 'small nw' }, m.exists ? `${DOC_ATTACH.exists} — 같은 메모가 이 업무에 있음` : '새 메모')))))));
+          el('td', { class: 'small nw' }, m.exists ? `${DOC_ATTACH.exists} — 같은 메모가 이 업무에 있음` : `새 메모${m.forLabel ? ` · 대상: 「${m.forLabel}」` : ''}`)))))));
       parts.push(el('p', { class: 'muted small' }, '메모는 「이슈」(미결 절)와 「주의사항」(유의·추적 절)만 씁니다. 「해결됨」「진행 중」은 쓰지 않습니다.'));
-    } else parts.push(el('p', { class: 'muted small', 'data-testid': 'doc-attach-no-memo' }, DOC_ATTACH.noMemo));
+    } else parts.push(el('p', { class: 'muted small', 'data-testid': 'doc-attach-no-memo' }, p.source === 'claude' ? DOC_ATTACH.noMemoClaude : DOC_ATTACH.noMemo));
+    // 더하지 않은 연결(Claude 읽기: 업무·담당과 이어지는 그 밖의 연결)
+    if (p.heldEdges && p.heldEdges.length) {
+      parts.push(el('div', { 'data-testid': 'doc-attach-held-edges' },
+        el('h3', {}, DOC_ATTACH.heldEdgesTitle(p.heldEdges.length)),
+        el('p', { class: 'muted small' }, DOC_ATTACH.heldEdgesNote),
+        el('ul', { class: 'small' }, ...p.heldEdges.slice(0, UNREAD_SHOW).map((x, k) => el('li', { 'data-testid': `doc-attach-held-edge-${k}` }, `${x.text}(${EDGE_TYPES[x.relation] || x.relation})`, x.quote ? el('span', { class: 'muted' }, ` — 「${x.quote}」`) : null)))));
+    }
     // 읽지 못한 줄·만들지 않은 절
     if (p.unread.length) {
       parts.push(el('div', { 'data-testid': 'doc-attach-unread' },
@@ -332,8 +430,9 @@ export function docAttachDialog(o) {
     const r = aiResolved();
     const p = ai.proposal;
     const mark = (cb) => (v) => { cb(v); render(); };
-    parts.push(el('h3', {}, DOC_ATTACH.aiTitle));
-    parts.push(el('p', { class: 'muted small' }, DOC_ATTACH.aiNote));
+    const claudeDoc = st.method === 'claude_doc';
+    parts.push(el('h3', {}, claudeDoc ? DOC_ATTACH.aiClaudeTitle : DOC_ATTACH.aiTitle));
+    parts.push(el('p', { class: 'muted small' }, claudeDoc ? DOC_ATTACH.aiClaudeNote : DOC_ATTACH.aiNote));
     // 새 주제·사람·조직·산출물은 문서 항목에 잇는다(문서 항목이 없고 만들지도 않으면 대상 업무에)
     const docLinked = sel().doc || !!st.plan.doc.match;
     const linkNote = (type) => {
@@ -381,8 +480,13 @@ export function docAttachDialog(o) {
     if (st.plan && !st.busy) {
       const p = st.plan;
       parts.push(el('h3', { 'data-testid': 'doc-attach-step3' }, DOC_ATTACH.step3));
-      parts.push(el('p', { class: 'small', 'data-testid': 'doc-attach-summary' }, DOC_ATTACH.summary(1, p.tasks.length, p.memos.length, p.unread.length)));
-      parts.push(el('p', { class: 'muted small', 'data-testid': 'doc-attach-method' }, st.method === 'claude_api' ? DOC_ATTACH.methodAi(st.model, st.chunks) : DOC_ATTACH.methodRule));
+      const claudeDoc = st.method === 'claude_doc';
+      parts.push(el('p', { class: 'small', 'data-testid': 'doc-attach-summary' }, claudeDoc ? DOC_ATTACH.claudeSummary(1, p.tasks.length, p.memos.length, st.ai ? st.ai.proposal.nodes.length : 0) : DOC_ATTACH.summary(1, p.tasks.length, p.memos.length, p.unread.length)));
+      parts.push(el('p', { class: 'muted small', 'data-testid': 'doc-attach-method' }, claudeDoc ? DOC_ATTACH.methodClaude(st.model) : st.method === 'claude_api' ? DOC_ATTACH.methodAi(st.model, st.chunks) : DOC_ATTACH.methodRule,
+        // 되돌리기: Claude 결과 ↔ 규칙 결과(체크는 새로 시작)
+        claudeDoc && st.rulePlan ? el('button', { type: 'button', class: 'link', 'data-testid': 'doc-attach-show-rule', onclick: showRule }, ` ${DOC_ATTACH.showRule}`) : null,
+        !claudeDoc && st.kc ? el('button', { type: 'button', class: 'link', 'data-testid': 'doc-attach-show-claude', onclick: showClaude }, ` ${DOC_ATTACH.showClaude}`) : null));
+      if (claudeDoc) { const rv = reviewSummary(st.reviewInfo, 'doc-attach-review', { open: true }); if (rv) parts.push(rv); }
       if (st.fallback) parts.push(el('p', { class: 'notice', role: 'status', 'data-testid': 'doc-attach-fallback' }, st.fallback));
       st.aiNotes.forEach((n, i) => parts.push(el('p', { class: 'notice', 'data-testid': `doc-attach-ai-note-${i}` }, n))); // Claude 덩어리 안내(상한·일부 실패)와 확인 안내
       parts.push(el('div', { class: 'row' },
@@ -410,7 +514,8 @@ export function docAttachDialog(o) {
     if (select) select.disabled = busy; // 읽는 동안 대상·글·파일은 바꾸지 못한다(RV-B-2)
     if (input) input.disabled = busy;
     if (fileInput) fileInput.disabled = busy;
-    busyLine.textContent = busy ? DOC_ATTACH.aiBusy : '';
+    if (reviewEl) reviewEl.box.disabled = busy;
+    busyLine.textContent = busy ? (o.convertAi ? busyText(st.stage, st.review) : DOC_ATTACH.aiBusy) : '';
     renderPreview();
     if (st.plan && !busy) {
       const { counts } = opsNow();
@@ -453,7 +558,8 @@ export function docAttachDialog(o) {
       ...works.map((w) => el('option', { value: w.id, selected: w.id === st.targetId }, w.label)));
     fileName = el('span', { class: 'muted small', 'data-testid': 'doc-attach-file-name' });
     readBtn = el('button', { type: 'button', 'data-testid': 'doc-attach-read', onclick: readRule }, DOC_ATTACH.read);
-    aiBtn = o.aiReady() ? el('button', { type: 'button', 'data-testid': 'doc-attach-ai', onclick: readAi }, DOC_ATTACH.ai) : null;
+    aiBtn = o.aiReady() ? el('button', { type: 'button', 'data-testid': 'doc-attach-ai', onclick: o.convertAi ? readClaude : readAi }, DOC_ATTACH.ai) : null;
+    reviewEl = aiBtn && o.convertAi ? reviewBox('doc-attach-review-check', st.review, (v) => { st.review = v; }) : null;
     busyLine = el('p', { class: 'muted small', role: 'status', 'aria-live': 'polite', 'data-testid': 'doc-attach-busy' });
     previewBox = el('div', { 'data-testid': 'doc-attach-preview' });
     countLine = el('p', { class: 'small', 'data-testid': 'doc-attach-count' });
@@ -473,6 +579,7 @@ export function docAttachDialog(o) {
         fileName),
       ...(o.example ? [el('div', { class: 'row' }, el('button', { type: 'button', 'data-testid': 'doc-attach-example', onclick: fillExample }, `예시 문서 넣기: ${o.example.title}`))] : []),
       el('div', { class: 'row' }, readBtn, aiBtn, aiBtn ? null : el('span', { class: 'muted small', 'data-testid': 'doc-attach-ai-note' }, DOC_ATTACH.noKey)),
+      ...(reviewEl ? [reviewEl] : []),
       busyLine,
       previewBox,
       countLine,
@@ -489,6 +596,9 @@ export function docAttachDialog(o) {
     st.run += 1;
     st.plan = null;
     st.ai = null;
+    st.kc = null;
+    st.rulePlan = null;
+    st.view = '';
     st.busy = false;
     st.method = '';
     st.fallback = '';

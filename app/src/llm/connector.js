@@ -125,7 +125,7 @@ export function localNowIso(d = new Date()) {
 export function convertDocumentWith(text, { provider = null, ruleConvert, now = localNowIso }) {
   // 실시간 공급자(키 있음)면 결과에 「AI로 변환」 손잡이(ai)를 붙인다. 동기 결과는 그대로 규칙 기반이고, 화면이 단추를 눌렀을 때만 ai.run을 부른다(T-37).
   // 키가 없으면 ai가 없어 화면에 단추도 없다
-  const aiHook = isLive(provider) ? { model: provider.model, run: (t) => convertDocumentAsync(t, { provider, now }) } : null;
+  const aiHook = isLive(provider) ? { model: provider.model, run: (t, opts = {}) => convertDocumentAsync(t, { provider, now, ...opts }) } : null;
   const rule = (fallback, note = null) => ({ ...ruleConvert(text), method: 'rule', fallback, note, ...(aiHook ? { ai: aiHook } : {}) });
   if (aiHook) return rule(null);
   if (!provider || provider.name === 'none') return rule(null);
