@@ -288,3 +288,12 @@ test('화면: 검토가 실패하면 「검토는 하지 못했습니다(이유)
   assert.equal(f.q('doc-attach-show-claude'), null);
   assert.equal(f.q('doc-attach-save').disabled, false);
 }));
+
+test('비슷한 이름: 길이가 많이 다르면 비슷하다고 보지 않는다(「대사 확인」 ↔ 「대사 결과 이중 확인 절차 마련」), 실제 키 시험 사례는 그대로 비슷함', async () => {
+  const { similarName } = await import('../app/src/rules/doc-attach.js');
+  assert.equal(similarName('대사 결과 이중 확인 절차 마련', '대사 확인'), false);
+  assert.equal(similarName('월간 보고서 작성', '보고'), false);
+  assert.equal(similarName('문자메시지 발송 서비스 월정산', '문자발송 월정산'), true);
+  assert.equal(similarName('대사 확인', '대사확인'), true);
+  assert.equal(similarName('대사 확인 업무', '대사 확인'), true);
+});

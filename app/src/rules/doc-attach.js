@@ -718,15 +718,16 @@ export function attachNotice(created, memoCount, { issues = 0, assigns = 0 } = {
  */
 // 대상 업무와 「비슷한 이름」의 Claude 새 업무를 가리는 기준(바꾸려면 여기 한 곳만): 공백·문장부호를 뺀 뒤 한쪽이 다른 쪽을 품거나,
 // 짧은 쪽의 두 글자 묶음(bigram)이 긴 쪽에 들어 있는 비율이 이 값 이상이면 같은 업무로 본다(실제 키 시험: 「문자발송 월정산」 ↔ 「문자메시지 발송 서비스 월정산」)
-export const DOC_ATTACH_SIMILAR = Object.freeze({ bigram: 0.6 });
+export const DOC_ATTACH_SIMILAR = Object.freeze({ bigram: 0.6, lengthRatio: 0.5 }); // lengthRatio: 짧은 이름이 긴 이름의 이 비율보다 짧으면 비슷하다고 보지 않는다(「대사 확인」 ↔ 「대사 결과 이중 확인 절차 마련」은 다른 할 일)
 const compactName = (s) => String(s || '').normalize('NFC').toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
 export function similarName(a, b) {
   const x = compactName(a);
   const y = compactName(b);
   if (!x || !y) return false;
-  if (x.includes(y) || y.includes(x)) return true;
+  if (x === y) return true;
   const [short, long] = x.length <= y.length ? [x, y] : [y, x];
-  if (short.length < 2) return false;
+  if (short.length < 2 || short.length / long.length < DOC_ATTACH_SIMILAR.lengthRatio) return false;
+  if (long.includes(short)) return true;
   const grams = new Set();
   for (let i = 0; i + 1 < long.length; i += 1) grams.add(long.slice(i, i + 2));
   let hit = 0;
