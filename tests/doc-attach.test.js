@@ -611,3 +611,104 @@ test('CR-23 카드 메뉴: 업무 카드의 「⋯」에만 docAttach(고칠 수
   assert.ok(!actionPlan({ ...base, coreType: 'work', readOnly: true }).more.includes('docAttach'));
   assert.ok(!actionPlan({ ...base, coreType: 'work', own: false }).more.includes('docAttach'));
 });
+
+// ── H2: Claude 새 항목을 문서 항목에 잇기(②) ──
+
+const LINK_OUT = {
+  nodes: [
+    { type: 'org', label: '정산팀', emp_no: '', quote: '정산팀은 청구 및 채권관리를' },
+    { type: 'topic', label: '미납 관리', emp_no: '', quote: '미납 관리는 별도 점검한다' },
+    { type: 'topic', label: '대사 불일치', emp_no: '', quote: '대사 불일치와 미납 관리' }, // 지도에 이미 있는 주제
+    { type: 'work', label: '미납 통지', emp_no: '', quote: '미납 통지, 재청구 및 연체 관리' },
+  ],
+  edges: [],
+};
+const linkPlan = async (doc) => {
+  const { provider } = aiProvider(LINK_OUT);
+  const ai = await readDocumentAi(`${LONG}
+대사 불일치와 미납 관리는 별도 점검한다.`, { provider, view: null });
+  return { ai, plan: read('3', doc).plan };
+};
+const edgesFrom = (ops, src) => ops.filter((o) => o.op === 'addEdge' && o.input.source === src).map((o) => `${o.input.core_type}>${o.input.target}`);
+
+test('H2-② 새 Claude 항목(업무 제외)은 새 문서 항목에서 잇는다: 주제 relates_to·조직 references, 업무는 대상 업무 contains, 지도에 있던 항목은 잇지 않는다', async () => {
+  const doc = baseDoc();
+  const { ai, plan } = await linkPlan(doc);
+  const { ops, counts } = buildAttachOps(plan, defaultDocSelection(plan), { proposal: ai.proposal, selection: defaultSelection(ai.proposal, 'all') }, doc);
+  const docOp = ops.find((o) => o.key === 'doc');
+  const from = `@${docOp.row}`;
+  const rowOf = (label) => `@${ops.find((o) => o.op === 'addNode' && o.input.label === label).row}`;
+  assert.ok(edgesFrom(ops, from).includes(`references>${rowOf('정산팀')}`));
+  assert.ok(edgesFrom(ops, from).includes(`relates_to>${rowOf('미납 관리')}`));
+  assert.ok(!ops.some((o) => o.op === 'addNode' && o.input.label === '대사 불일치'), '지도에 있는 주제는 새로 만들지 않는다');
+  assert.equal(edgesFrom(ops, from).filter((x) => x.startsWith('relates_to') || x.includes(rowOf('정산팀'))).length, 2);
+  assert.ok(ops.some((o) => o.op === 'addEdge' && o.input.source === TARGET && o.input.core_type === 'contains' && o.input.target === rowOf('미납 통지')));
+  assert.equal(counts.aiLinks, 2);
+  const r = apply(doc, ops);
+  assert.equal(r.ok, true, JSON.stringify(r.errors));
+  assert.deepEqual(validateDocument(r.doc).errors, []);
+});
+
+test('H2-② 문서 항목을 체크 해제하고 지도에도 없으면 대상 업무에서 잇고, 지도의 문서가 있으면 그 문서에서 잇고, 체크 해제한 Claude 항목은 잇지 않는다', async () => {
+  const doc = baseDoc();
+  const { ai, plan } = await linkPlan(doc);
+  const sel = defaultSelection(ai.proposal, 'all');
+  const off = { ...defaultDocSelection(plan), doc: false };
+  const a = buildAttachOps(plan, off, { proposal: ai.proposal, selection: sel }, doc);
+  assert.ok(edgesFrom(a.ops, TARGET).some((x) => x.startsWith('relates_to>')), '문서가 없으면 대상 업무에서 relates_to');
+  assert.ok(edgesFrom(a.ops, TARGET).some((x) => x.startsWith('references>@')), '대상 업무에서 references(조직)');
+  const planM = { ...plan, doc: { ...plan.doc, match: { id: 'N-030', label: '기존 문서' } } };
+  const b = buildAttachOps(planM, { ...defaultDocSelection(planM), doc: true }, { proposal: ai.proposal, selection: sel }, doc);
+  assert.ok(edgesFrom(b.ops, 'N-030').some((x) => x.startsWith('relates_to>@')), '지도의 문서 id에서 잇는다');
+  const org = ai.proposal.nodes.find((n) => n.label === '정산팀');
+  sel.nodes[org.key] = { include: false };
+  const c = buildAttachOps(plan, defaultDocSelection(plan), { proposal: ai.proposal, selection: sel }, doc);
+  assert.equal(c.counts.aiLinks, 1);
+  assert.ok(!c.ops.some((o) => o.input && o.input.label === '정산팀'));
+});
+
+// ── H2: 쪽 머리글을 제목으로 잡지 않는다(③) ──
+
+test('H2-③ 쪽 머리글(「A사 … | …」)·되풀이되는 머리글·쪽 번호 줄은 제목이 되지 않고 본문에도 섞이지 않는다', () => {
+  const head = 'A사 메시징 서비스 | 가상 업무기록1';
+  const lines = FIX['3'].split('\n');
+  const text = [head, '- 1 -', ...lines.slice(0, 20), head, '- 2 -', ...lines.slice(20), '3 / 12', '페이지 3'].join('\n');
+  const p = readDocumentRule(text, { doc: baseDoc(), targetId: TARGET, today: TODAY }).plan;
+  assert.equal(p.doc.label, '문자메시지 발송 서비스 월정산 업무매뉴얼');
+  assert.ok(!p.unread.some((u) => u.text.includes('가상 업무기록1')), '되풀이된 머리글은 읽지 못한 줄로도 남지 않는다');
+  const once = readDocumentRule([head, ...lines].join('\n'), { doc: baseDoc(), targetId: TARGET, today: TODAY }).plan;
+  assert.equal(once.doc.label, '문자메시지 발송 서비스 월정산 업무매뉴얼', '한 번뿐이어도 「 | 」로 나뉜 짧은 줄은 제목 후보가 아니다');
+  const sd = splitDocument(['- 3 -', '회의록', '1. 개요', '내용입니다'].join('\n'));
+  assert.equal(sd.title, '회의록');
+});
+
+test('H2-③ 문서 제목과 같은 이름의 Claude 산출물은 따로 만들지 않는다(droppedSame)', async () => {
+  const out = { nodes: [{ type: 'artifact', label: '문자메시지 발송 서비스 월정산 업무매뉴얼', emp_no: '', quote: '정산팀은 청구 및 채권관리를' }], edges: [] };
+  const { provider } = aiProvider(out);
+  const ai = await readDocumentAi(LONG, { provider, view: null });
+  const plan = read('3').plan;
+  const d = dedupeAiProposal(ai.proposal, plan);
+  assert.equal(d.nodes.length, 0);
+  assert.equal(d.droppedSame, 1);
+});
+
+test('H2-② 화면: 체크한 새 조직·주제는 「문서 「…」에 참조로/관련으로 잇습니다」, 저장하면 문서에서 잇는 연결이 생겨 떠돌지 않고, 숫자에 따로 센다', withDom(async () => {
+  const app = openApp();
+  const text = `${LONG}\n대사 불일치와 미납 관리는 별도 점검한다.`;
+  const d = openDialog({ app, aiReady: true, target: TARGET, readAi: async () => readDocumentAi(text, { provider: aiProvider(LINK_OUT).provider, view: null }) });
+  d.q('doc-attach-input').value = text;
+  await d.q('doc-attach-ai').fire('click');
+  await new Promise((r) => setTimeout(r, 0));
+  await new Promise((r) => setTimeout(r, 0));
+  const labels2 = d.rows('doc-attach-ai-node').map((_, i) => d.q(`doc-attach-ai-node-${i}`).textContent);
+  for (let i = 0; i < labels2.length; i += 1) { const c = d.q(`doc-attach-ai-node-check-${i}`); if (c) { c.checked = true; c.fire('change'); } }
+  const st = d.rows('doc-attach-ai-node').map((_, i) => d.q(`doc-attach-ai-node-${i}`).textContent);
+  assert.ok(st.some((t) => t.includes('정산팀') && t.includes('새로 만듦 · 문서 「문자메시지 발송 서비스 월정산 업무…」에 참조로 잇습니다')), JSON.stringify(st));
+  assert.ok(st.some((t) => t.includes('미납 관리') && t.includes('에 관련으로 잇습니다')), JSON.stringify(st));
+  assert.ok(st.some((t) => t.includes('미납 통지') && t.includes('대상 업무 아래에 잇습니다')));
+  assert.match(d.q('doc-attach-count').textContent, /문서에 잇는 연결 2개/);
+  d.q('doc-attach-save').click();
+  const org = app.doc.nodes.find((n) => n.label === '정산팀' && n.core_type === 'org');
+  const docNode = app.doc.nodes.find((n) => n.core_type === 'artifact' && n.label.startsWith('문자메시지 발송 서비스'));
+  assert.ok(org && docNode && app.doc.edges.some((e) => e.source === docNode.id && e.target === org.id && e.core_type === 'references'));
+}));

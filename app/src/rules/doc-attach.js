@@ -27,6 +27,7 @@ export const DOC_ATTACH_LIMITS = Object.freeze({
   historyLines: 12,
   ownersPerTask: 4,
   headingMax: 40, // 절 제목으로 보는 줄의 길이
+  headerMax: 40, // 쪽 머리글(「A사 … | 업무기록」)로 보는 줄의 길이
 });
 
 /** 읽는 모양에 쓰는 낱말(바꾸려면 여기 한 곳만 고친다). 비교는 공백을 뺀 글자로 한다 */
@@ -43,6 +44,8 @@ export const DOC_ATTACH_WORDS = Object.freeze({
   /** 담당 칸에 있어도 사람(역할)으로 만들지 않는 값 */
   noOwner: ['미정', '미지정', '미배정', '없음', 'tbd', 'n/a', '-', '해당없음', '전원', '전체', '각팀', '각자'],
   skipLine: /^※/,
+  /** 쪽 머리글·바닥글: 쪽 번호만 있는 줄(「- 3 -」「3 / 12」「페이지 3」) */
+  pageNumber: /^(?:[-–—]\s*\d{1,4}\s*[-–—]|\d{1,4}\s*[/／]\s*\d{1,4}|(?:페이지|쪽|page|p\.?)\s*\d{1,4}(?:\s*[/／]\s*\d{1,4})?)$/i,
   /** 담당 칸에 오면 사람(역할)이 아닌 낱말(접속사·흔한 말) → 그 행을 읽지 않는다 */
   stopOwner: ['그리고', '및', '예정', '등', '또는', '혹은', '이후', '이내', '별도', '공지', '모두', '기타', '관련', '해당', '위', '아래', '다음', '이상', '이하', '각', '및등'],
   /** 공백뿐인 표에서 담당 낱말이 조직·역할 꼴인지 보는 끝말(세 글자 이상일 때) */
@@ -132,6 +135,9 @@ function headingOf(t, seq, hasMd) {
   return null;
 }
 
+/** 쪽 머리글 꼴: 짧고 「 | 」로 나뉜 줄(PDF를 복사하면 쪽마다 붙는다) */
+const isHeaderLike = (l) => l.length <= DOC_ATTACH_LIMITS.headerMax && /\s[|｜]\s/.test(l);
+
 /**
  * 글 → {title, titleLine, sections:[{num, title, lines[]}]}. 첫 절(title '')은 제목 앞 머리말이다.
  * 빈 줄·※ 줄은 버린다. 번호 절 제목은 앞 번호 다음 번호일 때만(목록의 「1. …」을 제목으로 보지 않게)
@@ -139,15 +145,20 @@ function headingOf(t, seq, hasMd) {
 export function splitDocument(text) {
   const all = String(text).replace(/\r\n?/g, '\n').split('\n').map((l) => l.trim());
   const hasMd = all.some((l) => /^#{1,6}\s+\S/.test(l));
-  const lines = all.filter((l) => l && !DOC_ATTACH_WORDS.skipLine.test(l));
-  const first = lines[0] || '';
+  // 쪽 번호 줄과 두 번 이상 되풀이되는 짧은 머리글·바닥글 줄은 읽지 않는다(제목으로 잡히거나 본문에 섞이지 않게)
+  const seen = new Map();
+  for (const l of all) if (l) seen.set(l, (seen.get(l) || 0) + 1);
+  const running = (l) => (seen.get(l) || 0) >= 2 && l.length >= 6 && l.length <= DOC_ATTACH_LIMITS.headerMax && !/^#{1,6}\s|^\d{1,2}\s*[.)]\s|^[■□▣◆◇●○▶【[]/.test(l) && !/[.다]$/.test(l) && !/	/.test(l) && !/\s{2,}/.test(l) && !taskHeader(l);
+  const lines = all.filter((l) => l && !DOC_ATTACH_WORDS.skipLine.test(l) && !DOC_ATTACH_WORDS.pageNumber.test(l) && !running(l));
+  const firstAt = lines.findIndex((l) => !isHeaderLike(l)); // 머리글 꼴 줄은 제목 후보에서 뺀다(본문에는 남긴다)
+  const first = firstAt >= 0 && firstAt < 4 ? lines[firstAt] : lines[0] || '';
   const head8 = lines.slice(0, 8);
   const titleKey = head8.map((l) => /^제목\s*[:：]\s*(\S.*)$/.exec(l)).find(Boolean);
   let title = '';
   let rest = lines;
   if (first && !/^#{2,6}\s/.test(first)) {
     title = cleanTitle(WHOLE_BRACKET.test(first) && titleKey ? titleKey[1] : first);
-    rest = lines.slice(1);
+    rest = lines.filter((l, i) => i !== (firstAt >= 0 && firstAt < 4 ? firstAt : 0));
   }
   const sections = [{ num: null, title: '', lines: [] }];
   let seq = 0;
@@ -644,6 +655,13 @@ export function dedupeAiProposal(proposal, plan) {
   return { ...proposal, nodes, edges, droppedSame: dropped.size };
 }
 
+/**
+ * Claude가 찾은 새 항목(업무 제외)을 지도에서 떠돌지 않게 잇는 방식(바꾸려면 여기 한 곳만 고친다).
+ * from 'doc': 문서 항목에서(문서 항목이 없고 만들지도 않으면 대상 업무에서). 주제는 topic, 사람·조직·산출물은 other 관계로.
+ * existing: 지도에 이미 있던 항목(맞춘 것)도 잇는가 — false면 잇지 않는다(새 항목만).
+ */
+export const DOC_ATTACH_AI_LINK = Object.freeze({ from: 'doc', topic: 'relates_to', other: 'references', existing: false });
+
 const shiftRef = (v, by) => (typeof v === 'string' && /^@\d+$/.test(v) ? `@${Number(v.slice(1)) + by}` : v);
 
 /**
@@ -656,12 +674,13 @@ const shiftRef = (v, by) => (typeof v === 'string' && /^@\d+$/.test(v) ? `@${Num
 export function buildAttachOps(plan, selection, ai, doc, { targetId = plan.targetId } = {}) {
   const base = planToOps(plan, selection, doc, { targetId });
   const ops = [...base.ops];
-  const counts = { ...base.counts, aiNodes: 0, aiEdges: 0 };
+  const counts = { ...base.counts, aiNodes: 0, aiEdges: 0, aiLinks: 0 };
   if (ai && ai.proposal) {
     const used = ops.reduce((m, o) => Math.max(m, o.row || 0), 0);
     const sub = proposalToOps(ai.proposal, ai.selection || defaultSelection(ai.proposal, 'none'), doc, { attachRoot: false });
     let next = used + sub.reduce((m, o) => Math.max(m, o.row || 0), 0);
     const contains = [];
+    const links = [];
     for (const o of sub) {
       const row = (o.row || 0) + used;
       const shifted = { ...o, row, ...(o.input ? { input: { ...o.input } } : {}) };
@@ -670,11 +689,20 @@ export function buildAttachOps(plan, selection, ai, doc, { targetId = plan.targe
       if (o.op === 'addNode') {
         counts.aiNodes += 1;
         if (o.input && o.input.core_type === 'work') contains.push({ key: `${o.key}-contains`, node: row });
+        else if (o.input) links.push({ key: `${o.key}-doclink`, node: row, type: o.input.core_type });
       } else if (o.op === 'addEdge' || o.op === 'assign') counts.aiEdges += 1;
     }
     for (const c of contains) {
       next += 1;
       ops.push({ op: 'addEdge', row: next, key: c.key, skipDup: true, input: { source: targetId, target: `@${c.node}`, core_type: 'contains' } });
+    }
+    // 새 주제·사람·조직·산출물: 문서 항목에서 잇는다(문서가 지도에 없고 만들지도 않으면 대상 업무에서)
+    const docOp = ops.find((o) => o.op === 'addNode' && o.key === 'doc');
+    const from = DOC_ATTACH_AI_LINK.from === 'doc' ? (docOp ? `@${docOp.row}` : plan.doc.match ? plan.doc.match.id : targetId) : targetId;
+    for (const l of links) {
+      next += 1;
+      ops.push({ op: 'addEdge', row: next, key: l.key, skipDup: true, input: { source: from, target: `@${l.node}`, core_type: l.type === 'topic' ? DOC_ATTACH_AI_LINK.topic : DOC_ATTACH_AI_LINK.other } });
+      counts.aiLinks += 1;
     }
   }
   return { ops, counts };
