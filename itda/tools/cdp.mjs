@@ -3,7 +3,8 @@ import { spawn } from 'node:child_process';
 import { rm } from 'node:fs/promises';
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+// 점검 브라우저: 기본 Chrome, 환경 변수 BROWSER=edge면 Edge
+const CHROME = process.env.BROWSER === 'edge' ? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe' : 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 
 export function connect(url) {
   const ws = new WebSocket(url);
