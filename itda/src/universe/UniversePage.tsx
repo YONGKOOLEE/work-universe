@@ -33,7 +33,7 @@ export default function UniversePage() {
         </div>
         <Chips<Scope>
           items={[
-            { id: 'mine', label: '내 지도', count: mineCount },
+            { id: 'mine', label: `내 지도 · 업무 ${mineCount}` },
             { id: 'all', label: lead ? '팀·부서 지도' : '팀·부서 지도 (팀장)' },
           ]}
           value={scope}
@@ -56,7 +56,10 @@ export default function UniversePage() {
           담당하는 업무가 아직 없습니다. 업무 관리에서 업무를 등록하면 지도가 생깁니다.
         </div>
       ) : (
-        <MapPanel key={scope + me.id} data={s} scope={mapScope} height={640} />
+        <>
+          {mapScope.kind === 'all' && <p className="rounded-md bg-brandsoft/60 px-3 py-2 text-[12.5px] text-ink" data-testid="map-expand-hint"><b>팀 도형(큰 원, ＋숫자)을 두 번 누르면</b> 그 팀의 업무·사람이 펼쳐집니다. 다시 두 번 누르면 접힙니다.</p>}
+          <MapPanel key={scope + me.id} data={s} scope={mapScope} height={640} />
+        </>
       )}
     </div>
   );

@@ -26,6 +26,8 @@ export default function Handover() {
   const [toSel, setTo] = useState('');
   const to = candidates.some((u) => u.id === toSel) ? toSel : candidates[0]?.id ?? '';
   const [base, setBase] = useState(today());
+  // 남의 업무에서 「인계 시작」으로 들어온 경우(처음 사용 점검 2026-10-29): 현재 담당자만 시작할 수 있음을 알린다
+  const presetOther = preset && !mine.some((x) => x.id === preset) ? s.works.find((x) => x.id === preset) ?? null : null;
   const activeForWork = w && raw.handovers.find((h) => h.workId === w.id && h.fromId === me.id && h.status !== 'confirmed');
 
   const create = () => {
@@ -66,8 +68,28 @@ export default function Handover() {
         </p>
       </div>
 
+      {presetOther && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-warn/40 bg-warnsoft px-4 py-3 text-[13px]" data-testid="handover-not-owner">
+          <span className="flex-1">
+            「{presetOther.name}」은(는) 지금 담당자({presetOther.owners.map((o) => s.users.find((u) => u.id === o)?.name ?? o).join('·')})만 인계를 시작할 수 있습니다. 인계는 넘기는 사람이 시작하고, 받는 사람이 확인합니다.
+          </span>
+          {presetOther.owners[0] && (
+            <Button
+              size="sm"
+              onClick={() =>
+                update((d) => {
+                  d.currentUserId = presetOther.owners[0];
+                })
+              }
+              data-testid="handover-switch-owner"
+            >
+              {s.users.find((u) => u.id === presetOther.owners[0])?.name}(으)로 전환
+            </Button>
+          )}
+        </div>
+      )}
       <div className="grid gap-5 lg:grid-cols-[1fr_1.6fr]">
-        <Card className="self-start">
+      <Card className="self-start">
           <CardHead icon={<Plus size={16} />} title="새 인계 시작" sub="1단계 · 인계 대상 업무 선택" />
           <div className="space-y-3 px-4 py-4">
             {!w ? (

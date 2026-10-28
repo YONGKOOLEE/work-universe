@@ -197,6 +197,8 @@ export function mockExtract(s: AppState, title: string, paras: DocParagraph[], d
   ];
   for (const [f, re] of ov) take('overview', re, 2, (x) => (out.some((o) => o.kind === 'overview' && o.quote === x.t) ? null : P({ kind: 'overview', field: f, text: clip(x.t, 140), quote: x.t, paraId: x.paraId })));
 
+  // 결정 문장(「…하기로 결정함」)이 조치로도 잡히면 결정만 남긴다(처음 사용 점검 2026-10-29)
+  dropDecisionActions(out);
   // 업무 유니버스 규칙(문서로 더하기): 표·목록의 할 일·담당·기한. 문장 규칙이 못 잡은 할 일만 더하고, 잡은 것에는 담당을 붙인다
   for (const t of ruleTasks(s, paras, defaultWork)) {
     const same = out.find((o) => o.kind === 'action' && (similarName(o.text, t.text) || o.quote.includes(t.text)));
@@ -454,6 +456,15 @@ export function toProposal(s: AppState, p: RawProposal, paras: DocParagraph[], d
 }
 
 const qn = (t: string) => t.replace(/\s+/g, '');
+/** 결정과 같은 원문 문장에서 나온 조치(담당·기한 없음)를 뺀다 */
+export function dropDecisionActions(list: Proposal[]) {
+  const dq = new Set(list.filter((p) => p.kind === 'decision' && p.quote).map((p) => p.quote.replace(/\s+/g, '')));
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const p = list[i];
+    if (p.kind === 'action' && p.quote && dq.has(p.quote.replace(/\s+/g, '')) && !p.ownerName && !p.date) list.splice(i, 1);
+  }
+}
+
 /** 결정과 같은 원문 문장에서 나온 조치는 뺀다(결정이 맞음). 같은 기한·비슷한 이름의 조치가 있는 이벤트는 뺀다(앞으로 할 일은 조치) */
 export function dedupeKinds(list: Proposal[]) {
   const decisionQuotes = new Set(list.filter((p) => p.kind === 'decision' && p.quote).map((p) => qn(p.quote)));

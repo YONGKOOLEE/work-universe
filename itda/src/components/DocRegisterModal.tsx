@@ -367,7 +367,7 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
             {!busy && !ext && <p className="text-xs text-muted">분석 결과는 원문 대조를 거쳐 표시합니다. 원문에서 근거 문장을 찾지 못한 항목은 '추가 확인 필요'로 남깁니다.</p>}
             {ext && !busy && (
               <div className="space-y-4 text-[13px]">
-                <Block title="문서 3줄 요약" prov="inference">
+                <Block title="문서 3줄 요약" prov={ext?.engine === 'claude' ? 'inference' : 'owner'} rule={ext?.engine !== 'claude'}>
                   <ol className="list-decimal space-y-1 pl-4">
                     {ext.summary.map((x, i) => (
                       <li key={i}>{x}</li>
@@ -381,7 +381,7 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
                     ))}
                   </Block>
                 )}
-                <Block title="연결할 업무" prov="inference">
+                <Block title="연결할 업무" prov={ext?.engine === 'claude' ? 'inference' : 'owner'} rule={ext?.engine !== 'claude'}>
                   {s.works.map((w) => {
                     const r = ext.relatedWorks.find((x) => x.id === w.id);
                     return (
@@ -393,7 +393,7 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
                     );
                   })}
                 </Block>
-                <Block title="유사 · 선행 · 후속 문서" prov="inference">
+                <Block title="유사 · 선행 · 후속 문서" prov={ext?.engine === 'claude' ? 'inference' : 'owner'} rule={ext?.engine !== 'claude'}>
                   {mockDoc?.similarDocs.length ? (
                     mockDoc.similarDocs.map((d) => (
                       <label key={d.id} className="flex items-start gap-2 py-1">
@@ -422,13 +422,13 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
   );
 }
 
-function Block({ title, prov, children }: { title: string; prov: 'fact' | 'inference' | 'unverified' | 'owner'; children: React.ReactNode }) {
+function Block({ title, prov, rule = false, children }: { title: string; prov: 'fact' | 'inference' | 'unverified' | 'owner'; rule?: boolean; children: React.ReactNode }) {
   return (
     <section>
       <h4 className="mb-1 flex items-center gap-2 text-xs font-semibold text-muted">
         <FileText size={12} />
         {title}
-        <ProvChip prov={prov} />
+        {rule ? <span className="rounded bg-sunken px-1.5 text-2xs font-semibold text-muted">규칙 기반</span> : <ProvChip prov={prov} />}
       </h4>
       <div className="text-ink">{children}</div>
     </section>

@@ -73,7 +73,11 @@ export function workAnswer(s: AppState, w: Work, q: string): Answer {
     ...stmtLines(w.current),
   ];
   if (evs.length) {
-    lines.push({ text: `타임라인 이벤트 ${evs.length}건 (${fmtDate(evs[0].date)} ~ ${fmtDate(last.date)}). 가장 최근 이벤트는 ${fmtDate(last.date)} '${last.title}'`, prov: 'owner' });
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const past = evs.filter((e) => String(e.date) <= todayKey);
+    const recent = past[past.length - 1];
+    const nextEv = evs.find((e) => String(e.date) > todayKey);
+    lines.push({ text: `타임라인 이벤트 ${evs.length}건 (${fmtDate(evs[0].date)} ~ ${fmtDate(last.date)}).${recent ? ` 가장 최근 이벤트는 ${fmtDate(recent.date)} '${recent.title}'` : ''}${nextEv ? ` 앞으로 예정: ${fmtDate(nextEv.date)} '${nextEv.title}'` : ''}`, prov: 'owner' });
     const unv = evs.filter((e) => evProv(e) === 'unverified').length;
     if (unv) lines.push({ text: `이 중 ${unv}건은 날짜 또는 근거가 원문으로 확인되지 않아 별도 확인 필요`, prov: 'unverified' });
   } else lines.push(none('타임라인 이벤트'));

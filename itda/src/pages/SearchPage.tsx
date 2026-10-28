@@ -134,7 +134,7 @@ export default function SearchPage() {
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-brandsoft/40 px-5 py-3">
               <h2 className="flex items-center gap-2 text-[15px] font-semibold">
                 <Sparkles size={16} className="text-brand" />
-                AI 종합 답변
+                {meta?.engine === 'claude' ? 'AI 종합 답변' : 'AI 종합 답변 · 규칙 기반'}
               </h2>
               <ProvLegend />
             </div>

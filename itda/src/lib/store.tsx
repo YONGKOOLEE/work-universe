@@ -134,7 +134,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const toast = (msg: string) => {
       setToast(msg);
       window.clearTimeout(timer.current);
-      timer.current = window.setTimeout(() => setToast(null), 2800);
+      timer.current = window.setTimeout(() => setToast(null), 4000);
     };
     return {
       s: view,

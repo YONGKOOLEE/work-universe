@@ -36,6 +36,7 @@ export default function Dashboard() {
         <div>
           <p className="text-xs font-medium text-muted">{fmtDate(nowIso)} 기준</p>
           <h1 className="mt-0.5 text-[22px] font-bold tracking-tight">{me.name}님의 업무 현황</h1>
+          <p className="mt-1 text-[13px] text-muted" data-testid="app-oneliner">업무잇다는 문서에서 결정·일정·할 일(담당·기한)을 뽑아 업무에 쌓고, 업무 화면을 그대로 인계하며, 쌓인 업무를 「업무 유니버스」 지도로 넓게 봅니다.</p>
         </div>
         <p className="text-xs text-muted">{me.dept}</p>
       </div>

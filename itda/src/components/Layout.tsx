@@ -29,7 +29,7 @@ function EngineToggle({ onSettings }: { onSettings: () => void }) {
   const can = ai.status === 'available';
   return (
     <div className="flex items-center gap-1">
-      <div className="flex items-center rounded-md border border-line text-xs" title={can ? 'AI 엔진 선택' : '키를 넣으면 Claude를 쓸 수 있습니다'} role="group" aria-label="AI 엔진">
+      <div className="flex items-center rounded-md border border-line text-xs" title={can ? 'AI 엔진 선택: Claude(본인 키로 실시간 분석) 또는 규칙(키 없이, 밖으로 보내지 않음)' : '지금은 규칙 기반(키 없이 동작). 「AI 설정」에 본인 키를 넣으면 Claude를 쓸 수 있습니다'} role="group" aria-label="AI 엔진">
         <button
           className={cx('flex items-center gap-1 rounded-l-md px-2 py-1 font-semibold', ai.engine === 'claude' ? 'bg-brand text-onbrand' : 'text-muted')}
           onClick={() => (can ? ai.setPreferred('claude') : onSettings())}
@@ -42,8 +42,9 @@ function EngineToggle({ onSettings }: { onSettings: () => void }) {
           규칙
         </button>
       </div>
-      <button className="rounded-md p-1.5 text-muted hover:bg-sunken hover:text-ink" onClick={onSettings} title="AI 설정(API 키)" aria-label="AI 설정" data-testid="ai-settings-open">
+      <button className="flex items-center rounded-md p-1.5 text-muted hover:bg-sunken hover:text-ink" onClick={onSettings} title="AI 설정(API 키)" aria-label="AI 설정" data-testid="ai-settings-open">
         <KeyRound size={15} />
+        <span className="ml-1 hidden text-xs font-medium xl:inline">AI 설정</span>
       </button>
     </div>
   );

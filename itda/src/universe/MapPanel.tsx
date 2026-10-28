@@ -83,7 +83,10 @@ export function MapPanel({ data, scope, height = 600, showRisk = true, testid = 
               </label>
             )}
           </div>
-          <p className="text-2xs text-faint">항목을 누르면 오른쪽에 카드가 열립니다{scope.kind === 'all' ? ' · 팀은 두 번 누르면 펼치고 접습니다' : ''}</p>
+          <p className="text-2xs text-faint">
+            {soloOn && solo.length > 0 && <span className="mr-2 inline-flex items-center gap-1 font-semibold text-danger"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-danger" />빨간 겹테두리 = 혼자만 아는 업무</span>}
+            항목을 누르면 오른쪽에 카드가 열립니다{scope.kind === 'all' ? '' : ''}
+          </p>
         </div>
       </div>
       <div className="space-y-3">
@@ -312,7 +315,8 @@ function WorkCardBody({ w, data, head, onPick, nav }: { w: AppState['works'][num
   const [mode, setMode] = useState<EditMode>(null);
   const owners = w.owners.map((o) => data.users.find((u) => u.id === o)?.name ?? o);
   const decisions = data.decisions.filter((d) => d.workId === w.id && !d.hidden).slice(-3);
-  const actions = data.actions.filter((a) => a.workId === w.id && a.status !== '완료');
+  const actions = data.actions.filter((a) => a.workId === w.id && a.status !== '완료').sort((a, b) => (a.due ?? '9999').localeCompare(b.due ?? '9999'));
+  const [allActs, setAllActs] = useState(false);
   const links: { kind: LinkKind; id: string; name: string; dir?: string }[] = [
     ...(w.parentId ? [{ kind: 'parent' as LinkKind, id: w.parentId, name: data.works.find((x) => x.id === w.parentId)?.name ?? w.parentId }] : []),
     ...w.relatedIds.map((id) => ({ kind: 'related' as LinkKind, id, name: data.works.find((x) => x.id === id)?.name ?? id })),
@@ -353,14 +357,20 @@ function WorkCardBody({ w, data, head, onPick, nav }: { w: AppState['works'][num
         <div className="mt-3">
           <p className="text-2xs font-semibold text-faint">남은 조치 {actions.length}건</p>
           <ul className="mt-1 space-y-1">
-            {actions.slice(0, 4).map((a) => (
+            {(allActs ? actions : actions.slice(0, 6)).map((a) => (
               <li key={a.id}>
                 <button className="w-full rounded px-1 py-0.5 text-left text-[12.5px] hover:bg-sunken" onClick={() => onPick({ kind: 'action', id: a.id })}>
                   <span className={cx('tnum', a.due && a.due < today() ? 'font-semibold text-danger' : 'text-faint')}>{a.due ? fmtDate(a.due) : '기한 미지정'}</span> {a.title}
+                  {a.ownerId && <span className="ml-1 text-2xs text-faint">· {data.users.find((u) => u.id === a.ownerId)?.name}</span>}
                 </button>
               </li>
             ))}
           </ul>
+          {actions.length > 6 && (
+            <button className="mt-1 text-2xs text-brand hover:underline" onClick={() => setAllActs(!allActs)} data-testid="map-card-more-actions">
+              {allActs ? '접기' : `${actions.length - 6}건 더 보기`}
+            </button>
+          )}
         </div>
       )}
       {links.length > 0 && (
@@ -427,7 +437,8 @@ function EditBtn({ on, onClick, icon, label, testid }: { on: boolean; onClick: (
 }
 
 function FormBox({ children }: { children: React.ReactNode }) {
-  return <div className="mt-2 space-y-2 rounded-md bg-sunken p-2.5">{children}</div>;
+  // 열리면 화면 안으로 끌어온다(입력칸·저장 단추가 첫 화면 아래에 숨지 않게, 처음 사용 점검 2026-10-29)
+  return <div ref={(el) => el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })} className="mt-2 space-y-2 rounded-md bg-sunken p-2.5">{children}</div>;
 }
 
 function OwnerForm({ w, data, onDone }: { w: AppState['works'][number]; data: AppState; onDone: () => void }) {
