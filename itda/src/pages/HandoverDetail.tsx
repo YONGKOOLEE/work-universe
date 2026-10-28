@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { HandoverPoints } from '../universe/HandoverPoints';
 import { Check, Sparkles, Loader2, UserRound, Camera, ExternalLink, MessageSquareWarning, Send, ShieldCheck, Stamp } from 'lucide-react';
 import { useStore, userName } from '../lib/store';
 import { useRouter } from '../lib/router';
@@ -244,6 +245,9 @@ export default function HandoverDetail({ id }: { id: string }) {
               )}
             </div>
           </Card>
+
+          {/* 2-1. 지도로 본 인계 포인트(업무 유니버스 규칙, CR-24) */}
+          {w && <HandoverPoints data={s} workId={w.id} fromId={h.fromId} toId={h.toId} />}
 
           {/* 3. 체크리스트 */}
           <Card>

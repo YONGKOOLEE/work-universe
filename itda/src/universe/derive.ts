@@ -237,7 +237,7 @@ function withDescendants(c: Ctx, ids: string[]): Work[] {
  * @param scope 지도 범위
  * @param now 기록 시각(ISO). 시험에서 고정한다
  */
-export function deriveMap(s: AppState, scope: MapScope, now = new Date().toISOString(), opts: { actions?: boolean } = {}): Derived {
+export function deriveMap(s: AppState, scope: MapScope, now = new Date().toISOString(), opts: { actions?: boolean; people?: string[] } = {}): Derived {
   const c: Ctx = { s, actions: opts.actions !== false, users: new Map(s.users.map((u) => [u.id, u])), works: new Map(s.works.map((w) => [w.id, w])) };
   const hidden = new Set(s.mapHidden || []);
   const origin = new Map<string, Origin>();
@@ -249,6 +249,8 @@ export function deriveMap(s: AppState, scope: MapScope, now = new Date().toISOSt
     b.node({ kind: 'work', id: scope.workId }, 'root', w ? w.name : scope.workId, { attrs: w ? workAttrs(w) : {} }, true);
     // 지도 중심 노드를 업무로도 찾을 수 있게(origin은 work)
     if (w) fillWorks(b, c, withDescendants(c, [w.id]), (x) => (x.id === w.id ? 'N-000' : null));
+    // 함께 둘 사람(인계 포인트의 인계자·인수자 — 아직 담당이 아니어도 지도에 있어야 규칙이 판단한다)
+    for (const u of opts.people || []) addPerson(b, c, u);
     const doc = finish(b, w ? w.name : scope.workId, '업무', w?.summary);
     docs.set(doc.universe.id, doc);
     return { doc, docs, resolve: (id) => docs.get(id) ?? null, origin, expanded: new Set() };

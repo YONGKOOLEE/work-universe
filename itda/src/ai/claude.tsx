@@ -2,6 +2,8 @@
 // 이전의 claude.ai 게시 페이지 방식(window.claude.use('sample'))은 뺐다(사용자 결정 U-6).
 import React, { createContext, useContext, useMemo, useState } from 'react';
 import { createClient, DEFAULT_MODEL, errorText as llmErrorText, loadKey, saveKey, type LlmClient } from './llm';
+// @ts-expect-error 업무 유니버스 공급자(JS) — 근거 칩 문장 다듬기(refineDraftAsync)에 쓴다
+import { createProvider } from '../../../app/src/llm/providers.js';
 
 export type Engine = 'claude' | 'mock';
 type Status = 'available' | 'unavailable';
@@ -11,6 +13,7 @@ interface AICtx {
   preferred: Engine;
   status: Status; // 키가 있으면 available
   client: LlmClient | null;
+  universeProvider: any; // 업무 유니버스 연결부용 Claude 공급자(키가 있을 때만)
   model: string;
   setPreferred: (e: Engine) => void;
   /** 키 저장(빈 값이면 지움). 키는 이 브라우저 저장소에만 둔다 */
@@ -33,12 +36,14 @@ export function AIProvider({ children }: { children: React.ReactNode }) {
     }
   });
   const client = useMemo(() => (key && !denied ? createClient(key, model || DEFAULT_MODEL) : null), [key, model, denied]);
+  const universeProvider = useMemo(() => (key && !denied ? createProvider('claude_api', { apiKey: key, model: model || DEFAULT_MODEL }) : null), [key, model, denied]);
   const value = useMemo<AICtx>(
     () => ({
       engine: preferred === 'claude' && client ? 'claude' : 'mock',
       preferred,
       status: client ? 'available' : 'unavailable',
       client,
+      universeProvider,
       model: model || DEFAULT_MODEL,
       setPreferred: (e) => {
         setPref(e);
@@ -59,7 +64,7 @@ export function AIProvider({ children }: { children: React.ReactNode }) {
         return llmErrorText(e);
       },
     }),
-    [preferred, client, model, key],
+    [preferred, client, universeProvider, model, key],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

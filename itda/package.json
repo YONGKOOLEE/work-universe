@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "single": "tsc && vite build --mode single",
     "typecheck": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check:chrome": "node tools/check.mjs"
   },
   "keywords": [],
   "author": "",

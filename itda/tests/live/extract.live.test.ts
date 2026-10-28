@@ -7,6 +7,15 @@ import { claudeExtract } from '../../src/ai/reflect';
 import { claudeAsk } from '../../src/ai/claudeSearch';
 import { createSeed } from '../../src/data/seed';
 import type { DocParagraph } from '../../src/lib/types';
+import { deriveMap } from '../../src/universe/derive';
+// @ts-expect-error 유니버스 순수 모듈(JS)
+import { buildView } from '../../../app/src/view/view.js';
+// @ts-expect-error 유니버스 순수 모듈(JS)
+import { buildHandoverDraft } from '../../../app/src/rules/handover.js';
+// @ts-expect-error 유니버스 순수 모듈(JS)
+import { refineDraftAsync } from '../../../app/src/llm/connector.js';
+// @ts-expect-error 유니버스 순수 모듈(JS)
+import { createProvider } from '../../../app/src/llm/providers.js';
 
 const LIVE = process.env.ITDA_LIVE === '1';
 const key = () => readFileSync(`${process.env.USERPROFILE}/.wu-anthropic-key.txt`, 'utf8').trim();
@@ -52,5 +61,20 @@ describe.skipIf(!LIVE)('실제 Claude 문서 분석', () => {
     console.log(JSON.stringify(r.verify), r.lines.map((l) => `${l.prov}: ${l.text}`).join('\n'));
     expect(r.lines.length).toBeGreaterThan(0);
     expect(r.verify.passed).toBeGreaterThan(0);
+  });
+
+  it('지도로 본 인계 포인트 — Claude 다듬기(근거 확인된 문장만)', { timeout: 300000 }, async () => {
+    const s = createSeed('linked');
+    const d = deriveMap(s, { kind: 'work', workId: 'W-001' }, undefined, { people: ['U1', 'U2'] });
+    const view = buildView(d.doc, d.resolve);
+    const uid = d.doc.universe.id;
+    const r = buildHandoverDraft(view, { target: `${uid}/N-000`, from: `${uid}/N-user-U1`, to: `${uid}/N-user-U2`, asOf: '2026-10-29' });
+    const t0 = Date.now();
+    const out = await refineDraftAsync(r.draft, { provider: createProvider('claude_api', { apiKey: key() }), exists: view.exists, view });
+    writeFileSync(`${OUT}/handover-points.json`, JSON.stringify(out, null, 1));
+    const llm = out.items.filter((it: any) => it.method === 'llm');
+    const NL = String.fromCharCode(10);
+    console.log(`(${Date.now() - t0}ms) llm 항목 ${llm.length}, fallback=${JSON.stringify(out.fallback)}` + NL + llm.map((it: any) => `[${it.title}] ` + it.sentences.map((x: any) => x.text).join(' / ')).join(NL));
+    expect(llm.length).toBeGreaterThan(0);
   });
 });
