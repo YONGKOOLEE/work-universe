@@ -130,6 +130,28 @@
   .now { grid-template-columns: 17mm 1fr 1fr 1fr; }
   .now .p { padding: 1.6mm 2.6mm; }
   .legend { gap: 0.8mm 5mm; }
+  /* 확장 단계(2026-10-28) */
+  .xp { border: 1.5px solid #e7c983; background: #fffcf4; padding: 3mm 3.5mm 2.2mm; }
+  .xp h2 { color: #6b4600; margin-bottom: 1.6mm; }
+  .stages { display: grid; grid-template-columns: 1.15fr 5mm 1fr 5mm 1fr; align-items: stretch; }
+  .stages .st { background: #fff; border: 1px solid #e7d6ae; border-radius: 2.5mm; padding: 1.8mm 2.4mm; font-size: 9.6pt; line-height: 1.35; }
+  .stages .st > b:first-child { display: block; color: #6b4600; font-size: 10.4pt; }
+  .stages .st.now1 { border: 1.5px solid #8a5a00; }
+  .stages .st .in { color: var(--ink); }
+  .stages .arrow svg path { fill: #c99a3a; }
+  .core { margin-top: 1.8mm; border-top: 3px solid #e7c983; padding-top: 1.4mm; font-size: 9.6pt; line-height: 1.38; }
+  .core > b:first-child { color: #6b4600; margin-right: 1mm; }
+  .lim { margin: 1.4mm 0 0; line-height: 1.38; }
+  .lim b { color: var(--ink); margin-right: 1mm; }
+  /* 2쪽 높이 맞춤(확장 상자를 넣으면서) */
+  .grid4 { gap: 3.4mm 4mm; }
+  .card .frame { max-height: 33.8mm; overflow: hidden; } /* 그림 자체가 아니라 틀에서 잘라 강조 상자(%) 위치가 그림 기준 그대로 */
+  .nums { gap: 1.6mm; }
+  .num { padding: 1mm 2.2mm; display: flex; flex-direction: column; justify-content: center; }
+  .num .v { font-size: 13pt; }
+  .num .v.sm { font-size: 11pt; }
+  .num .l { font-size: 9pt; }
+  .page + .page { gap: 2.3mm; }
 </style>
 </head>
 <body>
@@ -203,11 +225,11 @@
       <div class="s"><b>파일 하나로 시작</b>index.html 더블클릭, 설치·서버·로그인 없음</div>
       <div class="s"><b>업무 이름 하나부터</b>작은 지도가 생기고 「처음 할 일」이 안내</div>
       <div class="s"><b>각자 → 팀 → 부서</b>내보낸 파일·폴더 연결로 서버 없이 묶음</div>
-      <div class="s"><b>조직 전체로</b>저장 계층만 서버·DB로, 묶기 구조는 그대로</div>
+      <div class="s"><b>조직 전체로</b>같은 핵심을 데스크톱 앱·사내 연동으로(2쪽)</div>
     </div>
   </div>
 
-  <div class="foot"><span>업무 유니버스 · 1차 소개자료 초안 (2026-10-27)</span><span>1 / 2</span></div>
+  <div class="foot"><span>업무 유니버스 · 1차 소개자료 초안 (2026-10-28)</span><span>1 / 2</span></div>
 </section>
 
 <!-- ======================= 2쪽 ======================= -->
@@ -256,7 +278,7 @@
     <div class="modes">
       <div><b>「사전 생성」</b>(기본) 미리 받아 둔 Claude 문장, 열 때마다 근거 재검사</div>
       <div><b>「규칙 기반만」</b> 키 없이 같은 화면, 밖으로 보내는 것 없음</div>
-      <div><b>「Claude API(키를 넣으면 실시간)」</b> 초안·문서 변환·같은 업무 후보·글로 추가 <span class="small">— 가짜 응답으로 점검, 실제 호출은 확인 전</span></div>
+      <div><b>「Claude API(키를 넣으면 실시간)」</b> 초안·문서 변환·문서로 더하기 등 <span class="small">— 문서 둘은 실제 키로 시험(10-28), 나머지는 가짜 응답 점검</span></div>
     </div>
     <p class="small" style="margin:1.2mm 0 0">만드는 과정도 AI: 설계·구현·검증을 Claude Code로 — 계획 문서는 사람이 승인하고, 작업마다 자동 시험으로 확인.</p>
   </div>
@@ -267,28 +289,22 @@
       <div class="num"><div class="v">2,211<small>개</small><span class="fz">동결 뒤 확정</span></div><div class="l">자동 시험(단위)</div></div>
       <div class="num"><div class="v sm">Chrome·Edge<span class="fz">동결 뒤 확정</span></div><div class="l">화면 자동 점검</div></div>
       <div class="num"><div class="v">13<small>회</small><span class="fz">동결 뒤 확정</span></div><div class="l">전체 검토(하위 에이전트)</div></div>
-      <div class="num"><div class="v">9<small>회</small><span class="fz">동결 뒤 확정</span></div><div class="l">처음 사용 점검*</div></div>
+      <div class="num"><div class="v">9<small>회</small><span class="fz">동결 뒤 확정</span></div><div class="l">처음 사용 점검(에이전트 역할, 사람 관찰 아님)</div></div>
     </div>
-    <p class="small" style="margin:1.2mm 0 0">* 처음 사용 점검은 에이전트가 처음 쓰는 사람 역할을 맡은 점검이며, 실제 사람 관찰이 아닙니다.</p>
   </div>
 
-  <div class="limits">
-    <div class="block" style="padding:2.2mm 3mm">
-      <h3>한계</h3>
-      <ul>
-        <li>가상 데이터로만 보임 — 실데이터는 보안 검토 먼저</li>
-        <li>실제 사람 관찰·실제 API 응답 확인은 아직</li>
-        <li>키는 브라우저에 평문 저장 — 공용 PC 금지</li>
-      </ul>
+  <div class="block xp">
+    <span class="tag spr">확산 가능성 · 다음 단계</span>
+    <h2>파일 하나에서 조직까지 — 같은 핵심을 그대로 옮겨 넓힙니다</h2>
+    <div class="stages">
+      <div class="st now1"><b>지금 · 단일 HTML</b>메일로 전달, 설치 없음. 업무에 <b class="in">문서를 붙이면</b> 할 일·담당·메모로 지도가 자람</div>
+      <div class="arrow"><svg width="14" height="16" viewBox="0 0 14 16" aria-hidden="true"><path d="M1 4h6V0l7 8-7 8v-4H1z"/></svg></div>
+      <div class="st"><b>다음 · 데스크톱 앱</b>PDF·한글 직접 읽기, 폴더째 문서 반영, 파일 저장·키 보관함</div>
+      <div class="arrow"><svg width="14" height="16" viewBox="0 0 14 16" aria-hidden="true"><path d="M1 4h6V0l7 8-7 8v-4H1z"/></svg></div>
+      <div class="st"><b>이후 · 사내 연동</b>문서함·그룹웨어 문서가 지도로, 팀 → 부서 → 조직, 사내 LLM</div>
     </div>
-    <div class="block" style="padding:2.2mm 3mm">
-      <h3>다음 단계</h3>
-      <ul>
-        <li>실제 사람 관찰 → 막힌 곳 고치기</li>
-        <li>화면 2차 → 실사용 전환(서버 저장·로그인·권한)</li>
-        <li>AI 확장 — 키 서버 중계·사내 LLM 연결</li>
-      </ul>
-    </div>
+    <div class="core"><b>같은 핵심</b> 지도 모델 · 문서 읽기 규칙 · AI 인용 검사는 브라우저 기능을 쓰지 않아 <b>단위 시험 전부가 브라우저 없이</b> 돕니다 → 저장·파일·키 같은 바깥만 바꿔 옮깁니다. 지도는 공개 JSON으로 내보내 다른 시스템이 읽을 수 있습니다.</div>
+    <p class="small lim"><b>지금의 한계</b> PDF·한글은 글을 복사해 붙여 넣기(끊긴 줄·흩어진 표는 이어 읽고, 확신 없는 줄은 「읽지 못한 줄」로) · 회사 문서보안(DRM) 파일은 붙여 넣기로 · 키는 브라우저에 평문 저장(공용 PC 금지) · 가상 데이터만, 실제 사람 관찰은 아직</p>
   </div>
 
   <div class="foot"><span>「동결 뒤 확정」 숫자는 기능 동결 뒤 다시 세어 고칩니다 · 화면 속 이름은 모두 가상</span><span>2 / 2</span></div>
