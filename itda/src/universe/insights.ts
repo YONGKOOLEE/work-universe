@@ -109,9 +109,16 @@ export function handoverInsights(s: AppState, scope: MapScope, asOf: string): In
     push('gap', w.kind === 'scheduled' ? 'low' : 'high', w.gid, w.label, why, w.evidence_ids);
   }
 
+  // 내 지도: 「이 지도 밖」으로 그린 남의 업무는 담당 연결 없이 그려져 공백·혼자로 잘못 셀 수 있다 → 내 업무·나에 관한 것만 남긴다
+  let out = items;
+  if (scope.kind === 'mine') {
+    const mineIds = new Set(s.works.filter((w) => w.owners.includes(scope.userId)).map((w) => w.id));
+    out = items.filter((x) => (x.kind === 'dense' || x.kind === 'sole_person' ? x.userIds[0] === scope.userId : mineIds.has(x.workIds[0])));
+    for (const k of Object.keys(counts) as InsightKind[]) counts[k] = out.filter((x) => x.kind === k).length;
+  }
   const rank = { high: 0, mid: 1, low: 2 };
-  items.sort((a, b) => rank[a.level] - rank[b.level]);
-  return { items, counts, notes };
+  out.sort((a, b) => rank[a.level] - rank[b.level]);
+  return { items: out, counts, notes };
 }
 
 /** 사람 이름을 붙인 짧은 요약(대시보드 카드 머리) */

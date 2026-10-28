@@ -163,3 +163,85 @@ h3 {
 .zoom-tools button { min-width: 34px; height: 30px; padding: 0 9px; border-radius: 6px; font-size: 15px; line-height: 1; background: rgb(var(--surface)); color: rgb(var(--ink)); border: 1px solid rgb(var(--line2)); box-shadow: 0 1px 2px rgb(var(--shadow) / 0.08); }
 .zoom-tools button:hover { border-color: rgb(var(--brand)); color: rgb(var(--brand)); }
 .zoom-tools button:last-child { font-size: 12.5px; }
+
+/* ── 업무 유니버스 화면 시안(2026-10-29): 앱 틀은 그대로, 유니버스 공간만 ── */
+/* (가) 우주: 공간 안에서만 색 토큰을 짙은 남색으로 다시 정한다 — 카드·칩·글자가 같은 토큰을 쓰므로 그대로 따라온다 */
+.map-space {
+  --bg: 8 13 32;
+  --surface: 16 25 54;
+  --sunken: 24 36 72;
+  --line: 44 60 104;
+  --line2: 64 82 132;
+  --ink: 234 240 252;
+  --muted: 170 182 212;
+  --faint: 126 140 176;
+  --navy: 190 208 255;
+  --brand: 132 172 255;
+  --brandsoft: 34 52 104;
+  --fact: 92 210 170;
+  --factsoft: 18 52 46;
+  --infer: 176 156 255;
+  --infersoft: 44 36 82;
+  --warn: 245 190 100;
+  --warnsoft: 64 48 20;
+  --owner: 170 182 204;
+  --ownersoft: 36 44 70;
+  --danger: 255 132 132;
+  --dangersoft: 72 28 40;
+  --ok: 110 214 150;
+  --oksoft: 20 54 38;
+  --shadow: 0 0 0;
+  --onbrand: 8 13 32;
+  color-scheme: dark;
+  color: rgb(var(--ink));
+  background:
+    radial-gradient(1100px 520px at 12% -10%, rgb(64 96 210 / 0.38), transparent 62%),
+    radial-gradient(900px 520px at 105% 110%, rgb(132 92 230 / 0.28), transparent 60%),
+    rgb(var(--bg));
+  border-radius: 20px;
+  padding: 22px;
+}
+.map-space .map-canvas-space {
+  border-radius: 16px;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  background:
+    radial-gradient(rgb(255 255 255 / 0.22) 0.8px, transparent 1.3px) 0 0 / 37px 37px,
+    radial-gradient(rgb(170 200 255 / 0.14) 0.8px, transparent 1.4px) 11px 19px / 53px 53px,
+    radial-gradient(700px 380px at 50% 45%, rgb(60 90 190 / 0.25), transparent 70%),
+    #0b1430;
+  box-shadow: inset 0 0 60px rgb(0 0 0 / 0.45);
+}
+.map-canvas-space { background: #0b1430; border-radius: 16px; }
+.map-space [data-testid='map-card'],
+.map-space [data-testid='map-card-idle'],
+.map-space [data-testid='map-risk'],
+.map-space .glass {
+  background: rgb(255 255 255 / 0.055);
+  border-color: rgb(255 255 255 / 0.11);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 12px 34px rgb(0 0 0 / 0.35);
+  border-radius: 14px;
+}
+.map-space .zoom-tools button { background: rgb(255 255 255 / 0.08); border-color: rgb(255 255 255 / 0.16); color: rgb(var(--ink)); }
+
+/* (나) 정돈: 넉넉한 여백·얇은 선·부드러운 그림자, 점 격자 바탕 */
+.map-clean .map-canvas-clean,
+.map-canvas-clean {
+  border-radius: 16px;
+  background:
+    radial-gradient(rgb(var(--line2) / 0.9) 1px, transparent 1.2px) 0 0 / 22px 22px,
+    rgb(var(--surface));
+  box-shadow: 0 1px 2px rgb(var(--shadow) / 0.05), 0 10px 30px rgb(var(--shadow) / 0.07);
+  border: 1px solid rgb(var(--line) / 0.7);
+}
+.map-clean [data-testid='map-card'],
+.map-clean [data-testid='map-card-idle'],
+.map-clean [data-testid='map-risk'],
+.map-clean .glass {
+  border-color: rgb(var(--line) / 0.6);
+  border-style: solid;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 1px 2px rgb(var(--shadow) / 0.05), 0 10px 30px rgb(var(--shadow) / 0.07);
+}
+.map-clean .zoom-tools button { border-radius: 999px; border-color: rgb(var(--line)); }

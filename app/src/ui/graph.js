@@ -136,6 +136,7 @@ export function legendItems(display, also = [], marks = []) {
 
 // getFilter(display): 거르기 결과 {nodes:Set, edges:Set} 또는 null(T-18, R-17 ③). 그릴 때마다 다시 적용한다
 // theme(선택, CR-24 업무잇다 통합): 밝은 화면 등 다른 색으로 그릴 때 {bg,text,muted,edge,accent,select,font,types}. 주지 않으면 이전 색 그대로
+//   nodeStyle·rootStyle·edgeStyle(선택, 업무잇다 화면 시안): 기본 노드·지도 중심·연결 모양에 덧붙일 Cytoscape 스타일. 강조·선택 규칙은 그 뒤에 와서 그대로 이긴다
 export function createGraph(container, { onSelect, onToggle = () => {}, getFilter = () => null, onFlow = () => {}, theme = null }) {
   const th = { bg: BG, text: TEXT, muted: MUTED, edge: EDGE, accent: ACCENT, select: '#ffffff', font: null, ...(theme || {}), types: { ...TYPE_COLORS, ...((theme && theme.types) || {}) } };
   const colorOf = (n) => th.types[n.data('core_type')] || UNKNOWN_COLOR;
@@ -170,11 +171,12 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
           'text-max-width': 120,
           'text-outline-color': th.bg,
           'text-outline-width': 2.5,
+          ...(th.nodeStyle || {}),
         },
       },
       {
         selector: 'node[core_type = "root"]',
-        style: { 'background-opacity': 0.9, 'border-width': 4, 'font-weight': 'bold', 'font-size': 16 },
+        style: { 'background-opacity': 0.9, 'border-width': 4, 'font-weight': 'bold', 'font-size': 16, ...(th.rootStyle || {}) },
       },
       // 유형별 모양(CR-22 G): 색에만 기대지 않는다. 지도 중심은 큰 원 그대로
       ...Object.entries(TYPE_SHAPES).map(([type, shape]) => ({ selector: `node[core_type = "${type}"]`, style: { shape } })),
@@ -205,6 +207,7 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
           'arrow-scale': 0.8,
           'curve-style': 'bezier',
           opacity: 0.9,
+          ...(th.edgeStyle || {}),
         },
       },
       // 연결이 많은 화면은 글자가 빽빽해지므로 이름을 숨기고, 노드를 고르거나 올리면(hood) 그 연결의 이름만 보인다

@@ -10,6 +10,7 @@ import type { AppState } from '../lib/types';
 import { deriveMap, hideKey, type MapScope, type Origin, type Derived } from './derive';
 import { MapLegend, MapView, useMapView } from './MapView';
 import { InsightPanel } from './InsightPanel';
+import { scopeClass, useMapStyle } from './mapStyle';
 import type { Insight } from './insights';
 import { addMemo, addPrivateMemo, addTopic, assignOwner, linkWorks, LINK_NAMES, MEMO_NAMES, removeTopic, setMapHidden, unlinkWorks, type Change, type LinkKind, type MemoKind } from './commands';
 // @ts-expect-error 유니버스 순수 모듈(JS)
@@ -36,7 +37,9 @@ function gidOfOrigin(d: Derived, view: any, o: Origin): string | null {
   return null;
 }
 
-export function MapPanel({ data, scope, height = 600, showRisk = true, testid = 'itda-map' }: { data: AppState; scope: MapScope; height?: number; showRisk?: boolean; testid?: string }) {
+// framed: 시안(가 우주·나 정돈)의 공간 틀을 스스로 두른다(업무 상세 「업무 지도」 탭). 유니버스 메뉴는 화면 전체를 두르므로 false
+export function MapPanel({ data, scope, height = 600, showRisk = true, testid = 'itda-map', framed = true }: { data: AppState; scope: MapScope; height?: number; showRisk?: boolean; testid?: string; framed?: boolean }) {
+  const [mapStyle] = useMapStyle();
   // 팀·부서 지도는 항목이 많아 할 일(문서에서 온 조치)은 기본으로 숨긴다 — 「할 일 보기」로 켬. 업무·내 지도는 늘 보임
   const [showTodo, setShowTodo] = useState(scope.kind !== 'all');
   const derived = useMemo(() => deriveMap(data, scope, undefined, { actions: showTodo }), [data, scope, showTodo]);
@@ -73,8 +76,9 @@ export function MapPanel({ data, scope, height = 600, showRisk = true, testid = 
   };
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <div className="min-w-0 space-y-2">
+    <div className={cx('grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]', framed && scopeClass(mapStyle))}>
+      {/* 시안에서는 오른쪽 카드·인사이트가 길어도 지도가 따라 내려온다 */}
+      <div className={cx('min-w-0 space-y-2', mapStyle !== 'basic' && 'xl:sticky xl:top-4 xl:self-start')}>
         <MapView derived={derived} view={view} expanded={expanded} selected={selectedNow} onSelect={setSelected} onToggle={toggle} marks={marks} height={height} testid={testid} />
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-3">

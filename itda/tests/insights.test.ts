@@ -47,3 +47,17 @@ describe('인계 위험 인사이트 — 규칙별', () => {
     expect(r3.notes.length).toBe(1);
   });
 });
+
+describe('인계 위험 인사이트 — 내 지도 범위', () => {
+  it('지도 밖으로 그린 남의 업무를 담당자 빈 업무·혼자만 아는 일로 세지 않는다(시안 작업 중 발견, 2026-10-29)', () => {
+    const s = createSeed('linked');
+    const mine = new Set(s.works.filter((w) => w.owners.includes('U1')).map((w) => w.id));
+    const r = handoverInsights(s, { kind: 'mine', userId: 'U1' }, '2026-10-29');
+    for (const x of r.items) {
+      if (x.kind === 'dense' || x.kind === 'sole_person') expect(x.userIds[0]).toBe('U1');
+      else expect(mine.has(x.workIds[0])).toBe(true);
+    }
+    expect(r.counts.gap).toBe(r.items.filter((x) => x.kind === 'gap').length);
+    expect(r.items.some((x) => x.kind === 'gap')).toBe(false);
+  });
+});

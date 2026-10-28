@@ -66,7 +66,8 @@ const must = async (cond, msg) => { if (!cond) throw new Error(msg); };
 async function fresh() {
   await cdp.send('Page.navigate', { url: pathToFileURL(HTML).href });
   await wait('document.readyState === "complete" && document.querySelector("#root")?.children.length > 0', 15000);
-  await ev('localStorage.clear(); true');
+  // CHECK_MAP_STYLE=space|clean: 유니버스 화면 시안을 켠 채로 점검(기본은 지금 모양)
+  await ev(`localStorage.clear(); ${/^(space|clean)$/.test(process.env.CHECK_MAP_STYLE || '') ? `localStorage.setItem('itda-map-style', '${process.env.CHECK_MAP_STYLE}');` : ''} true`);
   await cdp.send('Page.reload');
   await sleep(300);
   await wait('document.readyState === "complete" && document.querySelector("#root")?.children.length > 0 && !!document.getElementById("user-switch")', 15000);
