@@ -202,7 +202,7 @@ export function NewWorkModal({ open, onClose }: { open: boolean; onClose: () => 
           <div className="mb-3 flex items-center gap-2 text-[13.5px] font-semibold">
             <Sparkles size={15} className="text-infer" />
             AI 중복 · 유사 업무 분석
-            <span className="ml-auto text-2xs font-normal text-faint">Mock · 개념 사전 + 문자열 유사도</span>
+            <span className="ml-auto text-2xs font-normal text-faint">규칙 기반 · 개념 사전 + 문자열 유사도</span>
           </div>
           {!res ? (
             <p className="text-xs text-muted">업무명을 4자 이상 입력하면 기존 업무와 비교합니다.</p>

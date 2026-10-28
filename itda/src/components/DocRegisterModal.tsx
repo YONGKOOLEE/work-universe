@@ -86,6 +86,8 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
   const [fileWarn, setFileWarn] = useState('');
   const [reading, setReading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [careful, setCareful] = useState(true); // 꼼꼼히 읽기(두 번째 대조 호출, 업무 유니버스 방식)
+  const [stage, setStage] = useState<'read' | 'review'>('read');
   const [aiMsg, setAiMsg] = useState('');
   const [mockDoc, setMockDoc] = useState<DocAnalysis | null>(null);
   const [ext, setExt] = useState<Extraction | null>(null);
@@ -131,14 +133,16 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
     const md = analyzeDocument(s, title, paras.map((p) => p.text).join('\n'), writtenAt);
     const def = presetWork ?? md.relatedWorks[0]?.id ?? s.works[0].id;
     let result: Extraction;
-    if (ai.engine === 'claude' && ai.sample) {
+    if (ai.engine === 'claude' && ai.client) {
       ctl.current = new AbortController();
       try {
-        result = await claudeExtract(ai.sample, s, title, paras, def, writtenAt, ctl.current.signal);
+        result = await claudeExtract(ai.client, s, title, paras, def, writtenAt, ctl.current.signal, { review: careful, onStage: setStage });
+        if (result.review && !result.review.ok) setAiMsg('꼼꼼히 읽기(두 번째 대조)는 실패해 첫 분석 결과만 보여 줍니다.');
+        else if (result.review) setAiMsg(`꼼꼼히 읽기: 빠진 항목 ${result.review.added}건을 더했고, 확인이 필요한 항목 ${result.review.flagged}건을 표시했습니다.`);
         if (result.truncatedInput) setAiMsg('문서가 길어 앞부분(약 6만 자)만 Claude에 보냈습니다. 뒷부분 내용은 반영 제안에 포함되지 않았습니다.');
       } catch (e) {
         const msg = ai.onError(e);
-        setAiMsg(`${msg} 이번 분석은 규칙 기반 Mock 엔진 결과입니다.`);
+        setAiMsg(`${msg} 이번 분석은 규칙 기반 결과입니다.`);
         result = mockExtract(s, title, paras, def);
       }
     } else {
@@ -218,7 +222,7 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
       };
       d.docs.push(doc);
       const pushed = d.docs[d.docs.length - 1];
-      works.forEach((w) => log(d, w, '문서 등록', `'${doc.title}' 등록 · ${ext.engine === 'claude' ? 'Claude' : 'Mock'} 분석`));
+      works.forEach((w) => log(d, w, '문서 등록', `'${doc.title}' 등록 · ${ext.engine === 'claude' ? 'Claude' : '규칙 기반'} 분석`));
       applyProposals(d, pushed, props, d.currentUserId);
       // 회의록·기타 외 문서는 연결 업무 타임라인에 자동 등록
       const ev = docEventFor(pushed);
@@ -238,7 +242,7 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
       Claude 분석
     </span>
   ) : (
-    <span className="rounded bg-warnsoft px-1.5 text-2xs font-semibold text-warn">Mock 분석 · 규칙 기반</span>
+    <span className="rounded bg-warnsoft px-1.5 text-2xs font-semibold text-warn">규칙 기반 분석</span>
   );
 
   return (
@@ -259,10 +263,18 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
               분석 중지
             </Button>
           ) : (
-            <Button onClick={run} disabled={!paras.length || reading}>
-              <Sparkles size={14} />
-              {ext ? '다시 분석' : 'AI 분석'}
-            </Button>
+            <>
+              {ai.engine === 'claude' && (
+                <label className="flex items-center gap-1.5 self-center text-xs text-muted" title="두 번째 호출로 빠진 항목을 더하고 의심 항목을 표시합니다(시간이 더 걸림)">
+                  <input type="checkbox" checked={careful} onChange={(e) => setCareful(e.target.checked)} data-testid="careful-read" />
+                  꼼꼼히 읽기
+                </label>
+              )}
+              <Button onClick={run} disabled={!paras.length || reading}>
+                <Sparkles size={14} />
+                {ext ? '다시 분석' : 'AI 분석'}
+              </Button>
+            </>
           )}
           <Button variant="primary" onClick={save} disabled={!ext || !title.trim() || busy}>
             문서 등록{approved.length ? ` · ${approved.length}건 반영` : ''}
@@ -342,7 +354,7 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
               <div className="flex items-start gap-2 py-6 text-[13px] text-muted">
                 <Loader2 size={16} className="mt-0.5 animate-spin" />
                 <span>
-                  {ai.engine === 'claude' ? 'Claude가 문서를 읽고 반영 항목을 추출하는 중입니다. 처음 호출할 때는 사용 동의 창이 뜨며, 긴 문서는 1~2분 걸릴 수 있습니다.' : '문장 분리 · 결정/일정/조치 문장 탐지 · 원문 대조 중'}
+                  {ai.engine === 'claude' ? (stage === 'review' ? '2단계: 꼼꼼히 읽기 — 같은 문서를 한 번 더 읽고 빠진 항목·의심 항목을 찾는 중입니다(최대 1분 30초).' : `1단계: Claude가 문서를 읽고 결정·일정·조치(담당·기한)·개요·주제를 뽑는 중입니다(긴 문서는 최대 2분)${careful ? ' — 다음에 꼼꼼히 읽기가 이어집니다' : ''}.`) : '문장 분리 · 결정/일정/조치 문장 탐지 · 표의 담당·기한 읽기(업무 유니버스 규칙) · 원문 대조 중'}
                 </span>
               </div>
             )}
@@ -398,7 +410,7 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
           </div>
         </div>
 
-        {ext && !busy && <ReflectionPreview props={props} setProps={setProps} paras={paras} works={s.works} />}
+        {ext && !busy && <ReflectionPreview props={props} setProps={setProps} paras={paras} works={s.works} users={s.users} />}
       </div>
     </Modal>
   );

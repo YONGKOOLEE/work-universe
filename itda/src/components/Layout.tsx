@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutDashboard, FolderKanban, Files, GitCommitVertical, ScrollText, Search, ArrowRightLeft, ChevronLeft, Menu, RotateCcw, UserRound, Bot, X, ArrowDownUp, Orbit } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, Files, GitCommitVertical, ScrollText, Search, ArrowRightLeft, ChevronLeft, Menu, RotateCcw, UserRound, Bot, X, ArrowDownUp, Orbit, KeyRound } from 'lucide-react';
 import { DataTransfer } from './DataTransfer';
 import { NewWorkModal } from './NewWorkModal';
 import { useRouter } from '../lib/router';
@@ -12,38 +12,112 @@ function EngineNote() {
   const ai = useAI();
   const txt =
     ai.engine === 'claude'
-      ? '문서 분석·AI 검색은 Claude로 동작합니다 (사용자 본인 Claude 계정 사용). 중복 탐지·회의록 관련성은 규칙 기반.'
-      : ai.status === 'denied'
-        ? 'Claude 사용이 허용되지 않아 규칙 기반 Mock 엔진으로 동작합니다.'
-        : ai.status === 'unavailable'
-          ? 'Claude 연결 불가 환경(claude.ai 밖) — 규칙 기반 Mock 엔진으로 동작합니다.'
-          : 'AI 기능을 규칙 기반 Mock 엔진으로 동작 중입니다.';
+      ? `문서 분석·AI 검색을 Claude(${ai.model})로 합니다 — 본인 API 키 사용. 결과는 원문 대조를 거쳐 표시합니다.`
+      : ai.status === 'available'
+        ? '규칙 기반으로 동작 중입니다(키는 저장되어 있음 — 상단에서 Claude를 고르면 바로 사용).'
+        : '키가 없어 규칙 기반으로 동작합니다. 상단 「AI 설정」에 본인 Claude API 키를 넣으면 Claude가 분석합니다.';
   return (
-    <div className="flex items-start gap-1.5 rounded-md border border-sidemuted/25 px-2 py-1.5">
+    <div className="flex items-start gap-1.5 rounded-md border border-sidemuted/25 px-2 py-1.5" data-testid="engine-note">
       <Bot size={13} className="mt-0.5 shrink-0" />
       <span>{txt}</span>
     </div>
   );
 }
 
-function EngineToggle() {
+function EngineToggle({ onSettings }: { onSettings: () => void }) {
   const ai = useAI();
   const can = ai.status === 'available';
-  const tip = can ? 'AI 엔진 선택' : ai.status === 'checking' ? 'Claude 연결 확인 중' : ai.status === 'denied' ? 'Claude 사용이 허용되지 않음' : 'claude.ai에 게시된 페이지에서만 Claude 사용 가능';
   return (
-    <div className="flex items-center rounded-md border border-line text-xs" title={tip} role="group" aria-label="AI 엔진">
-      <button
-        className={cx('flex items-center gap-1 rounded-l-md px-2 py-1 font-semibold', ai.engine === 'claude' ? 'bg-brand text-onbrand' : 'text-muted', !can && 'cursor-not-allowed opacity-50')}
-        disabled={!can}
-        onClick={() => ai.setPreferred('claude')}
-      >
-        <span className={cx('h-1.5 w-1.5 rounded-full', can ? 'bg-ok' : ai.status === 'checking' ? 'bg-warn' : 'bg-faint')} />
-        Claude
-      </button>
-      <button className={cx('rounded-r-md px-2 py-1 font-semibold', ai.engine === 'mock' ? 'bg-navy text-surface' : 'text-muted')} onClick={() => ai.setPreferred('mock')}>
-        Mock
+    <div className="flex items-center gap-1">
+      <div className="flex items-center rounded-md border border-line text-xs" title={can ? 'AI 엔진 선택' : '키를 넣으면 Claude를 쓸 수 있습니다'} role="group" aria-label="AI 엔진">
+        <button
+          className={cx('flex items-center gap-1 rounded-l-md px-2 py-1 font-semibold', ai.engine === 'claude' ? 'bg-brand text-onbrand' : 'text-muted')}
+          onClick={() => (can ? ai.setPreferred('claude') : onSettings())}
+          data-testid="engine-claude"
+        >
+          <span className={cx('h-1.5 w-1.5 rounded-full', can ? 'bg-ok' : 'bg-faint')} />
+          Claude
+        </button>
+        <button className={cx('rounded-r-md px-2 py-1 font-semibold', ai.engine === 'mock' ? 'bg-navy text-surface' : 'text-muted')} onClick={() => ai.setPreferred('mock')} data-testid="engine-rule">
+          규칙
+        </button>
+      </div>
+      <button className="rounded-md p-1.5 text-muted hover:bg-sunken hover:text-ink" onClick={onSettings} title="AI 설정(API 키)" aria-label="AI 설정" data-testid="ai-settings-open">
+        <KeyRound size={15} />
       </button>
     </div>
+  );
+}
+
+function AISettings({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const ai = useAI();
+  const { toast } = useStore();
+  const [key, setKey] = useState('');
+  const [model, setModel] = useState(ai.model);
+  useEffect(() => {
+    if (open) {
+      setKey('');
+      setModel(ai.model);
+    }
+  }, [open, ai.model]);
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="AI 설정 — Claude API 키"
+      footer={
+        <>
+          {ai.status === 'available' && (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                ai.setKey('');
+                toast('키를 지웠습니다 — 규칙 기반으로 동작합니다');
+                onClose();
+              }}
+              data-testid="ai-key-clear"
+            >
+              키 지우기
+            </Button>
+          )}
+          <Button variant="ghost" onClick={onClose}>
+            닫기
+          </Button>
+          <Button
+            onClick={() => {
+              if (key.trim()) ai.setKey(key, model);
+              else ai.setKey(null, model);
+              ai.setPreferred('claude');
+              toast(key.trim() ? '키를 저장했습니다 — Claude로 분석합니다' : '설정을 저장했습니다');
+              onClose();
+            }}
+            disabled={!key.trim() && ai.status !== 'available'}
+            data-testid="ai-key-save"
+          >
+            저장
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3 text-[13px]">
+        <p>
+          상태: <b data-testid="ai-key-status">{ai.status === 'available' ? '키 있음' : '키 없음'}</b> · 키가 없으면 문서 분석·AI 검색은 규칙 기반으로 동작합니다.
+        </p>
+        <label className="block">
+          <span className="text-xs font-semibold text-muted">API 키 {ai.status === 'available' ? '(바꿀 때만 입력)' : ''}</span>
+          <input type="password" autoComplete="off" className="mt-1 w-full rounded-md border border-line2 bg-surface px-3 py-2 font-mono text-[13px]" value={key} onChange={(e) => setKey(e.target.value)} placeholder="sk-ant-…" data-testid="ai-key-input" />
+        </label>
+        <label className="block">
+          <span className="text-xs font-semibold text-muted">모델</span>
+          <input className="mt-1 w-full rounded-md border border-line2 bg-surface px-3 py-2 font-mono text-[13px]" value={model} onChange={(e) => setModel(e.target.value)} data-testid="ai-model-input" />
+        </label>
+        <ul className="list-disc space-y-1 pl-4 text-xs text-muted">
+          <li>키는 이 브라우저 저장소에만 저장됩니다(암호화 없음). 데이터 옮기기·백업 파일에는 들어가지 않습니다.</li>
+          <li>호출은 api.anthropic.com으로만 가고, 사용량은 본인 키로 과금됩니다. 키를 넣고 분석하면 문서 본문과 업무 이름 목록이 전송됩니다 — 실제 업무 문서는 회사의 외부 전송 기준을 확인한 뒤 쓰세요.</li>
+          <li>브라우저에서 키를 직접 쓰는 방식은 시연·개인 도구용입니다. 조직 서비스로 쓰려면 서버 중계로 바꿔야 합니다.</li>
+        </ul>
+      </div>
+    </Modal>
   );
 }
 
@@ -119,6 +193,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [resetOpen, setResetOpen] = useState(false);
   const [dataOpen, setDataOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   useEffect(() => {
     const h = () => setNewOpen(true);
     window.addEventListener('open-new-work', h);
@@ -133,7 +208,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Nav />
         <div className="mt-auto space-y-2 px-4 py-4 text-2xs leading-relaxed text-sidemuted">
           <EngineNote />
-          <p>사용자(김도윤·이서연)는 시연용 가상 인물입니다.</p>
+          <p>사용자·부서·문서는 모두 시연용 가상 자료입니다.</p>
         </div>
       </aside>
 
@@ -199,7 +274,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 ))}
               </select>
             </label>
-            <EngineToggle />
+            <EngineToggle onSettings={() => setAiOpen(true)} />
             <Button variant="ghost" size="sm" onClick={() => setDataOpen(true)} title="데이터 옮기기 (백업 · 불러오기)">
               <ArrowDownUp size={14} />
               <span className="hidden md:inline">데이터 옮기기</span>
@@ -216,6 +291,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </div>
 
       <NewWorkModal open={newOpen} onClose={() => setNewOpen(false)} />
+      <AISettings open={aiOpen} onClose={() => setAiOpen(false)} />
       <DataTransfer open={dataOpen} onClose={() => setDataOpen(false)} />
 
       <Modal open={resetOpen} onClose={() => setResetOpen(false)} title={BUNDLED ? '처음 상태로 되돌리기' : '모든 데이터 지우기'}>

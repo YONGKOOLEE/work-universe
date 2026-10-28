@@ -1,0 +1,474 @@
+// 합쳐 불러오기 — 동료가 내보낸 백업을 지금 데이터에 더한다(팀 지도용). 순수 함수만(브라우저 기능 없음).
+import type { Action, AppState, Cite, Decision, Doc, Handover, HistoryEntry, Snapshot, Stmt, TEvent, User, Work } from './types';
+import { clone, nextId, uid } from './util';
+
+/** 사번 정규화 — 유니버스 app/src/model/schema.js의 normalizeEmpNo와 같은 규칙(NFC·공백 제거·대문자) */
+export function normalizeEmpNo(empNo: string): string {
+  return String(empNo).normalize('NFC').replace(/\s+/g, '').toUpperCase();
+}
+/** 업무 이름 정규화 — NFC·공백 제거·소문자 */
+export function normalizeWorkName(name: string): string {
+  return String(name).normalize('NFC').replace(/\s+/g, '').toLowerCase();
+}
+const normText = (s: string) => String(s ?? '').normalize('NFC').replace(/\s+/g, '').toLowerCase();
+
+export interface PersonMatch {
+  incomingId: string;
+  name: string;
+  dept: string;
+  /** same: 사번이 같음 · candidate: 사번 없이 이름+부서만 같음(확인 필요) · new: 새 사람 */
+  status: 'same' | 'candidate' | 'new';
+  currentId?: string;
+  currentName?: string;
+}
+export interface WorkMatch {
+  incomingId: string;
+  name: string;
+  /** 이름이 같은 지금 업무(같은 업무 후보). 없으면 새 업무 */
+  currentId?: string;
+  currentName?: string;
+}
+export interface MergeCounts {
+  users: number;
+  usersSame: number;
+  works: number;
+  worksMerged: number;
+  docs: number;
+  decisions: number;
+  actions: number;
+  events: number;
+  handovers: number;
+}
+export interface MergePlan {
+  people: PersonMatch[];
+  works: WorkMatch[];
+  /** 기본 선택 기준으로 추가될 건수 */
+  counts: MergeCounts;
+}
+export interface MergeChoices {
+  /** 들어온 사람 ID → true: 같은 사람 / false: 다른 사람. 없으면 기본값(사번 일치만 같은 사람) */
+  people?: Record<string, boolean>;
+  /** 들어온 업무 ID → true: 합치기 / false: 따로 두기. 없으면 기본값(후보가 있으면 합치기) */
+  works?: Record<string, boolean>;
+}
+
+const empOf = (u: User) => (u.empNo ? normalizeEmpNo(u.empNo) : '');
+
+export function planMerge(current: AppState, incoming: AppState): MergePlan {
+  const people: PersonMatch[] = incoming.users.map((u) => {
+    const e = empOf(u);
+    const byEmp = e ? current.users.find((c) => empOf(c) === e) : undefined;
+    if (byEmp) return { incomingId: u.id, name: u.name, dept: u.dept, status: 'same', currentId: byEmp.id, currentName: byEmp.name };
+    // 사번이 서로 다르게 있으면 다른 사람. 한쪽이라도 사번이 없을 때만 이름+부서로 후보
+    const cand = current.users.find((c) => !(e && empOf(c)) && normText(c.name) === normText(u.name) && normText(c.dept) === normText(u.dept));
+    if (cand) return { incomingId: u.id, name: u.name, dept: u.dept, status: 'candidate', currentId: cand.id, currentName: cand.name };
+    return { incomingId: u.id, name: u.name, dept: u.dept, status: 'new' };
+  });
+  const works: WorkMatch[] = incoming.works.map((w) => {
+    const k = normalizeWorkName(w.name);
+    const c = current.works.find((x) => normalizeWorkName(x.name) === k);
+    return { incomingId: w.id, name: w.name, currentId: c?.id, currentName: c?.name };
+  });
+  const base: MergePlan = { people, works, counts: undefined as unknown as MergeCounts };
+  base.counts = previewCounts(current, incoming, base, {});
+  return base;
+}
+
+function resolvePeople(plan: MergePlan, choices: MergeChoices) {
+  const m = new Map<string, string>(); // 들어온 사람 ID → 지금 사람 ID (같은 사람만)
+  for (const p of plan.people) {
+    const same = choices.people?.[p.incomingId] ?? p.status === 'same';
+    if (same && p.currentId) m.set(p.incomingId, p.currentId);
+  }
+  return m;
+}
+function resolveWorks(plan: MergePlan, choices: MergeChoices) {
+  const m = new Map<string, string>(); // 들어온 업무 ID → 지금 업무 ID (합칠 업무만)
+  for (const w of plan.works) {
+    const merge = choices.works?.[w.incomingId] ?? !!w.currentId;
+    if (merge && w.currentId) m.set(w.incomingId, w.currentId);
+  }
+  return m;
+}
+
+const docKey = (d: Pick<Doc, 'title' | 'writtenAt'>) => `${normText(d.title)}|${d.writtenAt}`;
+const decKey = (d: Decision, wid: string) => `${wid}|${d.date}|${normText(d.title)}`;
+const actKey = (a: Action, wid: string) => `${wid}|${normText(a.title)}|${a.due ?? ''}`;
+const evKey = (e: TEvent) => `${e.date}|${e.type}|${normText(e.title)}`;
+/** 같은 제목+작성일이고 같은 업무(합쳐진 업무)에 걸린 문서인가 */
+const sameDoc = (c: Doc, d: Doc, mappedWorkIds: string[]) =>
+  docKey(c) === docKey(d) && (mappedWorkIds.length === 0 ? c.workIds.length === 0 : mappedWorkIds.some((w) => c.workIds.includes(w)));
+
+/** 선택을 반영한 추가 건수(미리 보기·요약용) */
+export function previewCounts(current: AppState, incoming: AppState, plan: MergePlan, choices: MergeChoices): MergeCounts {
+  const pm = resolvePeople(plan, choices);
+  const wm = resolveWorks(plan, choices);
+  const mw = (id: string) => wm.get(id) ?? id;
+  const dec = new Set(current.decisions.map((d) => decKey(d, d.workId)));
+  const act = new Set(current.actions.map((a) => actKey(a, a.workId)));
+  const ev = new Set(current.events.map(evKey));
+  return {
+    users: incoming.users.length - pm.size,
+    usersSame: pm.size,
+    works: incoming.works.length - wm.size,
+    worksMerged: wm.size,
+    docs: incoming.docs.filter((d) => !current.docs.some((c) => sameDoc(c, d, d.workIds.map(mw)))).length,
+    decisions: incoming.decisions.filter((d) => !dec.has(decKey(d, mw(d.workId)))).length,
+    actions: incoming.actions.filter((a) => !act.has(actKey(a, mw(a.workId)))).length,
+    events: incoming.events.filter((e) => !ev.has(evKey(e))).length,
+    handovers: incoming.handovers.length,
+  };
+}
+
+/** 새 ID: 겹치지 않으면 그대로, 겹치면 접두어-3자리(기존 최댓값+1). 번호 형식이 아니면 무작위 접미 */
+function allocator(used: Set<string>) {
+  return (id: string) => {
+    let out = id;
+    if (used.has(id)) {
+      const m = /^(.*)-\d+$/.exec(id);
+      if (m) out = nextId(m[1], [...used]);
+      else {
+        const p = id.includes('-') ? id.slice(0, id.indexOf('-')) : 'X';
+        do out = uid(p);
+        while (used.has(out));
+      }
+    }
+    used.add(out);
+    return out;
+  };
+}
+const uniq = <T,>(a: T[]) => [...new Set(a)];
+
+export function applyMerge(current: AppState, incoming: AppState, choices: MergeChoices = {}): { state: AppState; summary: string } {
+  const cur = clone(current);
+  const inc = clone(incoming);
+  const plan = planMerge(cur, inc);
+  const pm = resolvePeople(plan, choices);
+  const wm = resolveWorks(plan, choices);
+  const now = new Date().toISOString();
+  const counts = previewCounts(current, incoming, plan, choices);
+
+  // ── 1) ID 표 ──
+  const uMap = new Map<string, string>();
+  const allocU = allocator(new Set(cur.users.map((x) => x.id)));
+  for (const u of inc.users) uMap.set(u.id, pm.get(u.id) ?? allocU(u.id));
+
+  const wMap = new Map<string, string>();
+  const allocW = allocator(new Set(cur.works.map((x) => x.id)));
+  for (const w of inc.works) wMap.set(w.id, wm.get(w.id) ?? allocW(w.id));
+
+  const mu = (id: string) => uMap.get(id) ?? id;
+  const mw = (id: string) => wMap.get(id) ?? id;
+
+  // 문서·결정·조치·이벤트: 합쳐진 업무에서 같은 것은 중복 추가 안 함
+  const dMap = new Map<string, string>();
+  const dupDocs = new Set<string>();
+  const allocD = allocator(new Set(cur.docs.map((x) => x.id)));
+  for (const d of inc.docs) {
+    const hit = cur.docs.find((c) => sameDoc(c, d, d.workIds.map(mw)));
+    if (hit) {
+      dMap.set(d.id, hit.id);
+      dupDocs.add(d.id);
+    } else dMap.set(d.id, allocD(d.id));
+  }
+  const decMap = new Map<string, string>();
+  const dupDec = new Set<string>();
+  const allocDec = allocator(new Set(cur.decisions.map((x) => x.id)));
+  for (const d of inc.decisions) {
+    const hit = cur.decisions.find((c) => decKey(c, c.workId) === decKey(d, mw(d.workId)));
+    if (hit) {
+      decMap.set(d.id, hit.id);
+      dupDec.add(d.id);
+    } else decMap.set(d.id, allocDec(d.id));
+  }
+  const actMap = new Map<string, string>();
+  const dupAct = new Set<string>();
+  const allocAct = allocator(new Set(cur.actions.map((x) => x.id)));
+  for (const a of inc.actions) {
+    const hit = cur.actions.find((c) => actKey(c, c.workId) === actKey(a, mw(a.workId)));
+    if (hit) {
+      actMap.set(a.id, hit.id);
+      dupAct.add(a.id);
+    } else actMap.set(a.id, allocAct(a.id));
+  }
+  const evMap = new Map<string, string>();
+  const dupEv = new Set<string>();
+  const allocEv = allocator(new Set(cur.events.map((x) => x.id)));
+  for (const e of inc.events) {
+    const hit = cur.events.find((c) => evKey(c) === evKey(e));
+    if (hit) {
+      evMap.set(e.id, hit.id);
+      dupEv.add(e.id);
+    } else evMap.set(e.id, allocEv(e.id));
+  }
+  const hUsed = new Set(cur.history.map((x) => x.id));
+  const allocH = allocator(hUsed);
+  const hMap = new Map<string, string>();
+  for (const h of inc.history) hMap.set(h.id, allocH(h.id));
+  const hoMap = new Map<string, string>();
+  const allocHo = allocator(new Set(cur.handovers.map((x) => x.id)));
+  for (const h of inc.handovers) hoMap.set(h.id, allocHo(h.id));
+  const sMap = new Map<string, string>();
+  const allocS = allocator(new Set(cur.snapshots.map((x) => x.id)));
+  for (const s of inc.snapshots) sMap.set(s.id, allocS(s.id));
+  const md = (id: string) => dMap.get(id) ?? id;
+  const mev = (id: string) => evMap.get(id) ?? id;
+  const mdec = (id: string) => decMap.get(id) ?? id;
+  const mact = (id: string) => actMap.get(id) ?? id;
+  const mho = (id: string) => hoMap.get(id) ?? id;
+  const ms = (id: string) => sMap.get(id) ?? id;
+
+  // ── 2) 참조 바꾸기 ──
+  const rc = (c: Cite): Cite => ({ ...c, docId: md(c.docId) });
+  const rcs = (a?: Cite[]) => a?.map(rc);
+  const rst = (s: Stmt): Stmt => (s.cite ? { ...s, cite: s.cite.map(rc) } : s);
+  const rework = (w: Work): Work => ({
+    ...w,
+    id: mw(w.id),
+    parentId: w.parentId ? mw(w.parentId) : null,
+    relatedIds: uniq(w.relatedIds.map(mw)).filter((x) => x !== mw(w.id)),
+    nextIds: uniq(w.nextIds.map(mw)).filter((x) => x !== mw(w.id)),
+    owners: uniq(w.owners.map(mu)),
+    ownerHistory: w.ownerHistory.map((o) => ({ ...o, userId: mu(o.userId) })),
+    purpose: w.purpose.map(rst),
+    background: w.background.map(rst),
+    current: w.current.map(rst),
+    cautions: w.cautions.map(rst),
+    rejected: w.rejected.map(rst),
+    partners: w.partners.map((p) => (p.cite ? { ...p, cite: p.cite.map(rc) } : p)),
+  });
+  const redec = (d: Decision): Decision => ({
+    ...d,
+    id: mdec(d.id),
+    workId: mw(d.workId),
+    cite: d.cite.map(rc),
+    eventId: d.eventId ? mev(d.eventId) : d.eventId,
+    rationale: rst(d.rationale),
+  });
+  const react = (a: Action): Action => ({ ...a, id: mact(a.id), workId: mw(a.workId), ownerId: mu(a.ownerId), cite: rcs(a.cite) });
+  const reev = (e: TEvent): TEvent => ({
+    ...e,
+    id: mev(e.id),
+    workIds: uniq(e.workIds.map(mw)),
+    docIds: uniq(e.docIds.map(md)),
+    cite: e.cite.map(rc),
+    causes: e.causes.map((c) => ({ ...c, eventId: mev(c.eventId), cite: rcs(c.cite) })),
+    autoDocId: e.autoDocId ? md(e.autoDocId) : e.autoDocId,
+  });
+  const redoc = (d: Doc): Doc => ({
+    ...d,
+    id: md(d.id),
+    workIds: uniq(d.workIds.map(mw)),
+    relevance: d.relevance?.map((r) => ({ ...r, workId: mw(r.workId) })),
+    relations: d.relations.map((r) => ({ ...r, targetId: md(r.targetId) })),
+    registeredBy: mu(d.registeredBy),
+  });
+
+  // ── 3) 사람 ──
+  for (const u of inc.users) {
+    const to = uMap.get(u.id)!;
+    if (pm.has(u.id)) {
+      const have = cur.users.find((c) => c.id === to);
+      if (have && !have.empNo && u.empNo) have.empNo = u.empNo;
+    } else cur.users.push({ ...u, id: to });
+  }
+
+  // ── 4) 업무 ──
+  for (const w of inc.works) {
+    const r = rework(w);
+    const target = wm.has(w.id) ? cur.works.find((c) => c.id === r.id) : undefined;
+    if (!target) {
+      cur.works.push(r);
+      continue;
+    }
+    // 합치기: 지금 업무 기준
+    target.owners = uniq([...target.owners, ...r.owners]);
+    const oh = new Set(target.ownerHistory.map((o) => `${o.userId}|${o.from}|${o.to}`));
+    for (const o of r.ownerHistory) if (!oh.has(`${o.userId}|${o.from}|${o.to}`)) target.ownerHistory.push(o);
+    target.relatedIds = uniq([...target.relatedIds, ...r.relatedIds]).filter((x) => x !== target.id);
+    target.nextIds = uniq([...target.nextIds, ...r.nextIds]).filter((x) => x !== target.id);
+    target.topics = uniq([...(target.topics ?? []), ...(r.topics ?? [])]);
+    target.keywords = uniq([...target.keywords, ...r.keywords]);
+    const pk = new Set(target.partners.map((p) => `${normText(p.name)}|${normText(p.role)}`));
+    for (const p of r.partners) if (!pk.has(`${normText(p.name)}|${normText(p.role)}`)) target.partners.push(p);
+    for (const f of ['purpose', 'background', 'current', 'cautions', 'rejected'] as const) if (target[f].length === 0) target[f] = r[f];
+    if (!target.summary) target.summary = r.summary;
+    if (!target.agency) target.agency = r.agency;
+    if (!target.parentId && r.parentId && r.parentId !== target.id) target.parentId = r.parentId;
+    target.version += 1;
+    target.updatedAt = now;
+  }
+
+  // ── 5) 문서·결정·조치·이벤트·이력 ──
+  for (const d of inc.docs) {
+    const r = redoc(d);
+    if (dupDocs.has(d.id)) {
+      const have = cur.docs.find((c) => c.id === r.id);
+      if (have) have.workIds = uniq([...have.workIds, ...r.workIds]);
+    } else cur.docs.push(r);
+  }
+  for (const d of inc.decisions) if (!dupDec.has(d.id)) cur.decisions.push(redec(d));
+  for (const a of inc.actions) if (!dupAct.has(a.id)) cur.actions.push(react(a));
+  for (const e of inc.events) {
+    const r = reev(e);
+    if (dupEv.has(e.id)) {
+      const have = cur.events.find((c) => c.id === r.id);
+      if (have) {
+        have.workIds = uniq([...have.workIds, ...r.workIds]);
+        have.docIds = uniq([...have.docIds, ...r.docIds]);
+      }
+    } else cur.events.push(r);
+  }
+  const hk = new Set(cur.history.map((h) => `${h.workId}|${h.at}|${h.kind}|${h.summary}`));
+  for (const h of inc.history) {
+    const r: HistoryEntry = { ...h, id: hMap.get(h.id)!, workId: mw(h.workId), actorId: h.actorId === 'ai' ? 'ai' : mu(h.actorId) };
+    const k = `${r.workId}|${r.at}|${r.kind}|${r.summary}`;
+    if (hk.has(k)) continue;
+    hk.add(k);
+    cur.history.push(r);
+  }
+
+  // ── 6) 인계·스냅샷 ──
+  for (const h of inc.handovers) {
+    const r: Handover = {
+      ...h,
+      id: mho(h.id),
+      workId: mw(h.workId),
+      fromId: mu(h.fromId),
+      toId: mu(h.toId),
+      snapshotId: h.snapshotId ? ms(h.snapshotId) : h.snapshotId,
+      requests: h.requests.map((q) => ({ ...q, byId: mu(q.byId) })),
+      log: h.log.map((l) => ({ ...l, byId: mu(l.byId) })),
+    };
+    cur.handovers.push(r);
+  }
+  for (const s of inc.snapshots) {
+    const r: Snapshot = {
+      ...s,
+      id: ms(s.id),
+      handoverId: mho(s.handoverId),
+      workId: mw(s.workId),
+      work: rework(s.work),
+      decisions: s.decisions.map(redec),
+      actions: s.actions.map(react),
+      events: s.events.map(reev),
+      docs: s.docs.map((d) => ({ ...d, id: md(d.id) })),
+    };
+    cur.snapshots.push(r);
+  }
+
+  // ── 7) 지도 숨김(합집합, 종류별 ID 바꿈) ──
+  const byKind: Record<string, (id: string) => string> = { work: mw, doc: md, user: mu, action: mact };
+  const hidden = new Set(cur.mapHidden ?? []);
+  for (const k of inc.mapHidden ?? []) {
+    const i = k.indexOf(':');
+    const kind = i > 0 ? k.slice(0, i) : '';
+    const f = byKind[kind];
+    hidden.add(f ? `${kind}:${f(k.slice(i + 1))}` : k);
+  }
+  cur.mapHidden = [...hidden];
+
+  // ── 8) 기록 ──
+  const summary = `사람 ${inc.users.length}명(같은 사람 ${pm.size}) · 업무 ${inc.works.length}건(합침 ${wm.size}) · 문서 ${counts.docs}건 · 결정 ${counts.decisions} · 조치 ${counts.actions} · 인계 ${counts.handovers}`;
+  const logWork = [...wm.values()][0] ?? wMap.get(inc.works[0]?.id ?? '') ?? cur.works[0]?.id;
+  if (logWork) {
+    let id: string;
+    do id = uid('H');
+    while (hUsed.has(id));
+    cur.history.push({ id, workId: logWork, at: now, actorId: cur.currentUserId, kind: '합쳐 불러오기', summary });
+  }
+  return { state: cur, summary };
+}
+
+/** 참조 무결성 점검 — 모든 참조가 실제로 존재하는지. 문제 목록(빈 배열이면 정상) */
+export function checkIntegrity(s: AppState): string[] {
+  const bad: string[] = [];
+  const U = new Set(s.users.map((x) => x.id));
+  const W = new Set(s.works.map((x) => x.id));
+  const D = new Set(s.docs.map((x) => x.id));
+  const E = new Set(s.events.map((x) => x.id));
+  const H = new Set(s.handovers.map((x) => x.id));
+  const SN = new Set(s.snapshots.map((x) => x.id));
+  const dupes = (name: string, ids: string[]) => {
+    if (new Set(ids).size !== ids.length) bad.push(`${name}: ID 중복`);
+  };
+  dupes('users', s.users.map((x) => x.id));
+  dupes('works', s.works.map((x) => x.id));
+  dupes('docs', s.docs.map((x) => x.id));
+  dupes('events', s.events.map((x) => x.id));
+  dupes('decisions', s.decisions.map((x) => x.id));
+  dupes('actions', s.actions.map((x) => x.id));
+  dupes('history', s.history.map((x) => x.id));
+  dupes('handovers', s.handovers.map((x) => x.id));
+  dupes('snapshots', s.snapshots.map((x) => x.id));
+  const need = (set: Set<string>, id: string | null | undefined, where: string) => {
+    if (id && !set.has(id)) bad.push(`${where} → ${id}`);
+  };
+  const cites = (a: Cite[] | undefined, where: string) => a?.forEach((c) => need(D, c.docId, `${where}.cite`));
+  const work = (w: Work, where: string, links: boolean) => {
+    if (links) {
+      need(W, w.parentId, `${where}.parentId`);
+      w.relatedIds.forEach((x) => need(W, x, `${where}.relatedIds`));
+      w.nextIds.forEach((x) => need(W, x, `${where}.nextIds`));
+    }
+    w.owners.forEach((x) => need(U, x, `${where}.owners`));
+    w.ownerHistory.forEach((o) => need(U, o.userId, `${where}.ownerHistory`));
+    for (const f of ['purpose', 'background', 'current', 'cautions', 'rejected'] as const) w[f].forEach((st) => cites(st.cite, `${where}.${f}`));
+    w.partners.forEach((p) => cites(p.cite, `${where}.partners`));
+  };
+  s.works.forEach((w) => work(w, `work ${w.id}`, true));
+  s.docs.forEach((d) => {
+    d.workIds.forEach((x) => need(W, x, `doc ${d.id}.workIds`));
+    d.relevance?.forEach((r) => need(W, r.workId, `doc ${d.id}.relevance`));
+    d.relations.forEach((r) => need(D, r.targetId, `doc ${d.id}.relations`));
+    need(U, d.registeredBy, `doc ${d.id}.registeredBy`);
+  });
+  const ev = (e: TEvent, where: string) => {
+    e.docIds.forEach((x) => need(D, x, `${where}.docIds`));
+    cites(e.cite, where);
+    e.causes.forEach((c) => cites(c.cite, `${where}.causes`));
+    need(D, e.autoDocId, `${where}.autoDocId`);
+  };
+  s.events.forEach((e) => {
+    e.workIds.forEach((x) => need(W, x, `event ${e.id}.workIds`));
+    e.causes.forEach((c) => need(E, c.eventId, `event ${e.id}.causes`));
+    ev(e, `event ${e.id}`);
+  });
+  s.decisions.forEach((d) => {
+    need(W, d.workId, `decision ${d.id}.workId`);
+    cites(d.cite, `decision ${d.id}`);
+    need(E, d.eventId, `decision ${d.id}.eventId`);
+    cites(d.rationale.cite, `decision ${d.id}.rationale`);
+  });
+  s.actions.forEach((a) => {
+    need(W, a.workId, `action ${a.id}.workId`);
+    need(U, a.ownerId, `action ${a.id}.ownerId`);
+    cites(a.cite, `action ${a.id}`);
+  });
+  s.history.forEach((h) => {
+    need(W, h.workId, `history ${h.id}.workId`);
+    if (h.actorId !== 'ai') need(U, h.actorId, `history ${h.id}.actorId`);
+  });
+  s.handovers.forEach((h) => {
+    need(W, h.workId, `handover ${h.id}.workId`);
+    need(U, h.fromId, `handover ${h.id}.fromId`);
+    need(U, h.toId, `handover ${h.id}.toId`);
+    need(SN, h.snapshotId, `handover ${h.id}.snapshotId`);
+    h.requests.forEach((q) => need(U, q.byId, `handover ${h.id}.requests`));
+    h.log.forEach((l) => need(U, l.byId, `handover ${h.id}.log`));
+  });
+  s.snapshots.forEach((sn) => {
+    need(H, sn.handoverId, `snapshot ${sn.id}.handoverId`);
+    need(W, sn.workId, `snapshot ${sn.id}.workId`);
+    work(sn.work, `snapshot ${sn.id}.work`, false);
+    sn.decisions.forEach((d) => {
+      need(W, d.workId, `snapshot ${sn.id}.decision`);
+      cites(d.cite, `snapshot ${sn.id}.decision`);
+    });
+    sn.actions.forEach((a) => need(U, a.ownerId, `snapshot ${sn.id}.action`));
+    sn.events.forEach((e) => ev(e, `snapshot ${sn.id}.event`));
+    sn.docs.forEach((d) => need(D, d.id, `snapshot ${sn.id}.docs`));
+  });
+  need(U, s.currentUserId, 'currentUserId');
+  return bad;
+}

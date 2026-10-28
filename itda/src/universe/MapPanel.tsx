@@ -12,6 +12,8 @@ import { addMemo, addTopic, assignOwner, linkWorks, LINK_NAMES, MEMO_NAMES, remo
 // @ts-expect-error 유니버스 순수 모듈(JS)
 import { soloWorks } from '../../../app/src/view/space-marks.js';
 // @ts-expect-error 유니버스 순수 모듈(JS)
+import { buildView } from '../../../app/src/view/view.js';
+// @ts-expect-error 유니버스 순수 모듈(JS)
 import { teamRiskSummary, teamRiskParts } from '../../../app/src/view/risk-summary.js';
 
 const SOLO_CLS = 'mk-solo';
@@ -40,8 +42,10 @@ export function MapPanel({ data, scope, height = 600, showRisk = true, testid = 
   const [selected, setSelected] = useState<string | null>(null);
   const [soloOn, setSoloOn] = useState(scope.kind === 'all');
   const asOf = today();
-  const solo: string[] = useMemo(() => [...soloWorks(view, asOf)], [view, asOf]);
-  const risk = useMemo(() => (showRisk ? teamRiskParts(teamRiskSummary(view, { asOf, n: 5 })) : []), [view, asOf, showRisk]);
+  // 위험 점검은 업무만 센다(문서에서 뽑은 할 일은 빼고 다시 파생 — 업무 노드 ID는 같다)
+  const riskView = useMemo(() => (showRisk ? buildView(...(() => { const d = deriveMap(data, scope, undefined, { actions: false }); return [d.doc, d.resolve] as const; })()) : null), [data, scope, showRisk]);
+  const solo: string[] = useMemo(() => (riskView ? [...soloWorks(riskView, asOf)].map((g: string) => view.canonical(g)).filter((g: string) => view.getNode(g)) : []), [riskView, view, asOf]);
+  const risk = useMemo(() => (riskView ? teamRiskParts(teamRiskSummary(riskView, { asOf, n: 5 })) : []), [riskView, asOf]);
   const marks = useMemo(() => (soloOn ? { cls: SOLO_CLS, gids: solo } : { cls: null, gids: [] }), [soloOn, solo]);
   const sel = originOfGid(derived, view, selected);
   // 선택한 항목이 다시 그린 지도에서 사라지면(숨김 등) 선택을 푼다

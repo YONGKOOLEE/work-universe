@@ -91,6 +91,7 @@ class DocBuilder {
 
 interface Ctx {
   s: AppState;
+  actions: boolean; // 미완료 조치를 할 일 항목으로 넣을지(위험 점검은 업무만 센다)
   users: Map<string, User>;
   works: Map<string, Work>;
 }
@@ -133,7 +134,7 @@ function addWorkBody(b: DocBuilder, c: Ctx, w: Work, workNode: string) {
     b.edge('produces', workNode, did);
   }
   // 미완료 조치 → 할 일 업무(마감) + 담당
-  for (const a of c.s.actions.filter((x) => x.workId === w.id && x.status !== '완료')) addAction(b, c, a, workNode);
+  if (c.actions) for (const a of c.s.actions.filter((x) => x.workId === w.id && x.status !== '완료')) addAction(b, c, a, workNode);
   // 주제
   for (const t of w.topics || []) {
     const name = String(t).trim();
@@ -236,8 +237,8 @@ function withDescendants(c: Ctx, ids: string[]): Work[] {
  * @param scope 지도 범위
  * @param now 기록 시각(ISO). 시험에서 고정한다
  */
-export function deriveMap(s: AppState, scope: MapScope, now = new Date().toISOString()): Derived {
-  const c: Ctx = { s, users: new Map(s.users.map((u) => [u.id, u])), works: new Map(s.works.map((w) => [w.id, w])) };
+export function deriveMap(s: AppState, scope: MapScope, now = new Date().toISOString(), opts: { actions?: boolean } = {}): Derived {
+  const c: Ctx = { s, actions: opts.actions !== false, users: new Map(s.users.map((u) => [u.id, u])), works: new Map(s.works.map((w) => [w.id, w])) };
   const hidden = new Set(s.mapHidden || []);
   const origin = new Map<string, Origin>();
   const docs = new Map<string, UDoc>();

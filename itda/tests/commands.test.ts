@@ -6,8 +6,9 @@ import type { AppState } from '../src/lib/types';
 function base(): AppState {
   const s = createSeed('linked');
   const w = s.works[0];
-  s.works.push({ ...JSON.parse(JSON.stringify(w)), id: 'W-002', name: '약관 개정안 마련', parentId: null, relatedIds: [], nextIds: [], topics: [] });
-  s.works.push({ ...JSON.parse(JSON.stringify(w)), id: 'W-003', name: '하위 점검', parentId: 'W-002', relatedIds: [], nextIds: [], topics: [] });
+  w.relatedIds = []; w.nextIds = []; w.topics = []; // T-55: 시연 데이터의 연결·주제를 비워 이 시험이 보는 상태로
+  s.works.push({ ...JSON.parse(JSON.stringify(w)), id: 'W-902', name: '약관 개정안 마련', parentId: null, relatedIds: [], nextIds: [], topics: [] });
+  s.works.push({ ...JSON.parse(JSON.stringify(w)), id: 'W-903', name: '하위 점검', parentId: 'W-902', relatedIds: [], nextIds: [], topics: [] });
   return s;
 }
 const TODAY = '2026-10-29';
@@ -36,16 +37,16 @@ describe('지도 편집 명령(D24-5)', () => {
   });
   it('업무 잇기·끊기: 상위(순환 막기)·관련(양쪽)·다음', () => {
     const s = base();
-    expect(linkWorks(s, 'W-002', 'W-003', 'parent')).toBeNull(); // W-003은 W-002의 하위
-    expect(linkWorks(s, 'W-001', 'W-002', 'parent')?.summary).toContain('상위 업무');
-    expect(s.works[0].parentId).toBe('W-002');
-    linkWorks(s, 'W-001', 'W-003', 'related');
-    expect(s.works.find((w) => w.id === 'W-003')?.relatedIds).toContain('W-001');
-    linkWorks(s, 'W-003', 'W-001', 'next');
-    expect(linkWorks(s, 'W-001', 'W-003', 'next')).toBeNull(); // 반대 방향 선후행은 막음
-    expect(unlinkWorks(s, 'W-001', 'W-003', 'related')).not.toBeNull();
-    expect(s.works.find((w) => w.id === 'W-003')?.relatedIds).not.toContain('W-001');
-    expect(unlinkWorks(s, 'W-001', 'W-002', 'parent')).not.toBeNull();
+    expect(linkWorks(s, 'W-902', 'W-903', 'parent')).toBeNull(); // W-903은 W-902의 하위
+    expect(linkWorks(s, 'W-001', 'W-902', 'parent')?.summary).toContain('상위 업무');
+    expect(s.works[0].parentId).toBe('W-902');
+    linkWorks(s, 'W-001', 'W-903', 'related');
+    expect(s.works.find((w) => w.id === 'W-903')?.relatedIds).toContain('W-001');
+    linkWorks(s, 'W-903', 'W-001', 'next');
+    expect(linkWorks(s, 'W-001', 'W-903', 'next')).toBeNull(); // 반대 방향 선후행은 막음
+    expect(unlinkWorks(s, 'W-001', 'W-903', 'related')).not.toBeNull();
+    expect(s.works.find((w) => w.id === 'W-903')?.relatedIds).not.toContain('W-001');
+    expect(unlinkWorks(s, 'W-001', 'W-902', 'parent')).not.toBeNull();
     expect(s.works[0].parentId).toBeNull();
   });
   it('메모·주제·숨김', () => {

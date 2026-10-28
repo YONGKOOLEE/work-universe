@@ -1,63 +1,30 @@
-// Claude 연결 (claude.ai 게시 페이지의 sample 기능).
-// 페이지를 여는 사람의 Claude 계정으로 호출되며, 첫 호출 시 사용 동의 창이 뜬다.
-// claude.ai 밖(로컬 실행 등)에서는 연결되지 않으므로 규칙 기반 Mock 엔진으로 동작한다.
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-
-type SampleOpts = { modelTier?: 'quick' | 'default' | 'complex'; cache?: boolean; signal?: AbortSignal; onText?: (u: { text: string; delta: string }) => void };
-export interface SampleFn {
-  (input: string, opts?: SampleOpts): Promise<{ text: string; truncated: boolean }>;
-  json<T = unknown>(input: string, opts?: SampleOpts): Promise<T>;
-}
-export interface SampleError {
-  code: string;
-  message: string;
-  text?: string;
-}
+// AI 엔진 선택(CR-24 D24-9): 본인 API 키가 있으면 Claude, 없으면 규칙 기반.
+// 이전의 claude.ai 게시 페이지 방식(window.claude.use('sample'))은 뺐다(사용자 결정 U-6).
+import React, { createContext, useContext, useMemo, useState } from 'react';
+import { createClient, DEFAULT_MODEL, errorText as llmErrorText, loadKey, saveKey, type LlmClient } from './llm';
 
 export type Engine = 'claude' | 'mock';
-type Status = 'checking' | 'available' | 'unavailable' | 'denied';
+type Status = 'available' | 'unavailable';
 
 interface AICtx {
-  engine: Engine; // 실제로 사용할 엔진
+  engine: Engine; // 실제로 쓸 엔진
   preferred: Engine;
-  status: Status;
+  status: Status; // 키가 있으면 available
+  client: LlmClient | null;
+  model: string;
   setPreferred: (e: Engine) => void;
-  sample: SampleFn | null;
-  /** 호출 실패 처리: 권한 거부류면 Claude를 끄고 Mock으로 전환 */
+  /** 키 저장(빈 값이면 지움). 키는 이 브라우저 저장소에만 둔다 */
+  setKey: (key: string | null, model?: string) => void; // key null = 키는 그대로, 모델만 바꿈
+  /** 호출 실패 → 화면 문구. 키가 거부되면 이번 화면에서는 규칙 기반으로 */
   onError: (e: unknown) => string;
 }
 
 const Ctx = createContext<AICtx | null>(null);
 const PREF_KEY = 'worklink-ai-engine';
 
-const PERMANENT = ['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed', 'session_expired'];
-
-export function errorText(code: string) {
-  switch (code) {
-    case 'not_granted':
-      return 'Claude 사용이 허용되지 않았습니다. 이번 화면에서는 Mock 엔진으로 전환합니다.';
-    case 'sampling_disabled':
-      return '이 계정 또는 조직에서 Claude 호출을 사용할 수 없습니다. Mock 엔진으로 전환합니다.';
-    case 'session_expired':
-      return 'Claude 로그인이 만료되었습니다. 다시 로그인한 뒤 새로고침하세요.';
-    case 'rate_limited':
-      return 'Claude 호출이 너무 잦거나 사용량 한도에 도달했습니다. 잠시 후 다시 시도하세요.';
-    case 'prompt_too_large':
-      return '문서가 너무 깁니다. 본문 일부만 보내도록 줄이거나 Mock 엔진을 사용하세요.';
-    case 'invalid_json':
-      return 'Claude 응답을 해석하지 못했습니다. 다시 시도하세요.';
-    case 'refused':
-      return 'Claude가 이 요청에 답하지 않았습니다. 내용을 바꿔 다시 시도하세요.';
-    case 'cancelled':
-      return '요청을 취소했습니다.';
-    default:
-      return 'Claude 호출 중 오류가 발생했습니다. 다시 시도하거나 Mock 엔진을 사용하세요.';
-  }
-}
-
 export function AIProvider({ children }: { children: React.ReactNode }) {
-  const [sample, setSample] = useState<SampleFn | null>(null);
-  const [status, setStatus] = useState<Status>('checking');
+  const [{ key, model }, setStored] = useState(loadKey);
+  const [denied, setDenied] = useState(false);
   const [preferred, setPref] = useState<Engine>(() => {
     try {
       return (localStorage.getItem(PREF_KEY) as Engine) || 'claude';
@@ -65,35 +32,14 @@ export function AIProvider({ children }: { children: React.ReactNode }) {
       return 'claude';
     }
   });
-
-  useEffect(() => {
-    let alive = true;
-    const w = window as unknown as { claude?: { use?: (n: string) => Promise<unknown> } };
-    if (!w.claude?.use) {
-      setStatus('unavailable');
-      return;
-    }
-    w.claude
-      .use('sample')
-      .then((fn) => {
-        if (!alive) return;
-        if (fn) {
-          setSample(() => fn as SampleFn);
-          setStatus('available');
-        } else setStatus('unavailable');
-      })
-      .catch(() => alive && setStatus('unavailable'));
-    return () => {
-      alive = false;
-    };
-  }, []);
-
+  const client = useMemo(() => (key && !denied ? createClient(key, model || DEFAULT_MODEL) : null), [key, model, denied]);
   const value = useMemo<AICtx>(
     () => ({
-      engine: preferred === 'claude' && status === 'available' && sample ? 'claude' : 'mock',
+      engine: preferred === 'claude' && client ? 'claude' : 'mock',
       preferred,
-      status,
-      sample,
+      status: client ? 'available' : 'unavailable',
+      client,
+      model: model || DEFAULT_MODEL,
       setPreferred: (e) => {
         setPref(e);
         try {
@@ -102,13 +48,18 @@ export function AIProvider({ children }: { children: React.ReactNode }) {
           /* noop */
         }
       },
+      setKey: (k, m) => {
+        const next = { key: k === null ? key : k.trim(), model: (m || model || DEFAULT_MODEL).trim() };
+        saveKey(next.key, next.model);
+        setStored(next);
+        setDenied(false);
+      },
       onError: (e) => {
-        const code = (e as SampleError)?.code ?? 'upstream_error';
-        if (PERMANENT.includes(code)) setStatus('denied');
-        return errorText(code);
+        if ((e as { code?: string })?.code === 'auth') setDenied(true);
+        return llmErrorText(e);
       },
     }),
-    [preferred, status, sample],
+    [preferred, client, model, key],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

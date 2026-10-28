@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────
 // 시연 초기 데이터 — 모두 가상 (실제 기관·인물·문서 아님)
-//  · linked: 제출본 시연 상태 (업무 1, 문서 2, 이벤트 5, 결정 3, 조치 4, 이력 6) — demo-linked.json
+//  · linked: 시연 상태 — demo-linked.json(업무 1) + demo-org.ts(가상 조직: 팀 2·사용자 7·업무 8)
 //  · fresh : 사용자만 있고 데이터가 빈 상태
 // demo-linked.json 은 schema 6 형태이며 migrate()가 현재(7) 구조로 변환한다.
 // ─────────────────────────────────────────────────────────────
@@ -8,6 +8,7 @@ import type { AppState, User } from '../lib/types';
 import { clone } from '../lib/util';
 import { migrate } from '../lib/migrate';
 import demoLinked from './demo-linked.json';
+import { extendLinked } from './demo-org';
 
 export const SCHEMA = 7;
 const DEPT = '디지털신원팀 (시연용 가상 부서)';
@@ -20,7 +21,7 @@ export const USERS: User[] = [
 export function createSeed(mode: 'linked' | 'fresh', now = new Date()): AppState {
   if (mode === 'linked') {
     const base = clone(demoLinked) as unknown as AppState;
-    return migrate(base, now);
+    return extendLinked(migrate(base, now));
   }
   return migrate(
     {

@@ -30,11 +30,11 @@ export default function SearchPage() {
     update((d) => {
       d.searchLog = [t, ...d.searchLog.filter((x) => x !== t)].slice(0, 6);
     });
-    if (ai.engine === 'claude' && ai.sample) {
+    if (ai.engine === 'claude' && ai.client) {
       const c = new AbortController();
       ctl.current = c;
       try {
-        const r = await claudeAsk(ai.sample, s, t, c.signal);
+        const r = await claudeAsk(ai.client, s, t, c.signal);
         if (c.signal.aborted) return;
         setAns(r);
         setMeta({ engine: 'claude', verify: r.verify });
@@ -45,7 +45,7 @@ export default function SearchPage() {
         }
         const msg = ai.onError(e);
         setAns(askAI(s, t));
-        setMeta({ engine: 'mock', note: `${msg} 아래는 규칙 기반 Mock 답변입니다.` });
+        setMeta({ engine: 'mock', note: `${msg} 아래는 규칙 기반 답변입니다.` });
       }
       setBusy(false);
       return;
@@ -57,10 +57,9 @@ export default function SearchPage() {
     }, 450);
   };
 
-  // Claude 연결 확인이 끝난 뒤에 URL 질문을 실행 (확인 전 실행되면 Mock으로 답하게 됨)
+  // URL 질문(상단 질문창)을 실행
   const lastAsked = useRef<string | null>(null);
   useEffect(() => {
-    if (ai.status === 'checking') return;
     const qq = query.get('q');
     if (qq && lastAsked.current !== qq) {
       lastAsked.current = qq;
@@ -191,7 +190,7 @@ export default function SearchPage() {
                   )}
                 </p>
               ) : (
-                <p className="text-2xs text-faint">Mock 답변 · 규칙 기반 시연 엔진이 등록 자료에서 생성.</p>
+                <p className="text-2xs text-faint">규칙 기반 답변 · 등록 자료에서 규칙으로 생성(키를 넣으면 Claude가 답함).</p>
               )}
             </div>
           </Card>

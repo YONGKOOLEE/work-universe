@@ -1,5 +1,5 @@
-import { Gavel, GitCommitVertical, ListTodo, LayoutList, CheckCircle2, CircleHelp, Quote } from 'lucide-react';
-import type { DocParagraph, EventType, Work } from '../lib/types';
+import { Gavel, GitCommitVertical, ListTodo, LayoutList, CheckCircle2, CircleHelp, Quote, Tag } from 'lucide-react';
+import type { DocParagraph, EventType, User, Work } from '../lib/types';
 import { verify, FIELD_LABEL, EVENT_TYPES, PHASE_OPTIONS, phaseOf, type Proposal, type ProposalKind, type OverviewField } from '../ai/reflect';
 import { cx } from '../lib/util';
 
@@ -8,10 +8,12 @@ const GROUPS: { kind: ProposalKind; title: string; Icon: React.ElementType; to: 
   { kind: 'event', title: '타임라인 이벤트', Icon: GitCommitVertical, to: '업무 타임라인' },
   { kind: 'action', title: '향후 조치', Icon: ListTodo, to: '향후 조치 및 유의사항' },
   { kind: 'overview', title: '업무 개요 갱신', Icon: LayoutList, to: '업무 개요' },
+  { kind: 'topic', title: '주제(업무 유니버스 지도)', Icon: Tag, to: '업무 지도의 주제 — 같은 주제의 업무끼리 이어짐' },
 ];
+const SOURCE_LABEL: Record<string, string> = { rule: '표·목록 규칙', review: '꼼꼼히 읽기' };
 const small = 'rounded border border-line2 bg-surface px-1.5 py-1 text-xs text-ink focus:border-brand focus:outline-none';
 
-export function ReflectionPreview({ props, setProps, paras, works }: { props: Proposal[]; setProps: (f: (p: Proposal[]) => Proposal[]) => void; paras: DocParagraph[]; works: Work[] }) {
+export function ReflectionPreview({ props, setProps, paras, works, users = [] }: { props: Proposal[]; setProps: (f: (p: Proposal[]) => Proposal[]) => void; paras: DocParagraph[]; works: Work[]; users?: User[] }) {
   const set = (id: string, patch: Partial<Proposal>, reverify = false) =>
     setProps((ps) => ps.map((p) => (p.id === id ? (reverify ? verify({ ...p, ...patch }, paras) : { ...p, ...patch }) : p)));
   const verifiedN = props.filter((p) => p.verified).length;
@@ -118,6 +120,17 @@ export function ReflectionPreview({ props, setProps, paras, works }: { props: Pr
                             }}
                           />
                         )}
+                        {p.kind === 'action' && (
+                          <select className={small} value={p.ownerId ?? ''} onChange={(e) => set(p.id, { ownerId: e.target.value || null })} aria-label="조치 담당" title={p.ownerName ? `문서상 담당: ${p.ownerName}` : '문서에 담당이 없으면 업무의 첫 담당자'} data-testid="proposal-owner">
+                            <option value="">{p.ownerName ? `담당: ${p.ownerName}(사용자 아님 → 업무 담당자)` : '담당: 업무 담당자(기본)'}</option>
+                            {users.map((u) => (
+                              <option key={u.id} value={u.id}>
+                                담당: {u.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        {p.source && SOURCE_LABEL[p.source] && <span className="rounded bg-sunken px-1.5 py-0.5 text-2xs text-muted">{SOURCE_LABEL[p.source]}</span>}
                       </div>
                       <input className={cx(small, 'w-full py-1.5 text-[13px]')} value={p.text} onChange={(e) => set(p.id, { text: e.target.value })} aria-label="반영 문구" />
                       {p.quote && (
