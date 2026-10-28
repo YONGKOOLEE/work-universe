@@ -707,6 +707,25 @@ export function attachNotice(created, memoCount, { issues = 0, assigns = 0 } = {
  * Claude가 읽은 제안(글로 추가와 같은 모양)에서 규칙 계획이 이미 다루는 것(문서 이름·할 일·담당)과 같은 이름의 항목을 빼고,
  * 그 항목에 걸린 연결도 뺀다(같은 이름은 한 번만 만든다). 새로 만들 항목 수는 그대로 두고 키는 바꾸지 않는다.
  */
+// 대상 업무와 「비슷한 이름」의 Claude 새 업무를 가리는 기준(바꾸려면 여기 한 곳만): 공백·문장부호를 뺀 뒤 한쪽이 다른 쪽을 품거나,
+// 짧은 쪽의 두 글자 묶음(bigram)이 긴 쪽에 들어 있는 비율이 이 값 이상이면 같은 업무로 본다(실제 키 시험: 「문자발송 월정산」 ↔ 「문자메시지 발송 서비스 월정산」)
+export const DOC_ATTACH_SIMILAR = Object.freeze({ bigram: 0.6 });
+const compactName = (s) => String(s || '').normalize('NFC').toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
+export function similarName(a, b) {
+  const x = compactName(a);
+  const y = compactName(b);
+  if (!x || !y) return false;
+  if (x.includes(y) || y.includes(x)) return true;
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  if (short.length < 2) return false;
+  const grams = new Set();
+  for (let i = 0; i + 1 < long.length; i += 1) grams.add(long.slice(i, i + 2));
+  let hit = 0;
+  const n = short.length - 1;
+  for (let i = 0; i < n; i += 1) if (grams.has(short.slice(i, i + 2))) hit += 1;
+  return hit / n >= DOC_ATTACH_SIMILAR.bigram;
+}
+
 export function dedupeAiProposal(proposal, plan) {
   const taken = new Set([
     `artifact|${normalizeLabel(plan.doc.label)}`,
@@ -715,11 +734,12 @@ export function dedupeAiProposal(proposal, plan) {
     `work|${normalizeLabel(plan.targetLabel || '')}`,
   ]);
   const dropped = new Set();
+  const target = plan.targetLabel || '';
   const nodes = proposal.nodes.filter((n) => {
     const hit = taken.has(`${n.type}|${normalizeLabel(n.label)}`);
     if (hit) dropped.add(n.key);
     return !hit;
-  });
+  }).map((n) => (n.type === 'work' && target && !n.hold && similarName(n.label, target) ? { ...n, hold: `대상 업무와 비슷한 이름(「${target}」)` } : n)); // 대상 업무의 복제를 새 업무로 만들지 않게 처음엔 체크 안 함
   const edges = proposal.edges.filter((e) => !dropped.has(e.from) && !dropped.has(e.to));
   return { ...proposal, nodes, edges, droppedSame: dropped.size };
 }

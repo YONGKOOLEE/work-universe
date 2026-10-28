@@ -1948,6 +1948,7 @@ function start() {
         toolbar: notes.length || tools ? el('div', {}, ...[...notes, tools].filter(Boolean)) : null,
         linkTools,
         justAdded: justAdded ? justAdded.gids : null,
+        mapOwner: selNode && selNode.core_type === 'root' ? ((view.universes.get(selNode.universe_id) || {}).owner || '') : '', // 지도 중심 상세에 「작성 주체」 읽기 전용 줄
       });
     }
     if (rw && rwPast) { // 편집 되감기: 그때 값임을 알리고, 지금과 다른 칸을 보인다
@@ -2121,6 +2122,7 @@ function start() {
   function adminBlock() {
     return el('div', { class: 'ws-admin', 'data-testid': 'ws-admin' },
       el('p', { class: 'small' }, el('strong', {}, '업무 지도')),
+      el('p', { class: 'muted small', 'data-testid': 'ws-map-owner' }, `이 지도: ${view.universe.name} · 작성 주체 ${view.universe.owner}`),
       el('div', { class: 'row' }, ...adminButtons),
       el('p', { class: 'muted small' }, '새 업무 지도를 만들거나, 지도를 팀·부서로 묶거나, 파일로 가져오고 내보냅니다'));
   }
@@ -2245,11 +2247,21 @@ function start() {
     renderPanel();
     $('detail').parentElement.scrollTop = 0;
   }
-  function openDialogFeature(name, arg) {
+  // 창 안의 요소로 데려간다: 접힌 상자(details)가 둘러싸고 있으면 모두 펼치고, 그 자리로 스크롤해 잠깐 강조한다(예: 「고급」 안의 「가상 데이터 초기화」)
+  function revealInDialog(dialog, testid) {
+    const target = dialog && testid ? dialog.querySelector(`[data-testid=${testid}]`) : null;
+    if (!target) return;
+    for (let d = target.parentElement ? target.parentElement.closest('details') : null; d; d = d.parentElement ? d.parentElement.closest('details') : null) d.open = true;
+    if (typeof target.scrollIntoView === 'function') target.scrollIntoView({ block: 'center' });
+    flash(target);
+    focusSoft(target);
+  }
+  function openDialogFeature(name, arg, anchor) {
     if (name === 'import') {
       openImport();
       const tab = document.querySelector(`[data-testid=import-tab-${arg}]`);
       if (tab) tab.click();
+      revealInDialog($('import-dialog'), anchor);
     } else if (name === 'group') $('group-open').click();
     else if (name === 'create') $('create-open').click();
     else if (name === 'settings') $('settings-open').click();
@@ -2275,7 +2287,7 @@ function start() {
       .filter((m) => m.name && m.works).map((m) => ({ gid: m.id, label: m.name }));
   }
   function goFeature(r) {
-    const [kind, arg, arg2] = r.go.split(':');
+    const [kind, arg, arg2, arg3] = r.go.split(':');
     if (kind === 'ov' && arg === 'weekly-quick' && isGroupedView(view) && !app.readOnly && !rw && !$('detail').querySelector('[data-testid=weekly-quick]')) {
       const maps = childMapsToWrite();
       if (maps.length) return { pick: { works: maps, note: '어느 업무 지도에 쓸까요? 메모는 업무가 있는 지도에서 남깁니다. 고르면 그 지도를 열고 「기록」 공간으로 갑니다.', onPick: (id) => { goSpace('record'); openUniverse(id); } } };
@@ -2284,7 +2296,7 @@ function start() {
     // 그 기능이 있는 공간으로 먼저 바꾼다(되감기 중 창만 여는 기능은 되감기를 끝내지 않도록 그대로 둔다)
     if (r.space && !(rw && kind === 'dlg')) goSpace(r.space, { keepCard: true }); // 고른 항목에 일을 시키는 길이라 카드는 둔다(FU6-1)
     if (kind === 'node') return goNodeFeature(r);
-    if (kind === 'dlg') return openDialogFeature(arg, arg2);
+    if (kind === 'dlg') return openDialogFeature(arg, arg2, arg3);
     if (kind === 'insight') {
       openInsight('', arg);
       return undefined;

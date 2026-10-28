@@ -14,7 +14,7 @@ import { validateDocument } from '../app/src/model/validate.js';
 import { editPoints } from '../app/src/model/rewind.js';
 import { SUBTYPE_ROLE } from '../app/src/model/schema.js';
 import {
-  DOC_ATTACH_MEMO_CATEGORIES, attachNotice, buildAttachOps, dedupeAiProposal, defaultDocSelection, itemsOf, ownersOf, parseDue, planToOps, readDocumentRule, splitDocument, taskHeader,
+  DOC_ATTACH_MEMO_CATEGORIES, attachNotice, buildAttachOps, dedupeAiProposal, similarName, defaultDocSelection, itemsOf, ownersOf, parseDue, planToOps, readDocumentRule, splitDocument, taskHeader,
 } from '../app/src/rules/doc-attach.js';
 import { AI_DOC_MAX_CHUNKS, chunkDocument, labelKeys, readDocumentAi } from '../app/src/llm/ai-doc-attach.js';
 import { TEXT_LIMITS, defaultSelection } from '../app/src/rules/text-extract.js';
@@ -734,3 +734,24 @@ test('H2-⑦ 화면: 「예시 문서 넣기」는 글 칸을 예시로 채우�
   assert.equal(picked.q('doc-attach-target').value, 'N-003', '이미 고른 대상은 바꾸지 않는다');
   assert.equal(DOC_ATTACH_EXAMPLE.text('2026-12-25').includes('2027. 1. 1.'), true, '해를 넘겨도 YYYY. M. D. 꼴');
 }));
+
+test('Claude 새 업무가 대상 업무와 비슷한 이름이면 hold(처음엔 체크 안 함), 다른 이름은 그대로', () => {
+  assert.equal(similarName('문자발송 월정산', '문자메시지 발송 서비스 월정산'), true, '실제 키 시험 사례');
+  assert.equal(similarName('문자발송 월정산', '문자발송 월정산 점검'), true, '포함');
+  assert.equal(similarName('불일치 원인 코드표 정리', '대사 확인'), false);
+  assert.equal(similarName('', '대사 확인'), false);
+  const plan = { doc: { label: '문서' }, tasks: [], targetLabel: '문자발송 월정산' };
+  const proposal = {
+    nodes: [
+      { key: 'a', type: 'work', label: '문자메시지 발송 서비스 월정산', quote: 'q' },
+      { key: 'b', type: 'work', label: '불일치 원인 코드표 정리', quote: 'q' },
+      { key: 'c', type: 'topic', label: '문자발송 월정산', quote: 'q' },
+    ],
+    edges: [],
+  };
+  const d = dedupeAiProposal(proposal, plan);
+  assert.equal(d.nodes[0].hold, '대상 업무와 비슷한 이름(「문자발송 월정산」)');
+  assert.equal(d.nodes[1].hold, undefined);
+  assert.equal(d.nodes[2].hold, undefined, '업무가 아닌 유형은 대상');
+  assert.equal(defaultSelection(d, 'all').nodes.a.include, false, '모두 체크에서도 빠진다');
+});

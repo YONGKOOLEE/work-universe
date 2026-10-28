@@ -44,7 +44,7 @@ function historyList(items, justAdded = null) {
  * extra가 있으면 속성 아래에 붙인다(층별 보기 조작 등). toolbar는 제목 아래 편집 버튼,
  * linkTools(link)는 연결마다 붙일 버튼(없으면 null)이다(T-06). justAdded는 방금 기록한 이력 줄(이벤트 전역 ID들)의 강조(CR-21 B-1).
  */
-export function renderNodeDetail(panel, d, { onFocus, extra = null, toolbar = null, linkTools = () => null, justAdded = null, card = null }) {
+export function renderNodeDetail(panel, d, { onFocus, extra = null, toolbar = null, linkTools = () => null, justAdded = null, card = null, mapOwner = '' }) {
   panel.replaceChildren();
   if (!d.found) {
     panel.append(el('p', { class: 'muted' }, '항목을 찾을 수 없습니다.'));
@@ -56,6 +56,7 @@ export function renderNodeDetail(panel, d, { onFocus, extra = null, toolbar = nu
     return;
   }
   panel.append(el('h2', {}, d.title));
+  if (mapOwner) panel.append(el('p', { class: 'muted small', 'data-testid': 'card-map-owner' }, `작성 주체: ${mapOwner}`));
   if (toolbar) panel.append(toolbar);
   if (d.hidden) panel.append(el('p', { class: 'notice', 'data-testid': 'hidden-note' }, d.deleted ? '완전히 삭제된 항목입니다. 내용은 지워졌고, 이 항목을 언급한 이력만 남아 있습니다.' : '숨김 처리된 항목입니다. 내용과 이력은 유지됩니다.'));
 
