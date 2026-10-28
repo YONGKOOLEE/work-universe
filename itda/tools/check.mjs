@@ -46,7 +46,7 @@ const HELPERS = `
       const s = document.getElementById('user-switch'); const o = [...s.options].find((x) => x.textContent.includes(name));
       if (!o) return false; this.setVal(s, o.value); return true;
     },
-    go(hash) { window.__itdaMap = null; location.hash = hash; },
+    go(hash) { if (location.hash !== hash) { window.__itdaMap = null; location.hash = hash; } },
     cy() { return window.__itdaMap && window.__itdaMap.graph && window.__itdaMap.graph.cy; },
     nodes() { const cy = this.cy(); return cy ? cy.nodes().length : -1; },
     edges() { const cy = this.cy(); return cy ? cy.edges().length : -1; },
@@ -208,7 +208,22 @@ try {
     await must(await H(`tap('비대면 출금동의 추진')`), '업무 노드 재선택 실패(2)');
     await wait(`!!document.querySelector('[data-testid="map-card"]')`, 3000);
     await must(await H(`clickId('map-edit-link')`), '업무 잇기 단추 없음');
-    await must(await wait(`!!document.querySelector('[data-testid="map-link-to"]')`, 2000), '잇기 폼 없음');
+    let linkNote = '';
+    if (!(await wait(`!!document.querySelector('[data-testid="map-link-to"]')`, 1500))) {
+      const msg = await ev(`(document.querySelector('[data-testid="map-edit-link"]').closest('[data-testid="map-card"]')||document.body).innerText.includes('이을 다른 업무가 없습니다')`);
+      await must(msg, '잇기 폼도 안내 문구도 없음');
+      linkNote = '(김도윤은 볼 수 있는 업무가 1건뿐이라 이을 후보 없음 → 박지훈 팀 지도로 대신 점검) ';
+      await must(await H(`user('박지훈')`), '박지훈 전환 실패');
+      await nav('#/universe', mapReady);
+      await H(`click('button', '팀·부서 지도')`);
+      await sleep(1200);
+      await ev(`(() => { window.__h.cy().nodes().filter((n) => n.data('core_type') === 'root').forEach((n) => n.emit('dbltap')); return true; })()`);
+      await sleep(1000);
+      await must(await H(`tap('비대면 출금동의 추진')`), '팀 지도에서 업무 노드 없음');
+      await wait(`!!document.querySelector('[data-testid="map-edit-link"]')`, 3000);
+      await must(await H(`clickId('map-edit-link')`), '업무 잇기 단추 없음(팀장)');
+      await must(await wait(`!!document.querySelector('[data-testid="map-link-to"]')`, 2000), '잇기 폼 없음(팀장)');
+    }
     const e0 = await H('edges()');
     const opts = await ev(`[...document.querySelector('[data-testid="map-link-to"]').options].map((o) => o.value + ':' + o.textContent)`);
     const pick = opts.find((o) => o.split(':')[0]) ;
@@ -221,6 +236,7 @@ try {
     const n2 = await H('nodes()');
     await must(e1 > e0 || n2 > n1, `잇기 후 선/노드 증가 없음 (edges ${e0}→${e1}, nodes ${n1}→${n2}, 선택: ${pick})`);
     await shot('04-잇기후');
+    if (linkNote) { await must(await H(`user('김도윤')`), '김도윤 복귀 실패'); await nav('#/universe', mapReady); }
     // 숨기기
     await must(await H(`tap('비대면 출금동의 추진')`), '업무 노드 재선택 실패(3)');
     await wait(`!!document.querySelector('[data-testid="map-card"]')`, 3000);
@@ -231,7 +247,7 @@ try {
     await nav('#/works/W-001');
     await sleep(600);
     await must(await H(`has('비대면 출금동의 추진')`), '숨긴 뒤 업무 화면에서 업무가 사라짐');
-    return `메모 반영, 주제(노드 ${n0}→${n1}), 잇기(선 ${e0}→${e1}, 노드 ${n1}→${n2}, 선택 ${pick}), 숨기기 후 업무 화면 유지`;
+    return `${linkNote}메모 반영, 주제(노드 ${n0}→${n1}), 잇기(선 ${e0}→${e1}, 노드 ${n1}→${n2}, 선택 ${pick}), 숨기기 후 업무 화면 유지`;
   });
 
   // 5
@@ -285,7 +301,7 @@ try {
     if (!st.includes('키 있음')) { await H(`clickId('ai-settings-open')`); await sleep(400); st = await ev(`document.querySelector('[data-testid="ai-key-status"]')?.innerText || ''`); }
     await must(st.includes('키 있음'), `저장 뒤 상태: ${st}`);
     const eng = await ev(`(() => { const c = document.querySelector('[data-testid="engine-claude"]'); const r = document.querySelector('[data-testid="engine-rule"]'); return { c: c && c.className, r: r && r.className, ct: c && c.getAttribute('aria-pressed') }; })()`);
-    await must(eng.c && /bg-navy/.test(eng.c) && !/bg-navy/.test(eng.r || ''), `Claude 엔진 선택 표시 아님: ${JSON.stringify(eng)}`);
+    await must(eng.c && /bg-brand/.test(eng.c) && !/bg-brand/.test(eng.r || ''), `Claude 엔진 선택 표시 아님: ${JSON.stringify(eng)}`);
     await shot('08-AI설정');
     // 창 닫기 → 데이터 옮기기
     await ev(`(() => { const e = window.__h.find('button','닫기') || window.__h.find('button','취소'); if (e) e.click(); else document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); return true; })()`);
@@ -354,6 +370,8 @@ try {
     await must(await H(`clickId('merge-confirm')`), '합쳐 불러오기 확인 단추 없음');
     await sleep(800);
     await H(`click('button', '데이터 옮기기')`);
+    await sleep(400);
+    await H(`click('button', '내보내기', true)`);
     await wait(`!!document.querySelector('textarea[aria-label="백업 데이터"]')`, 3000);
     const worksAfter = await ev(`JSON.parse(document.querySelector('textarea[aria-label="백업 데이터"]').value).works.length`);
     const usersAfter = await ev(`JSON.parse(document.querySelector('textarea[aria-label="백업 데이터"]').value).users.length`);
@@ -365,9 +383,9 @@ try {
   await check('11 인계 흐름 회귀(W-001 → 이서연)', async () => {
     await must(await H(`user('김도윤')`), '김도윤 전환 실패');
     await nav('#/handover', `window.__h.has('새 인계 시작')`);
-    await H(`(() => { const s = document.getElementById('ho-work'); if (s) { window.__h.setVal(s, 'W-001'); } return true; })()`);
+    await ev(`(() => { const s = document.getElementById('ho-work'); if (s) { window.__h.setVal(s, 'W-001'); } return true; })()`);
     await sleep(200);
-    await H(`(() => { const s = document.getElementById('ho-to'); const o = [...s.options].find((x) => x.textContent.includes('이서연')); window.__h.setVal(s, o.value); return true; })()`);
+    await ev(`(() => { const s = document.getElementById('ho-to'); const o = [...s.options].find((x) => x.textContent.includes('이서연')); window.__h.setVal(s, o.value); return true; })()`);
     await sleep(200);
     await must(await H(`click('button', '인계 시작', true)`), '인계 시작 단추 없음');
     await must(await wait(`location.hash.startsWith('#/handover/HO-')`, 4000), '인계 상세로 이동 안 함: ' + await ev('location.hash'));

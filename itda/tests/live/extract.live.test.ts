@@ -77,4 +77,19 @@ describe.skipIf(!LIVE)('실제 Claude 문서 분석', () => {
     console.log(`(${Date.now() - t0}ms) llm 항목 ${llm.length}, fallback=${JSON.stringify(out.fallback)}` + NL + llm.map((it: any) => `[${it.title}] ` + it.sentences.map((x: any) => x.text).join(' / ')).join(NL));
     expect(llm.length).toBeGreaterThan(0);
   });
+
+  it('지도 시연 문서(약관 개정 회의록, PDF 문단) — 표 행은 조치·담당 사용자, 결정 중복 없음', { timeout: 300000 }, async () => {
+    const s = createSeed('linked');
+    const lines = ['약관·시행세칙 개정 실무 회의록', '□ 회의 개요', '○ 일시: 2026. 10. 28.(수) 10:00~11:00', '○ 참석: 디지털신원팀 박지훈, 이서연, 최민서', '□ 논의 결과', '○ 개정안은 전자서명과 ARS 녹취 방식을 함께 반영하기로 결정함.', '○ 본인확인 수준은 법무 검토 의견을 받은 뒤 확정하기로 함.', '□ 향후 조치', '과제 담당 기한', '개정 조문 대비표 작성 이서연 2026. 11. 12.', '참가기관 의견 반영안 정리 최민서 2026. 11. 19.', '법무 검토 의견 요청 박지훈 2026. 11. 5.', '□ 유의사항', '○ 다만, 참가기관 의견 반영안은 업무협의회 결과와 맞춰야 함.', '※ 시연용 가상 자료'];
+    const ps = lines.map((t, i) => ({ id: `p1-${i + 1}`, text: t, page: 1 }));
+    const r = await claudeExtract(createClient(key()), s, lines[0], ps, 'W-003', '2026-10-28', undefined, { review: true });
+    writeFileSync(`${OUT}/extract-yakgwan.json`, JSON.stringify(r, null, 1));
+    console.log(`review=${JSON.stringify(r.review)}` + String.fromCharCode(10) + show(r));
+    const acts = r.proposals.filter((p) => p.kind === 'action');
+    const uid = (n: string) => s.users.find((u) => u.name === n)!.id;
+    expect(acts.find((p) => p.text.includes('대비표'))).toMatchObject({ ownerId: uid('이서연'), date: '2026-11-12' });
+    expect(acts.find((p) => p.text.includes('반영안'))).toMatchObject({ ownerId: uid('최민서'), date: '2026-11-19' });
+    expect(acts.find((p) => p.text.includes('법무 검토'))).toMatchObject({ ownerId: uid('박지훈'), date: '2026-11-05' });
+    expect(r.proposals.filter((p) => p.kind === 'event' && p.date && p.date > '2026-10-28').length).toBe(0);
+  });
 });

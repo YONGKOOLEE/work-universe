@@ -317,7 +317,7 @@ export const EXTRACT_SYSTEM = [
   '항목',
   `- decision: 의결·결정·확정·합의된 사항(최대 ${EXTRACT_MAX.decision})`,
   `- event: 이미 있었던 날짜 있는 사건(최대 ${EXTRACT_MAX.event}). 「…예정」「…계획」처럼 앞으로 할 일은 event가 아니라 action으로만 넣습니다. eventType은 업무 착수|법령|회의|의사결정|보도자료|시행|업무 변경 중 하나`,
-  `- action: 앞으로 할 조치·예정 사항(최대 ${EXTRACT_MAX.action}). 기한이 있으면 date. owner에는 그 조치의 담당(사람 이름·부서·팀 이름)을 문서 글자 그대로 쓰고, 없으면 빈 글자. <지도 정보>의 사람 목록에 같은 이름이 있으면 그 이름을 씁니다.`,
+  `- action: 누가 무엇을 해야 하는 앞으로의 조치·예정 사항만(최대 ${EXTRACT_MAX.action}). 「…하기로 결정함」처럼 정해진 방침은 decision으로만 넣고 action으로 다시 넣지 않습니다. 표의 과제 행은 action으로만 넣고 event로 넣지 않습니다. 기한이 있으면 date. owner에는 그 조치의 담당(사람 이름·부서·팀 이름)을 문서 글자 그대로 쓰고, 없으면 빈 글자. <지도 정보>의 사람 목록에 같은 이름이 있으면 그 이름을 씁니다.`,
   `- overview: 업무 개요에 더할 문장(최대 ${EXTRACT_MAX.overview}). field는 purpose(목적)|background(추진 배경)|current(현재 진행 사항)|cautions(유의사항·이슈·리스크)`,
   `- topic: 여러 업무에 되풀이될 큰 주제(예: 본인확인, 정산)만 최대 ${EXTRACT_MAX.topic}개. text는 2~10자의 짧은 주제 이름, quote는 그 주제가 나오는 문장`,
   '- workId는 <지도 정보>의 업무 목록에서만 고릅니다. 모르겠으면 기본 연결 업무.',
@@ -420,6 +420,22 @@ export function toProposal(s: AppState, p: RawProposal, paras: DocParagraph[], d
   return out;
 }
 
+const qn = (t: string) => t.replace(/\s+/g, '');
+/** 결정과 같은 원문 문장에서 나온 조치는 뺀다(결정이 맞음). 같은 기한·비슷한 이름의 조치가 있는 이벤트는 뺀다(앞으로 할 일은 조치) */
+export function dedupeKinds(list: Proposal[]) {
+  const decisionQuotes = new Set(list.filter((p) => p.kind === 'decision' && p.quote).map((p) => qn(p.quote)));
+  const actions = list.filter((p) => p.kind === 'action');
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const p = list[i];
+    if (p.kind === 'action' && p.quote && decisionQuotes.has(qn(p.quote)) && !p.ownerName && !p.date) list.splice(i, 1);
+    else if (
+      p.kind === 'event' &&
+      actions.some((a) => (a.quote && qn(a.quote) === qn(p.quote)) || (!!a.date && a.date === p.date && (similarName(a.text, p.text) || qn(p.quote).includes(qn(a.text)) || qn(p.text).includes(qn(a.text)))))
+    )
+      list.splice(i, 1);
+  }
+}
+
 const sameProposal = (a: Proposal, b: Proposal) => a.kind === b.kind && (a.text === b.text || similarName(a.text, b.text) || (!!a.quote && a.quote === b.quote && a.kind !== 'overview'));
 
 export async function claudeExtract(
@@ -445,10 +461,8 @@ export async function claudeExtract(
     proposals.push(p);
   }
   // 같은 원문 문장의 「예정」 이벤트와 조치가 함께 나오면 조치만 남긴다(앞으로 할 일은 타임라인 사건이 아님)
-  for (let i = proposals.length - 1; i >= 0; i -= 1) {
-    const p = proposals[i];
-    if (p.kind === 'event' && /예정|계획/.test(p.text) && proposals.some((q) => q.kind === 'action' && q.quote && q.quote === p.quote)) proposals.splice(i, 1);
-  }
+  // 같은 근거의 중복을 덜어 낸다(모델이 규칙을 어겨도): 결정과 같은 문장의 조치, 조치(표 행)와 같은 것의 이벤트
+  dedupeKinds(proposals);
   // 꼼꼼히 읽기(두 번째 대조 호출): 빠진 것만 더하고 의심 항목은 표시만. 실패해도 첫 결과는 그대로
   let review: Extraction['review'];
   if (opts.review) {

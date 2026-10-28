@@ -32,3 +32,19 @@ describe('키 없는 문서 분석 — 업무 유니버스 표 규칙으로 담�
     expect(r.proposals.filter((p) => p.kind === 'decision').length).toBeGreaterThanOrEqual(1);
   });
 });
+
+import { dedupeKinds, type Proposal } from '../src/ai/reflect';
+describe('제안 중복 덜기', () => {
+  const P = (x: Partial<Proposal>): Proposal => ({ id: Math.random().toString(36), kind: 'action', workId: 'W-001', text: '', date: null, quote: '', basis: 'source', verified: true, dateVerified: true, approved: false, ...x }) as Proposal;
+  it('결정 문장의 조치(담당·기한 없음)와 표 행의 이벤트를 뺀다', () => {
+    const list = [
+      P({ kind: 'decision', text: '두 방식 함께 반영 결정', quote: '○ 개정안은 전자서명과 ARS 녹취 방식을 함께 반영하기로 결정함.' }),
+      P({ kind: 'action', text: '두 방식 함께 반영', quote: '○ 개정안은 전자서명과 ARS 녹취 방식을 함께 반영하기로 결정함.' }),
+      P({ kind: 'action', text: '개정 조문 대비표 작성', quote: '개정 조문 대비표 작성 이서연 2026. 11. 12.', date: '2026-11-12', ownerName: '이서연' }),
+      P({ kind: 'event', text: '개정 조문 대비표 작성 이서연 2026. 11. 12.', quote: '개정 조문 대비표 작성 이서연 2026. 11. 12.', date: '2026-11-12' }),
+      P({ kind: 'event', text: '내부 검토회의 개최', quote: '2026. 8. 20. 내부 검토회의를 개최함.', date: '2026-08-20' }),
+    ];
+    dedupeKinds(list);
+    expect(list.map((p) => `${p.kind}:${p.text}`)).toEqual(['decision:두 방식 함께 반영 결정', 'action:개정 조문 대비표 작성', 'event:내부 검토회의 개최']);
+  });
+});

@@ -25,21 +25,7 @@ export interface PdfResult {
   likelyScanned: boolean;
 }
 
-const BULLET = /^(□|■|▢|○|ㅇ|◦|●|•|-|※|▸|‣|\d{1,2}\.|\(\d{1,2}\)|[가-하]\.|[①-⑳])\s*/;
-const END = /(다|음|함|임|됨|요|것)\.\s*$|[.。]\s*$/;
-
-/** 줄 단위 텍스트를 문단으로 묶는다: 글머리표로 시작하거나 앞줄이 문장 끝이면 새 문단 */
-function toParagraphs(lines: string[]): string[] {
-  const out: string[] = [];
-  for (const raw of lines) {
-    const l = raw.replace(/\s+/g, ' ').trim();
-    if (!l) continue;
-    const prev = out[out.length - 1];
-    if (prev === undefined || BULLET.test(l) || END.test(prev) || prev.length < 4) out.push(l);
-    else out[out.length - 1] = prev + (/[가-힣]$/.test(prev) && /^[가-힣]/.test(l) ? '' : ' ') + l;
-  }
-  return out;
-}
+import { toParagraphs } from './paragraphs';
 
 export async function extractPdf(buf: ArrayBuffer): Promise<PdfResult> {
   const pdfjs = await lib();
