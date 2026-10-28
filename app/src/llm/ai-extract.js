@@ -15,7 +15,7 @@ import {
   TEXT_LIMITS, TEXT_NODE_TYPES, TEXT_UNREAD_CONTEXT_NOTE, TEXT_WORDS, capNotes, classifySentences, createBuilder, empNoAfterName, finalizeProposal, knownNames, nameInText, orientRelation, ownCandidates, splitSentencesEnd, unreadWhyText,
 } from '../rules/text-extract.js';
 import { QUOTE_MAX, normalizeQuote } from './evidence-text.js';
-import { textFingerprint } from './ai-convert.js';
+import { AI_EDGE_VERB_MAX, textFingerprint } from './ai-convert.js';
 import { EXTRACT_SYSTEM_PROMPT, extractUserText } from './prompts.js';
 
 /** 보내는 「지도의 항목」 최대 개수(넘으면 앞에서부터. 이름 목록만 가므로 글자 수는 작다) */
@@ -44,6 +44,7 @@ export const AI_EXTRACT_SCHEMA = obj({
     to_label: str('위 nodes의 label 그대로'),
     type: { type: 'string', enum: AI_EXTRACT_RELATIONS },
     quote: str('글에서 글자 그대로 따온 구절(4글자 이상)'),
+    verb: str(`연결의 뜻을 나타내는 짧은 동사(작성·검토·승인·보고·담당 등, ${AI_EDGE_VERB_MAX}글자 이하). quote에 그 글자가 그대로 있을 때만, 아니면 빈 글자`),
   })),
 });
 
@@ -173,7 +174,9 @@ export function verifyAiExtract(text, parsed, view = null, opt = {}) {
     // 연결의 근거 구절 안에 두 끝 이름이 모두 낱말로 있어야 한다(다른 문장의 인용을 붙여 만든 연결을 걸러낸다)
     if (!nameInText(raw.quote, a.label) || !nameInText(raw.quote, c.label)) { drop('edge', name, '근거 구절에 두 항목의 이름이 모두 있어야 함'); continue; }
     const before = b.edges.length;
-    const e = dir === 'forward' ? b.addEdge(a, c, raw.type, oneLine(raw.quote)) : b.addEdge(c, a, raw.type, oneLine(raw.quote));
+    const verb = typeof raw.verb === 'string' ? oneLine(raw.verb) : '';
+    const verbOk = verb && verb.length <= AI_EDGE_VERB_MAX && normalizeQuote(raw.quote).includes(normalizeQuote(verb)) ? verb : '';
+    const e = dir === 'forward' ? b.addEdge(a, c, raw.type, oneLine(raw.quote), verbOk) : b.addEdge(c, a, raw.type, oneLine(raw.quote), verbOk);
     if (e) quotes.push(raw.quote);
     else if (b.edges.length === before && !b.flags.edgesCapped) merged += 1;
   }

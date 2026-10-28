@@ -13,7 +13,7 @@ import { isDate } from '../model/checks.js';
 import { ID_PREFIX, LABEL_MAX, SCHEMA_VERSION, SUBTYPE_ROLE, TEXT_MAX, normalizeLabel, pairAllowed } from '../model/schema.js';
 import { validateDocument } from '../model/validate.js';
 import { CONVERT_RULES, findDate, marksOf, statusOf, stripMarks } from '../rules/doc-convert.js';
-import { QUOTE_MAX, QUOTE_MIN, normalizeQuote, quoteShapeProblem } from './evidence-text.js';
+import { QUOTE_MAX, QUOTE_MIN, normalizeQuote, quoteShapeProblem, shortEdgeQuoteOk } from './evidence-text.js';
 import { CONVERT_SYSTEM_PROMPT, convertUserText } from './prompts.js';
 
 /** 인용의 최소 길이(공백을 뺀 글자 수). 짧은 구절은 어디에나 있어 근거가 되지 못한다 */
@@ -25,6 +25,9 @@ export const WORK_ATTR_KEYS = ['절차', '주기', '마감', '주의사항', '�
 export const AI_RELATIONS = ['performs', 'produces', 'precedes', 'relates_to', 'references'];
 export const AI_EDGE_TYPES = ['work', 'person', 'artifact', 'topic'];
 export const AI_MEMO_KINDS = ['issue', 'caution'];
+/** 연결에 붙이는 동사(verb)의 최대 길이(글자). 인용 안에 글자 그대로 있어야 쓴다 */
+export const AI_EDGE_VERB_MAX = 6;
+export { AI_CONVERT_GUIDE } from './prompts.js';
 
 // ── 응답 스키마 ─────────────────────────────────────────────────────────────
 const str = (description) => ({ type: 'string', description });
@@ -64,7 +67,8 @@ export const AI_CONVERT_SCHEMA = obj({
     from: ENDPOINT,
     to: ENDPOINT,
     relation: { type: 'string', enum: AI_RELATIONS },
-    quote: str('근거 구절. 없으면 빈 글자'),
+    quote: str('근거 구절. 없으면 빈 글자. 표의 한 줄에서 읽은 연결이면 그 줄 전체를 글자 그대로'),
+    verb: str(`연결의 뜻을 나타내는 짧은 동사(작성·검토·승인·보고·담당 등, ${AI_EDGE_VERB_MAX}글자 이하). 근거 구절에 그 글자가 그대로 있을 때만, 아니면 빈 글자`),
   })),
 });
 
@@ -126,11 +130,12 @@ export function verifyAiConvert(text, parsed) {
   let merged = 0;
   const drop = (kind, label, reason) => dropped.push({ kind, label: clip(oneLine(label || '(이름 없음)'), 60), reason });
 
-  /** 인용이 맞으면 null, 아니면 버리는 이유 */
-  const quoteProblem = (quote) => {
+  /** 인용이 맞으면 null, 아니면 버리는 이유. ends가 있으면(연결) 표의 짧은 칸 인용을 완화해 받는다(shortEdgeQuoteOk) */
+  const quoteProblem = (quote, ends = null) => {
     if (typeof quote !== 'string') return '원문 인용이 없음';
     const q = normalizeQuote(quote);
     const shape = quoteShapeProblem(q);
+    if (shape === 'short' && ends && shortEdgeQuoteOk(text, quote, ends)) return null;
     if (shape === 'short') return `원문 인용이 ${AI_CONVERT_MIN_QUOTE}글자 미만`;
     if (shape === 'long') return `원문 인용이 ${QUOTE_MAX}글자 초과(원문을 통째로 베낀 인용)`;
     if (shape) return `원문 인용에 글자·숫자가 ${AI_CONVERT_MIN_QUOTE}개 미만`;
@@ -208,12 +213,14 @@ export function verifyAiConvert(text, parsed) {
     if (a === b) { drop('edge', name, '자기 자신으로 가는 연결'); continue; }
     if (!pairAllowed(e.relation, ends[0].type, ends[1].type)) { drop('edge', name, '허용되지 않는 연결 조합'); continue; }
     const hasQuote = typeof e.quote === 'string' && e.quote.trim() !== '';
-    const why = hasQuote ? quoteProblem(e.quote) : null;
+    const why = hasQuote ? quoteProblem(e.quote, [a.label, b.label]) : null;
     if (why) { drop('edge', name, why); continue; }
     const key = `${ends[0].type}|${a.label}|${ends[1].type}|${b.label}|${e.relation}`;
     if (seenEdges.has(key)) { merged += 1; continue; }
     seenEdges.add(key);
-    kept.edges.push({ from: { type: ends[0].type, label: a.label }, to: { type: ends[1].type, label: b.label }, relation: e.relation, quote: hasQuote ? oneLine(e.quote) : '' });
+    const verb = hasQuote && typeof e.verb === 'string' ? oneLine(e.verb) : '';
+    const verbOk = verb && verb.length <= AI_EDGE_VERB_MAX && normalizeQuote(e.quote).includes(normalizeQuote(verb));
+    kept.edges.push({ from: { type: ends[0].type, label: a.label }, to: { type: ends[1].type, label: b.label }, relation: e.relation, quote: hasQuote ? oneLine(e.quote) : '', verb: verbOk ? verb : '' });
   }
 
   // 머리: 이름은 사람이 미리 보기에서 고친다. 작성 주체·날짜는 원문에 있을 때만 쓴다
@@ -317,7 +324,7 @@ export function aiResultToDocument(kept, ctx) {
     const a = byKey.get(`${e.from.type}|${normalizeLabel(e.from.label)}`);
     const b = byKey.get(`${e.to.type}|${normalizeLabel(e.to.label)}`);
     if (!a || !b) continue;
-    pushEdge(a.id, b.id, e.relation, e.quote ? `${AI_CONVERT_LABEL}: 원문 「${srcOf(e.quote)}」` : `${AI_CONVERT_LABEL}: 원문에서 읽은 관계`);
+    pushEdge(a.id, b.id, e.relation, e.quote ? `${e.verb ? `${e.verb} — ` : ''}${AI_CONVERT_LABEL}: 원문 「${srcOf(e.quote)}」` : `${AI_CONVERT_LABEL}: 원문에서 읽은 관계`);
     linked.add(a.id);
     linked.add(b.id);
   }
@@ -331,8 +338,9 @@ export function aiResultToDocument(kept, ctx) {
   pushEvent('created', { target_kind: 'node', target_id: rootId }, `문서에서 ${AI_CONVERT_LABEL}으로 만듦(${ctx.model})`, today);
   kept.memos.forEach((m) => {
     const w = m.work ? byKey.get(`work|${normalizeLabel(m.work)}`) : null;
-    const kind = m.kind === 'caution' ? '주의' : '질문·이슈';
-    const note = clip(`[${AI_CONVERT_LABEL} · 원문 「${srcOf(m.quote)}」 · ${kind}] ${m.text}`, TEXT_MAX);
+    // 내용이 먼저, 출처는 뒤(문서로 더하기와 같은 모양). 분류(주의·질문·이슈)는 payload.category가 맡는다
+    const src = ` — 출처: ${AI_CONVERT_LABEL}, 원문 「${srcOf(m.quote)}」`;
+    const note = `${clip(m.text, TEXT_MAX - src.length)}${src}`;
     pushEvent('memo', { target_id: w ? w.id : rootId, category: m.kind }, note);
   });
   if (!kept.date && kept.memos.length) notes.push({ code: 'C-DATE-ASSUMED', date: today });
