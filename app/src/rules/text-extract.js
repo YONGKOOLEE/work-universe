@@ -469,7 +469,7 @@ export function createBuilder(limits = TEXT_LIMITS) {
       byLabel.set(k, n);
       return n;
     },
-    addEdge(a, b, type, quote) {
+    addEdge(a, b, type, quote, verb = '') {
       if (!a || !b || a === b) return null;
       const k = `${a.key}>${b.key}>${type}`;
       if (edgeKeys.has(k)) return null;
@@ -478,7 +478,7 @@ export function createBuilder(limits = TEXT_LIMITS) {
         return null;
       }
       edgeKeys.add(k);
-      const e = { key: `e${edges.length + 1}`, from: a.key, to: b.key, type, quote };
+      const e = { key: `e${edges.length + 1}`, from: a.key, to: b.key, type, quote, ...(verb ? { verb } : {}) };
       edges.push(e);
       return e;
     },
@@ -1136,7 +1136,7 @@ export function finalizeProposal(proposal, view) {
       continue;
     }
     const [from, to] = dir === 'forward' ? [a, b] : [b, a];
-    const out = { key: e.key, from: from.key, to: to.key, type: e.type, quote: e.quote };
+    const out = { key: e.key, from: from.key, to: to.key, type: e.type, quote: e.quote, ...(e.verb ? { verb: e.verb } : {}) };
     // 연결 자체의 확인 사유(문자열, 예: Claude 읽기에서 인용이 든 원문 문장에 부정·조건이 있음)가 먼저, 없으면 끝 항목의 hold(true)
     if (typeof e.hold === 'string' && e.hold) out.hold = e.hold;
     else if (a.hold || b.hold) out.hold = true;
@@ -1424,7 +1424,7 @@ export function proposalToOps(proposal, selection, doc, opt = {}) {
     const f = r.edges[e.key];
     if (!f.include || !ref.has(f.source) || !ref.has(f.target)) continue;
     if (f.type === 'performs') ops.push({ op: 'assign', row, key: e.key, input: { person_id: ref.get(f.source), work_id: ref.get(f.target) } });
-    else ops.push({ op: 'addEdge', row, key: e.key, skipDup: true, input: { source: ref.get(f.source), target: ref.get(f.target), core_type: f.type } });
+    else ops.push({ op: 'addEdge', row, key: e.key, skipDup: true, input: { source: ref.get(f.source), target: ref.get(f.target), core_type: f.type, ...(e.verb ? { note: e.verb } : {}) } }); // Claude가 준 동사(작성·검토 …, 인용에 있는 것만)는 연결 메모로
     row += 1;
   }
   return ops;
