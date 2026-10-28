@@ -49,7 +49,9 @@ export default function Docs() {
     s.works.forEach((w) => !out.some((o) => o.w.id === w.id) && out.push({ w, depth: 0 }));
     return out;
   }, [s.works]);
-  const descendants = (id: string): string[] => s.works.filter((w) => w.parentId === id).flatMap((w) => [w.id, ...descendants(w.id)]);
+  // 하위 업무(하위의 하위까지). 상위 연결이 순환이어도 멈추게 방문 표시
+  const descendants = (id: string, seen = new Set<string>([id])): string[] =>
+    s.works.filter((w) => w.parentId === id && !seen.has(w.id)).flatMap((w) => (seen.add(w.id), [w.id, ...descendants(w.id, seen)]));
   const selected = s.works.find((w) => w.id === work);
   const hasSub = !!selected && descendants(selected.id).length > 0;
   const scope = selected ? (withSub ? [selected.id, ...descendants(selected.id)] : [selected.id]) : [];

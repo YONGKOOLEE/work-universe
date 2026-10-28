@@ -62,7 +62,7 @@ describe('합쳐 불러오기', () => {
     expect(state.decisions.length).toBe(a.decisions.length);
     expect(state.actions.length).toBe(a.actions.length);
     expect(state.events.length).toBe(a.events.length);
-    expect(state.handovers.length).toBe(a.handovers.length + b.handovers.length); // 인계는 항상 추가
+    expect(state.handovers.length).toBe(a.handovers.length); // 같은 인계(업무·인계자·인수자·기준일)는 다시 더하지 않음(검토 2026-10-29 높음 2)
     expect(state.works[0].version).toBe(a.works[0].version + 1);
     expect(state.history.at(-1)?.kind).toBe('합쳐 불러오기');
     expect(summary).toContain(`같은 사람 ${a.users.length}`);
@@ -231,5 +231,34 @@ describe('합쳐 불러오기', () => {
     expect(twice.works.length).toBe(once.works.length);
     expect(twice.docs.length).toBe(once.docs.length);
     expect(twice.users.length).toBe(once.users.length);
+  });
+});
+
+describe('합쳐 불러오기 — 검토 반영(2026-10-29)', () => {
+  it('같은 백업을 두 번 합쳐도 인계·스냅샷이 늘지 않는다', async () => {
+    const { applyMerge, planMerge } = await import('../src/lib/mergeImport');
+    const { createSeed } = await import('../src/data/seed');
+    const base = createSeed('linked');
+    const once = applyMerge(base, createSeed('linked'), {}).state;
+    const twice = applyMerge(once, createSeed('linked'), {}).state;
+    expect(once.handovers.length).toBe(base.handovers.length);
+    expect(twice.snapshots.length).toBe(base.snapshots.length);
+    expect(planMerge(base, createSeed('linked')).counts.handovers).toBe(0);
+  });
+  it('들어온 상위 연결이 순환을 만들면 붙이지 않는다', async () => {
+    const { applyMerge } = await import('../src/lib/mergeImport');
+    const { createSeed } = await import('../src/data/seed');
+    const cur = createSeed('linked');
+    const inc = createSeed('linked');
+    const child = cur.works.find((w) => w.parentId)!; // 지금: child의 상위가 parent
+    const parentId = child.parentId!;
+    // 들어온 쪽: parent의 상위가 child, child는 상위 없음
+    inc.works.find((w) => w.id === parentId)!.parentId = child.id;
+    inc.works.find((w) => w.id === child.id)!.parentId = null;
+    cur.works.find((w) => w.id === parentId)!.parentId = null;
+    const out = applyMerge(cur, inc, {}).state;
+    const p = out.works.find((w) => w.id === parentId)!;
+    const c = out.works.find((w) => w.id === child.id)!;
+    expect(p.parentId === c.id && c.parentId === p.id).toBe(false);
   });
 });

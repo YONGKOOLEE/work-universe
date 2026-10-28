@@ -95,6 +95,7 @@ const docKey = (d: Pick<Doc, 'title' | 'writtenAt'>) => `${normText(d.title)}|${
 const decKey = (d: Decision, wid: string) => `${wid}|${d.date}|${normText(d.title)}`;
 const actKey = (a: Action, wid: string) => `${wid}|${normText(a.title)}|${a.due ?? ''}`;
 const evKey = (e: TEvent) => `${e.date}|${e.type}|${normText(e.title)}`;
+const hoKey = (h: Pick<Handover, 'workId' | 'fromId' | 'toId' | 'baseDate'>) => `${h.workId}|${h.fromId}|${h.toId}|${h.baseDate}`;
 /** 같은 제목+작성일이고 같은 업무(합쳐진 업무)에 걸린 문서인가 */
 const sameDoc = (c: Doc, d: Doc, mappedWorkIds: string[]) =>
   docKey(c) === docKey(d) && (mappedWorkIds.length === 0 ? c.workIds.length === 0 : mappedWorkIds.some((w) => c.workIds.includes(w)));
@@ -116,7 +117,7 @@ export function previewCounts(current: AppState, incoming: AppState, plan: Merge
     decisions: incoming.decisions.filter((d) => !dec.has(decKey(d, mw(d.workId)))).length,
     actions: incoming.actions.filter((a) => !act.has(actKey(a, mw(a.workId)))).length,
     events: incoming.events.filter((e) => !ev.has(evKey(e))).length,
-    handovers: incoming.handovers.length,
+    handovers: incoming.handovers.filter((h) => !current.handovers.some((c) => hoKey(c) === hoKey({ ...h, workId: mw(h.workId), fromId: pm.get(h.fromId) ?? h.fromId, toId: pm.get(h.toId) ?? h.toId }))).length,
   };
 }
 
@@ -294,7 +295,7 @@ export function applyMerge(current: AppState, incoming: AppState, choices: Merge
     for (const f of ['purpose', 'background', 'current', 'cautions', 'rejected'] as const) if (target[f].length === 0) target[f] = r[f];
     if (!target.summary) target.summary = r.summary;
     if (!target.agency) target.agency = r.agency;
-    if (!target.parentId && r.parentId && r.parentId !== target.id) target.parentId = r.parentId;
+    if (!target.parentId && r.parentId && r.parentId !== target.id && !wouldCycle(cur, target.id, r.parentId)) target.parentId = r.parentId;
     target.version += 1;
     target.updatedAt = now;
   }
@@ -328,8 +329,25 @@ export function applyMerge(current: AppState, incoming: AppState, choices: Merge
     cur.history.push(r);
   }
 
-  // ── 6) 인계·스냅샷 ──
+  // ── 6) 인계·스냅샷(같은 인계·스냅샷은 지금 것으로 맞추고 더하지 않음) ──
+  const dupHo = new Set<string>();
   for (const h of inc.handovers) {
+    const have = cur.handovers.find((c) => hoKey(c) === hoKey({ ...h, workId: mw(h.workId), fromId: mu(h.fromId), toId: mu(h.toId) }));
+    if (have) {
+      hoMap.set(h.id, have.id);
+      dupHo.add(h.id);
+    }
+  }
+  const dupSnap = new Set<string>();
+  for (const sn of inc.snapshots) {
+    const have = cur.snapshots.find((c) => c.handoverId === mho(sn.handoverId) && c.takenAt === sn.takenAt);
+    if (have) {
+      sMap.set(sn.id, have.id);
+      dupSnap.add(sn.id);
+    }
+  }
+  for (const h of inc.handovers) {
+    if (dupHo.has(h.id)) continue;
     const r: Handover = {
       ...h,
       id: mho(h.id),
@@ -343,6 +361,7 @@ export function applyMerge(current: AppState, incoming: AppState, choices: Merge
     cur.handovers.push(r);
   }
   for (const s of inc.snapshots) {
+    if (dupSnap.has(s.id)) continue;
     const r: Snapshot = {
       ...s,
       id: ms(s.id),
@@ -471,4 +490,16 @@ export function checkIntegrity(s: AppState): string[] {
   });
   need(U, s.currentUserId, 'currentUserId');
   return bad;
+}
+
+/** childId의 상위를 parentId로 정하면 순환이 되는가(parentId의 조상 사슬에 childId가 있음) */
+function wouldCycle(s: AppState, childId: string, parentId: string): boolean {
+  const seen = new Set<string>();
+  let cur: string | null = parentId;
+  while (cur && !seen.has(cur)) {
+    if (cur === childId) return true;
+    seen.add(cur);
+    cur = s.works.find((w) => w.id === cur)?.parentId ?? null;
+  }
+  return false;
 }

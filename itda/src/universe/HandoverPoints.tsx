@@ -2,7 +2,7 @@
 // 업무잇다 데이터에서 파생한 지도에 그대로 돌린다. 문장마다 근거 칩이 붙고, 칩을 누르면 근거가 된 기록 한 줄이 펼쳐진다.
 // 키가 있으면 업무 유니버스 연결부(refineDraftAsync)로 Claude가 문장을 다듬는다 — 근거 ID·인용이 확인된 문장만 쓰고, 실패하면 규칙 문장 그대로.
 // 인계 절차(사전 점검·체크리스트·확정)는 업무잇다 것이 기준이고, 이 카드는 참고 자료다.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Orbit, Sparkles, Loader2, ChevronDown } from 'lucide-react';
 import type { AppState } from '../lib/types';
 import { Card, CardHead, Button } from '../components/ui';
@@ -24,15 +24,18 @@ export const POINT_ITEMS = ['받는_범위', '주의사항', '진행_중', '최�
 export function HandoverPoints({ data, workId, fromId, toId }: { data: AppState; workId: string; fromId: string; toId: string }) {
   const ai = useAI();
   const built = useMemo(() => {
-    const d = deriveMap(data, { kind: 'work', workId }, undefined, { people: [fromId, toId] });
+    // 대상 업무를 일반 업무 항목으로(이전 인계·받는 범위 판정에 들어가게), 문서에서 온 할 일은 빼고(하위 업무로 세지 않게)
+    const d = deriveMap(data, { kind: 'work', workId }, undefined, { people: [fromId, toId], centerAsWork: true, actions: false });
     const view = buildView(d.doc, d.resolve);
     const uid = d.doc.universe.id;
-    const res = buildHandoverDraft(view, { target: `${uid}/N-000`, from: `${uid}/N-user-${fromId}`, to: `${uid}/N-user-${toId}`, asOf: today() });
+    const res = buildHandoverDraft(view, { target: `${uid}/N-work-${workId}`, from: `${uid}/N-user-${fromId}`, to: `${uid}/N-user-${toId}`, asOf: today() });
     // 화면에 보일 항목만 남긴다(다듬기 호출도 이 항목만 — 시간 절약)
     const draft = res.ok ? { ...res.draft, items: res.draft.items.filter((it: any) => POINT_ITEMS.includes(it.key)) } : null;
     return { view, draft, error: res.ok ? null : res.error };
   }, [data, workId, fromId, toId]);
   const [refined, setRefined] = useState<any>(null);
+  // 데이터가 바뀌면(인계 진행·업무 수정) 예전에 다듬은 문장을 버린다
+  useEffect(() => setRefined(null), [built]);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [open, setOpen] = useState<string | null>(null);
