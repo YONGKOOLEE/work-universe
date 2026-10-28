@@ -64,7 +64,7 @@ export default function DocDetail({ id }: { id: string }) {
           </Card>
 
           <Card>
-            <CardHead icon={<Sparkles size={15} />} title="AI 요약" right={d.summary.length ? <ProvChip prov="inference" /> : undefined} />
+            <CardHead icon={<Sparkles size={15} />} title={d.analyzedBy === 'claude' ? 'AI 요약' : '요약(규칙 기반)'} right={d.summary.length ? (d.analyzedBy === 'claude' ? <ProvChip prov="inference" /> : <span className="rounded bg-sunken px-1.5 text-2xs font-semibold text-muted">규칙 기반</span>) : undefined} />
             <div className="px-4 py-3 text-[13px]">
               {d.summary.length ? (
                 <ol className="list-decimal space-y-1.5 pl-4">

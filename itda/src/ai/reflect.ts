@@ -208,12 +208,17 @@ export function mockExtract(s: AppState, title: string, paras: DocParagraph[], d
     } else out.push(t);
   }
 
-  const scored = sents.map((x, i) => ({ ...x, i, sc: (/의결|결정|목적|위하여|시행|개정/.test(x.t) ? 2 : 0) + (i < 3 ? 1 : 0) }));
+  // 문서 제목과 같은 줄·「일시:」 같은 머리 정보는 요약 후보에서 뺀다(처음 사용 점검 2회차)
+  const titleKey = title.replace(/\s+/g, '');
+  const scored = sents
+    .map((x, i) => ({ ...x, i, sc: (/의결|결정|목적|위하여|시행|개정|합의|확정/.test(x.t) ? 2 : 0) + (i < 3 ? 1 : 0) }))
+    .filter((x) => x.t.replace(/\s+/g, '') !== titleKey && !/^(○\s*)?(일시|작성일|참석|장소)\s*[:：]/.test(x.t));
   const summary = [...scored].sort((a, b) => b.sc - a.sc).slice(0, 3).sort((a, b) => a.i - b.i).map((x) => clip(x.t, 120));
+  const inSummary = new Set(summary);
   const text = paras.map((p) => p.text).join('\n');
   return {
     summary: summary.length ? summary : ['본문이 짧아 요약할 문장이 부족함'],
-    core: scored.filter((x) => x.sc >= 2).slice(0, 4).map((x) => clip(x.t, 160)),
+    core: scored.filter((x) => x.sc >= 2 && !inSummary.has(clip(x.t, 120))).slice(0, 4).map((x) => clip(x.t, 160)),
     keywords: [],
     relatedWorks: relatedWorksOf(s, title, text),
     proposals: out,

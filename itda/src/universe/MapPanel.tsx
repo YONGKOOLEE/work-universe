@@ -318,9 +318,9 @@ function WorkCardBody({ w, data, head, onPick, nav }: { w: AppState['works'][num
   const actions = data.actions.filter((a) => a.workId === w.id && a.status !== '완료').sort((a, b) => (a.due ?? '9999').localeCompare(b.due ?? '9999'));
   const [allActs, setAllActs] = useState(false);
   const links: { kind: LinkKind; id: string; name: string; dir?: string }[] = [
-    ...(w.parentId ? [{ kind: 'parent' as LinkKind, id: w.parentId, name: data.works.find((x) => x.id === w.parentId)?.name ?? w.parentId }] : []),
-    ...w.relatedIds.map((id) => ({ kind: 'related' as LinkKind, id, name: data.works.find((x) => x.id === id)?.name ?? id })),
-    ...(w.nextIds || []).map((id) => ({ kind: 'next' as LinkKind, id, name: data.works.find((x) => x.id === id)?.name ?? id })),
+    ...(w.parentId ? [{ kind: 'parent' as LinkKind, id: w.parentId, name: data.works.find((x) => x.id === w.parentId)?.name ?? `다른 담당자의 업무(${w.parentId})` }] : []),
+    ...w.relatedIds.map((id) => ({ kind: 'related' as LinkKind, id, name: data.works.find((x) => x.id === id)?.name ?? `다른 담당자의 업무(${id})` })),
+    ...(w.nextIds || []).map((id) => ({ kind: 'next' as LinkKind, id, name: data.works.find((x) => x.id === id)?.name ?? `다른 담당자의 업무(${id})` })),
   ];
   return (
     <>
@@ -340,7 +340,7 @@ function WorkCardBody({ w, data, head, onPick, nav }: { w: AppState['works'][num
           <ul className="mt-1 space-y-1.5">
             {decisions.map((d) => (
               <li key={d.id} className="text-[12.5px]">
-                <span className="tnum text-faint">{fmtDate(d.date)}</span> {d.title}
+                <span className="tnum text-faint">{fmtDate(d.date)}</span> {d.title.replace(/^\d{4}\.\s*\d{1,2}\.\s*\d{1,2}\.\s*/, '')}
                 {d.cite?.length > 0 && (
                   <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
                     {d.cite.slice(0, 1).map((c, i) => (
@@ -360,7 +360,7 @@ function WorkCardBody({ w, data, head, onPick, nav }: { w: AppState['works'][num
             {(allActs ? actions : actions.slice(0, 6)).map((a) => (
               <li key={a.id}>
                 <button className="w-full rounded px-1 py-0.5 text-left text-[12.5px] hover:bg-sunken" onClick={() => onPick({ kind: 'action', id: a.id })}>
-                  <span className={cx('tnum', a.due && a.due < today() ? 'font-semibold text-danger' : 'text-faint')}>{a.due ? fmtDate(a.due) : '기한 미지정'}</span> {a.title}
+                  <span className={cx('tnum', a.due && a.due < today() ? 'font-semibold text-danger' : 'text-faint')}>{a.due ? fmtDate(a.due) : '기한 미지정'}</span> {a.title.replace(/^\d{4}\.\s*\d{1,2}\.\s*\d{1,2}\.\s*/, '')}
                   {a.ownerId && <span className="ml-1 text-2xs text-faint">· {data.users.find((u) => u.id === a.ownerId)?.name}</span>}
                 </button>
               </li>

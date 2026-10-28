@@ -81,7 +81,12 @@ export function workAnswer(s: AppState, w: Work, q: string): Answer {
     const unv = evs.filter((e) => evProv(e) === 'unverified').length;
     if (unv) lines.push({ text: `이 중 ${unv}건은 날짜 또는 근거가 원문으로 확인되지 않아 별도 확인 필요`, prov: 'unverified' });
   } else lines.push(none('타임라인 이벤트'));
-  if (acts.length) lines.push({ text: `남은 조치사항 ${acts.length}건 — 가장 가까운 기한: ${acts[0].title}${acts[0].due ? ` (${fmtDate(acts[0].due)})` : ' (기한 미지정)'}`, prov: 'owner' });
+  if (acts.length) {
+    const dayKey = new Date().toISOString().slice(0, 10);
+    const overdue = acts.filter((a) => a.due && a.due < dayKey);
+    const upcoming = acts.find((a) => a.due && a.due >= dayKey);
+    lines.push({ text: `남은 조치사항 ${acts.length}건${overdue.length ? ` — 기한 경과 ${overdue.length}건(${overdue.map((a) => `${a.title} ${fmtDate(a.due)}`).join(', ')})` : ''}${upcoming ? ` — 다음 기한: ${upcoming.title} (${fmtDate(upcoming.due)})` : ''}`, prov: 'owner' });
+  }
   return {
     ...base,
     intent: 'work-progress',

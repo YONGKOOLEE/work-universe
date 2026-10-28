@@ -402,7 +402,7 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
                           <span className="mr-1.5 rounded bg-navy px-1 text-2xs font-semibold text-surface">{d.type}</span>
                           <span className="font-medium">{d.title}</span>
                           <span className="block text-2xs text-muted">
-                            {d.note} · {d.basis === 'fact' ? '원문 근거' : 'AI 추론'}
+                            {d.note} · {d.basis === 'fact' ? '원문 근거' : ext?.engine === 'claude' ? 'AI 추론' : '규칙 추정'}
                           </span>
                         </span>
                       </label>

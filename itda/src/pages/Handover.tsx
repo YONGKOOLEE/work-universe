@@ -89,8 +89,8 @@ export default function Handover() {
         </div>
       )}
       <div className="grid gap-5 lg:grid-cols-[1fr_1.6fr]">
-      <Card className="self-start">
-          <CardHead icon={<Plus size={16} />} title="새 인계 시작" sub="1단계 · 인계 대상 업무 선택" />
+      <Card className={presetOther ? 'self-start opacity-50' : 'self-start'} aria-disabled={!!presetOther}>
+          <CardHead icon={<Plus size={16} />} title="새 인계 시작" sub={presetOther ? '위 안내대로 담당자로 전환하면 그 업무로 시작합니다' : '1단계 · 인계 대상 업무 선택'} />
           <div className="space-y-3 px-4 py-4">
             {!w ? (
               <p className="rounded-md bg-sunken px-3 py-3 text-[13px] text-muted">현재 사용자({me.name})가 담당자로 지정된 업무가 없어 인계를 시작할 수 없습니다.</p>
