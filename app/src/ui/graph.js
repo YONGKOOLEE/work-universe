@@ -32,7 +32,6 @@ const ACCENT = '#a6d86b';
 
 const LAYOUT_LABEL_MAX_NODES = 25; // 이 수 이하의 지도만 배치 계산에 이름 자리를 넣는다
 const BIG_TUNED_MAX = 200; // 큰 지도 배치값(온도 1000·냉각 0.99·반복 1500)을 쓰는 노드 수 상한. 이 수를 넘으면 예전 값(120·0.97·1200)
-const colorOf =(el) => TYPE_COLORS[el.data('core_type')] || UNKNOWN_COLOR;
 
 // 꼭지에서 몇 단계 떨어졌는지(연결 방향 무시). 닿지 않는 노드는 가장 바깥 고리로 보낸다.
 // 같은 고리 안에서는 부모 노드 순서대로 모아 선이 덜 엇갈리게 한다.
@@ -136,7 +135,11 @@ export function legendItems(display, also = [], marks = []) {
 }
 
 // getFilter(display): 거르기 결과 {nodes:Set, edges:Set} 또는 null(T-18, R-17 ③). 그릴 때마다 다시 적용한다
-export function createGraph(container, { onSelect, onToggle = () => {}, getFilter = () => null, onFlow = () => {} }) {
+// theme(선택, CR-24 업무잇다 통합): 밝은 화면 등 다른 색으로 그릴 때 {bg,text,muted,edge,accent,select,font,types}. 주지 않으면 이전 색 그대로
+export function createGraph(container, { onSelect, onToggle = () => {}, getFilter = () => null, onFlow = () => {}, theme = null }) {
+  const th = { bg: BG, text: TEXT, muted: MUTED, edge: EDGE, accent: ACCENT, select: '#ffffff', font: null, ...(theme || {}), types: { ...TYPE_COLORS, ...((theme && theme.types) || {}) } };
+  const colorOf = (n) => th.types[n.data('core_type')] || UNKNOWN_COLOR;
+  const fontStyle = th.font ? { 'font-family': th.font } : {};
   // 흐름 정렬 상태(U-7): 흐름 정렬을 하면 true, 다시 정렬·화면 다시 그리기(render)면 false. 「흐름 정렬」 단추의 눌림 표시에 쓴다
   let flowOn = false;
   const setFlow = (v) => { if (flowOn !== v) { flowOn = v; onFlow(v); } };
@@ -158,13 +161,14 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
           'background-opacity': 0.35,
           'border-width': 2.5,
           'border-color': colorOf,
-          color: TEXT,
+          color: th.text,
+          ...fontStyle,
           'font-size': 14,
           'text-valign': 'bottom',
           'text-margin-y': 6,
           'text-wrap': 'wrap',
           'text-max-width': 120,
-          'text-outline-color': BG,
+          'text-outline-color': th.bg,
           'text-outline-width': 2.5,
         },
       },
@@ -182,20 +186,21 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
       { selector: 'node.mk-solo', style: { 'border-color': '#ff6b6b', 'border-width': 7, 'border-style': 'double' } },
       { selector: 'node.mk-current', style: { 'border-color': '#e6ecdf', 'border-width': 4.5, 'background-opacity': 0.65 } },
       { selector: 'node.mk-dim', style: { opacity: 0.45 } },
-      { selector: 'node:selected', style: { 'border-width': 4, 'border-color': '#ffffff', 'background-opacity': 0.75 } },
-      { selector: 'node.hover', style: { 'border-color': '#ffffff', 'background-opacity': 0.6 } },
+      { selector: 'node:selected', style: { 'border-width': 4, 'border-color': th.select, 'background-opacity': 0.75 } },
+      { selector: 'node.hover', style: { 'border-color': th.select, 'background-opacity': 0.6 } },
       {
         selector: 'edge',
         style: {
           label: '',
           'font-size': 10,
           'text-rotation': 'autorotate',
-          color: MUTED,
-          'text-outline-color': BG,
+          color: th.muted,
+          ...fontStyle,
+          'text-outline-color': th.bg,
           'text-outline-width': 2,
           width: 1.4,
-          'line-color': EDGE,
-          'target-arrow-color': EDGE,
+          'line-color': th.edge,
+          'target-arrow-color': th.edge,
           'target-arrow-shape': 'triangle',
           'arrow-scale': 0.8,
           'curve-style': 'bezier',
@@ -213,7 +218,7 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
       { selector: '.faded', style: { opacity: 0.15 } },
       { selector: 'node.time-off', style: { opacity: 0.25, 'border-style': 'dotted' } },
       { selector: 'edge.time-off', style: { display: 'none' } }, // 기준일에 유효하지 않은 담당·소속 선은 빼고 노드만 흐리게(D7, 2026-10-25)
-      { selector: 'edge.hood', style: { 'line-color': ACCENT, 'target-arrow-color': ACCENT, width: 2.4, color: TEXT, opacity: 1 } },
+      { selector: 'edge.hood', style: { 'line-color': th.accent, 'target-arrow-color': th.accent, width: 2.4, color: th.text, opacity: 1 } },
       // 거르기에서 빠진 요소(R-17 ③, D-17): 기본은 아주 흐리게(위치는 그대로 두어 전체 모양을 잃지 않게), 'hide'면 숨김
       EXPLORE.FILTER_MODE === 'hide'
         ? { selector: '.filtered-out', style: { display: 'none' } }
@@ -221,10 +226,10 @@ export function createGraph(container, { onSelect, onToggle = () => {}, getFilte
       // 이름이 다른 이름과 겹치면 우선순위가 낮은 쪽을 숨긴다(CR-22 G 이름 단계 표시, applyLabels). 클래스 이름은 이전 규칙(작아서 숨김)의 것을 그대로 쓴다
       { selector: '.tiny-label', style: { 'text-opacity': 0 } },
       // 팀을 펼친 직후 펼친 항목 강조(CR-22 G 7)
-      { selector: 'node.just-opened', style: { 'border-color': '#ffffff', 'border-width': 5, 'background-opacity': 0.7 } },
+      { selector: 'node.just-opened', style: { 'border-color': th.select, 'border-width': 5, 'background-opacity': 0.7 } },
       // 포함 선: 아주 흐리게·화살표 없음·이름 늘 숨김(다른 연결 규칙보다 뒤에 둬서 이긴다). 고른 항목의 연결이어도 조금만 진해진다
       { selector: 'edge[?contains]', style: { opacity: LOD.CONTAINS_OPACITY, 'target-arrow-shape': 'none', label: '', width: 1 } },
-      { selector: 'edge[?contains].hood', style: { opacity: 0.35, 'line-color': EDGE, 'target-arrow-color': EDGE, width: 1.2, label: '' } },
+      { selector: 'edge[?contains].hood', style: { opacity: 0.35, 'line-color': th.edge, 'target-arrow-color': th.edge, width: 1.2, label: '' } },
       // 찾기로 고른 노드: 노란 테두리(잠시)
       // 따라 하기가 짚는 노드(CR-13 A, ui/tour.js가 깜빡이거나 고정으로 켠다)
       // 흰 점선: 공간 강조의 노랑 실선(mk-issue)과 겹쳐 헷갈리지 않게(CR-22 G2)

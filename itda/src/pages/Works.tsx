@@ -1,0 +1,172 @@
+import { openNewWork } from '../lib/newWork';
+import { useEffect, useMemo, useState } from 'react';
+import { Plus, Search, ListTree, LayoutGrid, CornerDownRight } from 'lucide-react';
+import { useStore, ownerNames } from '../lib/store';
+import { useRouter } from '../lib/router';
+import { Button, Card, StatusBadge, Mono, inputCls, Empty } from '../components/ui';
+import { WorkCard } from '../components/WorkCard';
+import { WORK_STATUSES, type Work } from '../lib/types';
+import { workIssues } from '../ai/engine';
+import { fmtDate, cx } from '../lib/util';
+
+export default function Works() {
+  const { s } = useStore();
+  const { query, nav } = useRouter();
+  const [q, setQ] = useState('');
+  const [status, setStatus] = useState<string>(query.get('status') === 'active' ? 'active' : 'all');
+  const [owner, setOwner] = useState('all');
+  const [sort, setSort] = useState(query.get('sort') === 'updated' ? 'updated' : 'tree');
+  const [view, setView] = useState<'table' | 'cards'>('table');
+  useEffect(() => {
+    if (query.get('new') === '1') openNewWork();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const filtered = useMemo(() => {
+    const t = q.trim();
+    return s.works.filter(
+      (w) =>
+        (!t || [w.name, w.summary, w.id, ...w.keywords].join(' ').includes(t)) &&
+        (status === 'all' || (status === 'active' ? w.status === '진행 중' || w.status === '운영 중' : w.status === status)) &&
+        (owner === 'all' || w.owners.includes(owner)),
+    );
+  }, [s.works, q, status, owner]);
+
+  const ordered: { w: Work; depth: number }[] = useMemo(() => {
+    if (sort === 'updated') return [...filtered].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map((w) => ({ w, depth: 0 }));
+    if (sort === 'name') return [...filtered].sort((a, b) => a.name.localeCompare(b.name, 'ko')).map((w) => ({ w, depth: 0 }));
+    if (sort === 'status') return [...filtered].sort((a, b) => WORK_STATUSES.indexOf(a.status) - WORK_STATUSES.indexOf(b.status)).map((w) => ({ w, depth: 0 }));
+    // 계층 순
+    const ids = new Set(filtered.map((w) => w.id));
+    const out: { w: Work; depth: number }[] = [];
+    const walk = (pid: string | null, depth: number) => {
+      s.works
+        .filter((w) => w.parentId === pid)
+        .sort((a, b) => a.id.localeCompare(b.id))
+        .forEach((w) => {
+          if (ids.has(w.id)) out.push({ w, depth });
+          walk(w.id, depth + 1);
+        });
+    };
+    walk(null, 0);
+    filtered.forEach((w) => !out.find((o) => o.w.id === w.id) && out.push({ w, depth: 0 }));
+    return out;
+  }, [filtered, sort, s.works]);
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-[22px] font-bold tracking-tight">업무 관리</h1>
+          <p className="text-[13px] text-muted">문서가 아닌 업무 단위로 배경·경과·결정·향후 조치를 관리합니다.</p>
+        </div>
+        <Button variant="primary" onClick={openNewWork}>
+          <Plus size={16} />
+          업무 등록
+        </Button>
+      </div>
+
+      <Card className="flex flex-wrap items-center gap-2 p-3">
+        <div className="relative min-w-[200px] flex-1">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
+          <input id="works-q" className={cx(inputCls, 'pl-9')} placeholder="업무명, ID, 키워드 검색" value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
+        <select id="works-status" className={cx(inputCls, '!w-auto')} value={status} onChange={(e) => setStatus(e.target.value)} aria-label="상태 필터">
+          <option value="all">전체 상태</option>
+          <option value="active">진행·운영 중</option>
+          {WORK_STATUSES.map((x) => (
+            <option key={x} value={x}>
+              {x}
+            </option>
+          ))}
+        </select>
+        <select id="works-owner" className={cx(inputCls, '!w-auto')} value={owner} onChange={(e) => setOwner(e.target.value)} aria-label="담당자 필터">
+          <option value="all">전체 담당자</option>
+          {s.users.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.name}
+            </option>
+          ))}
+        </select>
+        <select id="works-sort" className={cx(inputCls, '!w-auto')} value={sort} onChange={(e) => setSort(e.target.value)} aria-label="정렬">
+          <option value="tree">업무 계층순</option>
+          <option value="updated">최근 갱신순</option>
+          <option value="name">업무명순</option>
+          <option value="status">상태순</option>
+        </select>
+        <div className="flex rounded-md border border-line2">
+          <button className={cx('p-2', view === 'table' ? 'bg-sunken text-ink' : 'text-faint')} onClick={() => setView('table')} aria-label="목록 보기">
+            <ListTree size={16} />
+          </button>
+          <button className={cx('p-2', view === 'cards' ? 'bg-sunken text-ink' : 'text-faint')} onClick={() => setView('cards')} aria-label="카드 보기">
+            <LayoutGrid size={16} />
+          </button>
+        </div>
+      </Card>
+
+      {ordered.length === 0 ? (
+        <Card>
+          <Empty title="조건에 맞는 업무가 없습니다" sub="검색어나 필터를 바꿔 보세요." />
+        </Card>
+      ) : view === 'cards' ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {ordered.map(({ w }) => (
+            <WorkCard key={w.id} w={w} />
+          ))}
+        </div>
+      ) : (
+        <Card className="overflow-x-auto scroll-thin">
+          <table className="w-full min-w-[820px] text-[13px]">
+            <thead>
+              <tr className="border-b border-line bg-sunken/60 text-left text-xs text-muted">
+                <th className="px-4 py-2.5 font-semibold">업무명</th>
+                <th className="px-3 py-2.5 font-semibold">상태</th>
+                <th className="px-3 py-2.5 font-semibold">담당</th>
+                <th className="px-3 py-2.5 font-semibold">문서</th>
+                <th className="px-3 py-2.5 font-semibold">미완료 조치</th>
+                <th className="px-3 py-2.5 font-semibold">AI 점검</th>
+                <th className="px-3 py-2.5 font-semibold">최근 갱신</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ordered.map(({ w, depth }) => {
+                const iss = workIssues(s, w);
+                const high = iss.filter((i) => i.severity === 'high').length;
+                const mid = iss.filter((i) => i.severity === 'mid').length;
+                return (
+                  <tr key={w.id} className="cursor-pointer border-b border-line last:border-0 hover:bg-sunken/50" onClick={() => nav(`/works/${w.id}`)}>
+                    <td className="px-4 py-3">
+                      <div className="flex items-start gap-1.5" style={{ paddingLeft: depth * 20 }}>
+                        {depth > 0 && <CornerDownRight size={13} className="mt-1 shrink-0 text-faint" />}
+                        <div className="min-w-0">
+                          <div className="font-semibold">{w.name}</div>
+                          <div className="flex gap-2 text-2xs text-muted">
+                            <Mono>{w.id}</Mono>
+                            <span>{w.type}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3 py-3">
+                      <StatusBadge status={w.status} />
+                    </td>
+                    <td className="px-3 py-3">{ownerNames(s, w.owners)}</td>
+                    <td className="px-3 py-3 tnum">{s.docs.filter((d) => d.workIds.includes(w.id)).length}</td>
+                    <td className="px-3 py-3 tnum">{s.actions.filter((a) => a.workId === w.id && a.status !== '완료').length}</td>
+                    <td className="px-3 py-3">
+                      <div className="flex gap-1">
+                        {high > 0 && <span className="rounded bg-dangersoft px-1.5 text-2xs font-semibold text-danger">높음 {high}</span>}
+                        {mid > 0 && <span className="rounded bg-warnsoft px-1.5 text-2xs font-semibold text-warn">보통 {mid}</span>}
+                        {!high && !mid && <span className="text-2xs text-faint">—</span>}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-muted tnum">{fmtDate(w.updatedAt)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Card>
+      )}
+    </div>
+  );
+}

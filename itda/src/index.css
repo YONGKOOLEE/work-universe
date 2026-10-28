@@ -1,0 +1,158 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Layout: 고정 네이비 사이드바 + 밝은 작업 영역, 카드형 정보 블록 */
+:root {
+  --bg: 245 247 250;
+  --surface: 255 255 255;
+  --sunken: 239 242 247;
+  --line: 223 228 237;
+  --line2: 204 211 224;
+  --ink: 17 27 45;
+  --muted: 86 97 118;
+  --faint: 132 142 161;
+  --navy: 20 41 92;
+  --brand: 37 87 214;
+  --brandsoft: 230 237 252;
+  --fact: 10 116 90;
+  --factsoft: 225 244 238;
+  --infer: 104 76 214;
+  --infersoft: 238 234 252;
+  --warn: 166 98 0;
+  --warnsoft: 253 242 222;
+  --owner: 71 85 105;
+  --ownersoft: 236 239 244;
+  --danger: 196 43 43;
+  --dangersoft: 252 232 232;
+  --ok: 16 128 72;
+  --oksoft: 226 245 234;
+  --side: 16 30 66;
+  --sideink: 233 238 250;
+  --sidemuted: 150 165 200;
+  --sideactive: 35 58 120;
+  --shadow: 17 27 45;
+  --onbrand: 255 255 255;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: 13 18 30;
+    --surface: 21 28 44;
+    --sunken: 17 23 37;
+    --line: 39 49 72;
+    --line2: 55 67 95;
+    --ink: 230 235 245;
+    --muted: 160 171 192;
+    --faint: 118 130 155;
+    --navy: 190 208 255;
+    --brand: 120 160 255;
+    --brandsoft: 30 44 82;
+    --fact: 92 210 170;
+    --factsoft: 18 52 46;
+    --infer: 176 156 255;
+    --infersoft: 44 36 82;
+    --warn: 240 180 90;
+    --warnsoft: 62 46 18;
+    --owner: 170 182 204;
+    --ownersoft: 36 44 62;
+    --danger: 255 128 128;
+    --dangersoft: 70 26 30;
+    --ok: 110 214 150;
+    --oksoft: 20 54 38;
+    --side: 10 16 32;
+    --sideink: 226 232 246;
+    --sidemuted: 130 146 182;
+    --sideactive: 32 48 92;
+    --shadow: 0 0 0;
+    --onbrand: 10 16 32;
+    color-scheme: dark;
+  }
+}
+:root[data-theme='dark'] {
+  --bg: 13 18 30;
+  --surface: 21 28 44;
+  --sunken: 17 23 37;
+  --line: 39 49 72;
+  --line2: 55 67 95;
+  --ink: 230 235 245;
+  --muted: 160 171 192;
+  --faint: 118 130 155;
+  --navy: 190 208 255;
+  --brand: 120 160 255;
+  --brandsoft: 30 44 82;
+  --fact: 92 210 170;
+  --factsoft: 18 52 46;
+  --infer: 176 156 255;
+  --infersoft: 44 36 82;
+  --warn: 240 180 90;
+  --warnsoft: 62 46 18;
+  --owner: 170 182 204;
+  --ownersoft: 36 44 62;
+  --danger: 255 128 128;
+  --dangersoft: 70 26 30;
+  --ok: 110 214 150;
+  --oksoft: 20 54 38;
+  --side: 10 16 32;
+  --sideink: 226 232 246;
+  --sidemuted: 130 146 182;
+  --sideactive: 32 48 92;
+  --shadow: 0 0 0;
+  --onbrand: 10 16 32;
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  background: rgb(var(--bg));
+  color: rgb(var(--ink));
+  font-family: "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  -webkit-font-smoothing: antialiased;
+}
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+:focus-visible {
+  outline: 2px solid rgb(var(--brand));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.anchor-hit {
+  animation: hit 2.4s ease-out 1;
+  box-shadow: 0 0 0 2px rgb(var(--brand));
+}
+@keyframes hit {
+  0% {
+    background: rgb(var(--brandsoft));
+  }
+  100% {
+    background: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+.scroll-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: rgb(var(--line2));
+  border-radius: 8px;
+}
