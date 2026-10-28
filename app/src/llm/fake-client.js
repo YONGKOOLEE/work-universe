@@ -14,6 +14,7 @@ function quoteOf(line, gid) {
   return evidenceBody(String(line || '')).trim().slice(0, 20).trim();
 }
 
+const isReview = (params) => !!(params.output_config && params.output_config.format && params.output_config.format.schema.properties.issues);
 const isConvert = (params) => !!(params.output_config && params.output_config.format && params.output_config.format.schema.properties.works);
 
 // ── 문서 변환 응답 흉내(T-37): 원문의 줄을 그대로 인용하는 "착실한 모델". 모양은 llm/ai-convert.js의 AI_CONVERT_SCHEMA ──
@@ -130,6 +131,8 @@ function answer(mode, params, fake) {
   const user = params.messages[0].content;
   if (isExtract(params)) return fake.extractOut || extractAnswer(mode, user);
   if (isCandidates(params)) return fake.candidatesOut || candidatesAnswer(mode, user);
+  // 검토(두 번째 호출): 기본은 더할 것도 의심도 없는 응답(기존 점검 결과가 그대로). fake.reviewOut에 객체를 넣으면 그것을 돌려준다
+  if (isReview(params)) return fake.reviewOut || { works: [], people: [], artifacts: [], topics: [], memos: [], edges: [], issues: [] };
   if (isConvert(params)) return fake.convertOut || convertAnswer(mode, parseConvertUser(user) || '');
   const sections = parsePrompt(user);
   const isDraft = !!(params.output_config && params.output_config.format && params.output_config.format.schema.properties.items);

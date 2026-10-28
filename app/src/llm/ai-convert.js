@@ -14,7 +14,7 @@ import { ID_PREFIX, LABEL_MAX, SCHEMA_VERSION, SUBTYPE_ROLE, TEXT_MAX, normalize
 import { validateDocument } from '../model/validate.js';
 import { CONVERT_RULES, findDate, marksOf, statusOf, stripMarks } from '../rules/doc-convert.js';
 import { QUOTE_MAX, QUOTE_MIN, normalizeQuote, quoteShapeProblem, shortEdgeQuoteOk } from './evidence-text.js';
-import { CONVERT_SYSTEM_PROMPT, convertUserText } from './prompts.js';
+import { CONVERT_SYSTEM_PROMPT, REVIEW_SYSTEM_PROMPT, convertUserText, reviewUserText } from './prompts.js';
 
 /** 인용의 최소 길이(공백을 뺀 글자 수). 짧은 구절은 어디에나 있어 근거가 되지 못한다 */
 export const AI_CONVERT_MIN_QUOTE = QUOTE_MIN;
@@ -36,12 +36,8 @@ const list = (items) => ({ type: 'array', items });
 const Q = str('문서에서 글자 그대로 따온 구절(8글자 이상). 문서에 없는 구절은 쓰지 마세요');
 const ENDPOINT = obj({ type: { type: 'string', enum: AI_EDGE_TYPES }, label: str('위에서 만든 항목의 label 그대로') });
 
-/** 모델이 내야 하는 JSON. 12.2를 단순화한 입력 형식이다(ID·시각은 앱이 매긴다) */
-export const AI_CONVERT_SCHEMA = obj({
-  name: str('유니버스(문서) 이름. 100글자 이하'),
-  purpose: str('목적 한두 문장. 문서에 있는 내용만, 없으면 빈 글자'),
-  owner: str('작성 주체(팀·부서). 문서에 적힌 것만, 없으면 빈 글자'),
-  date: str('작성일 YYYY-MM-DD. 문서에 적힌 것만, 없으면 빈 글자'),
+/** 항목·연결 목록 칸(변환·검토 응답이 같은 모양을 쓴다) */
+const ITEM_LISTS = {
   works: list(obj({
     label: str('업무 이름'),
     description: str('설명. 없으면 빈 글자'),
@@ -70,6 +66,28 @@ export const AI_CONVERT_SCHEMA = obj({
     quote: str('근거 구절. 없으면 빈 글자. 표의 한 줄에서 읽은 연결이면 그 줄 전체를 글자 그대로'),
     verb: str(`연결의 뜻을 나타내는 짧은 동사(작성·검토·승인·보고·담당 등, ${AI_EDGE_VERB_MAX}글자 이하). 근거 구절에 그 글자가 그대로 있을 때만, 아니면 빈 글자`),
   })),
+};
+
+/** 모델이 내야 하는 JSON. 12.2를 단순화한 입력 형식이다(ID·시각은 앱이 매긴다) */
+export const AI_CONVERT_SCHEMA = obj({
+  name: str('유니버스(문서) 이름. 100글자 이하'),
+  purpose: str('목적 한두 문장. 문서에 있는 내용만, 없으면 빈 글자'),
+  owner: str('작성 주체(팀·부서). 문서에 적힌 것만, 없으면 빈 글자'),
+  date: str('작성일 YYYY-MM-DD. 문서에 적힌 것만, 없으면 빈 글자'),
+  ...ITEM_LISTS,
+});
+
+/** 검토 응답에서 의심 항목의 종류 */
+export const AI_ISSUE_KINDS = ['item', 'edge'];
+/** 검토 응답: 첫 결과에 더할 항목·연결(변환 응답과 같은 모양, 머리 칸 없음) + 의심스러운 것(issues) */
+export const AI_REVIEW_SCHEMA = obj({
+  ...ITEM_LISTS,
+  issues: list(obj({
+    kind: { type: 'string', enum: AI_ISSUE_KINDS },
+    label: str('항목 이름. 연결이면 「a → b」'),
+    reason: str('왜 문서와 달라 보이는지 한 문장'),
+    quote: str('문서에서 글자 그대로 따온 근거 구절'),
+  })),
 });
 
 // ── 요청 ────────────────────────────────────────────────────────────────────
@@ -81,19 +99,60 @@ export function checkConvertInput(text) {
   return { ok: true };
 }
 
+/** 문서와 함께 보내는 지도 정보의 기존 항목 상한(글로 추가 existingItems와 같은 값) */
+export const AI_CONVERT_MAX_EXISTING = 200;
+
 /**
- * @param {string} text 문서 원문(20만 자 이하)
- * @returns {{system:string, user:string, schema:object}}
- * @throws {Error} 비었거나 20만 자를 넘으면(err.code = 'empty'|'too_long') — 호출하지 않는다
+ * 보낼 지도 정보를 다듬는다: 붙일 업무 이름 + 기존 항목(유형·이름, 상한 AI_CONVERT_MAX_EXISTING, 이름은 LABEL_MAX까지).
+ * 비어 있으면 null(프롬프트가 지금과 같고 캐시 키도 같다)
+ * @param {{target?:string, existing?:{type:string,label:string}[]}|null} [ctx]
+ * @returns {{target:string, existing:{type:string,label:string}[]}|null}
  */
-export function buildConvertPrompt(text) {
+export function normalizeConvertContext(ctx) {
+  if (!isObj(ctx)) return null;
+  const target = typeof ctx.target === 'string' ? clip(oneLine(ctx.target), LABEL_MAX) : '';
+  const existing = (Array.isArray(ctx.existing) ? ctx.existing : [])
+    .filter((x) => isObj(x) && typeof x.type === 'string' && typeof x.label === 'string' && oneLine(x.label))
+    .slice(0, AI_CONVERT_MAX_EXISTING)
+    .map((x) => ({ type: x.type, label: clip(oneLine(x.label), LABEL_MAX) }));
+  return target || existing.length ? { target, existing } : null;
+}
+
+/** 지도 정보의 지문(캐시 키용). 정보가 없으면 빈 글자 */
+export function contextFingerprint(ctx) {
+  const c = normalizeConvertContext(ctx);
+  return c ? textFingerprint(`${c.target}\u0002${c.existing.map((x) => `${x.type}\u0001${x.label}`).join('\u0003')}`) : '';
+}
+
+function checkedInput(text) {
   const c = checkConvertInput(text);
   if (!c.ok) {
     const err = new Error(c.reason === 'empty' ? '변환할 문서가 비어 있습니다' : `문서가 너무 깁니다(${c.max.toLocaleString()}자 이하)`);
     err.code = c.reason;
     throw err;
   }
-  return { system: CONVERT_SYSTEM_PROMPT, user: convertUserText(text), schema: AI_CONVERT_SCHEMA };
+}
+
+/**
+ * @param {string} text 문서 원문(20만 자 이하)
+ * @param {{target?:string, existing?:{type:string,label:string}[]}} [ctx] 문서로 더하기: 붙일 업무와 지도의 기존 항목 이름(선택)
+ * @returns {{system:string, user:string, schema:object}}
+ * @throws {Error} 비었거나 20만 자를 넘으면(err.code = 'empty'|'too_long') — 호출하지 않는다
+ */
+export function buildConvertPrompt(text, ctx = {}) {
+  checkedInput(text);
+  return { system: CONVERT_SYSTEM_PROMPT, user: convertUserText(text, normalizeConvertContext(ctx) || {}), schema: AI_CONVERT_SCHEMA };
+}
+
+/**
+ * 검토(두 번째 호출) 프롬프트: 원문 + 첫 결과 요약. 응답은 AI_REVIEW_SCHEMA
+ * @param {string} text 문서 원문
+ * @param {string} firstSummary summarizeKept 결과
+ * @param {object} [ctx] buildConvertPrompt와 같은 지도 정보
+ */
+export function buildReviewPrompt(text, firstSummary, ctx = {}) {
+  checkedInput(text);
+  return { system: REVIEW_SYSTEM_PROMPT, user: reviewUserText(text, String(firstSummary || ''), normalizeConvertContext(ctx) || {}), schema: AI_REVIEW_SCHEMA };
 }
 
 /** 원문 지문(FNV-1a 32비트 + 길이). 캐시 키용 — 같은 글이면 같은 키 */
@@ -247,6 +306,146 @@ function dateInText(text, raw) {
   if (!d || !isDate(d)) return '';
   const [y, m, day] = d.split('-');
   return new RegExp(`(?<!\\d)${y}\\s*[.\\-/년]\\s*0?${Number(m)}\\s*[.\\-/월]\\s*0?${Number(day)}(?!\\d)`).test(text) ? d : '';
+}
+
+// ── 검토(두 번째 호출) ──────────────────────────────────────────────────────
+
+/** 첫 결과 요약의 최대 글자 수(검토 호출에 같이 보낸다 — 작게 유지) */
+export const AI_REVIEW_SUMMARY_MAX = 20000;
+/** 돌려주는 의심 항목의 최대 개수 */
+export const AI_REVIEW_ISSUES_MAX = 30;
+const ATTR_SHOW = 40;
+
+/**
+ * 검증을 통과한 첫 결과(kept)를 검토 호출에 보낼 작은 글로 줄인다: 유형별 이름, 업무의 속성(값은 앞부분만), 연결은 「from -관계→ to」
+ * @param {object} kept verifyAiConvert().kept
+ * @returns {string}
+ */
+export function summarizeKept(kept) {
+  const lines = [];
+  const attrText = (w) => WORK_ATTR_KEYS.map((k) => (w.attrs && w.attrs[k] ? `${k}=${k === '절차' ? '있음' : clip(oneLine(w.attrs[k]), ATTR_SHOW)}` : '')).filter(Boolean).join('; ');
+  lines.push('업무:');
+  for (const w of kept.works) lines.push(`- ${w.label}${attrText(w) ? ` [${attrText(w)}]` : ''}${w.description ? ' [설명 있음]' : ''}`);
+  lines.push('사람:');
+  for (const p of kept.people) lines.push(`- ${p.label}${p.role ? '(역할)' : ''}${p.org ? ` [소속=${p.org}]` : ''}${p.duty ? ' [하는 일 있음]' : ''}`);
+  lines.push('산출물:');
+  for (const a of kept.artifacts) lines.push(`- ${a.label}`);
+  lines.push('주제:');
+  for (const t of kept.topics) lines.push(`- ${t.label}`);
+  lines.push('메모:');
+  for (const m of kept.memos) lines.push(`- ${clip(oneLine(m.text), 60)}`);
+  lines.push('연결:');
+  for (const e of kept.edges) lines.push(`- ${e.from.label} -${e.relation}→ ${e.to.label}`);
+  return clip(lines.join('\n'), AI_REVIEW_SUMMARY_MAX);
+}
+
+const keyOf = (label) => normalizeLabel(oneLine(typeof label === 'string' ? stripMarks(label) || label : ''));
+const empty = (v) => typeof v !== 'string' || !v.trim();
+
+/**
+ * 첫 응답(원 응답)에 검토 응답을 합친다. 순수 함수 — 합친 뒤 verifyAiConvert를 다시 돌려야 인용이 확인된다.
+ *  - 새 항목·연결·메모는 뒤에 덧붙인다. 메모는 정규화한 글이 같으면 건너뛴다
+ *  - 업무·사람은 이름(normalizeLabel)이 첫 응답에 이미 있으면 새로 만들지 않고 빈 칸(설명·속성·소속·하는 일)만 채운다(덮어쓰지 않는다)
+ *  - text를 주면 채우기도 그 항목의 인용이 원문에 글자 그대로 있을 때만 한다
+ * @param {object} first 첫 응답(AI_CONVERT_SCHEMA 모양)
+ * @param {object} review 검토 응답(AI_REVIEW_SCHEMA 모양)
+ * @param {string} [text] 원문(채우기 인용 확인용)
+ * @returns {object} 합친 응답(AI_CONVERT_SCHEMA 모양). first가 객체가 아니면 first 그대로
+ */
+export function mergeReview(first, review, text = null) {
+  if (!isObj(first) || !isObj(review)) return first;
+  const hay = text === null ? null : normalizeQuote(text);
+  const quoteOk = (q) => hay === null || (typeof q === 'string' && !quoteShapeProblem(normalizeQuote(q)) && hay.includes(normalizeQuote(q)));
+  const arr = (o, k) => (Array.isArray(o[k]) ? o[k] : []);
+  const out = { ...first };
+  for (const k of ['works', 'people', 'artifacts', 'topics', 'memos', 'edges']) out[k] = arr(first, k).map((x) => (isObj(x) ? { ...x, ...(isObj(x.attrs) ? { attrs: { ...x.attrs } } : {}) } : x));
+
+  const mergeNamed = (k, fill) => {
+    const byKey = new Map(out[k].filter((x) => isObj(x)).map((x) => [keyOf(x.label), x]));
+    for (const r of arr(review, k)) {
+      if (!isObj(r)) continue;
+      const hit = byKey.get(keyOf(r.label));
+      if (!hit) { out[k].push(r); continue; }
+      if (quoteOk(r.quote)) fill(hit, r);
+    }
+  };
+  mergeNamed('works', (hit, r) => {
+    if (empty(hit.description) && !empty(r.description)) hit.description = r.description;
+    if (!isObj(r.attrs)) return;
+    if (!isObj(hit.attrs)) hit.attrs = {};
+    for (const key of WORK_ATTR_KEYS) if (empty(hit.attrs[key]) && !empty(r.attrs[key])) hit.attrs[key] = r.attrs[key];
+  });
+  mergeNamed('people', (hit, r) => {
+    for (const f of ['description', 'org', 'duty']) if (empty(hit[f]) && !empty(r[f])) hit[f] = r[f];
+  });
+  // 산출물·주제는 같은 이름이면 verifyAiConvert가 먼저 나온 것 하나로 합친다
+  for (const k of ['artifacts', 'topics', 'edges']) for (const r of arr(review, k)) if (isObj(r)) out[k].push(r);
+  const seen = new Set(out.memos.filter(isObj).map((m) => normalizeQuote(typeof m.text === 'string' ? m.text : '')));
+  for (const m of arr(review, 'memos')) {
+    if (!isObj(m)) continue;
+    const t = normalizeQuote(typeof m.text === 'string' ? m.text : '');
+    if (!t || seen.has(t)) continue;
+    seen.add(t);
+    out.memos.push(m);
+  }
+  return out;
+}
+
+/**
+ * 검토가 더한 것의 개수: 첫 결과 대비 새 노드·연결·메모와 채워진 칸(설명·속성·소속·하는 일)
+ * @returns {{nodes:number, edges:number, memos:number, attrs:number}}
+ */
+export function reviewDelta(firstKept, kept) {
+  const n = (o) => o.works.length + o.people.length + o.artifacts.length + o.topics.length;
+  const byKey = (list) => new Map(list.map((x) => [keyOf(x.label), x]));
+  let attrs = 0;
+  const wf = byKey(firstKept.works);
+  for (const w of kept.works) {
+    const f = wf.get(keyOf(w.label));
+    if (!f) continue;
+    if (!f.description && w.description) attrs += 1;
+    for (const k of WORK_ATTR_KEYS) if (!(f.attrs && f.attrs[k]) && w.attrs && w.attrs[k]) attrs += 1;
+  }
+  const pf = byKey(firstKept.people);
+  for (const p of kept.people) {
+    const f = pf.get(keyOf(p.label));
+    if (!f) continue;
+    for (const k of ['description', 'org', 'duty']) if (!f[k] && p[k]) attrs += 1;
+  }
+  return { nodes: n(kept) - n(firstKept), edges: kept.edges.length - firstKept.edges.length, memos: kept.memos.length - firstKept.memos.length, attrs };
+}
+
+/**
+ * 검토 응답의 issues 중 쓸 만한 것만 남긴다: 인용이 원문에 글자 그대로 있고, 이름이 지금 결과(kept)의 항목·연결과 맞는 것.
+ * 연결 이름은 「a → b」(또는 a -> b). 이유는 한 줄로, 개수는 AI_REVIEW_ISSUES_MAX까지
+ * @param {string} text 원문
+ * @param {object} reviewParsed 검토 응답
+ * @param {object} kept 합친 결과(verifyAiConvert().kept)
+ * @returns {{kind:'item'|'edge', label:string, reason:string, quote:string}[]}
+ */
+export function filterReviewIssues(text, reviewParsed, kept) {
+  const list = isObj(reviewParsed) && Array.isArray(reviewParsed.issues) ? reviewParsed.issues : [];
+  const hay = normalizeQuote(text);
+  const items = new Set([...kept.works, ...kept.people, ...kept.artifacts, ...kept.topics].map((x) => keyOf(x.label)));
+  const edges = new Set(kept.edges.map((e) => `${keyOf(e.from.label)}\u0001${keyOf(e.to.label)}`));
+  const out = [];
+  for (const it of list) {
+    if (!isObj(it) || !AI_ISSUE_KINDS.includes(it.kind)) continue;
+    if (typeof it.label !== 'string' || typeof it.reason !== 'string' || typeof it.quote !== 'string') continue;
+    const reason = oneLine(it.reason);
+    const q = normalizeQuote(it.quote);
+    if (!reason || quoteShapeProblem(q) || !hay.includes(q)) continue;
+    const label = oneLine(it.label);
+    if (it.kind === 'item') {
+      if (!items.has(keyOf(label))) continue;
+    } else {
+      const parts = label.split(/\s*(?:→|->)\s*/);
+      if (parts.length !== 2 || !edges.has(`${keyOf(parts[0])}\u0001${keyOf(parts[1])}`)) continue;
+    }
+    out.push({ kind: it.kind, label: clip(label, 100), reason: clip(reason, 300), quote: clip(oneLine(it.quote), QUOTE_MAX) });
+    if (out.length >= AI_REVIEW_ISSUES_MAX) break;
+  }
+  return out;
 }
 
 // ── 문서 만들기 ─────────────────────────────────────────────────────────────

@@ -8,7 +8,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { jsonSchemaOutputFormat } from '@anthropic-ai/sdk/helpers/json-schema';
-import { buildConvertPrompt } from './ai-convert.js';
+import { buildConvertPrompt, buildReviewPrompt } from './ai-convert.js';
 import { buildCandidatesPrompt } from './ai-candidates.js';
 import { buildExtractPrompt } from './ai-extract.js';
 
@@ -170,8 +170,13 @@ function claudeProvider({ apiKey, model, client = null, base = null, cache = nul
     cache,
     refine: (task, prompt) => request(prompt, LLM_MAX_TOKENS, undefined),
     // 문서 AI 변환(T-37): 응답이 길 수 있어 max_tokens·시간 제한이 따로이고, 재시도하지 않는다(화면의 「최대 90초」가 곧 최악의 시간)
-    async convert(text) {
-      return request(buildConvertPrompt(text), LLM_CONVERT_MAX_TOKENS, { timeout: LLM_CONVERT_TIMEOUT_MS, maxRetries: 0 });
+    // ctx(선택) = {target, existing}: 문서로 더하기가 붙일 업무와 지도의 기존 항목 이름을 문서 앞에 붙여 보낸다(없으면 지금과 같다)
+    async convert(text, ctx = {}) {
+      return request(buildConvertPrompt(text, ctx), LLM_CONVERT_MAX_TOKENS, { timeout: LLM_CONVERT_TIMEOUT_MS, maxRetries: 0 });
+    },
+    // 검토(두 번째 호출): 원문 + 첫 결과 요약 → 더할 것과 의심 항목만. 변환과 같은 max_tokens·시간 제한, 재시도 0회. 실패해도 첫 결과는 그대로 쓴다(connector)
+    async review(text, firstSummary, ctx = {}) {
+      return request(buildReviewPrompt(text, firstSummary, ctx), LLM_CONVERT_MAX_TOKENS, { timeout: LLM_CONVERT_TIMEOUT_MS, maxRetries: 0 });
     },
     // AI 연관 후보(T-38): works = llm/ai-candidates.js의 collectWorks 결과. 크기 상한을 넘으면 호출하지 않는다(buildCandidatesPrompt가 던짐). 재시도 0회
     async candidates(works) {
@@ -221,7 +226,7 @@ function claudeProvider({ apiKey, model, client = null, base = null, cache = nul
  */
 function unavailable(name, reason, kind = 'error') {
   const fail = thrower(reason, kind !== 'error');
-  return { name, method: 'llm', refine: fail, explain: fail, convert: fail, candidates: fail, extract: fail };
+  return { name, method: 'llm', refine: fail, explain: fail, convert: fail, review: fail, candidates: fail, extract: fail };
 }
 
 /** 호출하면 안내(noPrefix) 또는 오류를 던지는 함수. keyless: 키 없음 표지도 붙인다 */
@@ -240,7 +245,7 @@ function thrower(why, noPrefix, keyless = false) {
  *  - live가 아니므로 비동기 실시간 경로는 아무것도 부르지 않는다
  */
 function keylessProvider(pregen) {
-  return { ...pregenProvider(pregen), name: 'claude_api', keyless: true, convert: thrower(KEYLESS_CONVERT_REASON, true, true), candidates: thrower(KEYLESS_REASON, true, true), extract: thrower(KEYLESS_EXTRACT_REASON, true, true) };
+  return { ...pregenProvider(pregen), name: 'claude_api', keyless: true, convert: thrower(KEYLESS_CONVERT_REASON, true, true), review: thrower(KEYLESS_CONVERT_REASON, true, true), candidates: thrower(KEYLESS_REASON, true, true), extract: thrower(KEYLESS_EXTRACT_REASON, true, true) };
 }
 
 /**

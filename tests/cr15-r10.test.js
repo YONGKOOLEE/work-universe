@@ -225,7 +225,7 @@ test('R10-3: 합치기는 실패를 기억하지 않는다(실패한 요청이 �
 test('R10-3: 문서 변환·AI 후보도 같은 키의 동시 호출은 호출 1회', async () => {
   const fake = createFakeClient({ mode: 'convert-clean', delayMs: 30 });
   const p = live(fake);
-  const rs = await Promise.all([1, 2, 3].map(() => convertDocumentAsync(DOC_EXAMPLE.text, { provider: p })));
+  const rs = await Promise.all([1, 2, 3].map(() => convertDocumentAsync(DOC_EXAMPLE.text, { provider: p, review: false })));
   assert.equal(fake.calls.length, 1);
   assert.ok(rs.every((r) => r.ok));
 
