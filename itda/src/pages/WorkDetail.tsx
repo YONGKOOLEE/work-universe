@@ -4,13 +4,16 @@ import { useEffect, useState } from 'react';
 import {
   Sparkles, Pencil, ArrowRightLeft, Gavel, ListTodo, AlertTriangle, Plus, Check, Building2, CircleDot, History, Camera, ScrollText, ChevronRight, Ban, Eye, EyeOff, Users,
 } from 'lucide-react';
-import { useStore, userName, ownerNames, useFocus } from '../lib/store';
+import { PrivateMemos } from '../components/PrivateMemos';
+import { ReadOnlyCtx, useCanEdit, useReadOnly, useStore, userName, ownerNames, useFocus } from '../lib/store';
+import { selectableUsers, displayName } from '../lib/people';
 import { useRouter } from '../lib/router';
 import { Button, Card, CardHead, StatusBadge, Mono, Tabs, StmtList, ProvChip, SourceChip, CiteLink, ProvLegend, Modal, Field, inputCls, Empty, Tag } from '../components/ui';
 import { Timeline } from '../components/Timeline';
 import { DocRegisterModal } from '../components/DocRegisterModal';
 import { WORK_STATUSES, type Stmt, type Work, type WorkStatus } from '../lib/types';
 import { workIssues } from '../ai/engine';
+import { CheckFindings, useClaudeCheck } from '../ai/CheckFindings';
 import { fmtDate, fmtDateTime, relDays, dateKey, cx, uid, today as todayLocal } from '../lib/util';
 
 type Tab = 'overview' | 'map' | 'docs' | 'timeline' | 'meetings' | 'actions' | 'history';
@@ -24,12 +27,16 @@ export default function WorkDetail({ id }: { id: string }) {
   const [ownersOpen, setOwnersOpen] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
   const [, setFocus] = useFocus();
+  // Claude 점검(키가 있을 때, 「기록 점검」 줄의 단추). 결과는 화면에만
+  const cc = useClaudeCheck(s, id);
   const w = s.works.find((x) => x.id === id);
+  // 남의 업무는 읽기 전용(사용자 결정 2026-10-29: 팀 업무는 모두가 보고, 고치기는 담당자·팀장)
+  const ro = !useCanEdit(id);
   useEffect(() => {
     if (w) setFocus(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, !!w]);
-  if (!w) return <Empty title="업무를 찾을 수 없거나 열람 권한이 없습니다" sub="담당자로 지정된 업무와 인수 대기 중인 업무만 볼 수 있습니다." action={<Button onClick={() => nav('/works')}>업무 목록</Button>} />;
+  if (!w) return <Empty title="업무를 찾을 수 없습니다" sub="지워졌거나 아직 불러오지 않은 업무입니다." action={<Button onClick={() => nav('/works')}>업무 목록</Button>} />;
 
   const parent = s.works.find((x) => x.id === w.parentId);
   const children = s.works.filter((x) => x.parentId === w.id);
@@ -41,8 +48,11 @@ export default function WorkDetail({ id }: { id: string }) {
   const events = s.events.filter((e) => e.workIds.includes(w.id) && e.source !== 'record').sort((a, b) => dateKey(a.date).localeCompare(dateKey(b.date)));
   const issues = workIssues(s, w);
   const today = todayLocal();
-  const lastStrong = [...events].reverse().find((e) => e.source === 'original' || e.source === 'cited');
-  const lastAny = events[events.length - 1];
+  // 「현재 어디까지」는 오늘까지 일어난 이벤트만(앞으로의 계획은 「앞으로 무엇을」 쪽) — 비교 검토 2026-10-29
+  const happened = events.filter((e) => dateKey(e.date) <= today);
+  const lastStrong = [...happened].reverse().find((e) => e.source === 'original' || e.source === 'cited');
+  const lastAny = happened[happened.length - 1];
+  const noDate = (t: string) => t.replace(/^\d{4}\.\s*\d{1,2}\.\s*\d{1,2}\.?\s*/, '');
 
   const setStatus = (st: WorkStatus) =>
     update((d) => {
@@ -53,6 +63,7 @@ export default function WorkDetail({ id }: { id: string }) {
     });
 
   return (
+    <ReadOnlyCtx.Provider value={ro}>
     <div className="space-y-5">
       {/* 헤더 */}
       <div className="space-y-3">
@@ -93,29 +104,41 @@ export default function WorkDetail({ id }: { id: string }) {
             <p className="mt-1 max-w-3xl text-[13.5px] text-muted">{w.summary}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <select id="wd-status" className={cx(inputCls, 'h-9 !w-auto py-0')} value={w.status} onChange={(e) => setStatus(e.target.value as WorkStatus)} aria-label="진행상태 변경">
+            {ro ? null : <select id="wd-status" className={cx(inputCls, 'h-9 !w-auto py-0')} value={w.status} onChange={(e) => setStatus(e.target.value as WorkStatus)} aria-label="진행상태 변경">
               {WORK_STATUSES.map((x) => (
                 <option key={x}>{x}</option>
               ))}
-            </select>
-            <Button onClick={() => setEdit(true)}>
-              <Pencil size={14} />
-              업무정보 수정
-            </Button>
+            </select>}
+            {!ro && (
+              <Button onClick={() => setEdit(true)}>
+                <Pencil size={14} />
+                업무정보 수정
+              </Button>
+            )}
             <Button variant="subtle" onClick={() => nav(`/handover?new=${w.id}`)}>
               <ArrowRightLeft size={14} />
               인계 시작
             </Button>
           </div>
         </div>
+        {ro && (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-sunken/60 px-4 py-2.5 text-[13px] text-muted" data-testid="work-readonly">
+            <Eye size={14} className="shrink-0" />
+            <span className="flex-1">
+              {ownerNames(s, w.owners) || '담당자 없음'}의 업무입니다. 보기만 할 수 있고, 고치기는 담당자와 팀장이 합니다. 「나만 보기」 메모는 남길 수 있습니다.
+            </span>
+          </div>
+        )}
         <Card className="grid grid-cols-2 gap-x-6 gap-y-2 px-4 py-3 text-[13px] sm:grid-cols-3 lg:grid-cols-6">
           <Meta k="업무 ID"><Mono className="text-[13px] text-ink">{w.id}</Mono></Meta>
           <Meta k="담당자">
             <span className="whitespace-normal">{ownerNames(s, w.owners)}</span>
+            {!ro && (
             <button className="ml-1.5 inline-flex items-center gap-0.5 text-2xs font-medium text-brand hover:underline" onClick={() => setOwnersOpen(true)}>
               <Users size={11} />
               변경
             </button>
+            )}
           </Meta>
           <Meta k="소관 부서">{w.dept.replace(' (시연용 가상 부서)', '')}<span className="ml-1 text-2xs text-faint">가상</span></Meta>
           <Meta k="소관 기관">{w.agency}</Meta>
@@ -164,6 +187,7 @@ export default function WorkDetail({ id }: { id: string }) {
                         <span className="flex flex-wrap items-center gap-1">
                           <ProvChip prov={d.prov} />
                           {d.cite.map((c, i) => <CiteLink key={i} c={c} />)}
+                          {!ro && (
                           <button
                             className="ml-1 inline-flex items-center gap-0.5 rounded px-1 py-px text-2xs text-muted hover:bg-sunken hover:text-ink"
                             title={d.hidden ? '숨기기 취소' : '한눈에 보기에서 숨기기'}
@@ -178,6 +202,7 @@ export default function WorkDetail({ id }: { id: string }) {
                             {d.hidden ? <Eye size={12} /> : <EyeOff size={12} />}
                             {d.hidden ? '숨기기 취소' : '숨기기'}
                           </button>
+                          )}
                         </span>
                       </li>
                     ))}
@@ -202,12 +227,12 @@ export default function WorkDetail({ id }: { id: string }) {
             <div className="mb-2 flex flex-wrap gap-2 text-xs">
               {lastStrong && (
                 <span className="rounded-md border border-fact/30 bg-factsoft/60 px-2 py-1">
-                  <b className="text-fact">원문으로 확인된 최근 단계</b> · {fmtDate(lastStrong.date)} {lastStrong.title}
+                  <b className="text-fact">원문으로 확인된 최근 단계</b> · {fmtDate(lastStrong.date)} {noDate(lastStrong.title)}
                 </span>
               )}
               {lastAny && lastAny !== lastStrong && (
                 <span className="rounded-md border border-warn/30 bg-warnsoft/60 px-2 py-1">
-                  <b className="text-warn">참고정보상 최근 단계</b> · {fmtDate(lastAny.date)} {lastAny.title}
+                  <b className="text-warn">참고정보상 최근 단계</b> · {fmtDate(lastAny.date)} {noDate(lastAny.title)}
                 </span>
               )}
             </div>
@@ -232,16 +257,24 @@ export default function WorkDetail({ id }: { id: string }) {
             )}
           </Glance>
         </dl>
-        {issues.length > 0 && (
+        {(issues.length > 0 || (cc.available && !ro)) && (
           <div className="border-t border-line bg-sunken/50 px-4 py-2.5">
             <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="flex items-center gap-1 font-semibold text-warn"><AlertTriangle size={13} />AI 점검</span>
+              <span className="flex items-center gap-1 font-semibold text-warn"><AlertTriangle size={13} />기록 점검</span>
+              {!issues.length && <span className="text-muted">규칙 점검에서 찾은 것 없음</span>}
               {issues.map((i) => (
                 <button key={i.id} onClick={() => setTab((new URLSearchParams(i.to.split('?')[1] ?? '').get('tab') as Tab) || 'overview')} className={cx('rounded px-1.5 py-0.5 font-medium', i.severity === 'high' ? 'bg-dangersoft text-danger' : i.severity === 'mid' ? 'bg-warnsoft text-warn' : 'bg-surface text-muted')}>
                   {i.title}
                 </button>
               ))}
+              {cc.available && !ro && !cc.running && (
+                <button className="ml-auto inline-flex items-center gap-1 rounded border border-infer/30 bg-surface px-2 py-0.5 font-medium text-infer hover:bg-infersoft" onClick={() => void cc.run()} title="업무 기록과 연결 문서를 Claude가 대조해, 문서에는 있는데 기록에 빠진 것·서로 다른 것을 찾습니다" data-testid="work-claude-check">
+                  <Sparkles size={12} />
+                  {cc.result ? 'Claude로 다시 점검' : 'Claude로 점검'}
+                </button>
+              )}
             </div>
+            <CheckFindings state={cc} className="mt-2" />
           </div>
         )}
       </Card>
@@ -289,7 +322,12 @@ export default function WorkDetail({ id }: { id: string }) {
           ]}
         />
         <div className="pt-5">
-          {tab === 'overview' && <Overview w={w} />}
+          {tab === 'overview' && (
+            <div className="space-y-5">
+              <Overview w={w} />
+              <PrivateMemos workId={w.id} />
+            </div>
+          )}
           {tab === 'map' && <WorkMap workId={w.id} />}
           {tab === 'docs' && <DocsTab w={w} onAdd={() => setDocOpen(true)} />}
           {tab === 'timeline' && (
@@ -312,6 +350,7 @@ export default function WorkDetail({ id }: { id: string }) {
       {edit && <EditWorkModal open onClose={() => setEdit(false)} w={w} onSave={() => toast('업무정보를 저장했습니다')} />}
       <DocRegisterModal open={docOpen} onClose={() => setDocOpen(false)} presetWork={w.id} />
     </div>
+    </ReadOnlyCtx.Provider>
   );
 }
 
@@ -426,9 +465,10 @@ function DocsTab({ w, onAdd }: { w: Work; onAdd: () => void }) {
   const { nav } = useRouter();
   const docs = s.docs.filter((d) => d.workIds.includes(w.id)).sort((a, b) => dateKey(b.writtenAt || '0').localeCompare(dateKey(a.writtenAt || '0')));
   const excluded = s.docs.filter((d) => d.relevance?.some((r) => r.workId === w.id && r.level === 'none'));
+  const ro = useReadOnly();
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className={cx('flex justify-end', ro && 'hidden')}>
         <Button variant="primary" onClick={onAdd}>
           <Plus size={15} />
           이 업무에 문서 등록
@@ -550,6 +590,7 @@ function MeetingsTab({ w }: { w: Work }) {
 
 export function ActionsCard({ workId, compact, onAll }: { workId: string; compact?: boolean; onAll?: () => void }) {
   const { s, update, log, touch, toast } = useStore();
+  const ro = useReadOnly();
   const [title, setTitle] = useState('');
   const [due, setDue] = useState('');
   // 체크박스는 '완료 처리 예정'으로만 표시하고, 저장을 눌러야 실제로 반영
@@ -574,7 +615,7 @@ export function ActionsCard({ workId, compact, onAll }: { workId: string; compac
   const today = todayLocal();
   return (
     <Card className="min-w-0">
-      <CardHead icon={<ListTodo size={16} />} title="향후 조치사항 및 기한" sub={compact ? '미완료 우선 · 기한순' : '상태를 눌러 변경'} right={onAll && <button className="text-xs text-brand" onClick={onAll}>전체</button>} />
+      <CardHead icon={<ListTodo size={16} />} title="향후 조치사항 및 기한" sub={compact ? '미완료 우선 · 기한순' : ro ? '보기 전용' : '상태를 눌러 변경'} right={onAll && <button className="text-xs text-brand" onClick={onAll}>전체</button>} />
       <ul className="divide-y divide-line">
         {list.map((a) => {
           const od = a.due && a.due < today && a.status !== '완료';
@@ -587,6 +628,7 @@ export function ActionsCard({ workId, compact, onAll }: { workId: string; compac
                 aria-checked={checked}
                 aria-label={a.status === '완료' ? '완료 취소 선택' : '완료 처리 선택'}
                 onClick={() => togglePending(a.id)}
+                disabled={ro}
                 className={cx(
                   'mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border',
                   checked ? (isPending ? 'border-brand bg-brand text-onbrand' : 'border-ok bg-ok text-surface') : isPending ? 'border-brand border-dashed' : 'border-line2 hover:border-brand',
@@ -657,7 +699,7 @@ export function ActionsCard({ workId, compact, onAll }: { workId: string; compac
           </Button>
         </div>
       )}
-      {!compact && (
+      {!compact && !ro && (
         <form
           className="flex flex-wrap gap-2 border-t border-line px-4 py-3"
           onSubmit={(e) => {
@@ -687,6 +729,7 @@ export function ActionsCard({ workId, compact, onAll }: { workId: string; compac
 
 function CautionsCard({ w }: { w: Work }) {
   const { update, log, touch } = useStore();
+  const ro = useReadOnly();
   const [t, setT] = useState('');
   return (
     <Card className="min-w-0 self-start">
@@ -695,7 +738,7 @@ function CautionsCard({ w }: { w: Work }) {
         <StmtList items={w.cautions} />
       </div>
       <form
-        className="flex gap-2 border-t border-line px-4 py-3"
+        className={cx('flex gap-2 border-t border-line px-4 py-3', ro && 'hidden')}
         onSubmit={(e) => {
           e.preventDefault();
           if (!t.trim()) return;
@@ -908,10 +951,10 @@ function OwnersModal({ w, onClose }: { w: Work; onClose: () => void }) {
     >
       <p className="mb-3 text-xs text-muted">여러 명을 지정할 수 있습니다. 해제한 담당자는 담당 기간(언제부터 언제까지)이 담당자 이력에 남습니다. 담당을 넘길 때는 '인계 시작'을 이용하면 점검·확인 절차와 스냅샷이 함께 기록됩니다.</p>
       <div className="space-y-2">
-        {s.users.map((u) => (
+        {selectableUsers(s.users, sel).map((u) => (
           <label key={u.id} className="flex items-center gap-2.5 rounded-md border border-line px-3 py-2 text-[13.5px]">
             <input type="checkbox" className="accent-[rgb(var(--brand))]" checked={sel.includes(u.id)} onChange={(e) => setSel((x) => (e.target.checked ? [...x, u.id] : x.filter((y) => y !== u.id)))} />
-            <span className="font-medium">{u.name}</span>
+            <span className="font-medium">{displayName(u)}</span>
             <span className="text-xs text-muted">{u.title}</span>
           </label>
         ))}

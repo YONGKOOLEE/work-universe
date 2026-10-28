@@ -14,6 +14,7 @@ import SearchPage from './pages/SearchPage';
 import Handover from './pages/Handover';
 import HandoverDetail from './pages/HandoverDetail';
 import SnapshotView from './pages/SnapshotView';
+import People from './pages/People';
 import UniversePage from './universe/UniversePage';
 
 function Routes() {
@@ -34,6 +35,8 @@ function Routes() {
       return seg[1] ? <HandoverDetail id={seg[1]} /> : <Handover />;
     case 'universe':
       return <UniversePage />;
+    case 'people':
+      return <People />;
     case 'snapshots':
       return <SnapshotView id={seg[1]} />;
     default:

@@ -42,6 +42,8 @@ export interface User {
   title: string;
   empNo?: string;
   role?: 'member' | 'lead';
+  /** 전출·퇴직이면 'left'. 없으면 재직(active)으로 본다. 선택 칸이라 스키마 번호는 그대로 */
+  status?: 'active' | 'left';
 }
 
 export type WorkStatus = '검토 중' | '진행 중' | '운영 중' | '완료' | '보류';
@@ -268,6 +270,16 @@ export interface AppState {
   handovers: Handover[];
   snapshots: Snapshot[];
   mapHidden: string[]; // 지도에서 숨긴 항목 키
+  privateMemos?: PrivateMemo[]; // 「나만 보기」 메모 — 쓴 사람에게만 보인다(열람 범위에서 거름, 2026-10-29 사용자 결정)
   searchLog: string[];
   focus: Record<string, string>; // 사용자별로 마지막에 보던 업무 ('all' 또는 업무 ID)
+}
+
+/** 「나만 보기」 메모: 업무에 붙지만 쓴 사람만 본다. 업무 기록·인계·지도 파생에는 들어가지 않는다 */
+export interface PrivateMemo {
+  id: string;
+  workId: string;
+  userId: string;
+  text: string;
+  at: string;
 }

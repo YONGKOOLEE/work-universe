@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ArrowRightLeft, Plus, Camera, Info } from 'lucide-react';
 import { useStore, userName, ownerNames } from '../lib/store';
+import { selectableUsers } from '../lib/people';
 import { useRouter } from '../lib/router';
 import { Button, Card, CardHead, Field, inputCls, Mono } from '../components/ui';
 import type { Handover as HO, HandoverStatus } from '../lib/types';
@@ -22,7 +23,7 @@ export default function Handover() {
   const mine = s.works.filter((w) => w.owners.includes(me.id));
   const [work, setWork] = useState(preset && mine.some((w) => w.id === preset) ? preset : mine[0]?.id ?? '');
   const w = mine.find((x) => x.id === work) ?? mine[0];
-  const candidates = w ? s.users.filter((u) => !w.owners.includes(u.id)) : [];
+  const candidates = w ? selectableUsers(s.users).filter((u) => !w.owners.includes(u.id)) : [];
   const [toSel, setTo] = useState('');
   const to = candidates.some((u) => u.id === toSel) ? toSel : candidates[0]?.id ?? '';
   const [base, setBase] = useState(today());

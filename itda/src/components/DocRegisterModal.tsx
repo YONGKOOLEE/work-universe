@@ -3,7 +3,7 @@ import { unzipSync, strFromU8 } from 'fflate';
 import { Sparkles, Upload, Loader2, FileText, AlertTriangle, Bot, Square } from 'lucide-react';
 import { Modal, Button, Field, inputCls, ProvChip } from './ui';
 import { ReflectionPreview } from './ReflectionPreview';
-import { useStore } from '../lib/store';
+import { canEdit, useStore } from '../lib/store';
 import { useRouter } from '../lib/router';
 import { useAI } from '../ai/claude';
 import { analyzeDocument, type DocAnalysis } from '../ai/engine';
@@ -71,7 +71,9 @@ const textParas = (t: string): DocParagraph[] =>
     .map((x, i) => ({ id: `p-${i + 1}`, text: x }));
 
 export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean; onClose: () => void; presetWork?: string }) {
-  const { s, update, log, toast } = useStore();
+  const { s, raw, update, log, toast } = useStore();
+  // 문서를 붙이고 반영할 수 있는 업무 = 내가 고칠 수 있는 업무(담당·팀장). 남의 업무는 보기만(2026-10-29)
+  const myWorks = s.works.filter((w) => canEdit(raw, w.id, raw.currentUserId));
   const { nav } = useRouter();
   const ai = useAI();
   const [title, setTitle] = useState('');
@@ -131,9 +133,9 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
     setAiMsg('');
     invalidate();
     const md = analyzeDocument(s, title, paras.map((p) => p.text).join('\n'), writtenAt);
-    const def = presetWork ?? md.relatedWorks[0]?.id ?? s.works[0]?.id;
+    const def = (presetWork && myWorks.some((w) => w.id === presetWork) ? presetWork : null) ?? md.relatedWorks.find((r) => myWorks.some((w) => w.id === r.id))?.id ?? myWorks[0]?.id;
     if (!def) {
-      setAiMsg('연결할 업무가 없습니다. 업무 관리에서 업무를 먼저 등록하세요.');
+      setAiMsg('연결할 내 업무가 없습니다(문서는 내가 담당하는 업무에만 붙일 수 있음). 업무 관리에서 업무를 먼저 등록하세요.');
       setBusy(false);
       return;
     }
@@ -382,7 +384,7 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
                   </Block>
                 )}
                 <Block title="연결할 업무" prov={ext?.engine === 'claude' ? 'inference' : 'owner'} rule={ext?.engine !== 'claude'}>
-                  {s.works.map((w) => {
+                  {myWorks.map((w) => {
                     const r = ext.relatedWorks.find((x) => x.id === w.id);
                     return (
                       <label key={w.id} className="flex items-center gap-2 py-0.5">
@@ -416,7 +418,7 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
           </div>
         </div>
 
-        {ext && !busy && <ReflectionPreview props={props} setProps={setProps} paras={paras} works={s.works} users={s.users} />}
+        {ext && !busy && <ReflectionPreview props={props} setProps={setProps} paras={paras} works={myWorks} users={s.users} />}
       </div>
     </Modal>
   );

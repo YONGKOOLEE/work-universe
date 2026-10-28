@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutDashboard, FolderKanban, Files, GitCommitVertical, ScrollText, Search, ArrowRightLeft, ChevronLeft, Menu, RotateCcw, UserRound, Bot, X, ArrowDownUp, Orbit, KeyRound } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, Files, GitCommitVertical, ScrollText, Search, ArrowRightLeft, ChevronLeft, Menu, RotateCcw, UserRound, Bot, X, ArrowDownUp, Orbit, KeyRound, Users } from 'lucide-react';
 import { DataTransfer } from './DataTransfer';
 import { NewWorkModal } from './NewWorkModal';
 import { useRouter } from '../lib/router';
@@ -7,6 +7,7 @@ import { useStore, useFocus, BUNDLED } from '../lib/store';
 import { cx } from '../lib/util';
 import { Button, Modal } from './ui';
 import { useAI } from '../ai/claude';
+import { selectableUsers, displayName } from '../lib/people';
 
 function EngineNote() {
   const ai = useAI();
@@ -131,6 +132,7 @@ const NAV = [
   { to: '/search', label: 'AI 업무 검색', Icon: Search },
   { to: '/handover', label: '업무 인계 관리', Icon: ArrowRightLeft },
   { to: '/universe', label: '업무 유니버스', Icon: Orbit },
+  { to: '/people', label: '사람', Icon: Users },
 ];
 
 function Brand() {
@@ -268,9 +270,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   toast(`${s.users.find((u) => u.id === id)?.name}(으)로 전환했습니다`);
                 }}
               >
-                {s.users.map((u) => (
+                {selectableUsers(s.users, [s.currentUserId]).map((u) => (
                   <option key={u.id} value={u.id}>
-                    {u.name} · {u.title}
+                    {displayName(u)} · {u.title}
                   </option>
                 ))}
               </select>

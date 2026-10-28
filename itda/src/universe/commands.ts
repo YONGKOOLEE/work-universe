@@ -151,3 +151,17 @@ export function setMapHidden(d: AppState, key: string, hidden: boolean): boolean
   d.mapHidden = [...cur];
   return true;
 }
+
+/** 「나만 보기」 메모: 쓴 사람만 본다(열람 범위에서 거름). 업무 기록·변경 이력·버전에는 남기지 않는다 */
+export function addPrivateMemo(d: AppState, workId: string, userId: string, text: string, at: string): boolean {
+  const t = text.replace(/\s+/g, ' ').trim();
+  if (!t || !work(d, workId)) return false;
+  d.privateMemos = [...(d.privateMemos || []), { id: sid('PM'), workId, userId, text: t, at }];
+  return true;
+}
+
+export function removePrivateMemo(d: AppState, id: string, userId: string): boolean {
+  const before = (d.privateMemos || []).length;
+  d.privateMemos = (d.privateMemos || []).filter((m) => !(m.id === id && m.userId === userId));
+  return d.privateMemos.length !== before;
+}

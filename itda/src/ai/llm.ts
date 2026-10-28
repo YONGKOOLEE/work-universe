@@ -14,6 +14,7 @@ export const LIMITS = {
   extract: { maxTokens: 32000, timeoutMs: 120000 }, // 문서 분석(긴 문서)
   review: { maxTokens: 16000, timeoutMs: 90000 }, // 꼼꼼히 읽기(두 번째 대조 호출)
   ask: { maxTokens: 8000, timeoutMs: 60000 }, // AI 업무 검색
+  check: { maxTokens: 16000, timeoutMs: 90000 }, // 사전 점검·업무 점검(Claude)
   explain: { maxTokens: 4000, timeoutMs: 45000 }, // 지도 요약 문장
 } as const;
 

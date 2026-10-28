@@ -2,6 +2,7 @@ import { Gavel, GitCommitVertical, ListTodo, LayoutList, CheckCircle2, CircleHel
 import type { DocParagraph, EventType, User, Work } from '../lib/types';
 import { verify, FIELD_LABEL, EVENT_TYPES, PHASE_OPTIONS, phaseOf, type Proposal, type ProposalKind, type OverviewField } from '../ai/reflect';
 import { cx } from '../lib/util';
+import { selectableUsers, displayName } from '../lib/people';
 
 const GROUPS: { kind: ProposalKind; title: string; Icon: React.ElementType; to: string }[] = [
   { kind: 'decision', title: '결정사항', Icon: Gavel, to: '업무 상세 › 결정사항' },
@@ -34,7 +35,7 @@ export function ReflectionPreview({ props, setProps, paras, works, users = [] }:
         </div>
       </div>
       <p className="border-b border-line px-4 py-2 text-xs text-muted">
-        체크한 항목만 업무에 반영됩니다. 문구·날짜·대상 업무는 반영 전에 고칠 수 있습니다. '별도 확인 필요' 항목을 승인하면 해당 표시가 붙은 채로 반영되어, 업무 화면과 AI 점검에서 확인 대상으로 남습니다.
+        체크한 항목만 업무에 반영됩니다. 문구·날짜·대상 업무는 반영 전에 고칠 수 있습니다. '별도 확인 필요' 항목을 승인하면 해당 표시가 붙은 채로 반영되어, 업무 화면과 기록 점검에서 확인 대상으로 남습니다.
       </p>
       {props.length === 0 && <p className="px-4 py-6 text-center text-[13px] text-muted">이 문서에서 업무에 반영할 항목을 찾지 못했습니다. 문서만 등록됩니다.</p>}
       {GROUPS.map((g) => {
@@ -123,9 +124,9 @@ export function ReflectionPreview({ props, setProps, paras, works, users = [] }:
                         {p.kind === 'action' && (
                           <select className={small} value={p.ownerId ?? ''} onChange={(e) => set(p.id, { ownerId: e.target.value || null })} aria-label="조치 담당" title={p.ownerName ? `문서상 담당: ${p.ownerName}` : '문서에 담당이 없으면 업무의 첫 담당자'} data-testid="proposal-owner">
                             <option value="">{p.ownerName ? `담당: ${p.ownerName}(사용자 아님 → 업무 담당자)` : '담당: 업무 담당자(기본)'}</option>
-                            {users.map((u) => (
+                            {selectableUsers(users, p.ownerId ? [p.ownerId] : []).map((u) => (
                               <option key={u.id} value={u.id}>
-                                담당: {u.name}
+                                담당: {displayName(u)}
                               </option>
                             ))}
                           </select>

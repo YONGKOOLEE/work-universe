@@ -60,10 +60,10 @@ describe('parseBackup', () => {
 
 describe('createSeed', () => {
   const REAL = /국무회의|행정안전부|모바일 신분증|금융결제원|주민등록|mois\.go\.kr|의안/;
-  it("linked: 시연 상태(업무 8·문서 7·이벤트 14·결정 6·조치 16·이력 17·인계 1·스냅샷 1)이고 실제 기관명이 없다", () => {
+  it("linked: 시연 상태(업무 10·문서 7·이벤트 14·결정 6·조치 16·이력 17·인계 1·스냅샷 1)이고 실제 기관명이 없다", () => {
     const s = createSeed('linked');
     expect(s.schema).toBe(SCHEMA);
-    expect([s.works.length, s.docs.length, s.events.length, s.decisions.length, s.actions.length, s.history.length]).toEqual([8, 7, 14, 6, 16, 17]);
+    expect([s.works.length, s.docs.length, s.events.length, s.decisions.length, s.actions.length, s.history.length]).toEqual([10, 7, 14, 6, 16, 17]); // 업무 8→10: 인계 위험 인사이트 시연용 W-009·W-010(2026-10-29)
     expect([s.handovers.length, s.snapshots.length]).toEqual([1, 1]);
     expect(s.works.every((w) => Array.isArray(w.nextIds) && Array.isArray(w.topics))).toBe(true);
     expect(s.mapHidden).toEqual([]);

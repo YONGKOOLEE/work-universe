@@ -1,20 +1,21 @@
 // 지도 + 항목 카드 + 위험 점검(CR-24 D24-3·D24-5·D24-6). 업무 지도(①, 업무 상세 탭)와 업무 유니버스 메뉴(②③)가 함께 쓴다.
 import { useMemo, useState } from 'react';
-import { ArrowRight, ExternalLink, EyeOff, Eye, FileText, Link2, StickyNote, Tag as TagIcon, UserPlus, X, AlertTriangle } from 'lucide-react';
-import { useStore } from '../lib/store';
+import { ArrowRight, ExternalLink, EyeOff, Eye, FileText, Link2, StickyNote, Tag as TagIcon, UserPlus, X } from 'lucide-react';
+import { useCanEdit, useStore } from '../lib/store';
+import { selectableUsers } from '../lib/people';
 import { useRouter } from '../lib/router';
 import { Button, CiteLink, Mono, StatusBadge, inputCls } from '../components/ui';
 import { cx, fmtDate, today } from '../lib/util';
 import type { AppState } from '../lib/types';
 import { deriveMap, hideKey, type MapScope, type Origin, type Derived } from './derive';
 import { MapLegend, MapView, useMapView } from './MapView';
-import { addMemo, addTopic, assignOwner, linkWorks, LINK_NAMES, MEMO_NAMES, removeTopic, setMapHidden, unlinkWorks, type Change, type LinkKind, type MemoKind } from './commands';
+import { InsightPanel } from './InsightPanel';
+import type { Insight } from './insights';
+import { addMemo, addPrivateMemo, addTopic, assignOwner, linkWorks, LINK_NAMES, MEMO_NAMES, removeTopic, setMapHidden, unlinkWorks, type Change, type LinkKind, type MemoKind } from './commands';
 // @ts-expect-error 유니버스 순수 모듈(JS)
 import { soloWorks } from '../../../app/src/view/space-marks.js';
 // @ts-expect-error 유니버스 순수 모듈(JS)
 import { buildView } from '../../../app/src/view/view.js';
-// @ts-expect-error 유니버스 순수 모듈(JS)
-import { teamRiskSummary, teamRiskParts } from '../../../app/src/view/risk-summary.js';
 
 const SOLO_CLS = 'mk-solo';
 
@@ -47,8 +48,10 @@ export function MapPanel({ data, scope, height = 600, showRisk = true, testid = 
   // 위험 점검은 업무만 센다(문서에서 뽑은 할 일은 빼고 다시 파생 — 업무 노드 ID는 같다)
   const riskView = useMemo(() => (showRisk ? buildView(...(() => { const d = deriveMap(data, scope, undefined, { actions: false }); return [d.doc, d.resolve] as const; })()) : null), [data, scope, showRisk]);
   const solo: string[] = useMemo(() => (riskView ? [...soloWorks(riskView, asOf)].map((g: string) => view.canonical(g)).filter((g: string) => view.getNode(g)) : []), [riskView, view, asOf]);
-  const risk = useMemo(() => (riskView ? teamRiskParts(teamRiskSummary(riskView, { asOf, n: 5 })) : []), [riskView, asOf]);
-  const marks = useMemo(() => (soloOn ? { cls: SOLO_CLS, gids: solo } : { cls: null, gids: [] }), [soloOn, solo]);
+  // 인사이트 항목을 고르면 그 근거를 노랗게 강조하고 나머지 업무·사람은 흐리게(고르지 않으면 혼자만 아는 일 겹테두리)
+  const [focus, setFocus] = useState<Insight | null>(null);
+  const focusGids = useMemo(() => (focus ? focus.evidence.map((g) => view.canonical(g)).filter((g: string) => view.getNode(g)) : []), [focus, view]);
+  const marks = useMemo(() => (focus ? { cls: 'mk-issue', gids: focusGids, dim: true } : soloOn ? { cls: SOLO_CLS, gids: solo } : { cls: null, gids: [] }), [focus, focusGids, soloOn, solo]);
   const sel = originOfGid(derived, view, selected);
   // 선택한 항목이 다시 그린 지도에서 사라지면(숨김 등) 선택을 푼다
   const selectedNow = selected && view.getNode(selected) && !view.getNode(selected).hidden ? selected : null;
@@ -84,7 +87,9 @@ export function MapPanel({ data, scope, height = 600, showRisk = true, testid = 
             )}
           </div>
           <p className="text-2xs text-faint">
-            {soloOn && solo.length > 0 && <span className="mr-2 inline-flex items-center gap-1 font-semibold text-danger"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-danger" />빨간 겹테두리 = 혼자만 아는 업무</span>}
+            {focus ? (
+              <span className="mr-2 inline-flex items-center gap-1 font-semibold text-ink"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2" style={{ borderColor: '#ffd84d' }} />노란 테두리 = 「{focus.title}」 근거</span>
+            ) : soloOn && solo.length > 0 && <span className="mr-2 inline-flex items-center gap-1 font-semibold text-danger"><span className="inline-block h-2.5 w-2.5 rounded-sm border-2 border-danger" />빨간 겹테두리 = 혼자만 아는 업무</span>}
             항목을 누르면 오른쪽에 카드가 열립니다{scope.kind === 'all' ? '' : ''}
           </p>
         </div>
@@ -92,36 +97,24 @@ export function MapPanel({ data, scope, height = 600, showRisk = true, testid = 
       <div className="space-y-3">
         {sel ? <NodeCard origin={sel} data={data} onClose={() => setSelected(null)} onPick={pick} isCenter={!!selectedNow && view.getNode(selectedNow)?.core_type === 'root'} /> : <IdleCard scope={scope} />}
         {showRisk && (
-          <div className="rounded-lg border border-line bg-surface p-4" data-testid="map-risk">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="flex items-center gap-1.5 text-[14px] font-bold">
-                <AlertTriangle size={15} className="text-warn" /> 지도 위험 점검
-              </h3>
-              <label className="flex items-center gap-1.5 text-2xs text-muted">
-                <input type="checkbox" checked={soloOn} onChange={(e) => setSoloOn(e.target.checked)} data-testid="map-solo-toggle" />
-                지도에 표시
-              </label>
-            </div>
-            <p className="mt-1 text-[12.5px] text-muted">{risk.join(' · ')}</p>
-            {solo.length > 0 && (
-              <ul className="mt-2 space-y-1">
-                {solo.slice(0, 6).map((g) => {
-                  const o = originOfGid(derived, view, g);
-                  const n = view.getNode(g);
-                  return (
-                    <li key={g}>
-                      <button className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-[12.5px] hover:bg-sunken" onClick={() => o && pick(o)} data-testid="map-solo-item">
-                        <span className="h-2 w-2 shrink-0 rounded-full border-2 border-danger" />
-                        <span className="flex-1 truncate">{n?.label}</span>
-                        <span className="text-2xs text-faint">혼자만 아는 일</span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-            <p className="mt-2 text-2xs text-faint">혼자만 아는 일 = 지금까지 한 사람만 담당해 본 업무(인계 대비 필요). 업무 유니버스의 위험 규칙과 같은 기준입니다.</p>
-          </div>
+          <>
+            <InsightPanel
+              data={data}
+              scope={scope}
+              asOf={asOf}
+              focusId={focus?.id ?? null}
+              onFocus={(x) => {
+                setFocus(x);
+                // 근거의 첫 업무(없으면 사람) 카드를 연다 — 접힌 팀이면 펼친다
+                const o = x ? (x.workIds[0] ? { kind: 'work' as const, id: x.workIds[0] } : x.userIds[0] ? { kind: 'user' as const, id: x.userIds[0] } : null) : null;
+                if (o) pick(o);
+              }}
+            />
+            <label className="flex items-center gap-1.5 px-1 text-2xs text-muted">
+              <input type="checkbox" checked={soloOn} onChange={(e) => setSoloOn(e.target.checked)} data-testid="map-solo-toggle" />
+              혼자만 아는 일({solo.length})을 지도에 빨간 겹테두리로 표시
+            </label>
+          </>
         )}
       </div>
     </div>
@@ -312,6 +305,7 @@ type EditMode = null | 'owner' | 'link' | 'memo' | 'topic';
 
 function WorkCardBody({ w, data, head, onPick, nav }: { w: AppState['works'][number]; data: AppState; head: (k: string, t: string, e?: React.ReactNode) => React.ReactNode; onPick: (o: Origin) => void; nav: (to: string) => void }) {
   const apply = useApply();
+  const ro = !useCanEdit(w.id); // 남의 업무: 보기와 「나만 보기」 메모만
   const [mode, setMode] = useState<EditMode>(null);
   const owners = w.owners.map((o) => data.users.find((u) => u.id === o)?.name ?? o);
   const decisions = data.decisions.filter((d) => d.workId === w.id && !d.hidden).slice(-3);
@@ -383,9 +377,9 @@ function WorkCardBody({ w, data, head, onPick, nav }: { w: AppState['works'][num
                 <button className="flex-1 truncate text-left hover:underline" onClick={() => onPick({ kind: 'work', id: l.id })}>
                   {l.name}
                 </button>
-                <button className="rounded p-0.5 text-faint hover:bg-sunken hover:text-danger" title="연결 끊기" aria-label={`${l.name} 연결 끊기`} onClick={() => apply((d) => unlinkWorks(d, w.id, l.id, l.kind))}>
+                {!ro && <button className="rounded p-0.5 text-faint hover:bg-sunken hover:text-danger" title="연결 끊기" aria-label={`${l.name} 연결 끊기`} onClick={() => apply((d) => unlinkWorks(d, w.id, l.id, l.kind))}>
                   <X size={12} />
-                </button>
+                </button>}
               </li>
             ))}
           </ul>
@@ -396,15 +390,18 @@ function WorkCardBody({ w, data, head, onPick, nav }: { w: AppState['works'][num
           {w.topics.map((t) => (
             <span key={t} className="inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 text-2xs">
               #{t}
-              <button aria-label={`주제 ${t} 떼기`} className="text-faint hover:text-danger" onClick={() => apply((d) => removeTopic(d, w.id, t))}>
-                <X size={10} />
-              </button>
+              {!ro && (
+                <button aria-label={`주제 ${t} 떼기`} className="text-faint hover:text-danger" onClick={() => apply((d) => removeTopic(d, w.id, t))}>
+                  <X size={10} />
+                </button>
+              )}
             </span>
           ))}
         </div>
       )}
 
-      <div className="mt-3 grid grid-cols-2 gap-1.5">
+      {ro && <p className="mt-3 rounded bg-sunken px-2 py-1.5 text-2xs text-muted" data-testid="map-card-readonly">다른 담당자의 업무 — 보기와 「나만 보기」 메모만 할 수 있습니다(고치기는 담당자·팀장).</p>}
+      <div className={cx('mt-3 grid grid-cols-2 gap-1.5', ro && 'hidden')}>
         <EditBtn on={mode === 'owner'} onClick={() => setMode(mode === 'owner' ? null : 'owner')} icon={<UserPlus size={13} />} label="담당 넘기기·추가" testid="map-edit-owner" />
         <EditBtn on={mode === 'link'} onClick={() => setMode(mode === 'link' ? null : 'link')} icon={<Link2 size={13} />} label="업무 잇기" testid="map-edit-link" />
         <EditBtn on={mode === 'memo'} onClick={() => setMode(mode === 'memo' ? null : 'memo')} icon={<StickyNote size={13} />} label="메모 남기기" testid="map-edit-memo" />
@@ -412,7 +409,8 @@ function WorkCardBody({ w, data, head, onPick, nav }: { w: AppState['works'][num
       </div>
       {mode === 'owner' && <OwnerForm w={w} data={data} onDone={() => setMode(null)} />}
       {mode === 'link' && <LinkForm w={w} data={data} onDone={() => setMode(null)} />}
-      {mode === 'memo' && <MemoForm w={w} onDone={() => setMode(null)} />}
+      {ro && <div className="mt-1.5"><EditBtn on={mode === 'memo'} onClick={() => setMode(mode === 'memo' ? null : 'memo')} icon={<StickyNote size={13} />} label="나만 보기 메모" testid="map-edit-memo" /></div>}
+      {mode === 'memo' && <MemoForm w={w} onDone={() => setMode(null)} privateOnly={ro} />}
       {mode === 'topic' && <TopicForm w={w} data={data} onDone={() => setMode(null)} />}
 
       <Button className="mt-3 w-full justify-center" variant="subtle" onClick={() => nav(`/works/${w.id}`)}>
@@ -443,7 +441,7 @@ function FormBox({ children }: { children: React.ReactNode }) {
 
 function OwnerForm({ w, data, onDone }: { w: AppState['works'][number]; data: AppState; onDone: () => void }) {
   const apply = useApply();
-  const others = data.users.filter((u) => !(w.owners.length === 1 && w.owners[0] === u.id));
+  const others = selectableUsers(data.users).filter((u) => !(w.owners.length === 1 && w.owners[0] === u.id));
   const [who, setWho] = useState(others.find((u) => !w.owners.includes(u.id))?.id ?? others[0]?.id ?? '');
   const [how, setHow] = useState<'hand' | 'add'>('hand');
   return (
@@ -513,24 +511,34 @@ function LinkForm({ w, data, onDone }: { w: AppState['works'][number]; data: App
   );
 }
 
-function MemoForm({ w, onDone }: { w: AppState['works'][number]; onDone: () => void }) {
+function MemoForm({ w, onDone, privateOnly = false }: { w: AppState['works'][number]; onDone: () => void; privateOnly?: boolean }) {
   const apply = useApply();
+  const { update, toast } = useStore();
   const [text, setText] = useState('');
-  const [kind, setKind] = useState<MemoKind>('caution');
+  const [kind, setKind] = useState<MemoKind | 'private'>(privateOnly ? 'private' : 'caution');
+  const kinds: (MemoKind | 'private')[] = privateOnly ? ['private'] : [...(Object.keys(MEMO_NAMES) as MemoKind[]), 'private'];
   return (
     <FormBox>
       <textarea className={cx(inputCls, 'min-h-[64px]')} value={text} onChange={(e) => setText(e.target.value)} placeholder="예: 매월 첫 영업일 새벽은 점검 시간이라 대조를 시작하지 않음" aria-label="메모 내용" data-testid="map-memo-text" />
       <div className="flex gap-3 text-[12px]">
-        {(Object.keys(MEMO_NAMES) as MemoKind[]).map((k) => (
+        {kinds.map((k) => (
           <label key={k} className="flex items-center gap-1">
-            <input type="radio" checked={kind === k} onChange={() => setKind(k)} /> {MEMO_NAMES[k]}
+            <input type="radio" checked={kind === k} onChange={() => setKind(k)} data-testid={`map-memo-kind-${k}`} /> {k === 'private' ? '나만 보기' : MEMO_NAMES[k]}
           </label>
         ))}
       </div>
-      <p className="text-2xs text-faint">업무 개요의 「{kind === 'caution' ? '유의사항' : '현재 진행 중인 사항'}」에 담당자 작성으로 들어갑니다.</p>
+      <p className="text-2xs text-faint">
+        {kind === 'private' ? '나에게만 보입니다. 업무 기록·인계 자료·변경 이력에는 들어가지 않습니다.' : `업무 개요의 「${kind === 'caution' ? '유의사항' : '현재 진행 중인 사항'}」에 담당자 작성으로 들어갑니다.`}
+      </p>
       <Button
         onClick={() => {
-          apply((d) => addMemo(d, w.id, text, kind));
+          if (kind === 'private') {
+            const at = new Date().toISOString();
+            update((d) => {
+              addPrivateMemo(d, w.id, d.currentUserId, text, at);
+            });
+            toast('나만 보기 메모를 남겼습니다');
+          } else apply((d) => addMemo(d, w.id, text, kind));
           onDone();
         }}
         disabled={!text.trim()}

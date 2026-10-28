@@ -6,10 +6,11 @@ import { useRouter } from '../lib/router';
 import { Button, Card, CardHead, Mono, Empty, KV, inputCls, StatusBadge } from '../components/ui';
 import { HO_STATUS } from './Handover';
 import { workIssues } from '../ai/engine';
+import { CheckFindings, useClaudeCheck } from '../ai/CheckFindings';
 import type { AppState, Handover, Snapshot } from '../lib/types';
 import { fmtDate, fmtDateTime, clone, cx, uid, localDay } from '../lib/util';
 
-const STEPS = ['업무 선택', 'AI 사전 점검', '정보 확인·보완', '인계 제출', '인수자 검토', '보완 요청', '인수 확인', '확정·스냅샷'];
+const STEPS = ['업무 선택', '사전 점검', '정보 확인·보완', '인계 제출', '인수자 검토', '보완 요청', '인수 확인', '확정·스냅샷'];
 const CHECKS: { key: string; label: string; tab: string; hint: (s: AppState, wid: string) => string }[] = [
   { key: 'overview', label: '업무 개요 및 추진 배경 확인', tab: 'overview', hint: (s, w) => `목적 ${s.works.find((x) => x.id === w)!.purpose.length}항목 · 배경 ${s.works.find((x) => x.id === w)!.background.length}항목` },
   { key: 'progress', label: '진행 중 과제 및 향후 조치사항 확인', tab: 'actions', hint: (s, w) => `미완료 조치 ${s.actions.filter((a) => a.workId === w && a.status !== '완료').length}건` },
@@ -24,6 +25,8 @@ export default function HandoverDetail({ id }: { id: string }) {
   const [reqText, setReqText] = useState('');
   const [respText, setRespText] = useState('');
   const h = s.handovers.find((x) => x.id === id);
+  // Claude 점검(키가 있고 엔진이 Claude일 때). 결과는 화면에만 두고 인계 기록에는 건수만 남긴다
+  const cc = useClaudeCheck(s, h?.workId ?? '');
   if (!h) return <Empty title="인계 기록을 찾을 수 없습니다" action={<Button onClick={() => nav('/handover')}>인계 관리</Button>} />;
   const w = s.works.find((x) => x.id === h.workId);
   if (!w) {
@@ -79,16 +82,16 @@ export default function HandoverDetail({ id }: { id: string }) {
     toast(`${userName(s, uidv)}(으)로 전환했습니다`);
   };
 
-  const precheck = () => {
+  const precheck = async () => {
     setRunning(true);
-    window.setTimeout(() => {
-      mut((x, d) => {
-        x.precheckDone = true;
-        x.step = 3;
-        x.log.push({ at: now(), byId: d.currentUserId, text: `AI 사전 점검 완료 · 확인 필요 ${issues.length}건` });
-      });
-      setRunning(false);
-    }, 800);
+    // 키가 있으면 규칙 점검 + Claude 점검. Claude가 실패해도 규칙 결과로 점검을 마친다(인계 흐름을 막지 않음)
+    const r = cc.available ? await cc.run() : await new Promise<null>((res) => window.setTimeout(() => res(null), 800));
+    mut((x, d) => {
+      x.precheckDone = true;
+      x.step = 3;
+      x.log.push({ at: now(), byId: d.currentUserId, text: `사전 점검(${r ? '규칙 + Claude' : '규칙 기반'}) 완료 · 확인 필요 ${issues.length}건${r ? ` · Claude가 찾은 것 ${r.findings.length}건` : ''}` });
+    });
+    setRunning(false);
   };
 
   const confirm = () => {
@@ -213,15 +216,34 @@ export default function HandoverDetail({ id }: { id: string }) {
 
       <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
         <div className="min-w-0 space-y-5">
-          {/* 2. AI 사전 점검 */}
+          {/* 2. 사전 점검(규칙 기반) */}
           <Card>
-            <CardHead icon={<Sparkles size={16} />} title="AI 사전 점검" sub="업무정보 누락·갱신 필요 항목을 인계 전에 확인" right={!h.precheckDone && isFrom ? <Button size="sm" variant="primary" onClick={precheck} disabled={running}>{running ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}점검 실행</Button> : undefined} />
+            <CardHead icon={<Sparkles size={16} />} title="사전 점검"
+              sub={cc.available ? '규칙 + Claude · 빈 항목·기한·갱신(규칙)과 문서에는 있는데 기록에 빠진 것·서로 다른 것(Claude)을 인계 전에 확인' : '규칙 기반 · 업무정보 빈 항목·기한·갱신 필요를 인계 전에 확인'}
+              right={
+                !h.precheckDone && isFrom ? (
+                  <Button size="sm" variant="primary" onClick={precheck} disabled={running} data-testid="precheck-run">
+                    {running ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}점검 실행
+                  </Button>
+                ) : h.precheckDone && cc.available && !cc.result && !cc.running ? (
+                  <Button size="sm" onClick={() => void cc.run()} data-testid="precheck-claude">
+                    <Sparkles size={14} />
+                    Claude로 점검
+                  </Button>
+                ) : undefined
+              }
+            />
             <div className="px-4 py-3">
               {!h.precheckDone ? (
-                <p className="text-[13px] text-muted">{isFrom ? "'점검 실행'을 눌러 인계 전 업무정보 상태를 확인하세요." : '인계자가 사전 점검을 실행하기 전입니다.'}</p>
+                cc.running ? (
+                  <CheckFindings state={cc} />
+                ) : (
+                  <p className="text-[13px] text-muted">{isFrom ? "'점검 실행'을 눌러 인계 전 업무정보 상태를 확인하세요." : '인계자가 사전 점검을 실행하기 전입니다.'}</p>
+                )
               ) : (
                 <>
-                  <div className="mb-3 flex flex-wrap gap-2 text-xs">
+                  <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+                    <span className="rounded bg-sunken px-1.5 text-2xs font-semibold text-muted">규칙 점검</span>
                     <span className="rounded bg-dangersoft px-2 py-0.5 font-semibold text-danger">높음 {issues.filter((i) => i.severity === 'high').length}</span>
                     <span className="rounded bg-warnsoft px-2 py-0.5 font-semibold text-warn">보통 {issues.filter((i) => i.severity === 'mid').length}</span>
                     <span className="rounded bg-sunken px-2 py-0.5 font-semibold text-muted">낮음 {issues.filter((i) => i.severity === 'low').length}</span>
@@ -240,7 +262,8 @@ export default function HandoverDetail({ id }: { id: string }) {
                     ))}
                     {!issues.length && <li className="text-[13px] text-fact">누락·갱신 필요 항목 없음</li>}
                   </ul>
-                  <p className="mt-3 text-2xs text-faint">점검 결과가 남아 있어도 제출할 수 있으며, 미해결 항목은 인수자에게 그대로 표시됩니다.</p>
+                  <CheckFindings state={cc} className="mt-3 border-t border-line pt-3" />
+                  <p className="mt-3 text-2xs text-faint">점검 결과가 남아 있어도 제출할 수 있으며, 미해결 항목은 인수자에게 그대로 표시됩니다.{cc.available ? ' Claude가 찾은 것은 이 화면에만 보이고 인계 기록에는 건수만 남습니다.' : ''}</p>
                 </>
               )}
             </div>

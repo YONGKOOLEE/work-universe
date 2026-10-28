@@ -10,11 +10,13 @@ import { workIssues } from '../ai/engine';
 import { fmtDate, cx } from '../lib/util';
 
 export default function Works() {
-  const { s } = useStore();
+  const { s, me } = useStore();
   const { query, nav } = useRouter();
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<string>(query.get('status') === 'active' ? 'active' : 'all');
-  const [owner, setOwner] = useState('all');
+  // 팀 업무는 모두 보이지만(2026-10-29) 처음에는 내 업무만 — 팀장은 전체
+  const [owner, setOwner] = useState(me.role === 'lead' ? 'all' : me.id);
+  useEffect(() => setOwner(me.role === 'lead' ? 'all' : me.id), [me.id, me.role]);
   const [sort, setSort] = useState(query.get('sort') === 'updated' ? 'updated' : 'tree');
   const [view, setView] = useState<'table' | 'cards'>('table');
   useEffect(() => {
@@ -63,6 +65,18 @@ export default function Works() {
           <Plus size={16} />
           업무 등록
         </Button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 text-[13px]" role="tablist" aria-label="업무 범위">
+        {[
+          { id: me.id, label: `내 업무 ${s.works.filter((w) => w.owners.includes(me.id)).length}` },
+          { id: 'all', label: `팀 전체 ${s.works.length}` },
+        ].map((c) => (
+          <button key={c.id} role="tab" aria-selected={owner === c.id} onClick={() => setOwner(c.id)} className={cx('rounded-full border px-3 py-1 font-medium', owner === c.id ? 'border-brand bg-brand text-onbrand' : 'border-line bg-surface text-muted hover:text-ink')} data-testid={`works-scope-${c.id === 'all' ? 'all' : 'mine'}`}>
+            {c.label}
+          </button>
+        ))}
+        <span className="text-2xs text-faint">남의 업무는 열어 볼 수 있고, 고치기는 담당자·팀장이 합니다.</span>
       </div>
 
       <Card className="flex flex-wrap items-center gap-2 p-3">
@@ -123,7 +137,7 @@ export default function Works() {
                 <th className="px-3 py-2.5 font-semibold">담당</th>
                 <th className="px-3 py-2.5 font-semibold">문서</th>
                 <th className="px-3 py-2.5 font-semibold">미완료 조치</th>
-                <th className="px-3 py-2.5 font-semibold">AI 점검</th>
+                <th className="px-3 py-2.5 font-semibold">기록 점검</th>
                 <th className="px-3 py-2.5 font-semibold">최근 갱신</th>
               </tr>
             </thead>

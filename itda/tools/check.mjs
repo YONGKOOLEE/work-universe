@@ -141,8 +141,9 @@ try {
     await shot('02-내지도');
     await must(await H(`click('button', '팀·부서 지도')`), '팀·부서 지도 칩 없음');
     await sleep(500);
-    await must(await H(`find('[data-testid="map-lead-only"]','')!==null`), '팀장 전용 안내 없음');
-    await shot('02-팀지도-안내');
+    // 팀·부서 지도는 모두가 본다(2026-10-29) — 팀원 김도윤도 지도가 그려진다
+    await must(await wait(`window.__h.has('팀 도형') && window.__h.nodes() > 3`, 6000), '팀원에게 팀·부서 지도가 안 보임');
+    await shot('02-팀지도-팀원');
     return `노드 ${n}, 중심 「김도윤의 업무」`;
   });
 
@@ -155,8 +156,9 @@ try {
     await must(roots.some((l) => l.includes('디지털신원팀')) && roots.some((l) => l.includes('출금이체팀')), `팀 중심: ${roots.join('|')}`);
     const risk = await ev(`(document.querySelector('[data-testid="map-risk"]')||{}).innerText || ''`);
     await must(risk.includes('혼자만 아는 일'), '위험 패널에 「혼자만 아는 일」 없음');
-    const items = await ev(`document.querySelectorAll('[data-testid="map-solo-item"]').length`);
-    await must(items > 0, '혼자만 아는 일 목록 비어 있음');
+    const items = await ev(`document.querySelectorAll('[data-testid="insight-item"]').length`);
+    await must(items > 0, '인계 위험 인사이트 목록 비어 있음');
+    for (const k of ['bottleneck', 'dense', 'gap']) await must(await ev(`!(document.querySelector('[data-testid="insight-kind-${k}"]')||{disabled:true}).disabled`), `인사이트 종류 ${k} 0건`);
     await shot('03-팀장-접힘');
     const before = await H('nodes()');
     await ev(`(() => { const cy = window.__h.cy(); const t = cy.nodes().filter((n) => n.data('core_type') === 'root' && n.data('label').includes('디지털신원팀'))[0]; t.emit('dbltap'); return true; })()`);
@@ -164,6 +166,15 @@ try {
     await sleep(500);
     await shot('03-팀장-펼침');
     await must(grew, `dbltap 후 노드 수 그대로(${before})`);
+    // 인사이트 항목을 누르면 근거가 노랗게 강조되고 카드가 열린다
+    await ev(`document.querySelector('[data-testid="insight-kind-bottleneck"]').click()`);
+    await sleep(200);
+    await ev(`document.querySelector('[data-testid="insight-item"]').click()`);
+    const lit = await wait(`window.__h.cy().nodes('.mk-issue').length > 0`, 3000);
+    await shot('03-팀장-인사이트-강조');
+    await must(lit, '인사이트 항목을 눌러도 지도 강조 없음');
+    await ev(`document.querySelector('[data-testid="insight-item"]').click()`);
+    await ev(`document.querySelector('[data-testid="insight-kind-all"]').click()`);
     return `팀 중심 [${roots.join(', ')}], 목록 ${items}건, 노드 ${before}→${await H('nodes()')}`;
   });
 
@@ -277,14 +288,17 @@ try {
   });
 
   // 7
-  await check('07 대시보드 혼자만 아는 업무', async () => {
+  await check('07 대시보드 기록 점검·인계 위험 인사이트', async () => {
     await must(await H(`user('박지훈')`), '박지훈 전환 실패');
-    await nav('#/dashboard', `window.__h.has('AI가 발견한 누락')`);
+    await nav('#/dashboard', `window.__h.has('인계 위험 인사이트')`);
     await sleep(500);
-    const n = await ev(`(document.body.innerText.match(/혼자만 아는 업무/g) || []).length`);
+    await must(await ev(`window.__h.has('기록 점검')`), '「기록 점검」 카드 없음');
+    await must(!(await ev(`window.__h.has('AI가 발견한')`)), '규칙 결과에 「AI가 발견한」 이름이 남음');
+    const n = await ev(`document.querySelectorAll('[data-testid="dash-insight-item"]').length`);
+    const solo = await ev(`(document.querySelector('[data-testid="dash-insights"]')?.innerText.match(/혼자만 아는 일/g) || []).length`);
     await shot('07-대시보드-팀장');
-    await must(n >= 1, '「혼자만 아는 업무」 항목 없음');
-    return `「혼자만 아는 업무」 ${n}곳`;
+    await must(n >= 1 && solo >= 1, `인사이트 ${n}건, 혼자만 아는 일 ${solo}`);
+    return `인사이트 ${n}건(혼자만 아는 일 표시 ${solo}곳)`;
   });
 
   // 8
@@ -420,6 +434,26 @@ try {
     await shot('11-팀지도-past');
     await must(past >= 1, `W-001 전 담당(past) 선 없음 (past ${past})`);
     return `${hoId} 확정, past 선 ${past}: ${w1.join(', ')}`;
+  });
+
+  await check('13 남의 업무는 읽기 전용·나만 보기 메모', async () => {
+    await must(await H(`user('김도윤')`), '김도윤 전환 실패');
+    await nav('#/works', `window.__h.has('팀 전체')`);
+    await must(await H(`clickId('works-scope-all')`), '「팀 전체」 칩 없음');
+    await sleep(300);
+    await nav('#/works/W-004', `window.__h.has('출금이체 월 정산')`);
+    await must(await ev(`!!document.querySelector('[data-testid="work-readonly"]')`), '남의 업무에 읽기 전용 안내 없음');
+    await must(!(await H(`find('button','업무정보 수정')`)), '남의 업무에 「업무정보 수정」 단추가 보임');
+    await ev(`(() => { const i = document.querySelector('[data-testid="private-memo-text"]'); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, '점검용 나만 보기 메모'); i.dispatchEvent(new Event('input', { bubbles: true })); i.form.requestSubmit(); return true; })()`);
+    await must(await wait(`window.__h.has('점검용 나만 보기 메모')`, 3000), '나만 보기 메모가 안 남음');
+    await shot('13-남의업무-읽기전용');
+    await must(await H(`user('정하준')`), '정하준 전환 실패');
+    await nav('#/works/W-004', `window.__h.has('출금이체 월 정산')`);
+    await sleep(300);
+    await must(!(await ev(`window.__h.has('점검용 나만 보기 메모')`)), '남의 「나만 보기」 메모가 담당자에게 보임');
+    await must(!(await ev(`!!document.querySelector('[data-testid="work-readonly"]')`)), '담당자에게 읽기 전용 안내가 뜸');
+    await must(await H(`user('김도윤')`), '김도윤 복귀 실패');
+    return '김도윤: W-004 읽기 전용·메모 남김 / 정하준: 메모 안 보임·편집 가능';
   });
 
   // 12

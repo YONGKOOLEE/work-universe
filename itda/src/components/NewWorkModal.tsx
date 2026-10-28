@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { Sparkles, GitBranch, FilePlus2, Link2, CornerDownRight } from 'lucide-react';
 import { Modal, Button, Field, inputCls, Mono, StatusBadge } from './ui';
 import { useStore } from '../lib/store';
+import { selectableUsers, displayName } from '../lib/people';
 import { useRouter } from '../lib/router';
 import { detectDuplicates } from '../ai/engine';
 import type { Stmt, Work } from '../lib/types';
@@ -41,7 +42,7 @@ export function NewWorkModal({ open, onClose }: { open: boolean; onClose: () => 
 
   const res = useMemo(() => (debounced.name.trim().length >= 4 ? detectDuplicates(s, debounced.name, debounced.desc) : null), [s, debounced]);
 
-  // AI 추천을 기본 선택으로 반영 (사용자가 바꿀 수 있음)
+  // 추천(규칙 기반 유사도)을 기본 선택으로 반영 (사용자가 바꿀 수 있음)
   useEffect(() => {
     if (!res) return;
     if (res.recommendation === 'child') {
@@ -162,7 +163,7 @@ export function NewWorkModal({ open, onClose }: { open: boolean; onClose: () => 
             </Field>
             <Field label="담당자 (복수 선택 가능)">
               <div className="flex min-h-[38px] flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-line2 bg-surface px-3 py-2">
-                {s.users.map((u) => (
+                {selectableUsers(s.users, owners).map((u) => (
                   <label key={u.id} className="flex items-center gap-1.5 text-[13px]">
                     <input
                       type="checkbox"
@@ -170,7 +171,7 @@ export function NewWorkModal({ open, onClose }: { open: boolean; onClose: () => 
                       checked={owners.includes(u.id)}
                       onChange={(e) => setOwners((o) => (e.target.checked ? [...o, u.id] : o.filter((x) => x !== u.id)))}
                     />
-                    {u.name}
+                    {displayName(u)}
                   </label>
                 ))}
               </div>
@@ -228,7 +229,7 @@ export function NewWorkModal({ open, onClose }: { open: boolean; onClose: () => 
                 {!res.candidates.length && <li className="text-xs text-muted">유사 업무 없음</li>}
               </ul>
               <div className="rounded-md border border-infer/30 bg-infersoft px-3 py-2 text-[13px] leading-relaxed text-ink">
-                <span className="mr-1 font-semibold text-infer">AI 추천</span>
+                <span className="mr-1 font-semibold text-infer">추천(규칙 기반)</span>
                 {res.message}
               </div>
 
@@ -257,7 +258,7 @@ export function NewWorkModal({ open, onClose }: { open: boolean; onClose: () => 
                     <span className="min-w-0">
                       <span className="block text-[13px] font-medium">
                         {o.t}
-                        {res.recommendation === o.id && <span className="ml-1.5 rounded bg-infersoft px-1 text-2xs font-semibold text-infer">AI 추천</span>}
+                        {res.recommendation === o.id && <span className="ml-1.5 rounded bg-infersoft px-1 text-2xs font-semibold text-infer">추천</span>}
                       </span>
                       <span className="block text-2xs text-muted">{o.d}</span>
                     </span>

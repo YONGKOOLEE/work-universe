@@ -49,16 +49,20 @@ function load(): AppState {
 }
 
 /**
- * 사용자별 열람 범위.
- * 볼 수 있는 업무 = 현재 담당자로 지정된 업무 + 인수 대기 중인 인계의 인수자로 지정된 업무.
- * 문서·이벤트·결정·조치·이력은 볼 수 있는 업무에 연결된 것만, 업무 연결이 없는 문서는 등록자만 본다.
+ * 사용자별 열람 범위(사용자 결정 2026-10-29: 팀 업무는 모두가 보고, 개인 것만 거른다).
+ * 볼 수 있는 업무 = 모든 업무(남의 업무는 읽기 전용 — canEdit).
+ * 나만 보는 것: 확정 전 인계(보내는 사람·받는 사람만), 「나만 보기」 메모, 업무 연결이 없는 문서(등록자만).
+ * 확정된 인계는 당사자와 팀장이 본다.
  */
-export function canSee(s: AppState, workId: string, userId: string) {
+export function canSee(s: AppState, workId: string, _userId: string) {
+  return s.works.some((x) => x.id === workId);
+}
+
+/** 고칠 수 있는가: 그 업무의 현재 담당자 또는 팀장(전체 보기 사용자) */
+export function canEdit(s: AppState, workId: string, userId: string) {
   const w = s.works.find((x) => x.id === workId);
   if (!w) return false;
-  // 전체 보기 사용자(팀장 역할, CR-24 D24-4)는 모든 업무를 본다
-  if (s.users.find((u) => u.id === userId)?.role === 'lead') return true;
-  return w.owners.includes(userId) || s.handovers.some((h) => h.workId === workId && h.toId === userId && h.status !== 'confirmed');
+  return w.owners.includes(userId) || s.users.find((u) => u.id === userId)?.role === 'lead';
 }
 
 export function scopeFor(s: AppState, userId: string): AppState {
@@ -67,9 +71,9 @@ export function scopeFor(s: AppState, userId: string): AppState {
     .filter((d) => (d.workIds.length ? d.workIds.some((w) => ids.has(w)) : d.registeredBy === userId || !!d.relevance?.some((r) => ids.has(r.workId))))
     .map((d) => ({ ...d, workIds: d.workIds.filter((w) => ids.has(w)) }));
   const docIds = new Set(docs.map((d) => d.id));
-  // 전체 보기 사용자(팀장 역할)는 모든 인계 기록·스냅샷을 본다(CR-24 D24-4)
+  // 인계: 당사자는 늘 보고, 팀장은 확정된 인계를 본다(확정 전 인계는 당사자만)
   const lead = s.users.find((u) => u.id === userId)?.role === 'lead';
-  const handovers = s.handovers.filter((h) => lead || h.fromId === userId || h.toId === userId);
+  const handovers = s.handovers.filter((h) => h.fromId === userId || h.toId === userId || (lead && h.status === 'confirmed'));
   const hoIds = new Set(handovers.map((h) => h.id));
   return {
     ...s,
@@ -81,6 +85,7 @@ export function scopeFor(s: AppState, userId: string): AppState {
     history: s.history.filter((h) => ids.has(h.workId)),
     handovers,
     snapshots: s.snapshots.filter((x) => hoIds.has(x.handoverId)),
+    privateMemos: (s.privateMemos || []).filter((m) => m.userId === userId),
   };
 }
 
@@ -158,6 +163,16 @@ export function useStore() {
   if (!c) throw new Error('StoreProvider missing');
   return c;
 }
+
+/** 지금 사용자가 이 업무를 고칠 수 있는가(남의 업무는 읽기 전용) */
+export function useCanEdit(workId: string | null | undefined) {
+  const { raw } = useStore();
+  return !!workId && canEdit(raw, workId, raw.currentUserId);
+}
+
+/** 업무 상세 안의 카드들이 읽기 전용인지(업무 상세가 정함, 기본은 고칠 수 있음) */
+export const ReadOnlyCtx = createContext(false);
+export const useReadOnly = () => useContext(ReadOnlyCtx);
 
 /** 사용자별 '보고 있는 업무' — 업무 관리·문서함·타임라인·회의록이 공유 */
 export function useFocus(): [string, (id: string) => void] {

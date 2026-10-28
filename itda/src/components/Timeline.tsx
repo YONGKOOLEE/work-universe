@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ArrowRight, ArrowDownRight, FileText, Gavel, Building2, Sparkles, Link2, Trash2, Undo2 } from 'lucide-react';
 import type { TEvent, CauseLink } from '../lib/types';
-import { useStore } from '../lib/store';
+import { canEdit, useStore } from '../lib/store';
 import { useRouter } from '../lib/router';
 import { Chips, SourceChip, Drawer, CiteLink, ProvChip, Tag, Mono, Empty } from './ui';
 import { fmtDate, dateKey, cx } from '../lib/util';
@@ -32,7 +32,9 @@ const TYPE_CLS: Record<string, string> = {
 };
 
 export function Timeline({ workId, initialEvent }: { workId: string; initialEvent?: string }) {
-  const { s, update, log, toast } = useStore();
+  const { s, raw, update, log, toast } = useStore();
+  // 남의 업무 이벤트는 지울 수 없다(고치기는 담당자·팀장, 2026-10-29)
+  const editable = (e: TEvent) => e.workIds.every((w) => canEdit(raw, w, raw.currentUserId));
   const [f, setF] = useState<F>('all');
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [undo, setUndo] = useState<{ ev: TEvent; decs: string[]; causes: { eventId: string; cause: CauseLink }[] } | null>(null);
@@ -190,7 +192,7 @@ export function Timeline({ workId, initialEvent }: { workId: string; initialEven
                     !strong(e) && e.source !== 'record' && 'border-dashed',
                   )}
                 >
-                  <button
+                  {editable(e) && <button
                     aria-label="이벤트 삭제"
                     title="타임라인에서 삭제"
                     onClick={(ev) => {
@@ -200,7 +202,7 @@ export function Timeline({ workId, initialEvent }: { workId: string; initialEven
                     className="absolute right-2 top-2 rounded p-1 text-faint hover:bg-dangersoft hover:text-danger"
                   >
                     <Trash2 size={14} />
-                  </button>
+                  </button>}
                   {confirmId === e.id && (
                     <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md bg-dangersoft px-2.5 py-1.5 text-xs text-danger" onClick={(ev) => ev.stopPropagation()}>
                       <span className="flex-1">이 이벤트를 타임라인에서 삭제할까요?{e.autoDocId ? ' (문서는 삭제되지 않음)' : ''}</span>

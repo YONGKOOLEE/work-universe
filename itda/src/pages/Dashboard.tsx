@@ -1,9 +1,10 @@
-import { FolderKanban, Activity, RefreshCw, AlertTriangle, ArrowRightLeft, FileText, ScrollText, ListTodo, History } from 'lucide-react';
+import { Orbit, FolderKanban, Activity, RefreshCw, AlertTriangle, ArrowRightLeft, FileText, ScrollText, ListTodo, History } from 'lucide-react';
 import { useStore, userName } from '../lib/store';
 import { useRouter } from '../lib/router';
-import { Card, CardHead, Mono, Empty } from '../components/ui';
+import { Button, Card, CardHead, Mono, Empty } from '../components/ui';
 import { WorkCard } from '../components/WorkCard';
-import { allIssues } from '../ai/engine';
+import { workIssues } from '../ai/engine';
+import { handoverInsights, insightSummary, INSIGHT_NAMES } from '../universe/insights';
 import { daysBetween, fmtDate, relDays, cx, localDay } from '../lib/util';
 
 export default function Dashboard() {
@@ -11,27 +12,45 @@ export default function Dashboard() {
   const { nav } = useRouter();
   const now = new Date();
   const nowIso = now.toISOString();
-  const issues = allIssues(s, now);
+  // 기록 점검(업무잇다 규칙) — 업무마다 빈 칸·기한·갱신. 인계 위험(업무 유니버스 규칙)은 아래 카드에 따로
+  // 팀 업무는 모두 보이지만(2026-10-29) 대시보드는 내 업무 기준 — 팀장은 팀 전체
+  const lead = me.role === 'lead';
+  const mine = s.works.filter((w) => w.owners.includes(me.id));
+  const base = lead ? s.works : mine;
+  const baseIds = new Set(base.map((w) => w.id));
+  const rank = { high: 0, mid: 1, low: 2 };
+  const issues = base.flatMap((w) => workIssues(s, w, now)).sort((a, b) => rank[a.severity] - rank[b.severity]);
+  const insights = handoverInsights(s, me.role === 'lead' ? { kind: 'all' } : { kind: 'mine', userId: me.id }, localDay(nowIso));
   const issueWorks = new Set(issues.filter((i) => i.severity !== 'low' && i.workId).map((i) => i.workId));
   const waiting = s.handovers.filter((h) => ['submitted', 'revision', 'accepted', 'draft'].includes(h.status));
-  const recentWorks = s.works.filter((w) => daysBetween(w.updatedAt, nowIso) <= 30);
-  const mine = s.works.filter((w) => w.owners.includes(me.id));
+  const recentWorks = base.filter((w) => daysBetween(w.updatedAt, nowIso) <= 30);
   const stats = [
-    { label: '전체 담당 업무', value: s.works.length, sub: `내 담당 ${mine.length}건`, Icon: FolderKanban, to: '/works' },
-    { label: '진행 중인 업무', value: s.works.filter((w) => w.status === '진행 중' || w.status === '운영 중').length, sub: '진행 중 · 운영 중', Icon: Activity, to: '/works?status=active' },
+    { label: lead ? '팀 전체 업무' : '내 담당 업무', value: base.length, sub: lead ? `내 담당 ${mine.length}건` : `팀 전체 ${s.works.length}건`, Icon: FolderKanban, to: '/works' },
+    { label: '진행 중인 업무', value: base.filter((w) => w.status === '진행 중' || w.status === '운영 중').length, sub: '진행 중 · 운영 중', Icon: Activity, to: '/works?status=active' },
     { label: '최근 업데이트', value: recentWorks.length, sub: '최근 30일 갱신', Icon: RefreshCw, to: '/works?sort=updated' },
-    { label: '확인 필요 업무', value: issueWorks.size, sub: 'AI 점검 결과', Icon: AlertTriangle, to: '#issues', warn: issueWorks.size > 0 },
+    { label: '확인 필요 업무', value: issueWorks.size, sub: '기록 점검 결과', Icon: AlertTriangle, to: '#issues', warn: issueWorks.size > 0 },
     { label: '인계·인수 대기', value: waiting.length, sub: '확정 전 인계 건', Icon: ArrowRightLeft, to: '/handover' },
   ];
-  const recentDocs = [...s.docs].sort((a, b) => b.registeredAt.localeCompare(a.registeredAt)).slice(0, 6);
+  const recentDocs = s.docs.filter((d) => d.workIds.some((w) => baseIds.has(w)) || d.registeredBy === me.id).sort((a, b) => b.registeredAt.localeCompare(a.registeredAt)).slice(0, 6);
   const upcoming = s.actions
-    .filter((a) => a.status !== '완료')
+    .filter((a) => a.status !== '완료' && (lead ? baseIds.has(a.workId) : a.ownerId === me.id))
     .sort((a, b) => (a.due ?? '9999').localeCompare(b.due ?? '9999'))
     .slice(0, 7);
-  const recentHist = [...s.history].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 7);
+  const recentHist = s.history.filter((h) => baseIds.has(h.workId)).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 7);
 
   return (
     <div className="space-y-6">
+      {raw.seedMode === 'fresh' && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand/40 bg-brandsoft px-4 py-3" data-testid="fresh-people-guide">
+          <div>
+            <p className="text-[14px] font-bold">먼저 나를 등록하세요</p>
+            <p className="text-xs text-muted">빈 데이터로 시작했습니다. 「사람」 화면에서 본인을 추가한 뒤 「이 사람으로 쓰기」를 누르면 그 사람으로 업무를 쌓을 수 있습니다.</p>
+          </div>
+          <Button variant="primary" size="sm" onClick={() => nav('/people')}>
+            사람 화면으로
+          </Button>
+        </div>
+      )}
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <p className="text-xs font-medium text-muted">{fmtDate(nowIso)} 기준</p>
@@ -68,8 +87,8 @@ export default function Dashboard() {
                 title="담당 중인 업무가 없습니다"
                 sub={
                   raw.works.length === 0
-                    ? "이 화면에는 등록된 업무가 하나도 없음. 다른 화면(claude.ai 게시 페이지 등)에서 등록했다면 상단 '데이터 옮기기' → '불러오기'로 가져오기. 새로 시작하려면 업무 관리에서 업무 등록."
-                    : `다른 사용자가 담당하는 업무 ${raw.works.length - mine.length}건이 있음. 상단 사용자 전환으로 확인 가능.`
+                    ? "등록된 업무가 하나도 없음. 동료가 내보낸 파일이 있으면 상단 '데이터 옮기기' → '합쳐 불러오기'로 더하기. 새로 시작하려면 업무 관리에서 업무 등록."
+                    : `팀의 다른 업무 ${raw.works.length - mine.length}건은 업무 관리 「팀 전체」에서 볼 수 있음.`
                 }
               />
             </Card>
@@ -83,7 +102,7 @@ export default function Dashboard() {
       </section>
 
         <Card id="issues" className="min-w-0">
-          <CardHead icon={<AlertTriangle size={16} />} title="AI가 발견한 누락 · 갱신 필요 항목" sub={`${issues.length}건 · 높음 ${issues.filter((i) => i.severity === 'high').length}`} />
+          <CardHead icon={<AlertTriangle size={16} />} title="기록 점검 — 빠진 항목 · 갱신 필요" sub={`${issues.length}건 · 높음 ${issues.filter((i) => i.severity === 'high').length}`} right={<span className="rounded bg-sunken px-1.5 text-2xs font-semibold text-muted" title="업무잇다 규칙으로 업무 기록의 빈 칸·기한·갱신을 점검합니다">규칙 기반</span>} />
           <ul className="max-h-[420px] divide-y divide-line overflow-y-auto scroll-thin">
             {issues.map((i) => (
               <li key={i.id}>
@@ -100,6 +119,33 @@ export default function Dashboard() {
               </li>
             ))}
           </ul>
+        </Card>
+
+        <Card className="min-w-0" data-testid="dash-insights">
+          <CardHead
+            icon={<Orbit size={16} />}
+            title="인계 위험 인사이트"
+            sub={`${me.role === 'lead' ? '팀·부서' : '내 업무'} · ${insightSummary(insights)}`}
+            right={<button className="text-xs text-brand" onClick={() => nav('/universe')}>지도에서 보기</button>}
+          />
+          <ul className="max-h-[300px] divide-y divide-line overflow-y-auto scroll-thin">
+            {insights.items.slice(0, 8).map((x) => (
+              <li key={x.id}>
+                <button onClick={() => nav(x.workIds[0] ? `/works/${x.workIds[0]}?tab=map` : '/universe')} className="flex w-full gap-3 px-4 py-2.5 text-left hover:bg-sunken/60" data-testid="dash-insight-item">
+                  <span className={cx('mt-1 h-2 w-2 shrink-0 rounded-full', x.level === 'high' ? 'bg-danger' : x.level === 'mid' ? 'bg-warn' : 'bg-faint')} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13px] font-medium">
+                      <span className="mr-1.5 text-2xs font-semibold text-muted">{INSIGHT_NAMES[x.kind]}</span>
+                      {x.title}
+                    </span>
+                    <span className="block truncate text-2xs text-muted">{x.detail}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+            {!insights.items.length && <li className="px-4 py-3 text-[13px] text-muted">{insights.notes[0] ?? '찾은 위험이 없습니다'}</li>}
+          </ul>
+          <p className="border-t border-line px-4 py-2 text-2xs text-faint">업무 유니버스의 위험 규칙(혼자만 아는 일·길목 업무·일 몰린 사람·담당자 빈 업무)으로 계산합니다. 키 없이 동작합니다.</p>
         </Card>
 
       <div className="grid gap-5 lg:grid-cols-3">
@@ -147,7 +193,7 @@ export default function Dashboard() {
         </Card>
 
         <Card className="min-w-0">
-          <CardHead icon={<ListTodo size={16} />} title="향후 처리해야 할 과제" />
+          <CardHead icon={<ListTodo size={16} />} title={lead ? '팀이 처리해야 할 과제' : '내가 처리해야 할 과제'} />
           <ul className="divide-y divide-line">
             {upcoming.map((a) => {
               const od = a.due && a.due < localDay(nowIso);

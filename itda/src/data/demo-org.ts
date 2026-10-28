@@ -161,6 +161,25 @@ export function extendLinked(base: AppState): AppState {
   w7Before.updatedAt = T('2026-09-29');
 
   s.works.push(...works);
+  // 인계 위험 인사이트용 연결·업무(2026-10-29): 길목 업무(선후행), 일 몰린 사람(정하준 3개), 담당자 빈 업무(재배치로 담당 종료)
+  s.works.find((w) => w.id === 'W-004')!.nextIds = ['W-008'];
+  s.works.find((w) => w.id === 'W-005')!.nextIds = ['W-003'];
+  s.works.push(
+    blankWork({
+      id: 'W-009', name: '정산 시스템 개선 요구사항 정리', dept: TEAM_PAY, owners: ['U5'],
+      ownerHistory: [{ userId: 'U5', from: '2026-09-01', to: null, note: '업무 등록 시 지정' }],
+      status: '검토 중', createdAt: T('2026-09-01'), updatedAt: T('2026-10-15'), version: 2, topics: ['정산'], relatedIds: ['W-004'],
+      summary: '월 정산·수수료 대사에서 반복되는 수작업을 시스템 개선 요구사항으로 정리',
+      purpose: [st('p1', '정산 수작업을 줄일 시스템 개선 요구사항을 정리한다.')],
+    }),
+    blankWork({
+      id: 'W-010', name: '참가기관 협의체 회의 운영', dept: TEAM_PAY, owners: [],
+      ownerHistory: [{ userId: 'U6', from: '2025-09-01', to: T('2026-10-20'), note: '업무 재배치로 담당 종료' }],
+      status: '운영 중', createdAt: T('2025-09-01'), updatedAt: T('2026-10-20'), version: 5, topics: ['참가기관'], relatedIds: ['W-005'],
+      summary: '분기별 참가기관 협의체 회의 일정·안건·회의록 관리',
+      purpose: [st('p1', '참가기관 협의체 회의를 분기마다 열고 안건과 회의록을 관리한다.')],
+    }),
+  );
 
   s.docs.push(
     mkDoc('D-101', '약관 개정 추진계획', '추진계획', '2026-10-06', ['W-003', 'W-001'], 'U3',

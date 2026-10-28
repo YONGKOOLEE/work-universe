@@ -27,7 +27,7 @@ describe('시연 데이터(linked) 참조 무결성', () => {
     expect(s.focus).toEqual({});
   });
   it('업무 참조: owners·ownerHistory·parentId·relatedIds·nextIds·doc.workIds', () => {
-    expect(s.works.length).toBe(8);
+    expect(s.works.length).toBe(10); // 인계 위험 인사이트 시연용 업무 2개(W-009·W-010) 더함, 2026-10-29
     for (const w of s.works) {
       expect(w.owners.every((o) => userIds.has(o)), w.id).toBe(true);
       expect(w.ownerHistory.every((p) => userIds.has(p.userId)), w.id).toBe(true);
