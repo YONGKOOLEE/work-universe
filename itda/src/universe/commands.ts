@@ -6,6 +6,7 @@ import type { AppState, Stmt } from '../lib/types';
 export interface Change {
   workId: string;
   summary: string;
+  also?: { workId: string; summary: string }[]; // 함께 바뀐 다른 업무(관련 업무는 양쪽이 바뀜) — 그 업무에도 이력·버전을 남긴다
 }
 
 const name = (d: AppState, userId: string) => d.users.find((u) => u.id === userId)?.name ?? userId;
@@ -39,6 +40,20 @@ export function assignOwner(d: AppState, workId: string, userId: string, mode: '
 export type LinkKind = 'parent' | 'related' | 'next';
 export const LINK_NAMES: Record<LinkKind, string> = { parent: '상위 업무', related: '관련 업무', next: '다음 업무(선후행)' };
 
+/** 선후행(nextIds)을 따라 from에서 to에 닿는가 */
+function reaches(d: AppState, from: string, to: string): boolean {
+  const seen = new Set<string>();
+  const queue = [from];
+  while (queue.length) {
+    const id = queue.shift()!;
+    if (id === to) return true;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    queue.push(...(work(d, id)?.nextIds || []));
+  }
+  return false;
+}
+
 /** 상위 업무를 정하면 순환(내 하위를 상위로)을 막는다 */
 function isDescendant(d: AppState, ancestorId: string, id: string): boolean {
   let cur = work(d, id);
@@ -64,11 +79,12 @@ export function linkWorks(d: AppState, fromId: string, toId: string, kind: LinkK
   if (kind === 'related') {
     if (a.relatedIds.includes(toId)) return null;
     a.relatedIds = [...a.relatedIds, toId];
-    if (!b.relatedIds.includes(fromId)) b.relatedIds = [...b.relatedIds, fromId];
-    return { workId: fromId, summary: `관련 업무 '${b.name}' 연결 (지도에서)` };
+    const added = !b.relatedIds.includes(fromId);
+    if (added) b.relatedIds = [...b.relatedIds, fromId];
+    return { workId: fromId, summary: `관련 업무 '${b.name}' 연결 (지도에서)`, ...(added ? { also: [{ workId: toId, summary: `관련 업무 '${a.name}' 연결 (지도에서)` }] } : {}) };
   }
   a.nextIds = a.nextIds || [];
-  if (a.nextIds.includes(toId) || (b.nextIds || []).includes(fromId)) return null;
+  if (a.nextIds.includes(toId) || reaches(d, toId, fromId)) return null; // 선후행이 돌아오는 고리(셋 이상 포함)는 막음
   a.nextIds = [...a.nextIds, toId];
   return { workId: fromId, summary: `다음 업무 '${b.name}' 연결 (지도에서)` };
 }
@@ -85,9 +101,10 @@ export function unlinkWorks(d: AppState, fromId: string, toId: string, kind: Lin
   }
   if (kind === 'related') {
     if (!a.relatedIds.includes(toId) && !b.relatedIds.includes(fromId)) return null;
+    const had = b.relatedIds.includes(fromId);
     a.relatedIds = a.relatedIds.filter((x) => x !== toId);
     b.relatedIds = b.relatedIds.filter((x) => x !== fromId);
-    return { workId: fromId, summary: `관련 업무 '${b.name}' 연결 해제 (지도에서)` };
+    return { workId: fromId, summary: `관련 업무 '${b.name}' 연결 해제 (지도에서)`, ...(had ? { also: [{ workId: toId, summary: `관련 업무 '${a.name}' 연결 해제 (지도에서)` }] } : {}) };
   }
   if (!(a.nextIds || []).includes(toId)) return null;
   a.nextIds = a.nextIds.filter((x) => x !== toId);

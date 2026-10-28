@@ -131,7 +131,12 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
     setAiMsg('');
     invalidate();
     const md = analyzeDocument(s, title, paras.map((p) => p.text).join('\n'), writtenAt);
-    const def = presetWork ?? md.relatedWorks[0]?.id ?? s.works[0].id;
+    const def = presetWork ?? md.relatedWorks[0]?.id ?? s.works[0]?.id;
+    if (!def) {
+      setAiMsg('연결할 업무가 없습니다. 업무 관리에서 업무를 먼저 등록하세요.');
+      setBusy(false);
+      return;
+    }
     let result: Extraction;
     if (ai.engine === 'claude' && ai.client) {
       ctl.current = new AbortController();

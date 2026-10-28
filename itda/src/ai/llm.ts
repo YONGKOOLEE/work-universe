@@ -55,7 +55,9 @@ function classify(err: any): LlmError {
   if (err instanceof LlmError) return err;
   const status = err?.status;
   const name = err?.name || err?.constructor?.name || '';
-  if (name === 'APIUserAbortError' || err?.name === 'AbortError') return new LlmError('cancelled', '취소');
+  if (err instanceof Anthropic.APIUserAbortError || name === 'APIUserAbortError' || err?.name === 'AbortError' || /request was aborted/i.test(String(err?.message || ''))) return new LlmError('cancelled', '취소');
+  if (err instanceof Anthropic.APIConnectionTimeoutError) return new LlmError('timeout', '시간 초과');
+  if (err instanceof Anthropic.APIConnectionError) return new LlmError('network', '연결 실패');
   if (status === 401 || status === 403) return new LlmError('auth', '키 거부');
   if (status === 429) return new LlmError('rate', '한도');
   if (status === 413) return new LlmError('too_large', '너무 김');

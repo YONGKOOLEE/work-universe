@@ -87,7 +87,7 @@ export function MapPanel({ data, scope, height = 600, showRisk = true, testid = 
         </div>
       </div>
       <div className="space-y-3">
-        {sel ? <NodeCard origin={sel} data={data} onClose={() => setSelected(null)} onPick={pick} /> : <IdleCard scope={scope} />}
+        {sel ? <NodeCard origin={sel} data={data} onClose={() => setSelected(null)} onPick={pick} isCenter={!!selectedNow && view.getNode(selectedNow)?.core_type === 'root'} /> : <IdleCard scope={scope} />}
         {showRisk && (
           <div className="rounded-lg border border-line bg-surface p-4" data-testid="map-risk">
             <div className="flex items-center justify-between gap-2">
@@ -141,22 +141,29 @@ function IdleCard({ scope }: { scope: MapScope }) {
 
 /** 명령 실행 → 변경 이력·버전·알림 */
 function useApply() {
-  const { update, log, touch, toast } = useStore();
+  const { raw, update, log, touch, toast } = useStore();
   return (fn: (d: AppState) => Change | null, done?: string) => {
-    let res: Change | null = null;
+    // 알림 글은 지금 데이터의 사본에 명령을 먼저 돌려 정한다(상태 갱신 함수가 언제 불리는지와 상관없게)
+    const probe = fn(JSON.parse(JSON.stringify(raw)) as AppState);
+    if (!probe) {
+      toast('바뀐 것이 없습니다');
+      return;
+    }
     update((d) => {
-      res = fn(d);
-      if (res) {
-        log(d, res.workId, '지도 편집', res.summary);
-        touch(d, res.workId);
+      const res = fn(d);
+      if (!res) return;
+      log(d, res.workId, '지도 편집', res.summary);
+      touch(d, res.workId);
+      for (const x of res.also || []) {
+        log(d, x.workId, '지도 편집', x.summary);
+        touch(d, x.workId);
       }
     });
-    // update는 동기로 함수를 부른다(React 상태 갱신 함수)
-    setTimeout(() => toast(res ? done ?? res.summary : '바뀐 것이 없습니다'), 0);
+    toast(done ?? probe.summary);
   };
 }
 
-function NodeCard({ origin, data, onClose, onPick }: { origin: Origin; data: AppState; onClose: () => void; onPick: (o: Origin) => void }) {
+function NodeCard({ origin, data, onClose, onPick, isCenter = false }: { origin: Origin; data: AppState; onClose: () => void; onPick: (o: Origin) => void; isCenter?: boolean }) {
   const { update, toast } = useStore();
   const { nav } = useRouter();
   const key = hideKey(origin);
@@ -182,7 +189,7 @@ function NodeCard({ origin, data, onClose, onPick }: { origin: Origin; data: App
       </button>
     </div>
   );
-  const foot = origin.kind !== 'root' && (
+  const foot = origin.kind !== 'root' && !isCenter && (
     <div className="mt-3 border-t border-line pt-2">
       <button className="flex items-center gap-1 text-2xs text-muted hover:text-ink" onClick={hide} data-testid="map-hide">
         {hidden ? <Eye size={13} /> : <EyeOff size={13} />} {hidden ? '지도에 다시 보이기' : '지도에서 숨기기'}

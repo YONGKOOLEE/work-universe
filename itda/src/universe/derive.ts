@@ -16,18 +16,25 @@ export type MapScope = { kind: 'work'; workId: string } | { kind: 'mine'; userId
 export const hideKey = (o: Origin) => `${o.kind}:${o.id}`;
 
 const LABEL_MAX = 100;
-const day = (s: string | null | undefined) => (s ? String(s).slice(0, 10) : '');
+// 날짜만(YYYY-MM-DD). ISO 시각(…T…Z)은 이 PC 시간대의 날짜로 — UTC로 자르면 오전 9시 전 기록이 하루 앞당겨진다
+const day = (s: string | null | undefined) => {
+  if (!s) return '';
+  const t = String(s);
+  if (!t.includes('T')) return t.slice(0, 10);
+  const d = new Date(t);
+  return Number.isNaN(d.getTime()) ? t.slice(0, 10) : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 const clip = (s: string) => {
   const t = String(s || '').replace(/\s+/g, ' ').trim() || '(이름 없음)';
   return t.length > LABEL_MAX ? `${t.slice(0, LABEL_MAX - 1)}…` : t;
 };
 // 지역 ID에는 「/」를 쓰지 않는다(전역 ID 구분자)
-const safe = (s: string) => String(s).replace(/\//g, '／');
+const safe = (s: string) => String(s).replace(/%/g, '%25').replace(/\//g, '%2F');
 // 조직 이름에 붙은 「(시연용 가상 부서)」 같은 꼬리표는 같은 조직으로 본다
 const orgLabel = (s: string) => String(s).replace(/\s*\((?:시연용 )?가상[^)]*\)\s*$/, '').trim();
 const UNKNOWN_AGENCY = /별도\s*확인|미입력|^-$/;
 
-interface UNode { id: string; core_type: string; label: string; subtype?: string; description?: string; attrs?: Record<string, string>; emp_no?: string; hidden: boolean; created_at: string; updated_at: string }
+interface UNode { id: string; core_type: string; label: string; subtype?: string; description?: string; attrs?: Record<string, string>; emp_no?: string; period?: { start?: string; end?: string }; hidden: boolean; created_at: string; updated_at: string }
 interface UEdge { id: string; core_type: string; source: string; target: string; period?: { start?: string; end?: string }; note?: string; hidden?: boolean }
 interface UEvent { id: string; type: string; occurred_at: string; recorded_at: string; source: string; payload: Record<string, unknown>; note?: string }
 export interface UDoc {
@@ -169,6 +176,11 @@ export function shortTitle(t: string): string {
   return x.length > ACTION_LABEL_MAX ? `${x.slice(0, ACTION_LABEL_MAX - 1)}…` : x || t;
 }
 
+/** 완료한 업무는 기간 끝(완료 시점 ≈ 마지막 갱신)을 둔다 — 업무 유니버스 위험 규칙이 진행 중인 업무만 센다(검토 2026-10-29) */
+function workPeriod(w: Work): { period?: { start?: string; end?: string } } {
+  return w.status === '완료' ? { period: { start: day(w.createdAt), end: day(w.updatedAt || w.createdAt) } } : {};
+}
+
 function workAttrs(w: Work): Record<string, string> {
   return { 상태: w.status, ...(w.type ? { 유형: w.type } : {}), ID: w.id };
 }
@@ -176,7 +188,7 @@ function workAttrs(w: Work): Record<string, string> {
 /** 업무들(과 그 하위 업무)을 평평한 문서 하나에 넣는다. 범위 밖 업무와의 관계는 「범위 밖」 업무 항목으로 잇는다 */
 function fillWorks(b: DocBuilder, c: Ctx, list: Work[], rootFor: (w: Work) => string | null) {
   const inScope = new Set(list.map((w) => w.id));
-  const nodeOf = (w: Work) => (rootFor(w) === 'N-000' ? 'N-000' : b.node({ kind: 'work', id: w.id }, 'work', w.name, { description: w.summary || undefined, attrs: workAttrs(w) }));
+  const nodeOf = (w: Work) => (rootFor(w) === 'N-000' ? 'N-000' : b.node({ kind: 'work', id: w.id }, 'work', w.name, { description: w.summary || undefined, attrs: workAttrs(w), ...workPeriod(w) }));
   // 먼저 업무 노드를 모두 만들어 둔다(관계를 그릴 때 순서와 상관없게)
   for (const w of list) nodeOf(w);
   for (const w of list) {
@@ -187,7 +199,7 @@ function fillWorks(b: DocBuilder, c: Ctx, list: Work[], rootFor: (w: Work) => st
   }
   const stub = (id: string) => {
     const o = c.works.get(id);
-    return o ? b.node({ kind: 'work', id: o.id }, 'work', o.name, { attrs: { ...workAttrs(o), 범위: '이 지도 밖' } }) : null;
+    return o ? b.node({ kind: 'work', id: o.id }, 'work', o.name, { attrs: { ...workAttrs(o), 범위: '이 지도 밖' }, ...workPeriod(o) }) : null;
   };
   for (const w of list) {
     const me = nodeOf(w);

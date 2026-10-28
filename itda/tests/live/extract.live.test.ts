@@ -65,10 +65,10 @@ describe.skipIf(!LIVE)('실제 Claude 문서 분석', () => {
 
   it('지도로 본 인계 포인트 — Claude 다듬기(근거 확인된 문장만)', { timeout: 300000 }, async () => {
     const s = createSeed('linked');
-    const d = deriveMap(s, { kind: 'work', workId: 'W-001' }, undefined, { people: ['U1', 'U2'] });
+    const d = deriveMap(s, { kind: 'work', workId: 'W-001' }, undefined, { people: ['U1', 'U2'], centerAsWork: true, actions: false });
     const view = buildView(d.doc, d.resolve);
     const uid = d.doc.universe.id;
-    const r = buildHandoverDraft(view, { target: `${uid}/N-000`, from: `${uid}/N-user-U1`, to: `${uid}/N-user-U2`, asOf: '2026-10-29' });
+    const r = buildHandoverDraft(view, { target: `${uid}/N-work-W-001`, from: `${uid}/N-user-U1`, to: `${uid}/N-user-U2`, asOf: '2026-10-29' });
     const t0 = Date.now();
     const out = await refineDraftAsync(r.draft, { provider: createProvider('claude_api', { apiKey: key() }), exists: view.exists, view });
     writeFileSync(`${OUT}/handover-points.json`, JSON.stringify(out, null, 1));

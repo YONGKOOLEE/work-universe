@@ -6,7 +6,7 @@ import { cx, localDay } from '../lib/util';
 import type { AppState } from '../lib/types';
 import { applyMerge, planMerge, previewCounts, type MergeChoices } from '../lib/mergeImport';
 
-/** 데이터 옮기기 — 게시 페이지와 내려받은 HTML 파일은 브라우저 저장소가 달라 데이터가 공유되지 않으므로 백업 파일로 이동 */
+/** 데이터 옮기기 — 다른 PC·브라우저·동료와는 저장소가 달라 데이터가 공유되지 않으므로 백업 파일로 이동(바꿔 불러오기·합쳐 불러오기) */
 export function DataTransfer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { raw, replace, toast } = useStore();
   const [tab, setTab] = useState<'export' | 'import'>('export');
@@ -73,7 +73,7 @@ export function DataTransfer({ open, onClose }: { open: boolean; onClose: () => 
   return (
     <Modal open={open} onClose={close} title="데이터 옮기기 (백업 · 불러오기)">
       <p className="mb-3 text-xs leading-relaxed text-muted">
-        claude.ai 게시 페이지와 내려받은 HTML 파일은 데이터가 서로 따로 저장됨. 한쪽에서 '내보내기' 한 백업을 다른 쪽에서 '불러오기' 하면 등록한 업무·문서·인계 내용이 그대로 옮겨짐.
+        데이터는 이 PC의 이 브라우저에만 저장됨. 다른 PC·브라우저로 옮기거나 동료와 합칠 때는 '내보내기' 한 백업을 '불러오기'(바꿔 불러오기 또는 합쳐 불러오기). AI 키는 백업에 들어가지 않음.
       </p>
       <div className="mb-3 flex gap-1 rounded-md bg-sunken p-1 text-[13px]">
         {(['export', 'import'] as const).map((t) => (

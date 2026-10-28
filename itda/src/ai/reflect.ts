@@ -94,15 +94,19 @@ export function verify(p: Proposal, paras: DocParagraph[]): Proposal {
   const hit = p.quote ? locate(paras, p.quote, p.paraId) : null;
   const all = paras.map((x) => x.text).join('\n');
   let dateVerified = true;
+  let dateOutside = false;
   if (p.date) {
-    const inDoc = parseDates(all).some((d) => d.iso === p.date || (p.date!.length === 7 && d.iso.startsWith(p.date!)));
-    const textOk = p.dateText ? norm(all).includes(norm(p.dateText)) : false;
-    dateVerified = inDoc || textOk;
+    const has = (t: string) => parseDates(t).some((d) => d.iso === p.date || (p.date!.length === 7 && d.iso.startsWith(p.date!))) || (!!p.dateText && norm(t).includes(norm(p.dateText)));
+    const inPara = !!hit && has(hit.text);
+    const inDoc = has(all);
+    // 조치의 기한은 근거 문단(표의 그 행) 안에 있어야 한다 — 다른 문단의 날짜를 붙인 기한은 확인 필요(검토 2026-10-29). 결정·사건은 회의 날짜 등 문서 날짜를 쓸 수 있다
+    dateVerified = inPara || (inDoc && p.kind !== 'action');
+    dateOutside = !inPara && inDoc && p.kind === 'action';
   }
   const issues: string[] = [];
   if (!hit) issues.push(p.quote ? '근거 인용문이 원문에서 확인되지 않음' : '근거 인용문 없음');
   if (p.basis === 'inference') issues.push('원문에 직접 기재되지 않은 AI 추론');
-  if (p.date && !dateVerified) issues.push('날짜가 원문에서 확인되지 않음');
+  if (p.date && !dateVerified) issues.push(dateOutside ? '기한이 근거 문단 밖에 있음' : '날짜가 원문에서 확인되지 않음');
   return {
     ...p,
     paraId: hit?.id ?? p.paraId,
@@ -221,7 +225,11 @@ export function mockExtract(s: AppState, title: string, paras: DocParagraph[], d
 export function matchUser(s: AppState, name?: string | null): string | null {
   const n = String(name ?? '').replace(/\s+/g, '');
   if (!n) return null;
-  const hit = s.users.filter((u) => u.name.replace(/\s+/g, '') === n || n.startsWith(u.name.replace(/\s+/g, '')));
+  const TITLE = /^(님|씨|주무관|사무관|팀장|부장|과장|차장|대리|주임|사원|선임|책임|수석|실장|본부장)?$/;
+  const hit = s.users.filter((u) => {
+    const un = u.name.replace(/\s+/g, '');
+    return un.length >= 2 && n.startsWith(un) && TITLE.test(n.slice(un.length));
+  });
   return hit.length === 1 ? hit[0].id : null;
 }
 
@@ -230,6 +238,7 @@ export function matchUser(s: AppState, name?: string | null): string | null {
  * 흔한 성씨로 시작하는 한글 세 글자면 사람 이름으로 본다. 업무 유니버스 규칙은 지도에 없는 이름이 담당이면 행을 건너뛰므로(과제·담당 경계가 흐림),
  * 그 이름을 「아는 이름」으로 넘겨 행을 읽게 한다. 사용자가 아니므로 ownerId 없이 「문서상 담당」으로만 남는다.
  */
+const DOC_TAIL = /(안|문|서|표|건|회|록|본|집|안서|계획|결과|보고|자료|양식|목록|기준|방안|현황)$/;
 const SURNAMES = '김이박최정강조윤장임한오서신권황안송류전홍고문양손배백허유남심노하곽성차주우구민진나지엄채원천방공현함변염여추도소석선설마길연위표명기반왕금옥육인맹제모탁국어은편용';
 export function guessOwnerNames(text: string): string[] {
   const lines = text.split(/\r?\n/).map((l) => l.trim());
@@ -238,7 +247,8 @@ export function guessOwnerNames(text: string): string[] {
   const out = new Set<string>();
   for (const l of lines.slice(head + 1, head + 41)) {
     const m = /(\S+)\s+\d{4}\.\s*\d{1,2}\.(\s*\d{1,2}\.?)?\s*$/.exec(l);
-    if (m && /^[가-힣]{3}$/.test(m[1]) && SURNAMES.includes(m[1][0])) out.add(m[1]);
+    // 「최종안」「공고문」처럼 문서·결과물 꼬리 글자로 끝나는 낱말은 이름이 아니다(검토 2026-10-29)
+    if (m && /^[가-힣]{3}$/.test(m[1]) && SURNAMES.includes(m[1][0]) && !DOC_TAIL.test(m[1])) out.add(m[1]);
   }
   return [...out];
 }
@@ -433,7 +443,10 @@ export function toProposal(s: AppState, p: RawProposal, paras: DocParagraph[], d
     paras,
   );
   // 담당 이름이 원문에 없으면 쓰지 않는다(지어낸 담당 막기)
-  if (out.ownerName && !paras.some((x) => x.text.replace(/\s+/g, '').includes(out.ownerName!.replace(/\s+/g, '')))) {
+  // 담당 이름은 근거 문단(표의 그 행) 안에 있고 두 글자 이상일 때만(문서 다른 곳의 이름을 붙이는 것 막기, 검토 2026-10-29)
+  const ownerPara = paras.find((x) => x.id === out.paraId);
+  const on = (out.ownerName || '').replace(/\s+/g, '');
+  if (out.ownerName && (on.length < 2 || !ownerPara || !ownerPara.text.replace(/\s+/g, '').includes(on))) {
     out.ownerName = undefined;
     out.ownerId = null;
   }
@@ -444,11 +457,15 @@ const qn = (t: string) => t.replace(/\s+/g, '');
 /** 결정과 같은 원문 문장에서 나온 조치는 뺀다(결정이 맞음). 같은 기한·비슷한 이름의 조치가 있는 이벤트는 뺀다(앞으로 할 일은 조치) */
 export function dedupeKinds(list: Proposal[]) {
   const decisionQuotes = new Set(list.filter((p) => p.kind === 'decision' && p.quote).map((p) => qn(p.quote)));
-  const actions = list.filter((p) => p.kind === 'action');
   for (let i = list.length - 1; i >= 0; i -= 1) {
     const p = list[i];
     if (p.kind === 'action' && p.quote && decisionQuotes.has(qn(p.quote)) && !p.ownerName && !p.date) list.splice(i, 1);
-    else if (
+  }
+  // 남은 조치와 겹치는 이벤트만 뺀다(지운 조치를 근거로 이벤트까지 지우지 않게)
+  const actions = list.filter((p) => p.kind === 'action');
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const p = list[i];
+    if (
       p.kind === 'event' &&
       actions.some((a) => (a.quote && qn(a.quote) === qn(p.quote)) || (!!a.date && a.date === p.date && (similarName(a.text, p.text) || qn(p.quote).includes(qn(a.text)) || qn(p.text).includes(qn(a.text)))))
     )
