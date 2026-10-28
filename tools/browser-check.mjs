@@ -3056,12 +3056,14 @@ async function checkBrowser(browser, port) {
     await pressAi();
     await sleep(250);
     const during = await evaluate(s.cdp, "(() => { const n = document.querySelector('[data-testid=ai-convert-live]'); const b = document.querySelector('[data-testid=btn-ai-convert]'); return { note: n ? n.textContent : '', aria: n ? n.getAttribute('aria-live') : '', disabled: b ? b.disabled : null, preview: !!document.querySelector('[data-testid=import-confirm]'), calls: window.__wu.fakeLlm.calls.length }; })()");
-    check('CR-15 T-37 누르면 「AI가 읽는 중… (최대 90초)」(aria-live=polite)가 보이고 단추가 잠기며 아직 미리 보기는 없음, 호출 1회', during.note === 'AI가 읽는 중… (최대 90초)' && during.aria === 'polite' && during.disabled === true && !during.preview && during.calls === 1, JSON.stringify(during));
+    check('CR-15 T-37 누르면 「Claude가 문서를 읽는 중…(1/2) — 최대 약 3분」(aria-live=polite)가 보이고 단추가 잠기며 아직 미리 보기는 없음, 호출 1회', during.note === 'Claude가 문서를 읽는 중…(1/2) — 최대 약 3분' && during.aria === 'polite' && during.disabled === true && !during.preview && during.calls === 1, JSON.stringify(during));
     const shown = await waitFor(s.cdp, `!!${aiChip}`, 5000);
     const done = await evaluate(s.cdp, `(() => ({ chip: ${aiChip} ? ${aiChip}.textContent : '', method: (document.querySelector('[data-testid=import-method]') || {}).textContent || '', dropped: (document.querySelector('[data-testid=import-ai-dropped] summary') || {}).textContent || '', droppedList: (document.querySelector('[data-testid=import-ai-dropped]') || {}).textContent || '', summary: (document.querySelector('[data-testid=import-summary]') || {}).textContent || '', gran: !!document.querySelector('[data-testid=import-granularity]'), source: (document.querySelector('[data-testid=import-source]') || {}).textContent || '', rows: document.querySelectorAll('[data-testid=import-sections] tbody tr').length, nodes: (document.querySelector('[data-testid=import-nodes]') || {}).textContent || '', live: (document.querySelector('[data-testid=ai-convert-live]') || {}).textContent, aiTag: !!document.querySelector('.error-text[data-testid=import-errors]') }))()`);
     check('CR-15 T-37 미리 보기 머리에 칩 「AI 변환 · 모델명」과 Claude API(실시간) 방식 안내가 보이고 규칙 방식 문구는 없음', shown && done.chip === 'AI 변환 · claude-opus-5-5' && done.method.includes('Claude API(실시간)') && !done.method.includes('규칙 v1') && done.live === '', JSON.stringify(done));
     check('CR-15 T-37 미리 보기: 노드 표(업무 5·사람 3·산출물 3·주제 3)와 원문 근거 15/15, 세분화 줄(월말 정산 수준)은 없음', shown && done.summary.includes('항목 15개') && done.summary.includes('업무 5') && done.summary.includes('사람 3') && done.summary.includes('산출물 3') && done.summary.includes('주제 3') && done.source === '항목 15/15개' && !done.gran && done.rows === 6 && done.nodes.includes('승인취소') && done.nodes.includes('절차: ①'), JSON.stringify({ summary: done.summary, source: done.source, rows: done.rows, gran: done.gran })); // CR-18-2
     check('CR-15 T-37 「원문 인용이 확인되지 않아 뺀 항목 1개」(펼치면 지어낸 업무 사유)가 보임', done.dropped === '원문 인용이 확인되지 않아 뺀 항목 1개' && done.droppedList.includes('지어낸 업무') && done.droppedList.includes('원문에서 인용을 찾지 못함') && !done.nodes.includes('지어낸 업무'), JSON.stringify({ dropped: done.dropped, list: done.droppedList }));
+    const impRev = await evaluate(s.cdp, "({ summary: (document.querySelector('[data-testid=import-ai-review]') || {}).textContent || '', box: !!document.querySelector('[data-testid=import-ai-review-check]'), checked: (document.querySelector('[data-testid=import-ai-review-check]') || {}).checked })");
+    check('h3 AI로 변환: 미리 보기에 검토 요약 「검토(두 번째 읽기) — 더한 것 0개 · 확인 필요 0건」, 「꼼꼼히 읽기」 체크는 기본 켜짐(버튼 아래 같은 칸)', impRev.summary === '검토(두 번째 읽기) — 더한 것 0개 · 확인 필요 0건' && impRev.box && impRev.checked === true, JSON.stringify(impRev));
     await shot(s.cdp, `${browser.name}-42-ai-convert-preview`);
     // 4) 같은 글로 다시 누르면 호출이 늘지 않는다(메모리 캐시)
     const calls1 = await calls();
@@ -4764,6 +4766,106 @@ async function checkBrowser(browser, port) {
       await sleep(200);
       check('CR-23 PDF 파일을 고르면 읽지 않고 「PDF·한글·워드 파일은 글을 복사해 붙여 넣어 주세요」', ((await d23Box('[data-testid=doc-attach-message]')) || {}).text === 'PDF·한글·워드 파일은 글을 복사해 붙여 넣어 주세요' && (await d23Box('[data-testid=doc-attach-input]')).value === '');
       await d23Close();
+      // 8-3) 「Claude로 읽기」(h3 제안 A): 키(가짜)를 넣으면 「꼼꼼히 읽기」 체크와 「Claude로 읽기」가 나타나고, 문서 전체를 읽은 결과가 규칙 결과 대신 미리 보기에 뜬다(검토 요약·되돌리기 링크)
+      {
+        const d23Key = ['sk', 'ant', 'x'.repeat(8), 'FAKEKEY', 'y'.repeat(12)].join('-');
+        await evaluate(s.cdp, "document.getElementById('settings-open').click()");
+        await sleep(150);
+        await evaluate(s.cdp, "(() => { const r = document.querySelector('[data-testid=provider-claude_api]'); r.checked = true; r.dispatchEvent(new Event('change')); })()");
+        await sleep(100);
+        await evaluate(s.cdp, `(() => { const e = document.querySelector('[data-testid=settings-apikey]'); e.value = ${JSON.stringify(d23Key)}; e.dispatchEvent(new Event('input')); e.dispatchEvent(new Event('change')); })()`);
+        await sleep(100);
+        await clickTestId(s.cdp, 'settings-close');
+        await sleep(100);
+        await evaluate(s.cdp, "window.__wu.useFakeLlm('convert')");
+        await evaluate(s.cdp, "window.__wu.select(null); document.querySelector('details.add').open = true");
+        await sleep(150);
+        await clickTestId(s.cdp, 'btn-doc-attach');
+        await sleep(200);
+        await clickTestId(s.cdp, 'doc-attach-example');
+        await sleep(150);
+        // 가짜 Claude 응답: 예시 회의록의 줄에서 따온 항목(인용은 원문 줄 그대로)
+        await evaluate(s.cdp, `(() => {
+          const f = window.__wu.fakeLlm;
+          const lines = document.querySelector('[data-testid=doc-attach-input]').value.split('\\n');
+          const find = (re) => lines.find((l) => re.test(l));
+          const L1 = find(/^불일치 원인 코드표/); const L2 = find(/^대사 결과 이중/); const U = find(/^원천 시스템/); const C = find(/^대사 불일치가 3건/);
+          const day = (l) => l.match(/\\d{4}\\. \\d+\\. \\d+\\./)[0];
+          const w = (label, quote, attrs, description = '') => ({ label, description, attrs: { 절차: '', 주기: '', 마감: '', 주의사항: '', '사용 시스템': '', ...attrs }, quote });
+          const p = (label, role, quote) => ({ label, role, org: '', duty: '', quote });
+          f.convertOut = {
+            name: lines[0], purpose: '', owner: '', date: '',
+            works: [w('불일치 원인 코드표 정리', L1, { 마감: day(L1), 절차: '원인 코드를 붙여 기록한다' }, '불일치 건의 원인 코드를 표로 정리'), w('대사 결과 이중 확인 절차 마련', L2, { 마감: day(L2), 주기: '월 1회' }), w('대사 확인', lines[0] + ' ' + lines[1])],
+            people: [p('서하늘', false, L1), p('윤바다', false, L2), p('가상정산팀', true, lines[1])],
+            artifacts: [{ label: '불일치 원인 코드표', description: '', quote: L1 }],
+            topics: [{ label: '원천 시스템 마감 시각', description: '마감 시각이 바뀌면 기준일이 흔들림', subtype: '', quote: U }],
+            memos: [{ text: U, kind: 'issue', work: '', quote: U }, { text: C, kind: 'caution', work: '불일치 원인 코드표 정리', quote: C }],
+            edges: [
+              { from: { type: 'person', label: '서하늘' }, to: { type: 'work', label: '불일치 원인 코드표 정리' }, relation: 'performs', quote: L1, verb: '' },
+              { from: { type: 'person', label: '윤바다' }, to: { type: 'work', label: '대사 결과 이중 확인 절차 마련' }, relation: 'performs', quote: L2, verb: '' },
+              { from: { type: 'person', label: '가상정산팀' }, to: { type: 'topic', label: '원천 시스템 마감 시각' }, relation: 'relates_to', quote: U, verb: '' },
+              { from: { type: 'work', label: '불일치 원인 코드표 정리' }, to: { type: 'artifact', label: '불일치 원인 코드표' }, relation: 'produces', quote: L1, verb: '' },
+            ],
+          };
+          f.reviewOut = { works: [], people: [], artifacts: [], topics: [], memos: [], edges: [], issues: [{ kind: 'item', label: '원천 시스템 마감 시각', reason: '주제인지 미결 사항인지 확실하지 않음', quote: U }] };
+          f.delayMs = 600;
+        })()`);
+        const d23Rv = await d23Box('[data-testid=doc-attach-review-check]');
+        const d23RvLabel = await d23Box('[data-testid=doc-attach-review-check-label]');
+        check('h3 문서로 더하기: 키가 있으면 「Claude로 읽기」 옆에 「꼼꼼히 읽기」 체크(기본 켜짐, 크기 있음)와 설명 「두 번 읽어 빠진 것을 더함 — 시간·사용료 약 2배」', !!d23Rv && d23Rv.checked === true && d23Rv.w > 5 && !!d23RvLabel && d23RvLabel.text.includes('꼼꼼히 읽기') && d23RvLabel.text.includes('시간·사용료 약 2배') && !!(await d23Box('[data-testid=doc-attach-ai]')), JSON.stringify([d23Rv, d23RvLabel]));
+        await clickTestId(s.cdp, 'doc-attach-ai');
+        await sleep(250);
+        const d23B1 = await evaluate(s.cdp, "({ busy: document.querySelector('[data-testid=doc-attach-busy]').textContent, ai: document.querySelector('[data-testid=doc-attach-ai]').disabled, rv: document.querySelector('[data-testid=doc-attach-review-check]').disabled, preview: !!document.querySelector('[data-testid=doc-attach-summary]') })");
+        check('h3 Claude로 읽는 중 1단계: 「Claude가 문서를 읽는 중…(1/2) — 최대 약 3분」, 단추·체크 잠김, 아직 미리 보기 없음', d23B1.busy === 'Claude가 문서를 읽는 중…(1/2) — 최대 약 3분' && d23B1.ai && d23B1.rv && !d23B1.preview, JSON.stringify(d23B1));
+        const d23B2ok = await waitFor(s.cdp, "(document.querySelector('[data-testid=doc-attach-busy]') || {}).textContent === '빠진 것이 없는지 다시 보는 중…(2/2) — 최대 약 3분'", 4000);
+        check('h3 2단계로 바뀌면 「빠진 것이 없는지 다시 보는 중…(2/2) — 최대 약 3분」', d23B2ok);
+        const d23B3ok = await waitFor(s.cdp, "!!document.querySelector('[data-testid=doc-attach-review]')", 5000);
+        const d23B3 = await evaluate(s.cdp, `({
+          method: (document.querySelector('[data-testid=doc-attach-method]') || {}).textContent || '',
+          summary: (document.querySelector('[data-testid=doc-attach-summary]') || {}).textContent || '',
+          tasks: [...document.querySelectorAll('[data-testid^=doc-attach-task-label-]')].map((e) => e.textContent),
+          owners: [...document.querySelectorAll('[data-testid^=doc-attach-task-owners-]')].map((e) => e.textContent),
+          due: [...document.querySelectorAll('[data-testid^=doc-attach-task-due-]')].map((e) => /^\\d{4}\\. \\d+\\. \\d+\\.$/.test(e.textContent)),
+          checks: [...document.querySelectorAll('[data-testid^=doc-attach-task-check-]')].map((e) => e.checked),
+          memos: [...document.querySelectorAll('[data-testid^=doc-attach-memo-cat-]')].map((e) => e.textContent),
+          memoStatus: [...document.querySelectorAll('[data-testid^=doc-attach-memo-]')].filter((e) => e.tagName === 'TR').map((e) => e.lastElementChild.textContent),
+          review: (document.querySelector('[data-testid=doc-attach-review]') || {}).textContent || '',
+          aiNodes: [...document.querySelectorAll('[data-testid^=doc-attach-ai-node-]')].filter((e) => e.tagName === 'TR').map((e) => e.children[2].textContent + '|' + e.children[3].textContent),
+          held: !!document.querySelector('[data-testid=doc-attach-held-edges]'),
+          showRule: !!document.querySelector('[data-testid=doc-attach-show-rule]'),
+          busy: document.querySelector('[data-testid=doc-attach-busy]').textContent,
+          calls: window.__wu.fakeLlm.calls.length,
+          sent: window.__wu.fakeLlm.calls[0].messages[0].content,
+          save: document.querySelector('[data-testid=doc-attach-save]').disabled,
+        })`);
+        check('h3 Claude 결과가 규칙 결과 대신 보임: 머리 「Claude가 문서 전체를 읽은 결과입니다(규칙 결과 대신…)」, 호출 2회(읽기+검토), 지도 정보(붙일 업무)가 함께 보내짐', d23B3ok && d23B3.method.startsWith('Claude가 문서 전체를 읽은 결과입니다(규칙 결과 대신') && d23B3.calls === 2 && d23B3.sent.includes('대사 확인') && d23B3.busy === '' && !d23B3.save, JSON.stringify(d23B3));
+        check('h3 할 일 업무 2개(대상과 같은 이름 「대사 확인」은 제외)·담당(서하늘·윤바다)·마감은 날짜로 읽음, 메모 2건(이슈·주의, 대상 표시), 요약 줄에 Claude 항목 수, 대상과 비슷한 이름의 둘째 할 일은 체크 안 함', d23B3.tasks.join('|') === '불일치 원인 코드표 정리|대사 결과 이중 확인 절차 마련' && d23B3.owners.join('|').startsWith('서하늘') && d23B3.owners[1].startsWith('윤바다') && d23B3.due.every(Boolean) && d23B3.checks.join() === 'true,false' /* 둘째는 대상 업무와 비슷한 이름이라 처음엔 체크 안 함 */ && d23B3.memos.join('|') === '이슈|주의사항' && d23B3.memoStatus[1].includes('대상: 「불일치 원인 코드표 정리」') && d23B3.summary === '문서 1개 · 할 일 업무 2개 · 메모 2건 · Claude 항목 3개', JSON.stringify(d23B3));
+        check('h3 검토 요약 「검토(두 번째 읽기) — 더한 것 0개 · 확인 필요 1건」과 의심 항목은 처음 체크 안 함(「검토: …」), 업무와 이어지는 연결은 「더하지 않은 연결」로 알림, 「규칙으로 읽은 결과 보기」 링크', d23B3.review.startsWith('검토(두 번째 읽기) — 더한 것 0개 · 확인 필요 1건') && d23B3.review.includes('주제인지 미결 사항인지 확실하지 않음') && d23B3.aiNodes.some((x) => x.startsWith('원천 시스템 마감 시각|처음엔 체크 안 함 · 검토: ')) && d23B3.held && d23B3.showRule, JSON.stringify(d23B3));
+        await evaluate(s.cdp, "document.querySelector('[data-testid=doc-attach-summary]').scrollIntoView({ block: 'start' })");
+        await sleep(200);
+        await shot(s.cdp, 'h3-doc-attach-claude-summary');
+        await evaluate(s.cdp, "(document.querySelector('[data-testid=doc-attach-held-edges]') || document.querySelector('[data-testid=doc-attach-review]')).scrollIntoView({ block: 'center' })");
+        await sleep(200);
+        await shot(s.cdp, 'h3-doc-attach-claude-lower');
+        // 되돌리기: 규칙으로 읽은 결과 ↔ Claude 결과
+        await clickTestId(s.cdp, 'doc-attach-show-rule');
+        await sleep(150);
+        const d23B4 = await evaluate(s.cdp, "({ method: document.querySelector('[data-testid=doc-attach-method]').textContent, rows: document.querySelectorAll('[data-testid^=doc-attach-task-label-]').length, back: !!document.querySelector('[data-testid=doc-attach-show-claude]'), review: !!document.querySelector('[data-testid=doc-attach-review]') })");
+        check('h3 「규칙으로 읽은 결과 보기」: 규칙 결과(할 일 2개)로 바뀌고 검토 줄은 사라지며 「Claude가 읽은 결과 다시 보기」 링크가 생김', d23B4.method.startsWith('규칙으로 읽었습니다') && d23B4.rows === 2 && d23B4.back && !d23B4.review, JSON.stringify(d23B4));
+        await clickTestId(s.cdp, 'doc-attach-show-claude');
+        await sleep(150);
+        check('h3 다시 Claude 결과로 돌아오면 검토 줄과 머리가 다시 보이고 호출은 늘지 않음(2회)', !!(await d23Box('[data-testid=doc-attach-review]')) && ((await d23Box('[data-testid=doc-attach-method]')) || {}).text.startsWith('Claude가 문서 전체를 읽은 결과입니다') && (await evaluate(s.cdp, 'window.__wu.fakeLlm.calls.length')) === 2);
+        // 꼼꼼히 읽기를 끄면 검토 호출 없이 1회, 문구는 「최대 90초」
+        await evaluate(s.cdp, "(() => { const c = document.querySelector('[data-testid=doc-attach-review-check]'); c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true })); })()");
+        await evaluate(s.cdp, "window.__wu.fakeLlm.calls.length = 0; window.__wu.fakeLlm.reviewOut = null; window.__wu.fakeLlm.convertOut = null; window.__wu.fakeLlm.delayMs = 500; (() => { const t = document.querySelector('[data-testid=doc-attach-input]'); t.value = t.value + '\\n'; t.dispatchEvent(new Event('input', { bubbles: true })); })()");
+        await clickTestId(s.cdp, 'doc-attach-ai');
+        await sleep(200);
+        const d23Off = await evaluate(s.cdp, "document.querySelector('[data-testid=doc-attach-busy]').textContent");
+        await waitFor(s.cdp, "(document.querySelector('[data-testid=doc-attach-busy]') || {}).textContent === ''", 4000);
+        const d23OffCalls = await evaluate(s.cdp, 'window.__wu.fakeLlm.calls.length');
+        check('h3 꼼꼼히 읽기를 끄고 읽으면 대기 문구는 「Claude가 문서를 읽는 중… — 최대 90초」, 호출 1회(검토 없음), 검토 줄 없음', d23Off === 'Claude가 문서를 읽는 중… — 최대 90초' && d23OffCalls === 1 && !(await d23Box('[data-testid=doc-attach-review]')), JSON.stringify([d23Off, d23OffCalls]));
+        await d23Close();
+      }
       // 8-2) 「예시 문서 넣기」(H2-⑦): 카드를 고르지 않은 채 열어 단추 → 글 칸이 예시로 채워지고 대상은 「대사 확인」 → 읽어 보기(할 일 2·메모 2) → 지도에 더하기
       await evaluate(s.cdp, "window.__wu.select(null); document.querySelector('details.add').open = true");
       await sleep(150);

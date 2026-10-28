@@ -5,7 +5,8 @@ import { el } from './dom.js';
 import { josa, messageFor } from './messages.js';
 import { MEMO_CATEGORIES, SCHEMA_VERSION, memoCategoryOf, nodeTypeLabel } from '../model/schema.js';
 import { IMPORT_MAX_CHARS, parseImportText } from '../model/import.js';
-import { METHOD_LABELS } from '../llm/connector.js';
+import { AI_REVIEW, METHOD_LABELS } from '../llm/connector.js';
+import { busyText, reviewBox, reviewSummary } from './ai-read.js';
 import { folderTab } from './folder-tab.js';
 import { CONVERT_RULES, docWorkLabel } from '../rules/doc-convert.js';
 
@@ -38,8 +39,9 @@ export const BINARY_DOC = /\.(pdf|hwp|hwpx|doc|docx|ppt|pptx|xls|xlsx)$/i;
 
 // 변환 결과가 「제목도 범위도 못 찾음」이면 업무정의서가 아닌 글을 붙였을 가능성이 크다(검토9 C-1·C-2)
 const AI_KIND_LABEL = { work: '업무', person: '사람', artifact: '산출물', topic: '주제', memo: '메모', edge: '연결' };
-// 문서 AI 변환(T-37): 화면 문구. 응답을 기다리는 최대 시간은 llm/providers.js의 LLM_CONVERT_TIMEOUT_MS(90초, 재시도 없음)와 같은 값이다
-export const AI_CONVERT_WAIT = 'AI가 읽는 중… (최대 90초)';
+// 문서 AI 변환(T-37): 화면 문구. 응답을 기다리는 최대 시간은 호출마다 llm/providers.js의 LLM_CONVERT_TIMEOUT_MS(90초, 재시도 없음)이고, 꼼꼼히 읽기(검토 호출)를 켜면 두 번이라 약 3분이다.
+// 대기 줄의 문구는 단계별(ui/ai-read.js busyText): 「Claude가 문서를 읽는 중…(1/2) — 최대 약 3분」 → 「빠진 것이 없는지 다시 보는 중…(2/2) — 최대 약 3분」
+export const AI_CONVERT_WAIT = busyText('read', AI_REVIEW.on);
 export const NOT_A_DEFINITION_NOTICE = '제목·범위를 찾지 못했습니다. 업무정의서가 아니거나 모양이 다른 글입니다 — 「예시 문서 넣기」로 모양을 먼저 보세요.';
 export function looksNotDefinition(report) {
   const codes = new Set(((report && report.notes) || []).map((n) => n.code));
@@ -107,7 +109,7 @@ function parseErrorText(err) {
  */
 export function importDialog(o) {
   // aiRun: 「AI로 변환」 요청 번호. 창을 닫거나 글을 바꾸거나 탭을 옮기면 올려서, 늦게 온 응답을 버린다
-  const st = { tab: 'doc', docText: '', jsonText: '', jsonFile: '', result: null, message: '', aiRun: 0, aiBusy: false };
+  const st = { tab: 'doc', docText: '', jsonText: '', jsonFile: '', result: null, message: '', aiRun: 0, aiBusy: false, aiReview: AI_REVIEW.on };
   let aiLive = null; // 지금 그려진 「AI가 읽는 중」 안내 칸
   const cancelAi = () => { st.aiRun += 1; st.aiBusy = false; };
 
@@ -195,17 +197,20 @@ export function importDialog(o) {
     st.message = '';
     const btn = o.dialog.querySelector('[data-testid=btn-ai-convert]');
     if (btn) btn.disabled = true;
-    setAiLive(AI_CONVERT_WAIT);
+    const rbox = o.dialog.querySelector('[data-testid=import-ai-review-check]');
+    if (rbox) rbox.disabled = true;
+    const review = st.aiReview;
+    setAiLive(busyText('read', review));
     let r;
     try {
-      r = await ai.run(text);
+      r = await ai.run(text, { review, onStage: (stage) => { if (run === st.aiRun) setAiLive(busyText(stage, review)); } });
     } catch {
       r = null;
     }
     if (run !== st.aiRun || !o.dialog.open) return; // 그 사이 창을 닫았거나 글·탭을 바꿨다: 응답을 버린다
     st.aiBusy = false;
     if (r && r.ok) {
-      st.result = { from: 'doc', doc: r.doc, report: r.report, method: r.method, model: r.model, fallback: null, note: null, ai: { model: r.model, dropped: r.dropped || [], cached: !!r.cached } };
+      st.result = { from: 'doc', doc: r.doc, report: r.report, method: r.method, model: r.model, fallback: null, note: null, ai: { model: r.model, dropped: r.dropped || [], cached: !!r.cached, review: r.review || null } };
       st.message = '';
     } else {
       // 실패하면 규칙 변환 결과를 대신 보여 준다(R-04 ③). 규칙 변환도 못 하는 글(비었음·너무 김)이면 그 안내만
@@ -293,6 +298,7 @@ export function importDialog(o) {
             el('summary', {}, `원문 인용이 확인되지 않아 뺀 항목 ${ai.dropped.length}개`),
             el('ul', {}, ...ai.dropped.slice(0, 30).map((d) => el('li', { class: 'small' }, `${AI_KIND_LABEL[d.kind] || d.kind} 「${d.label}」 — ${d.reason}`)), ai.dropped.length > 30 ? el('li', { class: 'small' }, `외 ${ai.dropped.length - 30}개`) : null))
           : el('p', { class: 'muted small', 'data-testid': 'import-ai-dropped' }, '원문 인용이 확인되지 않아 뺀 항목 0개'));
+        blocks.push(reviewSummary(ai.review, 'import-ai-review')); // 꼼꼼히 읽기(두 번째 읽기) 요약: 더한 것·확인 필요(펼치면 이유와 원문 구절)
       } else {
         blocks.push(el('p', { class: 'muted small', 'data-testid': 'import-method' }, `만든 방식: ${METHOD_LABELS[st.result.method] || st.result.method} 밑그림(규칙 ${report ? report.rules_version : '-'}). 원문 구조를 규칙으로 옮긴 것이라 사람이 확인해야 합니다.`));
       }
@@ -434,6 +440,8 @@ export function importDialog(o) {
     setAiLive('');
     const btn = o.dialog.querySelector('[data-testid=btn-ai-convert]');
     if (btn) btn.disabled = false;
+    const rbox = o.dialog.querySelector('[data-testid=import-ai-review-check]');
+    if (rbox) rbox.disabled = false;
   }
 
   function render() {
@@ -447,7 +455,8 @@ export function importDialog(o) {
       o.onExportHtml ? el('p', { class: 'muted small', 'data-testid': 'export-html-note' }, '받는 사람은 이 파일 하나를 더블클릭하면 이 업무 지도를 바로 볼 수 있습니다. 내용이 파일에 들어 있으니 보낼 사람에게만 주세요.') : null);
     // 키가 있을 때만 「AI로 변환」(단추와 안내 칸). 키가 없으면 둘 다 만들지 않아 화면이 지금과 같다
     const aiBtn = st.tab === 'doc' && aiOf() ? el('button', { type: 'button', 'data-testid': 'btn-ai-convert', disabled: st.aiBusy, title: 'Claude API로 문서를 읽어 업무가 여러 개인 문서도 나눕니다. 키가 있을 때만 보입니다', onclick: runAiConvert }, 'AI로 변환') : null;
-    aiLive = aiBtn ? el('p', { class: 'muted small', 'data-testid': 'ai-convert-live', 'aria-live': 'polite' }, st.aiBusy ? AI_CONVERT_WAIT : '') : null;
+    aiLive = aiBtn ? el('p', { class: 'muted small', 'data-testid': 'ai-convert-live', 'aria-live': 'polite' }, st.aiBusy ? busyText('read', st.aiReview) : '') : null;
+    const aiReviewBox = aiBtn ? reviewBox('import-ai-review-check', st.aiReview, (v) => { st.aiReview = v; }, st.aiBusy) : null;
     const body = st.tab === 'folder' ? folderTab(o, render) : st.tab === 'export' ? exportBody() : st.tab === 'doc'
       ? el('div', { class: 'editor' },
         el('p', { class: 'muted small' }, '업무정의서 같은 문서를 붙여 넣으면 제목(#)·표·번호 목록을 규칙으로 읽어 업무 지도 밑그림을 만듭니다. 업무 흐름은 업무의 「절차」 칸으로, 요건·예외 같은 절은 주제 하나로 묶어 항목을 10~20개 정도로 만듭니다(월말 정산 수준).'),
@@ -462,6 +471,7 @@ export function importDialog(o) {
           el('button', { type: 'button', class: 'primary', 'data-testid': 'import-convert', onclick: runConvert }, '읽어 보기'),
           aiBtn,
           el('span', { class: 'muted small', 'data-testid': 'import-method-note' }, aiBtn ? '「읽어 보기」는 규칙으로, 「AI로 변환」은 Claude가 읽습니다(원문 인용이 확인된 항목만 담음). 결과는 미리 보기에서 사람이 확인합니다.' : '문서 변환은 규칙으로 읽습니다. 결과는 미리 보기에서 사람이 확인합니다.')),
+        aiBtn ? aiReviewBox : null,
         aiBtn ? aiLive : null)
       : el('div', { class: 'editor' },
         el('p', { class: 'muted small' }, '「내보내기」로 저장한 업무 지도 파일(.json)을 엽니다. 파일을 고르면 바로 미리 보기가 열립니다.'),

@@ -55,10 +55,9 @@ import { textAddDialog } from './text-add.js';
 import { docAttachDialog } from './doc-attach.js';
 // 문서로 더한 뒤 배치를 다시 계산하는 조건: 새 항목이 minAdded개 이상이고 지도가 maxNodes개 이하일 때
 const DOC_ATTACH_RELAYOUT = { minAdded: 1, maxNodes: 80 };
-import { readDocumentAi } from '../llm/ai-doc-attach.js';
 import { TEXT_GROUPED_NOTE, isGroupedView } from '../rules/text-extract.js';
 import { convertDocument } from '../rules/doc-convert.js';
-import { convertDocumentWith, extractTextAsync, isLive } from '../llm/connector.js';
+import { convertDocumentAsync, convertDocumentWith, extractTextAsync, isLive } from '../llm/connector.js';
 import { DOC_EXAMPLE } from '../../data/doc-example.js';
 import { DOC_ATTACH_EXAMPLE } from '../../data/doc-attach-example.js';
 import { filterDisplay, foldedInside, neighborhoodDisplay, offPeriodEdgeIds, personsIn, searchNodes } from '../view/explore.js';
@@ -2970,8 +2969,9 @@ function start() {
     example: DOC_ATTACH_EXAMPLE,
     app,
     getView: () => view,
-    aiReady: () => isLive(provider) && typeof provider.extract === 'function',
-    readAi: (text) => readDocumentAi(text, { provider, view }),
+    aiReady: () => isLive(provider) && typeof provider.convert === 'function',
+    // 「Claude로 읽기」: 문서 읽기(AI 변환과 같은 읽기 + 붙일 업무·지도 정보 + 검토)의 결과를 규칙 결과 대신 보인다. 문서 전체를 한 번에 보낸다(덩어리 나눔 없음)
+    convertAi: (text, opt) => convertDocumentAsync(text, { provider, ...opt }),
     today: todayLocal,
     onSaved: (r, ctx) => {
       afterSave(r, toGid(currentId(), ctx.targetId)); // 대상 업무 카드를 연다

@@ -1415,7 +1415,7 @@ export function proposalToOps(proposal, selection, doc, opt = {}) {
       ref.set(n.key, f.match.id);
       continue;
     }
-    const input = { core_type: f.type, label: f.label, ...(f.type === 'person' && f.emp_no ? { emp_no: f.emp_no } : {}) };
+    const input = { core_type: f.type, label: f.label, ...(f.type === 'person' && f.emp_no ? { emp_no: f.emp_no } : {}), ...(typeof n.description === 'string' && n.description ? { description: n.description } : {}) }; // description: 문서 읽기(Claude)가 준 설명(글로 추가의 제안에는 없음)
     ops.push({ op: 'addNode', row, key: n.key, input, attachRoot: attach === true || (attach === 'work' && f.type === 'work') });
     ref.set(n.key, `@${row}`);
     row += 1;
