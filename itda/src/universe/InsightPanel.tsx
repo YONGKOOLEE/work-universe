@@ -5,6 +5,7 @@ import { cx } from '../lib/util';
 import type { AppState } from '../lib/types';
 import type { MapScope } from './derive';
 import { handoverInsights, INSIGHT_HELP, INSIGHT_NAMES, type Insight, type InsightKind } from './insights';
+import { ClaudeInsights } from './ClaudeInsights';
 
 const KINDS = Object.keys(INSIGHT_NAMES) as InsightKind[];
 const LEVEL_DOT = { high: 'bg-danger', mid: 'bg-warn', low: 'bg-faint' } as const;
@@ -64,6 +65,7 @@ export function InsightPanel({ data, scope, asOf, focusId, onFocus }: { data: Ap
         </button>
       )}
       <p className="mt-2 text-2xs text-faint">항목을 누르면 지도에서 근거가 노랗게 강조됩니다. 다시 누르면 풀립니다.</p>
+      <ClaudeInsights data={data} scope={scope} asOf={asOf} focusId={focusId} onFocus={onFocus} />
     </div>
   );
 }

@@ -32,7 +32,7 @@ export const DENSE_N = 3;
 
 export interface Insight {
   id: string;
-  kind: InsightKind;
+  kind: InsightKind | 'claude'; // claude: Claude 인사이트(ai/aiInsight.ts)를 지도에서 강조할 때
   level: 'high' | 'mid' | 'low';
   title: string; // 업무 또는 사람 이름
   detail: string;
@@ -41,8 +41,11 @@ export interface Insight {
   evidence: string[]; // 지도 전역 ID(지도에서 강조할 항목)
 }
 
+/** 규칙 인사이트(종류가 규칙 다섯 가지 중 하나) */
+export type RuleInsight = Insight & { kind: InsightKind };
+
 export interface InsightResult {
-  items: Insight[];
+  items: RuleInsight[];
   counts: Record<InsightKind, number>;
   notes: string[]; // 데이터가 모자라 셀 수 없는 규칙의 사유
 }
@@ -71,7 +74,7 @@ export function handoverInsights(s: AppState, scope: MapScope, asOf: string): In
   if (!s.works.length) return { items: [], counts, notes: ['업무가 없어 셀 수 없습니다'] };
   const d = deriveMap(s, scope, undefined, { actions: false });
   const view = buildView(d.doc, d.resolve);
-  const items: Insight[] = [];
+  const items: RuleInsight[] = [];
   const notes: string[] = [];
   const push = (kind: InsightKind, level: Insight['level'], key: string, title: string, detail: string, evidence: string[]) => {
     const ids = originIds(d, view, evidence);
@@ -119,6 +122,14 @@ export function handoverInsights(s: AppState, scope: MapScope, asOf: string): In
   const rank = { high: 0, mid: 1, low: 2 };
   out.sort((a, b) => rank[a.level] - rank[b.level]);
   return { items: out, counts, notes };
+}
+
+/** 업무잇다 업무·사람 ID → 지도 전역 ID(Claude 인사이트 근거를 지도에서 강조할 때). 지도는 같은 범위로 파생(업무·사람 노드 ID는 할 일 표시와 무관하게 같다) */
+export function evidenceGids(s: AppState, scope: MapScope, workIds: string[], userIds: string[]): string[] {
+  const d = deriveMap(s, scope, undefined, { actions: false });
+  const out: string[] = [];
+  for (const [gid, o] of d.origin) if ((o.kind === 'work' && workIds.includes(o.id)) || (o.kind === 'user' && userIds.includes(o.id))) out.push(gid);
+  return out;
 }
 
 /** 사람 이름을 붙인 짧은 요약(대시보드 카드 머리) */

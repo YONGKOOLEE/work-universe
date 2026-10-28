@@ -15,6 +15,7 @@ export const LIMITS = {
   review: { maxTokens: 16000, timeoutMs: 90000 }, // 꼼꼼히 읽기(두 번째 대조 호출)
   ask: { maxTokens: 8000, timeoutMs: 60000 }, // AI 업무 검색
   check: { maxTokens: 16000, timeoutMs: 90000 }, // 사전 점검·업무 점검(Claude)
+  insight: { maxTokens: 16000, timeoutMs: 120000 }, // 지도 인사이트(Claude): 출력은 점검과 비슷(최대 8개), 입력이 팀 전체 업무라 점검보다 김 → 시간만 늘림
   explain: { maxTokens: 4000, timeoutMs: 45000 }, // 지도 요약 문장
 } as const;
 

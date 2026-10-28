@@ -24,7 +24,8 @@ export default function Handover() {
   const [work, setWork] = useState(preset && mine.some((w) => w.id === preset) ? preset : mine[0]?.id ?? '');
   const w = mine.find((x) => x.id === work) ?? mine[0];
   const candidates = w ? selectableUsers(s.users).filter((u) => !w.owners.includes(u.id)) : [];
-  const [toSel, setTo] = useState('');
+  // 지도의 「인계 시작」은 받을 사람을 함께 넘긴다(?to=)
+  const [toSel, setTo] = useState(query.get('to') ?? '');
   const to = candidates.some((u) => u.id === toSel) ? toSel : candidates[0]?.id ?? '';
   const [base, setBase] = useState(today());
   // 남의 업무에서 「인계 시작」으로 들어온 경우(처음 사용 점검 2026-10-29): 현재 담당자만 시작할 수 있음을 알린다

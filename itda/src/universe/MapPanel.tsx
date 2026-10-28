@@ -448,9 +448,13 @@ function OwnerForm({ w, data, onDone }: { w: AppState['works'][number]; data: Ap
   const others = selectableUsers(data.users).filter((u) => !(w.owners.length === 1 && w.owners[0] === u.id));
   const [who, setWho] = useState(others.find((u) => !w.owners.includes(u.id))?.id ?? others[0]?.id ?? '');
   const [how, setHow] = useState<'hand' | 'add'>('hand');
+  const [sure, setSure] = useState(false);
+  const { raw } = useStore();
+  const { nav } = useRouter();
+  const iOwn = w.owners.includes(raw.currentUserId);
   return (
     <FormBox>
-      <select className={inputCls} value={who} onChange={(e) => setWho(e.target.value)} aria-label="담당할 사람" data-testid="map-owner-who">
+      <select className={inputCls} value={who} onChange={(e) => (setWho(e.target.value), setSure(false))} aria-label="담당할 사람" data-testid="map-owner-who">
         {others.map((u) => (
           <option key={u.id} value={u.id}>
             {u.name} · {u.title}
@@ -459,23 +463,57 @@ function OwnerForm({ w, data, onDone }: { w: AppState['works'][number]; data: Ap
       </select>
       <div className="flex gap-3 text-[12px]">
         <label className="flex items-center gap-1">
-          <input type="radio" checked={how === 'hand'} onChange={() => setHow('hand')} /> 넘기기(기존 담당 끝냄)
+          <input type="radio" checked={how === 'hand'} onChange={() => (setHow('hand'), setSure(false))} /> 넘기기(기존 담당 끝냄)
         </label>
         <label className="flex items-center gap-1">
           <input type="radio" checked={how === 'add'} onChange={() => setHow('add')} /> 공동 담당 추가
         </label>
       </div>
-      <p className="text-2xs text-faint">정식 인계(사전 점검·인수 확인·스냅샷)는 「업무 인계 관리」에서 합니다. 여기서는 담당만 바꿉니다.</p>
-      <Button
-        onClick={() => {
-          apply((d) => assignOwner(d, w.id, who, how, today()));
-          onDone();
-        }}
-        disabled={!who}
-        data-testid="map-owner-save"
-      >
-        저장
-      </Button>
+      {how === 'add' ? (
+        <Button
+          onClick={() => {
+            apply((d) => assignOwner(d, w.id, who, how, today()));
+            onDone();
+          }}
+          disabled={!who}
+          data-testid="map-owner-save"
+        >
+          저장
+        </Button>
+      ) : sure ? (
+        // 담당만 바꾸기는 인계 절차를 건너뛰므로 한 번 더 묻는다(사용자 결정 2026-10-29 ③)
+        <div className="space-y-2 rounded border border-warn/40 bg-warnsoft p-2 text-[12px]" data-testid="map-owner-confirm-box">
+          <p>인계 절차 없이 담당만 바꿉니다. 사전 점검·인수 확인·스냅샷이 남지 않고, 미완료 조치는 {data.users.find((u) => u.id === who)?.name ?? who}에게 넘어갑니다. 바꿀까요?</p>
+          <div className="flex gap-1.5">
+            <Button
+              size="sm"
+              onClick={() => {
+                apply((d) => assignOwner(d, w.id, who, how, today()));
+                onDone();
+              }}
+              data-testid="map-owner-confirm"
+            >
+              담당 바꾸기
+            </Button>
+            <Button size="sm" variant="subtle" onClick={() => setSure(false)}>
+              취소
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {iOwn ? (
+            <Button className="w-full justify-center" variant="primary" onClick={() => nav(`/handover?new=${w.id}&to=${who}`)} disabled={!who} data-testid="map-owner-handover">
+              인계 시작(정식 절차)
+            </Button>
+          ) : (
+            <p className="text-2xs text-muted">정식 인계(사전 점검·인수 확인·스냅샷)는 지금 담당자가 「업무 인계 관리」에서 시작합니다.</p>
+          )}
+          <Button className="w-full justify-center" variant="subtle" onClick={() => setSure(true)} disabled={!who} data-testid="map-owner-save">
+            담당만 바로 바꾸기
+          </Button>
+        </div>
+      )}
     </FormBox>
   );
 }

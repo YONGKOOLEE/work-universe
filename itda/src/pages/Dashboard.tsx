@@ -4,12 +4,15 @@ import { useRouter } from '../lib/router';
 import { Button, Card, CardHead, Mono, Empty } from '../components/ui';
 import { WorkCard } from '../components/WorkCard';
 import { workIssues } from '../ai/engine';
+import { useAI } from '../ai/claude';
 import { handoverInsights, insightSummary, INSIGHT_NAMES } from '../universe/insights';
 import { daysBetween, fmtDate, relDays, cx, localDay } from '../lib/util';
 
 export default function Dashboard() {
   const { s, raw, me } = useStore();
   const { nav } = useRouter();
+  const ai = useAI();
+  const claudeOn = ai.engine === 'claude' && !!ai.client;
   const now = new Date();
   const nowIso = now.toISOString();
   // 기록 점검(업무잇다 규칙) — 업무마다 빈 칸·기한·갱신. 인계 위험(업무 유니버스 규칙)은 아래 카드에 따로
@@ -145,7 +148,10 @@ export default function Dashboard() {
             ))}
             {!insights.items.length && <li className="px-4 py-3 text-[13px] text-muted">{insights.notes[0] ?? '찾은 위험이 없습니다'}</li>}
           </ul>
-          <p className="border-t border-line px-4 py-2 text-2xs text-faint">업무 유니버스의 위험 규칙(혼자만 아는 일·길목 업무·일 몰린 사람·담당자 빈 업무)으로 계산합니다. 키 없이 동작합니다.</p>
+          <p className="border-t border-line px-4 py-2 text-2xs text-faint">
+            업무 유니버스의 위험 규칙(혼자만 아는 일·길목 업무·일 몰린 사람·담당자 빈 업무)으로 계산합니다. 키 없이 동작합니다.
+            {claudeOn && <span data-testid="dash-insight-claude"> 업무 유니버스 지도 오른쪽 「Claude로 더 찾기」로 Claude가 업무 기록을 읽고 더 찾습니다.</span>}
+          </p>
         </Card>
 
       <div className="grid gap-5 lg:grid-cols-3">

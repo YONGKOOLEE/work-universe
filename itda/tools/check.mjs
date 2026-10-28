@@ -159,6 +159,9 @@ try {
     await must(risk.includes('혼자만 아는 일'), '위험 패널에 「혼자만 아는 일」 없음');
     const items = await ev(`document.querySelectorAll('[data-testid="insight-item"]').length`);
     await must(items > 0, '인계 위험 인사이트 목록 비어 있음');
+    // Claude 인사이트: 키 없는 점검 프로필 → 단추 없이 안내 한 줄(외부 호출 없음)
+    await must(await ev(`!!document.querySelector('[data-testid="insight-claude-hint"]')`), 'Claude 인사이트 안내 없음(키 없음)');
+    await must(await ev(`!document.querySelector('[data-testid="claude-insight-run"]')`), '키가 없는데 「Claude로 더 찾기」 단추가 보임');
     for (const k of ['bottleneck', 'dense', 'gap']) await must(await ev(`!(document.querySelector('[data-testid="insight-kind-${k}"]')||{disabled:true}).disabled`), `인사이트 종류 ${k} 0건`);
     await shot('03-팀장-접힘');
     const before = await H('nodes()');
@@ -435,6 +438,30 @@ try {
     await shot('11-팀지도-past');
     await must(past >= 1, `W-001 전 담당(past) 선 없음 (past ${past})`);
     return `${hoId} 확정, past 선 ${past}: ${w1.join(', ')}`;
+  });
+
+  await check('14 지도 담당 넘기기 → 인계 시작·바로 바꾸기 확인', async () => {
+    await must(await H(`user('정하준')`), '정하준 전환 실패');
+    await nav('#/universe', mapReady);
+    await must(await H(`tap('출금이체 월 정산')`), '업무 노드 없음');
+    await must(await wait(`!!document.querySelector('[data-testid="map-card"]')`, 3000), '카드 안 열림');
+    await must(await H(`clickId('map-edit-owner')`), '담당 넘기기 단추 없음');
+    await must(await wait(`!!document.querySelector('[data-testid="map-owner-handover"]')`, 2000), '「인계 시작(정식 절차)」 단추 없음');
+    // 바로 바꾸기는 한 번 더 묻고, 묻는 동안 아무것도 바뀌지 않는다
+    await must(await H(`clickId('map-owner-save')`), '「담당만 바로 바꾸기」 단추 없음');
+    await must(await wait(`!!document.querySelector('[data-testid="map-owner-confirm-box"]')`, 2000), '바로 바꾸기 확인 창 없음');
+    await shot('14-담당-바로바꾸기-확인');
+    await must(await H(`click('button', '취소')`), '확인 창 취소 단추 없음');
+    const who = await ev(`document.querySelector('[data-testid="map-owner-who"]').value`);
+    await must(await H(`clickId('map-owner-handover')`), '인계 시작 단추 누르기 실패');
+    await must(await wait(`location.hash.startsWith('#/handover')`, 3000), `인계 화면으로 안 감: ${await ev('location.hash')}`);
+    await sleep(400);
+    const picked = await ev(`[...document.querySelectorAll('select')].some((s) => s.value === ${JSON.stringify(who)})`);
+    await must(picked, `받을 사람(${who})이 미리 골라져 있지 않음`);
+    await shot('14-인계시작-받는사람');
+    const owners = await ev(`(() => { const k = Object.keys(localStorage).find((x) => x.startsWith('worklink')); return JSON.stringify(JSON.parse(localStorage.getItem(k)).works.find((w) => w.id === 'W-004').owners); })()`);
+    await must(owners === '["U5"]', `확인 없이 담당이 바뀜: ${owners}`);
+    return `확인 창 → 취소, 인계 화면 받는 사람 ${who}, W-004 담당 ${owners}`;
   });
 
   await check('13 남의 업무는 읽기 전용·나만 보기 메모', async () => {
