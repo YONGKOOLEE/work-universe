@@ -80,8 +80,8 @@ test('완화는 연결에만 — 노드의 짧은 인용은 그대로 버린다'
 
 test('shortEdgeQuoteOk: 줄 경계를 넘는 인용은 안 됨, 기호뿐인 인용은 안 됨', () => {
   const t = ['가나다 라마.', '바사 아자'].join(String.fromCharCode(10));
-  assert.equal(shortEdgeQuoteOk(t, '라마바', ['가나다']), false);
-  assert.equal(shortEdgeQuoteOk(t, '라마', ['가나다']), true);
+  assert.equal(shortEdgeQuoteOk(t, '라마바', ['라마바팀', '가나다']), false);
+  assert.equal(shortEdgeQuoteOk(t, '라마', ['라마팀', '가나다']), true);
   assert.equal(shortEdgeQuoteOk('가나다 //', '//', ['가나다']), false);
   assert.equal(shortEdgeQuoteOk('가나다 라마', '라마', []), false);
 });
@@ -165,11 +165,11 @@ test('글로 추가 Claude 읽기: 동사는 인용에 있을 때만 제안에 �
 test('줄 창(lineWindow): 가로 행(한 줄)·세로 행(과제/담당/기한 세 줄) 모두 남고, 창 밖이면 버린다', () => {
   const nl = String.fromCharCode(10);
   const row = ['과제 담당 기한', '계약별 인상 가능 여부 검토 법무/영업 2026. 11. 13.'].join(nl);
-  assert.equal(shortEdgeQuoteOk(row, '법무/영업', ['계약별 인상 가능 여부 검토']), true);
+  assert.equal(shortEdgeQuoteOk(row, '법무/영업', ['법무·준법팀', '계약별 인상 가능 여부 검토']), true);
   const col = ['과제', '담당', '기한', '고객 안내문·FAQ 배포', '영업기획', '2016. 11. 30.'].join(nl);
-  assert.equal(shortEdgeQuoteOk(col, '영업기획', ['고객 안내문·FAQ 배포']), true);
+  assert.equal(shortEdgeQuoteOk(col, '영업기획', ['영업기획팀', '고객 안내문·FAQ 배포']), true);
   const far = ['고객 안내문·FAQ 배포', '가', '나', '다', '라', '영업기획'].join(nl);
-  assert.equal(shortEdgeQuoteOk(far, '영업기획', ['고객 안내문·FAQ 배포']), false);
+  assert.equal(shortEdgeQuoteOk(far, '영업기획', ['영업기획팀', '고객 안내문·FAQ 배포']), false);
   assert.equal(EDGE_SHORT_QUOTE.lineWindow, 3);
 });
 
@@ -217,4 +217,21 @@ test('회귀(실제 AI 변환 결과 모양): 2026 회의록에서 버려졌던 
   }));
   assert.equal(v8.kept.edges.length, 8);
   assert.equal(v8.dropped.length, 0);
+});
+
+test('짧은 인용은 한 끝 항목을 가리켜야 한다 — 다른 행 담당 칸(재무정산)을 영업팀 연결의 근거로 쓰면 버린다', () => {
+  // 「고객별 매출 시나리오 및 손익 검증 재무정산 …」 줄: 업무 이름은 있지만 「재무정산」은 영업팀을 가리키지 않는다
+  assert.equal(shortEdgeQuoteOk(TEXT, '재무정산', ['영업팀', '고객별 매출 시나리오 및 손익 검증']), false);
+  assert.equal(shortEdgeQuoteOk(TEXT, '재무정산', ['재무정산팀', '고객별 매출 시나리오 및 손익 검증']), true);
+  // 「법무/영업」의 조각 「영업」은 영업팀을, 「법무」는 법무·준법팀을 가리킨다
+  assert.equal(shortEdgeQuoteOk(TEXT, '법무/영업', ['영업팀', '계약별 인상 가능 여부 검토']), true);
+  assert.equal(shortEdgeQuoteOk(TEXT, '법무/영업', ['고객지원팀', '계약별 인상 가능 여부 검토']), false);
+});
+
+test('문서로 더하기 Claude 읽기: 덩어리 제안을 합쳐도 연결 동사가 남는다', async () => {
+  const { mergeProposals } = await import('../app/src/llm/ai-doc-attach.js');
+  const p = { nodes: [{ key: 'n1', type: 'org', label: '정산팀', quote: '정산팀 작성' }, { key: 'n2', type: 'artifact', label: '월간 보고서', quote: '월간 보고서는' }], edges: [{ key: 'e1', from: 'n1', to: 'n2', type: 'references', quote: '월간 보고서는 정산팀 작성', verb: '작성' }], notes: [], unread: [] };
+  const m = mergeProposals([p]);
+  assert.equal(m.edges.length, 1);
+  assert.equal(m.edges[0].verb, '작성');
 });

@@ -61,7 +61,7 @@ export function mergeProposals(proposals, view = null) {
       const a = map.get(e.from);
       const c = map.get(e.to);
       if (!a || !c) continue;
-      const made = b.addEdge(a, c, e.type, e.quote);
+      const made = b.addEdge(a, c, e.type, e.quote, e.verb || '');
       if (made && typeof e.hold === 'string' && e.hold) made.hold = e.hold;
     }
     for (const n of p.notes || []) add(notes, n);

@@ -77,10 +77,19 @@ export function shortEdgeQuoteOk(text, quote, endLabels) {
   const q = normalizeQuote(quote);
   if (q.length >= QUOTE_MIN) return false; // 짧지 않은 인용은 이 길이 밖(보통 검사)
   if ((q.match(/[\p{L}\p{N}]/gu) || []).length < EDGE_SHORT_QUOTE.minChars) return false;
-  // 인용 자체가 들어 있는 이름(인용 「재무정산」과 사람 「재무정산팀」)은 근거가 못 된다 — 인용의 출처가 아닌 다른 끝 항목 이름이 근처에 있어야 한다
-  const ends = endLabels.map(normalizeQuote).filter((l) => l && !l.includes(q));
-  // 줄 단위로 나눠 인용이 있는 줄 앞뒤 lineWindow줄 안에서 끝 항목 이름을 찾는다
+  const ends = endLabels.map(normalizeQuote).filter(Boolean);
+  // 인용은 한 끝 항목을 가리켜야 한다: 인용을 「/」·「,」·「·」 등으로 나눈 조각(글자 minChars개 이상) 하나가 그 끝 이름 안에 있음(「법무」 ⊂ 「법무·준법팀」).
+  // 그래야 다른 행의 담당 칸(「재무정산」)을 따와 엉뚱한 끝(영업팀)과 근처 업무를 잇는 연결이 걸러진다
+  const pieces = String(quote).split(/[\s/／,，、·ㆍ]+/).map(normalizeQuote).filter((p) => (p.match(/[\p{L}\p{N}]/gu) || []).length >= EDGE_SHORT_QUOTE.minChars);
+  const named = ends.filter((l) => pieces.some((p) => l.includes(p)));
+  if (!named.length) return false;
+  // 줄 단위로 나눠 인용이 있는 줄 앞뒤 lineWindow줄 안(같은 줄 포함)에서, 인용이 가리킨 끝이 아닌 다른 끝 항목 이름(전체)을 찾는다.
+  // 인용이 들어 있는 이름(인용 「재무정산」과 「재무정산팀」)은 그 줄 자체라 근거가 못 된다
   const lines = String(text).split(/\r\n?|\n/).map(normalizeQuote);
   const w = EDGE_SHORT_QUOTE.lineWindow;
-  return lines.some((line, i) => line.includes(q) && ends.some((l) => lines.slice(Math.max(0, i - w), i + w + 1).some((x) => x.includes(l))));
+  return lines.some((line, i) => {
+    if (!line.includes(q)) return false;
+    const near = lines.slice(Math.max(0, i - w), i + w + 1);
+    return named.some((n) => ends.some((l) => l !== n && !l.includes(q) && near.some((x) => x.includes(l))));
+  });
 }
