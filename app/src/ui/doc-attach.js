@@ -352,7 +352,7 @@ export function docAttachDialog(o) {
             el('td', {}, f.fixed ? el('span', { class: 'muted' }, '—') : check(`doc-attach-ai-node-check-${i}`, `${i + 1}번 Claude 항목 넣기`, f.include, mark((v) => { nodeSel(n.key).include = v; if (!v) for (const e of p.edges) if (e.from === n.key || e.to === n.key) edgeSel(e.key).include = false; }))),
             el('td', { class: 'small' }, NODE_TYPES[f.type] || f.type),
             el('td', {}, f.label),
-            el('td', { class: 'small' }, f.fixed ? DOC_ATTACH.mapItem : n.hold ? `처음엔 체크 안 함 · ${n.hold}` : f.type === 'work' ? `${DOC_ATTACH.newItem} · 대상 업무 아래에 잇습니다` : f.include ? `${DOC_ATTACH.newItem} · ${linkNote(f.type)}` : DOC_ATTACH.newItem),
+            el('td', { class: 'small' }, f.fixed ? DOC_ATTACH.mapItem : n.hold ? (f.include ? `확인 필요 · ${n.hold}${f.type === 'work' ? '' : ` · ${linkNote(f.type)}`}` : `처음엔 체크 안 함 · ${n.hold}`) : f.type === 'work' ? `${DOC_ATTACH.newItem} · 대상 업무 아래에 잇습니다` : f.include ? `${DOC_ATTACH.newItem} · ${linkNote(f.type)}` : DOC_ATTACH.newItem),
             el('td', { class: 'small muted' }, `「${n.quote}」`));
         })))));
     }

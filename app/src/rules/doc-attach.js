@@ -727,9 +727,9 @@ export function dedupeAiProposal(proposal, plan) {
 /**
  * Claude가 찾은 새 항목(업무 제외)을 지도에서 떠돌지 않게 잇는 방식(바꾸려면 여기 한 곳만 고친다).
  * from 'doc': 문서 항목에서(문서 항목이 없고 만들지도 않으면 대상 업무에서). 주제는 topic, 사람·조직·산출물은 other 관계로.
- * existing: 지도에 이미 있던 항목(맞춘 것)도 잇는가 — false면 잇지 않는다(새 항목만).
+ * 지도에 이미 있던 항목(맞춘 것)은 잇지 않는다(새 항목만 — 이미 지도에 이어져 있고, 문서가 쌓일수록 선이 늘어나므로. 사용자 결정 2026-10-28).
  */
-export const DOC_ATTACH_AI_LINK = Object.freeze({ from: 'doc', topic: 'relates_to', other: 'references', existing: false });
+export const DOC_ATTACH_AI_LINK = Object.freeze({ from: 'doc', topic: 'relates_to', other: 'references' });
 
 const shiftRef = (v, by) => (typeof v === 'string' && /^@\d+$/.test(v) ? `@${Number(v.slice(1)) + by}` : v);
 
