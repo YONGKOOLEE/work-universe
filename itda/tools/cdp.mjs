@@ -5,7 +5,7 @@ import { rm } from 'node:fs/promises';
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 
-function connect(url) {
+export function connect(url) {
   const ws = new WebSocket(url);
   let seq = 0;
   const pending = new Map();
@@ -34,9 +34,9 @@ function connect(url) {
 
 /** Chrome을 띄우고 페이지 하나에 연결한다. 반환: { cdp, ev, close, logs } */
 /** network: true면 외부 통신 허용(키로 실제 Claude를 부르는 촬영·시험만). 기본은 막음(점검이 밖으로 나가지 않게) */
-export async function launch({ port, profile, width = 1440, height = 900, network = false }) {
+export async function launch({ port, profile, width = 1440, height = 900, network = false, extraArgs = [] }) {
   await rm(profile, { recursive: true, force: true });
-  const proc = spawn(CHROME, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--disable-extensions', ...(network ? [] : ['--proxy-server=http://127.0.0.1:9']), `--window-size=${width},${height}`, 'about:blank'], { stdio: 'ignore' });
+  const proc = spawn(CHROME, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--disable-extensions', ...(network ? [] : ['--proxy-server=http://127.0.0.1:9']), `--window-size=${width},${height}`, ...extraArgs, 'about:blank'], { stdio: 'ignore' });
   let url;
   for (let i = 0; i < 150 && !url; i += 1) {
     try { url = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find((t) => t.type === 'page')?.webSocketDebuggerUrl; } catch {}
