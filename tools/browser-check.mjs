@@ -4764,6 +4764,32 @@ async function checkBrowser(browser, port) {
       await sleep(200);
       check('CR-23 PDF 파일을 고르면 읽지 않고 「PDF·한글·워드 파일은 글을 복사해 붙여 넣어 주세요」', ((await d23Box('[data-testid=doc-attach-message]')) || {}).text === 'PDF·한글·워드 파일은 글을 복사해 붙여 넣어 주세요' && (await d23Box('[data-testid=doc-attach-input]')).value === '');
       await d23Close();
+      // 8-2) 「예시 문서 넣기」(H2-⑦): 카드를 고르지 않은 채 열어 단추 → 글 칸이 예시로 채워지고 대상은 「대사 확인」 → 읽어 보기(할 일 2·메모 2) → 지도에 더하기
+      await evaluate(s.cdp, "window.__wu.select(null); document.querySelector('details.add').open = true");
+      await sleep(150);
+      const d23ExBefore = await d23Counts();
+      await clickTestId(s.cdp, 'btn-doc-attach');
+      await sleep(200);
+      const d23ExBtn = await d23Box('[data-testid=doc-attach-example]');
+      const d23ExPre = (await d23Box('[data-testid=doc-attach-target]')).value;
+      check('H2-⑦ 「문서로 더하기」 창에 「예시 문서 넣기: 대사 확인 개선 회의록(샘플 「월말 정산 점검」용)」 단추(크기 있음), 카드를 고르지 않았으면 대상은 아직 비어 있음', !!d23ExBtn && d23ExBtn.text === '예시 문서 넣기: 대사 확인 개선 회의록(샘플 「월말 정산 점검」용)' && d23ExBtn.w > 20 && d23ExBtn.h > 10 && d23ExPre === '', JSON.stringify([d23ExBtn, d23ExPre]));
+      await clickTestId(s.cdp, 'doc-attach-example');
+      await sleep(150);
+      const d23ExText = (await d23Box('[data-testid=doc-attach-input]')).value;
+      check('H2-⑦ 단추를 누르면 글 칸이 예시 회의록으로 채워지고(기한은 「YYYY. M. D.」 꼴로 바뀜, 자리표시 없음) 붙일 업무가 「대사 확인」(N-001)으로 골라짐', d23ExText.startsWith('대사 확인 개선 회의록') && !d23ExText.includes('{D') && /서하늘 \d{4}\. \d{1,2}\. \d{1,2}\./.test(d23ExText) && /윤바다 \d{4}\. \d{1,2}\. \d{1,2}\./.test(d23ExText) && (await d23Box('[data-testid=doc-attach-target]')).value === 'N-001', d23ExText.slice(0, 80));
+      await clickTestId(s.cdp, 'doc-attach-read');
+      await sleep(250);
+      const d23ExPrev = await evaluate(s.cdp, `({
+        tasks: [...document.querySelectorAll('[data-testid^=doc-attach-task-label-]')].map((e) => e.textContent),
+        owners: [...document.querySelectorAll('[data-testid^=doc-attach-task-owners-]')].map((e) => e.textContent),
+        checks: [...document.querySelectorAll('[data-testid^=doc-attach-task-check-]')].map((e) => e.checked),
+        memos: [...document.querySelectorAll('[data-testid^=doc-attach-memo-cat-]')].map((e) => e.textContent),
+      })`);
+      check('H2-⑦ 읽어 보기: 할 일 2개(체크됨, 담당 서하늘·윤바다)·메모 2건(미결 1·주의 1)', d23ExPrev.tasks.length === 2 && d23ExPrev.checks.every(Boolean) && d23ExPrev.owners.join('|').includes('서하늘') && d23ExPrev.owners.join('|').includes('윤바다') && d23ExPrev.memos.length === 2, JSON.stringify(d23ExPrev));
+      await clickTestId(s.cdp, 'doc-attach-save');
+      await sleep(400);
+      const d23ExAfter = await d23Counts();
+      check('H2-⑦ 지도에 더하기: 항목 +3(문서 1·업무 2, 담당은 지도에 있는 사람)·그래프 노드도 같은 수만큼 늘고 대화상자는 닫힘', d23ExAfter.nodes === d23ExBefore.nodes + 3 && d23ExAfter.cy === d23ExBefore.cy + 3 && (await d23Open()) === false, JSON.stringify([d23ExBefore, d23ExAfter]));
       // 9) 카드 「⋯」 입구: 업무 카드에만, 대상이 미리 골라진 채 열림
       await evaluate(s.cdp, "window.__wu.select('U-A1/N-003')");
       await sleep(200);

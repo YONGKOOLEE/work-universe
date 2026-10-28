@@ -20,13 +20,14 @@ import { AI_DOC_MAX_CHUNKS, chunkDocument, labelKeys, readDocumentAi } from '../
 import { TEXT_LIMITS, defaultSelection } from '../app/src/rules/text-extract.js';
 import { createProvider } from '../app/src/llm/providers.js';
 import { createFakeClient } from '../app/src/llm/fake-client.js';
+import { DOC_ATTACH_EXAMPLE } from '../app/data/doc-attach-example.js';
 import { docAttachDialog } from '../app/src/ui/doc-attach.js';
 import { FEATURES, featureBlock, searchFeatures } from '../app/src/view/feature-index.js';
 import { actionPlan } from '../app/src/view/card.js';
 import { FakeEl, installDom, uninstallDom } from './dom-stub.js';
 
 const DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'doc-attach');
-const FIX = Object.fromEntries(fs.readdirSync(DIR).map((f) => [f.slice(0, 1), fs.readFileSync(path.join(DIR, f), 'utf8')]));
+const FIX = Object.fromEntries(fs.readdirSync(DIR).filter((f) => f.endsWith('.txt')).map((f) => [f.slice(0, 1), fs.readFileSync(path.join(DIR, f), 'utf8')]));
 const FAKE_KEY = ['sk', 'ant', 'x'.repeat(8), 'FAKEKEY', 'y'.repeat(12)].join('-');
 const TODAY = '2026-10-28';
 const NOW = '2026-10-28T09:00:00+09:00';
@@ -433,14 +434,14 @@ const withDom = (fn) => async () => {
   try { await fn(body); } finally { uninstallDom(); }
 };
 
-function openDialog({ app = openApp(), aiReady = false, readAi = null, target = '' } = {}) {
+function openDialog({ app = openApp(), aiReady = false, readAi = null, target = '', example = null } = {}) {
   const dialog = new FakeEl('dialog');
   dialog.open = false;
   dialog.showModal = () => { dialog.open = true; };
   dialog.close = () => { dialog.open = false; dialog.fire('close'); };
   document.body.append(dialog);
   const saved = [];
-  const open = docAttachDialog({ dialog, app, getView: () => app.view, aiReady: () => aiReady, readAi: readAi || (() => null), today: () => TODAY, onSaved: (r, ctx) => saved.push({ r, ctx }) });
+  const open = docAttachDialog({ dialog, app, getView: () => app.view, aiReady: () => aiReady, readAi: readAi || (() => null), today: () => TODAY, example, onSaved: (r, ctx) => saved.push({ r, ctx }) });
   open(target);
   const q = (id) => dialog.querySelector(`[data-testid=${id}]`);
   const all = (prefix) => dialog.querySelectorAll(`[data-testid^=${prefix}]`);
@@ -611,3 +612,125 @@ test('CR-23 카드 메뉴: 업무 카드의 「⋯」에만 docAttach(고칠 수
   assert.ok(!actionPlan({ ...base, coreType: 'work', readOnly: true }).more.includes('docAttach'));
   assert.ok(!actionPlan({ ...base, coreType: 'work', own: false }).more.includes('docAttach'));
 });
+
+// ── H2: Claude 새 항목을 문서 항목에 잇기(②) ──
+
+const LINK_OUT = {
+  nodes: [
+    { type: 'org', label: '정산팀', emp_no: '', quote: '정산팀은 청구 및 채권관리를' },
+    { type: 'topic', label: '미납 관리', emp_no: '', quote: '미납 관리는 별도 점검한다' },
+    { type: 'topic', label: '대사 불일치', emp_no: '', quote: '대사 불일치와 미납 관리' }, // 지도에 이미 있는 주제
+    { type: 'work', label: '미납 통지', emp_no: '', quote: '미납 통지, 재청구 및 연체 관리' },
+  ],
+  edges: [],
+};
+const linkPlan = async (doc) => {
+  const { provider } = aiProvider(LINK_OUT);
+  const ai = await readDocumentAi(`${LONG}
+대사 불일치와 미납 관리는 별도 점검한다.`, { provider, view: null });
+  return { ai, plan: read('3', doc).plan };
+};
+const edgesFrom = (ops, src) => ops.filter((o) => o.op === 'addEdge' && o.input.source === src).map((o) => `${o.input.core_type}>${o.input.target}`);
+
+test('H2-② 새 Claude 항목(업무 제외)은 새 문서 항목에서 잇는다: 주제 relates_to·조직 references, 업무는 대상 업무 contains, 지도에 있던 항목은 잇지 않는다', async () => {
+  const doc = baseDoc();
+  const { ai, plan } = await linkPlan(doc);
+  const { ops, counts } = buildAttachOps(plan, defaultDocSelection(plan), { proposal: ai.proposal, selection: defaultSelection(ai.proposal, 'all') }, doc);
+  const docOp = ops.find((o) => o.key === 'doc');
+  const from = `@${docOp.row}`;
+  const rowOf = (label) => `@${ops.find((o) => o.op === 'addNode' && o.input.label === label).row}`;
+  assert.ok(edgesFrom(ops, from).includes(`references>${rowOf('정산팀')}`));
+  assert.ok(edgesFrom(ops, from).includes(`relates_to>${rowOf('미납 관리')}`));
+  assert.ok(!ops.some((o) => o.op === 'addNode' && o.input.label === '대사 불일치'), '지도에 있는 주제는 새로 만들지 않는다');
+  assert.equal(edgesFrom(ops, from).filter((x) => x.startsWith('relates_to') || x.includes(rowOf('정산팀'))).length, 2);
+  assert.ok(ops.some((o) => o.op === 'addEdge' && o.input.source === TARGET && o.input.core_type === 'contains' && o.input.target === rowOf('미납 통지')));
+  assert.equal(counts.aiLinks, 2);
+  const r = apply(doc, ops);
+  assert.equal(r.ok, true, JSON.stringify(r.errors));
+  assert.deepEqual(validateDocument(r.doc).errors, []);
+});
+
+test('H2-② 문서 항목을 체크 해제하고 지도에도 없으면 대상 업무에서 잇고, 지도의 문서가 있으면 그 문서에서 잇고, 체크 해제한 Claude 항목은 잇지 않는다', async () => {
+  const doc = baseDoc();
+  const { ai, plan } = await linkPlan(doc);
+  const sel = defaultSelection(ai.proposal, 'all');
+  const off = { ...defaultDocSelection(plan), doc: false };
+  const a = buildAttachOps(plan, off, { proposal: ai.proposal, selection: sel }, doc);
+  assert.ok(edgesFrom(a.ops, TARGET).some((x) => x.startsWith('relates_to>')), '문서가 없으면 대상 업무에서 relates_to');
+  assert.ok(edgesFrom(a.ops, TARGET).some((x) => x.startsWith('references>@')), '대상 업무에서 references(조직)');
+  const planM = { ...plan, doc: { ...plan.doc, match: { id: 'N-030', label: '기존 문서' } } };
+  const b = buildAttachOps(planM, { ...defaultDocSelection(planM), doc: true }, { proposal: ai.proposal, selection: sel }, doc);
+  assert.ok(edgesFrom(b.ops, 'N-030').some((x) => x.startsWith('relates_to>@')), '지도의 문서 id에서 잇는다');
+  const org = ai.proposal.nodes.find((n) => n.label === '정산팀');
+  sel.nodes[org.key] = { include: false };
+  const c = buildAttachOps(plan, defaultDocSelection(plan), { proposal: ai.proposal, selection: sel }, doc);
+  assert.equal(c.counts.aiLinks, 1);
+  assert.ok(!c.ops.some((o) => o.input && o.input.label === '정산팀'));
+});
+
+// ── H2: 쪽 머리글을 제목으로 잡지 않는다(③) ──
+
+test('H2-③ 쪽 머리글(「A사 … | …」)·되풀이되는 머리글·쪽 번호 줄은 제목이 되지 않고 본문에도 섞이지 않는다', () => {
+  const head = 'A사 메시징 서비스 | 가상 업무기록1';
+  const lines = FIX['3'].split('\n');
+  const text = [head, '- 1 -', ...lines.slice(0, 20), head, '- 2 -', ...lines.slice(20), '3 / 12', '페이지 3'].join('\n');
+  const p = readDocumentRule(text, { doc: baseDoc(), targetId: TARGET, today: TODAY }).plan;
+  assert.equal(p.doc.label, '문자메시지 발송 서비스 월정산 업무매뉴얼');
+  assert.ok(!p.unread.some((u) => u.text.includes('가상 업무기록1')), '되풀이된 머리글은 읽지 못한 줄로도 남지 않는다');
+  const once = readDocumentRule([head, ...lines].join('\n'), { doc: baseDoc(), targetId: TARGET, today: TODAY }).plan;
+  assert.equal(once.doc.label, '문자메시지 발송 서비스 월정산 업무매뉴얼', '한 번뿐이어도 「 | 」로 나뉜 짧은 줄은 제목 후보가 아니다');
+  const sd = splitDocument(['- 3 -', '회의록', '1. 개요', '내용입니다'].join('\n'));
+  assert.equal(sd.title, '회의록');
+});
+
+test('H2-③ 문서 제목과 같은 이름의 Claude 산출물은 따로 만들지 않는다(droppedSame)', async () => {
+  const out = { nodes: [{ type: 'artifact', label: '문자메시지 발송 서비스 월정산 업무매뉴얼', emp_no: '', quote: '정산팀은 청구 및 채권관리를' }], edges: [] };
+  const { provider } = aiProvider(out);
+  const ai = await readDocumentAi(LONG, { provider, view: null });
+  const plan = read('3').plan;
+  const d = dedupeAiProposal(ai.proposal, plan);
+  assert.equal(d.nodes.length, 0);
+  assert.equal(d.droppedSame, 1);
+});
+
+test('H2-② 화면: 체크한 새 조직·주제는 「문서 「…」에 참조로/관련으로 잇습니다」, 저장하면 문서에서 잇는 연결이 생겨 떠돌지 않고, 숫자에 따로 센다', withDom(async () => {
+  const app = openApp();
+  const text = `${LONG}\n대사 불일치와 미납 관리는 별도 점검한다.`;
+  const d = openDialog({ app, aiReady: true, target: TARGET, readAi: async () => readDocumentAi(text, { provider: aiProvider(LINK_OUT).provider, view: null }) });
+  d.q('doc-attach-input').value = text;
+  await d.q('doc-attach-ai').fire('click');
+  await new Promise((r) => setTimeout(r, 0));
+  await new Promise((r) => setTimeout(r, 0));
+  const labels2 = d.rows('doc-attach-ai-node').map((_, i) => d.q(`doc-attach-ai-node-${i}`).textContent);
+  for (let i = 0; i < labels2.length; i += 1) { const c = d.q(`doc-attach-ai-node-check-${i}`); if (c) { c.checked = true; c.fire('change'); } }
+  const st = d.rows('doc-attach-ai-node').map((_, i) => d.q(`doc-attach-ai-node-${i}`).textContent);
+  assert.ok(st.some((t) => t.includes('정산팀') && t.includes('새로 만듦 · 문서 「문자메시지 발송 서비스 월정산 업무…」에 참조로 잇습니다')), JSON.stringify(st));
+  assert.ok(st.some((t) => t.includes('미납 관리') && t.includes('에 관련으로 잇습니다')), JSON.stringify(st));
+  assert.ok(st.some((t) => t.includes('미납 통지') && t.includes('대상 업무 아래에 잇습니다')));
+  assert.match(d.q('doc-attach-count').textContent, /문서에 잇는 연결 2개/);
+  d.q('doc-attach-save').click();
+  const org = app.doc.nodes.find((n) => n.label === '정산팀' && n.core_type === 'org');
+  const docNode = app.doc.nodes.find((n) => n.core_type === 'artifact' && n.label.startsWith('문자메시지 발송 서비스'));
+  assert.ok(org && docNode && app.doc.edges.some((e) => e.source === docNode.id && e.target === org.id && e.core_type === 'references'));
+}));
+
+test('H2-⑦ 화면: 「예시 문서 넣기」는 글 칸을 예시로 채우고(기한은 오늘 +7·+14일), 대상이 없으면 「대사 확인」을 고르며, 읽으면 할 일 2·이슈 1·주의 1', withDom(() => {
+  assert.equal(openDialog().q('doc-attach-example'), null, '예시를 주지 않으면 단추가 없다');
+  const d = openDialog({ example: DOC_ATTACH_EXAMPLE });
+  assert.equal(d.q('doc-attach-example').textContent, '예시 문서 넣기: 대사 확인 개선 회의록(샘플 「월말 정산 점검」용)');
+  assert.equal(d.q('doc-attach-target').value, '');
+  d.q('doc-attach-input').value = '덮어쓸 글';
+  d.q('doc-attach-example').click();
+  const t = d.q('doc-attach-input').value;
+  assert.ok(t.startsWith('대사 확인 개선 회의록') && !t.includes('{D') && !t.includes('2026. 11. 6.'));
+  assert.ok(t.includes('윤바다 2026. 11. 11.') && t.includes('서하늘 2026. 11. 4.'), '오늘(2026-10-28) +7일·+14일');
+  assert.equal(d.q('doc-attach-target').value, TARGET);
+  d.q('doc-attach-read').click();
+  assert.equal(d.rows('doc-attach-task').length, 2);
+  assert.equal(d.rows('doc-attach-task').filter((_, i) => d.q(`doc-attach-task-check-${i}`).checked).length, 2, '기한이 지나지 않아 둘 다 체크');
+  assert.equal(d.rows('doc-attach-memo').length, 2);
+  const picked = openDialog({ example: DOC_ATTACH_EXAMPLE, target: 'N-003' });
+  picked.q('doc-attach-example').click();
+  assert.equal(picked.q('doc-attach-target').value, 'N-003', '이미 고른 대상은 바꾸지 않는다');
+  assert.equal(DOC_ATTACH_EXAMPLE.text('2026-12-25').includes('2027. 1. 1.'), true, '해를 넘겨도 YYYY. M. D. 꼴');
+}));

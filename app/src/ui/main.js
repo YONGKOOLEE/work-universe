@@ -60,6 +60,7 @@ import { TEXT_GROUPED_NOTE, isGroupedView } from '../rules/text-extract.js';
 import { convertDocument } from '../rules/doc-convert.js';
 import { convertDocumentWith, extractTextAsync, isLive } from '../llm/connector.js';
 import { DOC_EXAMPLE } from '../../data/doc-example.js';
+import { DOC_ATTACH_EXAMPLE } from '../../data/doc-attach-example.js';
 import { filterDisplay, foldedInside, neighborhoodDisplay, offPeriodEdgeIds, personsIn, searchNodes } from '../view/explore.js';
 import { EXPLORE, exploreBar } from './explore.js';
 import { createTour } from './tour.js';
@@ -2954,6 +2955,7 @@ function start() {
   };
   const openDocAttach = docAttachDialog({
     dialog: $('doc-attach-dialog'),
+    example: DOC_ATTACH_EXAMPLE,
     app,
     getView: () => view,
     aiReady: () => isLive(provider) && typeof provider.extract === 'function',

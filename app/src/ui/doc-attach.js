@@ -5,7 +5,7 @@ import { el } from './dom.js';
 import { messageFor } from './messages.js';
 import { MEMO_CATEGORIES, NODE_TYPES, EDGE_TYPES } from '../model/schema.js';
 import { defaultSelection, docCandidates, resolveSelection } from '../rules/text-extract.js';
-import { attachNotice, buildAttachOps, defaultDocSelection, dedupeAiProposal, readDocumentRule, resolveDocSelection } from '../rules/doc-attach.js';
+import { DOC_ATTACH_AI_LINK, attachNotice, buildAttachOps, defaultDocSelection, dedupeAiProposal, readDocumentRule, resolveDocSelection } from '../rules/doc-attach.js';
 
 /** 화면 문구(한 곳). 용어: 「항목」「지도」 */
 export const DOC_ATTACH = Object.freeze({
@@ -82,7 +82,7 @@ function errorText(error, kind, relation) {
 
 /**
  * @param {{dialog:HTMLDialogElement, app:object, getView:()=>object, aiReady:()=>boolean, readAi:(text:string)=>(Promise<object|null>|null),
- *   today:()=>string, onSaved:(result:object, ctx:{targetId:string, notice:string})=>void}} o
+ *   today:()=>string, example?:{title:string, targetLabel:string, text:(today:string)=>string}, onSaved:(result:object, ctx:{targetId:string, notice:string})=>void}} o
  *   readAi: Claude로 읽기(llm/ai-doc-attach.js readDocumentAi를 감싼 것). null을 돌려주면 키가 없는 것
  * @returns {(targetId?:string)=>void} 대화상자를 여는 함수(대상 업무 id를 주면 미리 골라진다)
  */
@@ -334,6 +334,13 @@ export function docAttachDialog(o) {
     const mark = (cb) => (v) => { cb(v); render(); };
     parts.push(el('h3', {}, DOC_ATTACH.aiTitle));
     parts.push(el('p', { class: 'muted small' }, DOC_ATTACH.aiNote));
+    // 새 주제·사람·조직·산출물은 문서 항목에 잇는다(문서 항목이 없고 만들지도 않으면 대상 업무에)
+    const docLinked = sel().doc || !!st.plan.doc.match;
+    const linkNote = (type) => {
+      const rel = (type === 'topic' ? DOC_ATTACH_AI_LINK.topic : DOC_ATTACH_AI_LINK.other) === 'relates_to' ? '관련으로' : '참조로';
+      const label = st.plan.doc.label;
+      return `${docLinked ? `문서 「${label.length > 20 ? `${label.slice(0, 19)}…` : label}」` : '대상 업무'}에 ${rel} 잇습니다`;
+    };
     const nodeSel = (key) => (ai.sel.nodes[key] = ai.sel.nodes[key] || {});
     const edgeSel = (key) => (ai.sel.edges[key] = ai.sel.edges[key] || {});
     if (p.nodes.length) {
@@ -345,7 +352,7 @@ export function docAttachDialog(o) {
             el('td', {}, f.fixed ? el('span', { class: 'muted' }, '—') : check(`doc-attach-ai-node-check-${i}`, `${i + 1}번 Claude 항목 넣기`, f.include, mark((v) => { nodeSel(n.key).include = v; if (!v) for (const e of p.edges) if (e.from === n.key || e.to === n.key) edgeSel(e.key).include = false; }))),
             el('td', { class: 'small' }, NODE_TYPES[f.type] || f.type),
             el('td', {}, f.label),
-            el('td', { class: 'small' }, f.fixed ? DOC_ATTACH.mapItem : n.hold ? `넣지 않음 · ${n.hold}` : f.type === 'work' ? `${DOC_ATTACH.newItem} · 대상 업무 아래에 잇습니다` : DOC_ATTACH.newItem),
+            el('td', { class: 'small' }, f.fixed ? DOC_ATTACH.mapItem : n.hold ? `처음엔 체크 안 함 · ${n.hold}` : f.type === 'work' ? `${DOC_ATTACH.newItem} · 대상 업무 아래에 잇습니다` : f.include ? `${DOC_ATTACH.newItem} · ${linkNote(f.type)}` : DOC_ATTACH.newItem),
             el('td', { class: 'small muted' }, `「${n.quote}」`));
         })))));
     }
@@ -357,7 +364,7 @@ export function docAttachDialog(o) {
           const a = r.nodes[f.source];
           const b = r.nodes[f.target];
           const locked = f.reason === 'pair' || f.reason === 'same' || f.exists;
-          const status = f.exists ? '이미 있음' : f.reason === 'pair' ? '유형에 맞지 않는 관계' : f.reason === 'same' ? '두 끝이 같음' : f.reason === 'end_missing' ? '끝 항목을 체크하면 넣을 수 있음' : typeof e.hold === 'string' ? `넣지 않음 · ${e.hold}` : '새 연결';
+          const status = f.exists ? '이미 있음' : f.reason === 'pair' ? '유형에 맞지 않는 관계' : f.reason === 'same' ? '두 끝이 같음' : f.reason === 'end_missing' ? '끝 항목을 체크하면 넣을 수 있음' : typeof e.hold === 'string' ? `처음엔 체크 안 함 · ${e.hold}` : '새 연결';
           return el('tr', { 'data-testid': `doc-attach-ai-edge-${j}` },
             el('td', {}, check(`doc-attach-ai-edge-check-${j}`, `${j + 1}번 Claude 연결 넣기`, f.include, mark((v) => { edgeSel(e.key).include = v; if (v) for (const x of [a, b]) if (!x.include && !x.problem && !x.ambiguous) nodeSel(x.key).include = true; }), locked)),
             el('td', { class: 'small' }, a.label),
@@ -407,7 +414,7 @@ export function docAttachDialog(o) {
     renderPreview();
     if (st.plan && !busy) {
       const { counts } = opsNow();
-      const extra = counts.aiNodes || counts.aiEdges ? ` · Claude 항목 ${counts.aiNodes}개·연결 ${counts.aiEdges}개` : '';
+      const extra = counts.aiNodes || counts.aiEdges ? ` · Claude 항목 ${counts.aiNodes}개·연결 ${counts.aiEdges}개${counts.aiLinks ? `·문서에 잇는 연결 ${counts.aiLinks}개` : ''}` : '';
       countLine.textContent = `더할 것: 문서 ${counts.doc}개 · 할 일 업무 ${counts.tasks}개 · 역할 ${counts.roles}개 · 메모 ${counts.memos}건${extra}`;
     } else countLine.textContent = '';
     saveBtn.disabled = !st.plan || busy || o.app.readOnly || st.stale;
@@ -424,6 +431,19 @@ export function docAttachDialog(o) {
     const was = st.stale;
     updateStale();
     if (was !== st.stale) render();
+  }
+
+  // 예시 문서 넣기: 글 칸을 예시로 채운다(가져오기 창의 예시 단추처럼 이미 있는 글은 덮어쓴다). 대상이 아직 없으면 「대사 확인」 업무를 고른다
+  function fillExample() {
+    if (st.busy || !o.example) return;
+    input.value = o.example.text(o.today());
+    fileName.textContent = '';
+    if (!st.targetId) {
+      const hit = worksOf(o.app.doc).filter((w) => w.label === o.example.targetLabel);
+      if (hit.length === 1) { st.targetId = hit[0].id; select.value = hit[0].id; }
+    }
+    onInput();
+    render();
   }
 
   function build(works) {
@@ -451,6 +471,7 @@ export function docAttachDialog(o) {
       el('div', { class: 'row' },
         el('label', { class: 'file-pick' }, `${DOC_ATTACH.file} `, (fileInput = el('input', { type: 'file', accept: '.md,.txt,.markdown,.pdf,.hwp,.hwpx,.docx,text/plain,text/markdown', 'data-testid': 'doc-attach-file', onchange: onFile }))),
         fileName),
+      ...(o.example ? [el('div', { class: 'row' }, el('button', { type: 'button', 'data-testid': 'doc-attach-example', onclick: fillExample }, `예시 문서 넣기: ${o.example.title}`))] : []),
       el('div', { class: 'row' }, readBtn, aiBtn, aiBtn ? null : el('span', { class: 'muted small', 'data-testid': 'doc-attach-ai-note' }, DOC_ATTACH.noKey)),
       busyLine,
       previewBox,
