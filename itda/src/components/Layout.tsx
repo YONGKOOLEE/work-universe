@@ -191,7 +191,7 @@ function Nav({ onPick }: { onPick?: () => void }) {
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { canBack, back, nav } = useRouter();
-  const { s, update, reset, toastMsg, toast } = useStore();
+  const { s, update, reset, toastMsg, toast, saveIssue, reloadFromStorage, dismissSaveIssue } = useStore();
   const [mobile, setMobile] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [dataOpen, setDataOpen] = useState(false);
@@ -288,6 +288,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </Button>
           </div>
         </header>
+        {saveIssue && (
+          <div role="alert" className="flex flex-wrap items-center gap-2 border-b border-danger/30 bg-dangersoft px-4 py-2 text-[13px] text-danger sm:px-6" data-testid="save-issue">
+            <span className="flex-1">
+              {saveIssue.kind === 'fail'
+                ? '이 브라우저 저장소에 저장하지 못했습니다(용량 초과 등). 지금 내용은 이 탭에만 있으니 「데이터 옮기기 → 내보내기」로 파일을 받아 두세요.'
+                : '다른 탭에서 데이터가 바뀌었습니다. 이 탭에서 계속 고치면 다른 탭의 변경을 덮어씁니다.'}
+            </span>
+            {saveIssue.kind === 'other-tab' && (
+              <Button size="sm" variant="primary" onClick={reloadFromStorage} data-testid="save-issue-reload">
+                다른 탭 내용 불러오기
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" onClick={dismissSaveIssue}>
+              닫기
+            </Button>
+          </div>
+        )}
         <main id="main-scroll" className="flex-1 overflow-y-auto scroll-thin">
           <div className="mx-auto w-full max-w-[1280px] px-4 py-5 sm:px-6 lg:py-7">{children}</div>
         </main>

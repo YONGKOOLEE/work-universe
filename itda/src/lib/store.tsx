@@ -100,6 +100,11 @@ interface Ctx {
   touch: (draft: AppState, workId: string) => void;
   toast: (msg: string) => void;
   toastMsg: string | null;
+  /** 저장 경고(비교 검토 2026-10-29): 브라우저 저장 실패, 다른 탭에서 바뀜 */
+  saveIssue: { kind: 'fail' | 'other-tab'; at: string } | null;
+  /** 다른 탭에서 저장한 내용으로 이 탭을 바꾼다 */
+  reloadFromStorage: () => void;
+  dismissSaveIssue: () => void;
 }
 const StoreCtx = createContext<Ctx | null>(null);
 
@@ -108,13 +113,37 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [toastMsg, setToast] = useState<string | null>(null);
   const timer = useRef<number>();
 
+  const [saveIssue, setSaveIssue] = useState<Ctx['saveIssue']>(null);
+  const lastWritten = useRef<string | null>(null);
   useEffect(() => {
+    const text = JSON.stringify(raw);
     try {
-      localStorage.setItem(KEY, JSON.stringify(raw));
+      localStorage.setItem(KEY, text);
+      lastWritten.current = text;
+      setSaveIssue((x) => (x?.kind === 'fail' ? null : x));
     } catch {
-      /* 무시 */
+      // 용량 초과·저장소 막힘: 조용히 넘기지 않고 알린다(데이터는 이 탭 메모리에만 있음)
+      setSaveIssue({ kind: 'fail', at: new Date().toISOString() });
     }
   }, [raw]);
+  // 같은 파일을 다른 탭에서도 열어 고치면 서로 덮어쓴다 — 다른 탭의 저장을 알아채 알린다
+  useEffect(() => {
+    const on = (e: StorageEvent) => {
+      if (e.key !== KEY || e.newValue === null || e.newValue === lastWritten.current) return;
+      setSaveIssue({ kind: 'other-tab', at: new Date().toISOString() });
+    };
+    window.addEventListener('storage', on);
+    return () => window.removeEventListener('storage', on);
+  }, []);
+  const reloadFromStorage = () => {
+    try {
+      const text = localStorage.getItem(KEY);
+      if (text) setS(parseBackup(text));
+      setSaveIssue(null);
+    } catch {
+      setSaveIssue({ kind: 'fail', at: new Date().toISOString() });
+    }
+  };
 
   const view = useMemo(() => scopeFor(raw, raw.currentUserId), [raw]);
 
@@ -152,8 +181,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       touch,
       toast,
       toastMsg,
+      saveIssue,
+      reloadFromStorage,
+      dismissSaveIssue: () => setSaveIssue(null),
     };
-  }, [raw, view, toastMsg]);
+  }, [raw, view, toastMsg, saveIssue]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;
 }

@@ -92,7 +92,8 @@ describe('합쳐 불러오기', () => {
     const b = colleague();
     const plan = planMerge(a, b);
     expect(plan.people.every((p) => p.status === 'new')).toBe(true);
-    expect(plan.works.every((w) => !w.currentId)).toBe(true);
+    // 이름이 같은 업무는 없다. 비슷한 업무 후보(점수)는 나올 수 있지만 기본은 따로 두기(2026-10-29 유니버스 점수 판정)
+    expect(plan.works.every((w) => w.status !== 'same')).toBe(true);
     const { state } = applyMerge(a, b);
     expect(checkIntegrity(state)).toEqual([]);
     expect(state.users.length).toBe(a.users.length + b.users.length);
@@ -260,5 +261,34 @@ describe('합쳐 불러오기 — 검토 반영(2026-10-29)', () => {
     const p = out.works.find((w) => w.id === parentId)!;
     const c = out.works.find((w) => w.id === child.id)!;
     expect(p.parentId === c.id && c.parentId === p.id).toBe(false);
+  });
+});
+
+describe('합쳐 불러오기 — 비슷한 업무 후보(유니버스 점수)', () => {
+  it('이름이 달라도 주제·이름 낱말이 겹치면 후보로 보이고, 기본은 따로 두기, 고르면 합친다', () => {
+    const a = createSeed('linked');
+    const b = createSeed('linked');
+    const w = b.works.find((x) => x.id === 'W-004')!;
+    w.name = '출금이체 정산 월간 업무'; // 원래 「출금이체 월 정산」
+    const plan = planMerge(a, b);
+    const m = plan.works.find((x) => x.incomingId === 'W-004')!;
+    expect(m.status).toBe('candidate');
+    expect(m.currentId).toBe('W-004');
+    expect(m.score).toBeGreaterThanOrEqual(3);
+    expect(m.reason).toContain('같은 주제');
+    const sep = applyMerge(a, b).state;
+    expect(sep.works.filter((x) => x.name === '출금이체 정산 월간 업무').length).toBe(1); // 따로 더해짐
+    const merged = applyMerge(a, b, { works: { 'W-004': true } }).state;
+    expect(merged.works.some((x) => x.name === '출금이체 정산 월간 업무')).toBe(false);
+    expect(checkIntegrity(merged)).toEqual([]);
+  });
+  it('겹치는 것이 기준 점수 밑이면 새 업무', () => {
+    const a = createSeed('linked');
+    const b = createSeed('linked');
+    const w = b.works.find((x) => x.id === 'W-004')!;
+    w.name = '전혀 다른 일';
+    w.topics = [];
+    b.docs.forEach((d) => (d.workIds = d.workIds.filter((x) => x !== 'W-004')));
+    expect(planMerge(a, b).works.find((x) => x.incomingId === 'W-004')!.status).toBe('new');
   });
 });

@@ -1,6 +1,8 @@
 // 합쳐 불러오기 — 동료가 내보낸 백업을 지금 데이터에 더한다(팀 지도용). 순수 함수만(브라우저 기능 없음).
 import type { Action, AppState, Cite, Decision, Doc, Handover, HistoryEntry, Snapshot, Stmt, TEvent, User, Work } from './types';
 import { clone, nextId, uid } from './util';
+// @ts-expect-error 유니버스 순수 모듈(JS) — 비슷한 업무 점수(주제 3, 산출물 유형 2, 이름 낱말 1)
+import { tokensOf, WEIGHTS } from '../../../app/src/rules/insight.js';
 
 /** 사번 정규화 — 유니버스 app/src/model/schema.js의 normalizeEmpNo와 같은 규칙(NFC·공백 제거·대문자) */
 export function normalizeEmpNo(empNo: string): string {
@@ -24,9 +26,41 @@ export interface PersonMatch {
 export interface WorkMatch {
   incomingId: string;
   name: string;
-  /** 이름이 같은 지금 업무(같은 업무 후보). 없으면 새 업무 */
+  /** same: 이름이 같음(기본 합치기) / candidate: 비슷한 업무(점수·이유, 기본 따로 두기 — 사람이 정함) / new */
+  status: 'same' | 'candidate' | 'new';
   currentId?: string;
   currentName?: string;
+  score?: number;
+  reason?: string;
+}
+
+/** 비슷한 업무 후보 기준 점수(업무 유니버스 통합 후보와 같은 가중치: 주제 3, 문서 유형 2, 이름 낱말 1). 바꾸기 쉬운 곳 하나 */
+export const WORK_CANDIDATE_MIN = 3;
+// 인계서처럼 어느 업무에나 생기는 문서 유형은 비슷하다는 근거가 아니다(유니버스 GENERIC_ARTIFACT_TYPES와 같은 뜻)
+const GENERIC_DOC_TYPES = new Set(['인수인계서']);
+
+/** 업무 하나의 비교 기준: 주제, 연결 문서 유형, 이름 낱말 */
+function workProfile(s: AppState, w: Work) {
+  return {
+    topics: new Set((w.topics || []).map(normText)),
+    types: new Set(s.docs.filter((d) => d.workIds.includes(w.id) && !GENERIC_DOC_TYPES.has(d.type)).map((d) => d.type)),
+    tokens: tokensOf(w.name) as Set<string>,
+  };
+}
+
+/** 두 업무의 점수와 이유(겹친 것). 유니버스 merge.js·유사 경험자(insight.js)의 WEIGHTS를 그대로 쓴다 */
+export function workSimilarity(a: ReturnType<typeof workProfile>, b: ReturnType<typeof workProfile>) {
+  const both = <T,>(x: Set<T>, y: Set<T>) => [...x].filter((v) => y.has(v));
+  const topics = both(a.topics, b.topics);
+  const types = both(a.types, b.types);
+  const tokens = both(a.tokens, b.tokens);
+  const score = topics.length * WEIGHTS.topic + types.length * WEIGHTS.artifactType + tokens.length * WEIGHTS.token;
+  const why = [
+    ...topics.map((t) => `같은 주제 「${t}」`),
+    ...types.map((t) => `같은 문서 유형 「${t}」`),
+    ...tokens.map((t) => `이름에 같은 낱말 「${t}」`),
+  ];
+  return { score, reason: why.join(', ') };
 }
 export interface MergeCounts {
   users: number;
@@ -64,10 +98,19 @@ export function planMerge(current: AppState, incoming: AppState): MergePlan {
     if (cand) return { incomingId: u.id, name: u.name, dept: u.dept, status: 'candidate', currentId: cand.id, currentName: cand.name };
     return { incomingId: u.id, name: u.name, dept: u.dept, status: 'new' };
   });
+  const profiles = new Map(current.works.map((x) => [x.id, workProfile(current, x)]));
   const works: WorkMatch[] = incoming.works.map((w) => {
     const k = normalizeWorkName(w.name);
     const c = current.works.find((x) => normalizeWorkName(x.name) === k);
-    return { incomingId: w.id, name: w.name, currentId: c?.id, currentName: c?.name };
+    if (c) return { incomingId: w.id, name: w.name, status: 'same', currentId: c.id, currentName: c.name };
+    // 이름이 다르면 점수로 가장 비슷한 업무 하나를 후보로(자동으로 합치지 않음)
+    const mine = workProfile(incoming, w);
+    let best: { w: Work; score: number; reason: string } | null = null;
+    for (const x of current.works) {
+      const r = workSimilarity(mine, profiles.get(x.id)!);
+      if (r.score >= WORK_CANDIDATE_MIN && (!best || r.score > best.score)) best = { w: x, ...r };
+    }
+    return best ? { incomingId: w.id, name: w.name, status: 'candidate', currentId: best.w.id, currentName: best.w.name, score: best.score, reason: best.reason } : { incomingId: w.id, name: w.name, status: 'new' };
   });
   const base: MergePlan = { people, works, counts: undefined as unknown as MergeCounts };
   base.counts = previewCounts(current, incoming, base, {});
@@ -85,7 +128,7 @@ function resolvePeople(plan: MergePlan, choices: MergeChoices) {
 function resolveWorks(plan: MergePlan, choices: MergeChoices) {
   const m = new Map<string, string>(); // 들어온 업무 ID → 지금 업무 ID (합칠 업무만)
   for (const w of plan.works) {
-    const merge = choices.works?.[w.incomingId] ?? !!w.currentId;
+    const merge = choices.works?.[w.incomingId] ?? w.status === 'same';
     if (merge && w.currentId) m.set(w.incomingId, w.currentId);
   }
   return m;

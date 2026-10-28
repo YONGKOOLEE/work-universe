@@ -204,11 +204,16 @@ export function DataTransfer({ open, onClose }: { open: boolean; onClose: () => 
                   {plan.works.map((w) => (
                     <li key={w.incomingId} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
                       <span className="min-w-0 flex-1 truncate">{w.name}</span>
+                      {w.status === 'candidate' && (
+                        <span className="w-full rounded bg-warnsoft px-1.5 py-0.5 text-2xs text-warn" data-testid={`merge-work-reason-${w.incomingId}`}>
+                          비슷한 업무 후보 · 점수 {w.score} — {w.reason}. 같은 업무인지 확인 후 고르세요
+                        </span>
+                      )}
                       {w.currentId ? (
                         <select
                           aria-label={`${w.name} 업무 맞춤`}
                           data-testid={`merge-work-${w.incomingId}`}
-                          value={mergeOf(w.incomingId, true) ? 'merge' : 'separate'}
+                          value={mergeOf(w.incomingId, w.status === 'same') ? 'merge' : 'separate'}
                           onChange={(e) => setWork(w.incomingId, e.target.value === 'merge')}
                           className="rounded border border-line2 bg-surface px-1.5 py-1"
                         >
