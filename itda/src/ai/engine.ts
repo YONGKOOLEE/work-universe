@@ -4,6 +4,7 @@
 // 원칙: 등록 문서에 없는 내용은 사실로 만들지 않는다.
 // ─────────────────────────────────────────────────────────────
 import type { AppState, Doc, Prov, Work, Cite, RelType } from '../lib/types';
+import { mapRiskIssues } from '../universe/risk';
 import { conceptsOf, similarity, coreConcepts, conceptLabel, dice } from './concepts';
 import { daysBetween, fmtDate, dateKey, localDay } from '../lib/util';
 import { findTargetWork, workAnswer } from './workAnswer';
@@ -53,7 +54,8 @@ export function workIssues(s: AppState, w: Work, now = new Date()): Issue[] {
 }
 
 export function allIssues(s: AppState, now = new Date()) {
-  const list = s.works.flatMap((w) => workIssues(s, w, now));
+  // 업무 유니버스 지도 위험 점검(혼자만 아는 업무)도 같은 목록에(CR-24 D24-6 c)
+  const list: Issue[] = [...s.works.flatMap((w) => workIssues(s, w, now)), ...mapRiskIssues(s, localDay(now.toISOString()))];
   const rank = { high: 0, mid: 1, low: 2 };
   return list.sort((a, b) => rank[a.severity] - rank[b.severity]);
 }

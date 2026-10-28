@@ -3,6 +3,7 @@ import { useStore, userName, ownerNames } from '../lib/store';
 import { useRouter } from '../lib/router';
 import { Button, Card, CardHead, Empty, StmtList, StatusBadge, Mono, ProvChip } from '../components/ui';
 import { fmtDate, fmtDateTime, dateKey, cx } from '../lib/util';
+import { SnapshotMaps } from '../universe/SnapshotMaps';
 
 export default function SnapshotView({ id }: { id: string }) {
   const { s } = useStore();
@@ -78,6 +79,15 @@ export default function SnapshotView({ id }: { id: string }) {
           {w.summary} · 당시 담당 {ownerNames(s, w.owners)}
         </p>
       </div>
+
+      {curOrNull && (
+        <Card className="p-4">
+          <CardHead title="업무 지도로 비교 — 인계 당시 ↔ 지금" sub="담당 선의 점선은 끝난 담당(전 담당)입니다. 인계 뒤 늘거나 끝난 할 일·문서를 한눈에 봅니다." />
+          <div className="pt-3">
+            <SnapshotMaps snap={snap} s={s} />
+          </div>
+        </Card>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Card>

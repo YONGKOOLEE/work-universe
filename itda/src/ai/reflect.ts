@@ -316,7 +316,7 @@ export const EXTRACT_SYSTEM = [
   '5. 개수를 채우려고 억지로 만들지 않습니다. 쓸 내용이 없는 선택 칸은 빈 글자("").',
   '항목',
   `- decision: 의결·결정·확정·합의된 사항(최대 ${EXTRACT_MAX.decision})`,
-  `- event: 날짜가 있는 사건(최대 ${EXTRACT_MAX.event}). eventType은 업무 착수|법령|회의|의사결정|보도자료|시행|업무 변경 중 하나`,
+  `- event: 이미 있었던 날짜 있는 사건(최대 ${EXTRACT_MAX.event}). 「…예정」「…계획」처럼 앞으로 할 일은 event가 아니라 action으로만 넣습니다. eventType은 업무 착수|법령|회의|의사결정|보도자료|시행|업무 변경 중 하나`,
   `- action: 앞으로 할 조치·예정 사항(최대 ${EXTRACT_MAX.action}). 기한이 있으면 date. owner에는 그 조치의 담당(사람 이름·부서·팀 이름)을 문서 글자 그대로 쓰고, 없으면 빈 글자. <지도 정보>의 사람 목록에 같은 이름이 있으면 그 이름을 씁니다.`,
   `- overview: 업무 개요에 더할 문장(최대 ${EXTRACT_MAX.overview}). field는 purpose(목적)|background(추진 배경)|current(현재 진행 사항)|cautions(유의사항·이슈·리스크)`,
   `- topic: 여러 업무에 되풀이될 큰 주제(예: 본인확인, 정산)만 최대 ${EXTRACT_MAX.topic}개. text는 2~10자의 짧은 주제 이름, quote는 그 주제가 나오는 문장`,
@@ -443,6 +443,11 @@ export async function claudeExtract(
     if (!p || caps[p.kind] <= 0 || proposals.some((x) => sameProposal(x, p))) continue;
     caps[p.kind] -= 1;
     proposals.push(p);
+  }
+  // 같은 원문 문장의 「예정」 이벤트와 조치가 함께 나오면 조치만 남긴다(앞으로 할 일은 타임라인 사건이 아님)
+  for (let i = proposals.length - 1; i >= 0; i -= 1) {
+    const p = proposals[i];
+    if (p.kind === 'event' && /예정|계획/.test(p.text) && proposals.some((q) => q.kind === 'action' && q.quote && q.quote === p.quote)) proposals.splice(i, 1);
   }
   // 꼼꼼히 읽기(두 번째 대조 호출): 빠진 것만 더하고 의심 항목은 표시만. 실패해도 첫 결과는 그대로
   let review: Extraction['review'];

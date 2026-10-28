@@ -33,6 +33,15 @@ export function RouterProvider({ children }: { children: React.ReactNode }) {
     const anchor = new URLSearchParams(cur.split('?')[1] ?? '').get('anchor');
     if (!anchor) main?.scrollTo({ top: 0 });
   }, [cur]);
+  // 주소의 #경로를 바꾸면 그 화면으로(바로 가기·점검 도구용). 앱이 맞춘 해시와 같으면 무시
+  useEffect(() => {
+    const on = () => {
+      const h = window.location.hash.replace(/^#/, '');
+      if (h.startsWith('/')) setStack((s) => (s[s.length - 1] === h ? s : [...s.slice(-30), h]));
+    };
+    window.addEventListener('hashchange', on);
+    return () => window.removeEventListener('hashchange', on);
+  }, []);
   const [pathname, qs] = cur.split('?');
   const value: RouterCtx = {
     path: pathname,

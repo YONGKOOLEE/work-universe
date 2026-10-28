@@ -67,7 +67,9 @@ export function scopeFor(s: AppState, userId: string): AppState {
     .filter((d) => (d.workIds.length ? d.workIds.some((w) => ids.has(w)) : d.registeredBy === userId || !!d.relevance?.some((r) => ids.has(r.workId))))
     .map((d) => ({ ...d, workIds: d.workIds.filter((w) => ids.has(w)) }));
   const docIds = new Set(docs.map((d) => d.id));
-  const handovers = s.handovers.filter((h) => h.fromId === userId || h.toId === userId);
+  // 전체 보기 사용자(팀장 역할)는 모든 인계 기록·스냅샷을 본다(CR-24 D24-4)
+  const lead = s.users.find((u) => u.id === userId)?.role === 'lead';
+  const handovers = s.handovers.filter((h) => lead || h.fromId === userId || h.toId === userId);
   const hoIds = new Set(handovers.map((h) => h.id));
   return {
     ...s,

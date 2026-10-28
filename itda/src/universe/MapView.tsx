@@ -77,6 +77,8 @@ export function MapView({
       theme: themeNow(),
     });
     graph.current = g;
+    // 끝난 담당(기간 끝 있음)은 점선 「전 담당」 — 인계 뒤 전임 → 후임이 지도에서 보이게(D24-6 b)
+    g.cy.style().selector('edge.past').style({ 'line-style': 'dashed', opacity: 0.6, label: '전 담당', 'target-arrow-shape': 'none', 'font-size': 10 }).update();
     if (typeof window !== 'undefined') (window as any).__itdaMap = { graph: g, derived };
     return () => {
       try {
@@ -96,6 +98,10 @@ export function MapView({
     const g = graph.current;
     if (!g) return;
     g.render(display, selected);
+    const ended = new Set(view.edges.filter((e: any) => e.core_type === 'performs' && e.period?.end).map((e: any) => e.gid));
+    g.cy.edges().forEach((ed: any) => {
+      if (ended.has(ed.id())) ed.addClass('past');
+    });
     if (typeof window !== 'undefined') (window as any).__itdaMap = { graph: g, derived, view, display };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [display]);
