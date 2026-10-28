@@ -48,3 +48,14 @@ describe('제안 중복 덜기', () => {
     expect(list.map((p) => `${p.kind}:${p.text}`)).toEqual(['decision:두 방식 함께 반영 결정', 'action:개정 조문 대비표 작성', 'event:내부 검토회의 개최']);
   });
 });
+
+describe('사용자가 아닌 담당 이름(키 없음)', () => {
+  it('「과제 담당 기한」 표의 사람 이름은 문서상 담당으로 읽는다', () => {
+    const s = createSeed('linked');
+    const text = ['3. 후속 조치', '과제 담당 기한', '불일치 원인 코드표 정리 서하늘 2026. 11. 6.', '대사 결과 이중 확인 절차 마련 윤바다 2026. 11. 13.'];
+    const r = mockExtract(s, '대사 확인 개선 회의록', text.map((t, i) => ({ id: `p-${i + 1}`, text: t })), 'W-004');
+    const acts = r.proposals.filter((p) => p.kind === 'action');
+    expect(acts.find((p) => p.text.includes('원인 코드표'))).toMatchObject({ ownerName: '서하늘', ownerId: null, date: '2026-11-06' });
+    expect(acts.find((p) => p.text.includes('이중 확인'))).toMatchObject({ ownerName: '윤바다', ownerId: null, date: '2026-11-13' });
+  });
+});

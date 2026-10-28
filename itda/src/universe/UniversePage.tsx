@@ -1,5 +1,5 @@
 // 메뉴 「업무 유니버스」(CR-24 D24-3 ②③): 내 지도 / 팀·부서 지도(전체 보기 사용자).
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Orbit, Lock } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { Chips } from '../components/ui';
@@ -12,6 +12,8 @@ export default function UniversePage() {
   const { s, raw, me } = useStore();
   const lead = me.role === 'lead';
   const [scope, setScope] = useState<Scope>(lead ? 'all' : 'mine');
+  // 사용자를 바꾸면 그 사람의 기본 범위로(팀장 = 팀·부서 지도, 그 외 = 내 지도)
+  useEffect(() => setScope(lead ? 'all' : 'mine'), [me.id, lead]);
   const leads = raw.users.filter((u) => u.role === 'lead');
   const orgName = useMemo(() => {
     const depts = [...new Set(s.works.map((w) => w.dept.replace(/\s*\((?:시연용 )?가상[^)]*\)\s*$/, '').trim()).filter(Boolean))];

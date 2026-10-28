@@ -225,10 +225,30 @@ export function matchUser(s: AppState, name?: string | null): string | null {
   return hit.length === 1 ? hit[0].id : null;
 }
 
+/**
+ * 사용자로 등록되지 않은 담당 이름 짐작(키 없을 때): 「담당」 머리 줄이 있는 표에서, 날짜로 끝나는 행의 날짜 바로 앞 낱말이
+ * 흔한 성씨로 시작하는 한글 세 글자면 사람 이름으로 본다. 업무 유니버스 규칙은 지도에 없는 이름이 담당이면 행을 건너뛰므로(과제·담당 경계가 흐림),
+ * 그 이름을 「아는 이름」으로 넘겨 행을 읽게 한다. 사용자가 아니므로 ownerId 없이 「문서상 담당」으로만 남는다.
+ */
+const SURNAMES = '김이박최정강조윤장임한오서신권황안송류전홍고문양손배백허유남심노하곽성차주우구민진나지엄채원천방공현함변염여추도소석선설마길연위표명기반왕금옥육인맹제모탁국어은편용';
+export function guessOwnerNames(text: string): string[] {
+  const lines = text.split(/\r?\n/).map((l) => l.trim());
+  const head = lines.findIndex((l) => /(^|\s)담당(자|\s*부서)?(\s|$)/.test(l) && /(과제|구분|항목|업무|조치)/.test(l));
+  if (head < 0) return [];
+  const out = new Set<string>();
+  for (const l of lines.slice(head + 1, head + 41)) {
+    const m = /(\S+)\s+\d{4}\.\s*\d{1,2}\.(\s*\d{1,2}\.?)?\s*$/.exec(l);
+    if (m && /^[가-힣]{3}$/.test(m[1]) && SURNAMES.includes(m[1][0])) out.add(m[1]);
+  }
+  return [...out];
+}
+
 export function ruleTasks(s: AppState, paras: DocParagraph[], defaultWork: string): Proposal[] {
   const w = s.works.find((x) => x.id === defaultWork);
   if (!w || !paras.length) return [];
-  const doc = { nodes: [{ id: 'N-T', core_type: 'work', label: w.name }, ...s.users.map((u) => ({ id: `N-${u.id}`, core_type: 'person', label: u.name, emp_no: u.empNo || '' }))], edges: [] };
+  const known = new Set(s.users.map((u) => u.name));
+  const guessed = guessOwnerNames(paras.map((p) => p.text).join('\n')).filter((n) => !known.has(n));
+  const doc = { nodes: [{ id: 'N-T', core_type: 'work', label: w.name }, ...s.users.map((u) => ({ id: `N-${u.id}`, core_type: 'person', label: u.name, emp_no: u.empNo || '' })), ...guessed.map((n, i) => ({ id: `N-G${i}`, core_type: 'person', label: n }))], edges: [] };
   let r: any;
   try {
     r = readDocumentRule(paras.map((p) => p.text).join('\n'), { doc, targetId: 'N-T', today: localDay(new Date().toISOString()) });

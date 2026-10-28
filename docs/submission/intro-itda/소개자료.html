@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>업무잇다 소개자료</title>
+<!-- 1차 제출 소개자료 초안 v0.1 (2026-10-29, CR-24 통합 제품 기준). 화면: itda/dist-single/index.html 시연 데이터, 헤드리스 Chrome 1440×900(itda/tools/intro-shots.mjs --key).
+     「동결 뒤 확정」 숫자는 기능 동결 뒤 다시 센다. 모든 이름·기관·문서는 가상. -->
+<style>
+  @page { size: A4; margin: 0; }
+  :root {
+    --ink: #111b2d; --sub: #4c5870; --line: #d6dce7; --paper: #fff;
+    --navy: #14295c; --brand: #2557d6; --brand-bg: #e9effc;
+    --fact: #0a745a; --fact-bg: #e1f4ee; --warn: #a66200; --warn-bg: #fdf2de; --infer: #684cd6;
+    --c-rel: #2557d6; --c-spr: #8a5a00; --c-done: #5b4bb0; --c-ai: #b0306a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #e6e9ef; }
+  body { font-family: "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", sans-serif; color: var(--ink); font-size: 10.3pt; line-height: 1.42; -webkit-print-color-adjust: exact; print-color-adjust: exact; word-break: keep-all; overflow-wrap: anywhere; }
+  .page { width: 210mm; height: 297mm; padding: 9.5mm 11.5mm 8.5mm; margin: 0 auto 8mm; background: var(--paper); position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 2.6mm; }
+  @media print { html, body { background: #fff; } .page { margin: 0; break-after: page; } .page:last-child { break-after: auto; } }
+  h2 { font-size: 12.3pt; margin: 0; letter-spacing: -0.2px; }
+  b, strong { font-weight: 700; }
+  .ui { font-weight: 700; color: #183a8f; background: var(--brand-bg); border-radius: 3px; padding: 0 2px; white-space: nowrap; }
+  .block { position: relative; border: 1px solid var(--line); border-radius: 3mm; padding: 2.8mm 3.4mm; }
+  .tag { position: absolute; top: -2.3mm; right: 3mm; font-size: 7.8pt; font-weight: 700; color: #fff; padding: 0.3mm 2mm; border-radius: 2mm; }
+  .tag.rel { background: var(--c-rel); } .tag.spr { background: var(--c-spr); } .tag.done { background: var(--c-done); } .tag.ai { background: var(--c-ai); }
+  .tags { position: absolute; top: -2.3mm; right: 3mm; display: flex; gap: 1mm; } .tags .tag { position: static; }
+  .small { font-size: 8.4pt; color: var(--sub); }
+  /* 머리 */
+  .top { display: flex; justify-content: space-between; align-items: baseline; font-size: 8.4pt; color: var(--sub); border-bottom: 2px solid var(--navy); padding-bottom: 1.4mm; }
+  .title { display: flex; align-items: flex-end; gap: 4.5mm; }
+  .title h1 { font-size: 27pt; margin: 0; line-height: 1.05; letter-spacing: -1px; color: var(--navy); white-space: nowrap; }
+  .title .slogan { font-size: 13.2pt; font-weight: 700; padding-bottom: 1mm; }
+  .lead { font-size: 10.8pt; margin: 0; }
+  .chips { display: flex; gap: 1.8mm; flex-wrap: wrap; margin-top: 1.4mm; }
+  .chip { font-size: 8.8pt; border: 1px solid #a9bff0; background: var(--brand-bg); color: #183a8f; border-radius: 10mm; padding: 0.3mm 2.5mm; font-weight: 700; }
+  /* 지금은 */
+  .now { display: grid; grid-template-columns: 16mm 1fr 1fr 1fr; gap: 2.2mm; }
+  .now .lab { background: var(--navy); color: #fff; border-radius: 3mm; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11.5pt; }
+  .now .p { background: #f6f2ee; border: 1px solid #e6dcd2; border-radius: 3mm; padding: 1.6mm 2.6mm; font-size: 9.6pt; line-height: 1.36; }
+  .now .p b { display: block; font-size: 10.2pt; color: #7a2e12; }
+  /* 흐름 */
+  .flow { display: grid; grid-template-columns: 1fr 6mm 1fr 6mm 1.12fr; align-items: stretch; }
+  .step { border: 1.5px solid var(--brand); border-radius: 3mm; padding: 2.2mm 2.8mm; background: #f9fbff; }
+  .step .n { display: inline-flex; width: 5.8mm; height: 5.8mm; border-radius: 50%; background: var(--brand); color: #fff; font-weight: 700; align-items: center; justify-content: center; font-size: 9.6pt; margin-right: 1.4mm; flex: none; }
+  .step h3 { margin: 0 0 0.8mm; font-size: 11pt; display: flex; align-items: center; }
+  .step p { margin: 0; font-size: 9.6pt; line-height: 1.38; }
+  .step.uni { border-color: var(--navy); background: #f2f4fa; }
+  .step.uni .n { background: var(--navy); }
+  .arrow { display: flex; align-items: center; justify-content: center; }
+  .arrow svg path { fill: #7d93c9; }
+  .nest { display: flex; align-items: center; gap: 1mm; margin-top: 1mm; font-size: 8.8pt; color: var(--sub); }
+  .nest .ar { color: var(--navy); font-weight: 700; }
+  /* 화면 잘라 보이기: --x --y --w --h는 1440×900 화면 좌표 */
+  .crop { position: relative; overflow: hidden; aspect-ratio: calc(var(--w) / var(--h)); border-radius: 1.6mm; border: 1px solid #c9d1df; background: #fff; }
+  .crop img { position: absolute; display: block; width: calc(1440 / var(--w) * 100%); left: calc(var(--x) / var(--w) * -100%); top: calc(var(--y) / var(--h) * -100%); }
+  .pin { position: absolute; width: 6mm; height: 6mm; margin: -3mm 0 0 -3mm; border-radius: 50%; background: #ffd23f; color: #111; font-weight: 800; font-size: 10pt; display: flex; align-items: center; justify-content: center; border: 2px solid #111; box-shadow: 0 0 0 1.5px #ffd23f; z-index: 2; }
+  .hero { display: grid; grid-template-columns: 1fr 1fr; gap: 2.4mm; }
+  .hero .cap { font-size: 8.6pt; color: var(--sub); margin-top: 0.8mm; }
+  .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8mm 4mm; font-size: 9.4pt; }
+  .legend div { display: flex; gap: 1.4mm; align-items: baseline; }
+  .legend .k { flex: none; width: 4.8mm; height: 4.8mm; border-radius: 50%; background: #ffd23f; border: 1.5px solid #111; font-weight: 800; font-size: 8pt; display: inline-flex; align-items: center; justify-content: center; position: relative; top: 0.5mm; }
+  /* 확산 띠 */
+  .spread { display: grid; grid-template-columns: repeat(4, 1fr); }
+  .spread .s { position: relative; padding: 1.5mm 3mm 1.5mm 5mm; background: #fbf6ea; border-top: 1px solid #e7d6ae; border-bottom: 1px solid #e7d6ae; font-size: 9.3pt; line-height: 1.33; }
+  .spread .s:first-child { border-left: 1px solid #e7d6ae; border-radius: 3mm 0 0 3mm; padding-left: 3mm; }
+  .spread .s:last-child { border-right: 1px solid #e7d6ae; border-radius: 0 3mm 3mm 0; }
+  .spread .s:not(:last-child)::after { content: ""; position: absolute; right: -3mm; top: 50%; margin-top: -3mm; border: 3mm solid transparent; border-left-color: #e7c983; z-index: 1; }
+  .spread .s b { display: block; color: #6b4600; font-size: 9.9pt; }
+  /* 2쪽 */
+  .grid4 { display: grid; grid-template-columns: 1fr 1fr; gap: 2.8mm 3.6mm; }
+  .card { position: relative; border: 1px solid var(--line); border-radius: 3mm; padding: 2.4mm; display: flex; flex-direction: column; gap: 1.4mm; }
+  .card h3 { margin: 0; font-size: 11pt; letter-spacing: -0.3px; }
+  .card p { margin: 0; font-size: 9.5pt; line-height: 1.38; }
+  .ai { border: 1.5px solid var(--c-ai); background: #fdf7fa; }
+  .ai h2 { color: #8a1f50; margin-bottom: 1.4mm; }
+  .aiflow { display: grid; grid-template-columns: 0.95fr 4.5mm 1.15fr 4.5mm 1.45fr 4.5mm 0.8fr; align-items: stretch; }
+  .aiflow .b { background: #fff; border: 1px solid #e3b7cb; border-radius: 2.5mm; padding: 1.6mm 2.1mm; font-size: 9.3pt; line-height: 1.33; }
+  .aiflow .b b { display: block; font-size: 10pt; }
+  .aiflow .b.app { border: 1.5px solid #8a1f50; }
+  .aiflow .arrow svg path { fill: #b0306a; }
+  .modes { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2mm; margin-top: 1.8mm; font-size: 9.2pt; line-height: 1.33; }
+  .modes div { border-left: 3px solid #e3b7cb; padding-left: 2mm; }
+  .modes b { color: #8a1f50; }
+  .nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.6mm; }
+  .num { background: #f4f2fb; border: 1px solid #d8d2f0; border-radius: 2.5mm; padding: 1.1mm 2.2mm; }
+  .num .v { font-size: 13pt; font-weight: 800; color: var(--c-done); line-height: 1.15; }
+  .num .v small { font-size: 9pt; font-weight: 700; }
+  .num .l { font-size: 8.9pt; line-height: 1.28; }
+  .fz { display: inline-block; font-size: 6.8pt; font-weight: 700; color: #6b5c00; background: #fff4c2; border: 1px solid #e5cf6a; border-radius: 1.5mm; padding: 0 1.1mm; vertical-align: 1.5px; margin-left: 0.8mm; white-space: nowrap; }
+  .xp { border: 1.5px solid #e7c983; background: #fffcf4; }
+  .xp h2 { color: #6b4600; margin-bottom: 1.2mm; }
+  .xp p { margin: 0.6mm 0 0; font-size: 9.4pt; line-height: 1.36; }
+  .page + .page { gap: 2.2mm; }
+  .foot { margin-top: auto; display: flex; justify-content: space-between; font-size: 7.8pt; color: var(--sub); border-top: 1px solid var(--line); padding-top: 1.1mm; }
+</style>
+</head>
+<body>
+<!-- ───────────── 1쪽 ───────────── -->
+<section class="page">
+  <div class="top"><span>AI 활용 과제 · 1차 소개자료</span><span>화면의 모든 사람·부서·기관·문서는 시연용 가상 자료입니다</span></div>
+  <div class="title"><h1>업무잇다</h1><div class="slogan">평소의 업무 기록이 곧 인수인계 — 모이면 조직의 업무 지도</div></div>
+  <p class="lead">문서가 아니라 <b>업무</b>를 단위로 배경·경과·결정·향후 조치를 모으고, <b>업무 화면 자체를 인계 자료</b>로 씁니다. 업무가 모이면 <b>업무 유니버스 지도</b>가 사람·업무·문서·조직의 관계와 「혼자만 아는 일」을 보여 줍니다.</p>
+  <div class="chips"><span class="chip">설치·서버·로그인 없이 파일 하나</span><span class="chip">AI는 제안, 사람이 승인</span><span class="chip">모든 문장에 근거 표시 — 원문 문단으로 이동</span><span class="chip">키가 없어도 규칙으로 전부 동작</span></div>
+
+  <div class="block"><span class="tag rel">업무 관련성</span>
+    <div class="now">
+      <div class="lab">지금은</div>
+      <div class="p"><b>몰아서 쓰는 인수인계서</b>인사이동 직전에 몰아 써서 핵심이 빠지고, 다 쓰면 다시 안 봄</div>
+      <div class="p"><b>흩어진 문서·끊긴 맥락</b>보고서·회의록이 파일로 흩어져 「왜 그렇게 정했는지」는 담당자 기억에만</div>
+      <div class="p"><b>보이지 않는 위험</b>누가 무엇을 혼자 알고 있는지, 원문 근거인지 추정인지 구분이 안 됨</div>
+    </div>
+  </div>
+
+  <div class="block"><span class="tag rel">업무 관련성</span><h2 style="margin-bottom:1.6mm">이렇게 바꿉니다</h2>
+    <div class="flow">
+      <div class="step"><h3><span class="n">1</span>문서를 올리면 업무에 쌓임</h3><p>PDF·한글(HWPX)·글을 올리면 AI가 <b>결정·일정·조치(담당·기한)·주제</b>를 뽑고, 원문과 대조한 뒤 <b>담당자가 승인한 것만</b> 업무에 반영.</p></div>
+      <div class="arrow"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 6h7V2l6 6-6 6v-4H2z"/></svg></div>
+      <div class="step"><h3><span class="n">2</span>업무 화면이 곧 인계 자료</h3><p>「업무 한눈에 보기」 5문항 — 무엇·왜·어디까지·앞으로. 인계는 사전 점검 → 인수 확인 → 확정, <b>확정 시점 스냅샷</b>을 보존.</p></div>
+      <div class="arrow"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 6h7V2l6 6-6 6v-4H2z"/></svg></div>
+      <div class="step uni"><h3><span class="n">3</span>모이면 업무 유니버스 지도</h3><p>업무·사람·문서·조직을 선으로 잇고 <b>팀·부서로 접어</b> 봄. 지도에서 담당 넘기기·업무 잇기·메모도. <b>혼자만 아는 업무</b>를 경고.</p>
+        <div class="nest">업무<span class="ar">→</span>내 지도<span class="ar">→</span>팀<span class="ar">→</span>부서</div></div>
+    </div>
+  </div>
+
+  <div class="block"><span class="tags"><span class="tag rel">업무 관련성</span><span class="tag done">완성도</span></span>
+    <div class="hero">
+      <div>
+        <div class="crop" style="--x:240;--y:56;--w:1200;--h:700"><img src="work-detail.png" alt="업무 상세 화면">
+          <span class="pin" style="left:12%;top:23%">1</span><span class="pin" style="left:3%;top:47%">2</span><span class="pin" style="left:64%;top:47%">3</span></div>
+        <div class="cap">업무 상세(인계 자료) — 「비대면 출금동의 추진」</div>
+      </div>
+      <div>
+        <div class="crop" style="--x:240;--y:56;--w:1200;--h:700"><img src="team-map.png" alt="팀·부서 지도">
+          <span class="pin" style="left:42%;top:58%">4</span><span class="pin" style="left:43%;top:30%">5</span><span class="pin" style="left:83%;top:70%">6</span></div>
+        <div class="cap">업무 유니버스 — 팀장 화면, 「출금이체팀」을 펼치고 업무 카드를 연 모습</div>
+      </div>
+    </div>
+    <div class="legend" style="margin-top:1.8mm">
+      <div><span class="k">1</span><span>업무 단위 — 담당자·담당 기간·소관 부서, 「인계 시작」</span></div>
+      <div><span class="k">4</span><span>지도에서 고른 업무 — 카드에서 담당 넘기기·업무 잇기·메모·주제</span></div>
+      <div><span class="k">2</span><span>업무 한눈에 보기 — 무엇·왜·결정·현재·앞으로 5문항</span></div>
+      <div><span class="k">5</span><span>접힌 팀(＋숫자) — 두 번 누르면 펼침, 부서 → 팀 → 업무</span></div>
+      <div><span class="k">3</span><span>문장마다 근거 — <span class="ui">원문 확인</span> 칩을 누르면 원문 문단으로</span></div>
+      <div><span class="k">6</span><span>지도 위험 점검 — 「혼자만 아는 일」(빨간 테두리) 목록</span></div>
+    </div>
+  </div>
+
+  <div class="block"><span class="tag spr">확산 가능성</span><h2 style="margin-bottom:1.6mm">파일 하나에서 조직까지</h2>
+    <div class="spread">
+      <div class="s"><b>파일 하나로 시작</b>업무잇다.html 더블클릭. 설치·서버·로그인·인터넷 없음</div>
+      <div class="s"><b>각자 쌓기</b>본인 업무만 보이는 열람 범위. 문서를 올리면 업무가 자람</div>
+      <div class="s"><b>합쳐 불러오기</b>동료가 내보낸 파일을 더하면 같은 사람(사번)·업무를 맞춰 팀 지도</div>
+      <div class="s"><b>조직으로</b>저장·인증·문서함만 사내 시스템으로 바꾸면 같은 핵심 그대로(2쪽)</div>
+    </div>
+  </div>
+  <div class="foot"><span>업무잇다 · 1차 소개자료 초안 v0.1 (2026-10-29)</span><span>1 / 2</span></div>
+</section>
+
+<!-- ───────────── 2쪽 ───────────── -->
+<section class="page">
+  <h2>핵심 기능 — 실제 화면(시연 데이터, 실제 Claude 응답)</h2>
+  <div class="grid4">
+    <div class="card"><span class="tags"><span class="tag ai">AI</span><span class="tag rel">업무 관련성</span></span>
+      <div class="crop" style="--x:160;--y:420;--w:1100;--h:396"><img src="doc-preview.png" alt="업무 반영 미리보기"></div>
+      <h3>문서 → 업무 반영 미리보기</h3>
+      <p>회의록 PDF를 올리면 결정·일정·조치를 뽑고, 표의 <b>과제·담당·기한</b>은 담당 <b>사용자</b>와 기한까지 잇습니다. 항목마다 <span class="ui">원문 확인 · 1쪽 p1-10</span> — 승인한 것만 반영.</p>
+    </div>
+    <div class="card"><span class="tags"><span class="tag rel">업무 관련성</span><span class="tag spr">확산 가능성</span></span>
+      <div class="crop" style="--x:380;--y:372;--w:620;--h:232"><img src="work-map.png" alt="업무 지도"></div>
+      <h3>승인하면 바로 업무 지도에</h3>
+      <p>업무 상세의 「업무 지도」 탭. 방금 문서에서 온 할 일(파랑)이 담당자(초록)와 이어지고, 문서·주제·관계 기관이 함께 보입니다. 지도에서 고치면 업무 화면에 그대로 반영.</p>
+    </div>
+    <div class="card"><span class="tags"><span class="tag rel">업무 관련성</span><span class="tag ai">AI</span></span>
+      <div class="crop" style="--x:250;--y:62;--w:690;--h:252"><img src="handover-points.png" alt="지도로 본 인계 포인트"></div>
+      <h3>인계: 지도로 본 인계 포인트</h3>
+      <p>업무잇다 인계 절차 옆에, 지도에서 찾은 <b>받는 범위·주의·진행 중·관계자</b>를 근거 칩과 함께. 칩을 누르면 근거 기록이 펼쳐지고, 키가 있으면 Claude가 근거 확인된 문장으로 다듬습니다.</p>
+    </div>
+    <div class="card"><span class="tags"><span class="tag rel">업무 관련성</span><span class="tag done">완성도</span></span>
+      <div class="crop" style="--x:258;--y:58;--w:1150;--h:360"><img src="snapshot.png" alt="인계 당시 지도와 지금 지도"></div>
+      <h3>인계 당시 ↔ 지금, 지도로 비교</h3>
+      <p>확정 때 보존한 스냅샷으로 그때의 업무 지도를 다시 그립니다. 끝난 담당은 점선 「전 담당」 — 누가 넘겼고 무엇이 늘었는지 한눈에.</p>
+    </div>
+  </div>
+
+  <div class="block ai"><span class="tags"><span class="tag ai">창의성 · AI 활용</span></span>
+    <h2>AI는 등록된 원문에 있는 것만 — 앱이 검사하고, 사람이 승인합니다</h2>
+    <div class="aiflow">
+      <div class="b"><b>① 원문을 문단으로</b>PDF·HWPX를 쪽·문단 번호로. 표·절 제목은 따로 두어 행을 지킴</div>
+      <div class="arrow"><svg width="14" height="14" viewBox="0 0 16 16"><path d="M2 6h7V2l6 6-6 6v-4H2z"/></svg></div>
+      <div class="b"><b>② Claude가 제안</b>정해진 JSON으로, 항목마다 원문 구절(quote)·문단 번호. 담당은 원문에 있는 이름만</div>
+      <div class="arrow"><svg width="14" height="14" viewBox="0 0 16 16"><path d="M2 6h7V2l6 6-6 6v-4H2z"/></svg></div>
+      <div class="b app"><b>③ 앱이 검사</b>quote가 원문에 있나·날짜가 원문에 있나 → 못 넘으면 <b>「추가 확인 필요」</b>로 낮춤. 「꼼꼼히 읽기」 두 번째 호출이 빠진 것·의심 항목을 찾음</div>
+      <div class="arrow"><svg width="14" height="14" viewBox="0 0 16 16"><path d="M2 6h7V2l6 6-6 6v-4H2z"/></svg></div>
+      <div class="b"><b>④ 사람이 승인</b>승인한 항목만 반영, 근거 칩 유지</div>
+    </div>
+    <div class="modes">
+      <div><b>키 없음(기본)</b> 업무잇다 문장 규칙 + 업무 유니버스 표·목록 규칙으로 같은 화면. 밖으로 보내는 것 없음</div>
+      <div><b>본인 Claude API 키</b> 문서 분석·AI 업무 검색·인계 포인트 다듬기를 실시간으로. 키는 이 브라우저에만</div>
+      <div><b>실제 키 시험(가상 문서)</b> 회의록 표 3행 → 담당 3/3·기한 3/3, 제안 10건 모두 원문 확인 <span class="fz">동결 뒤 확정</span></div>
+    </div>
+    <p class="small" style="margin:1.4mm 0 0">만드는 과정도 AI: 설계·구현·검증을 Claude Code로 — 계획·변경안(CR)은 사람이 승인하고, 작업마다 자동 시험·브라우저 점검으로 확인.</p>
+  </div>
+
+  <div class="block"><span class="tag done">완성도</span>
+    <div class="nums">
+      <div class="num"><div class="v">45<small>개</small><span class="fz">동결 뒤 확정</span></div><div class="l">업무잇다 단위 시험(지도 파생·지도 편집·합쳐 불러오기·문서 분석)</div></div>
+      <div class="num"><div class="v">2,320<small>개</small></div><div class="l">업무 유니버스 핵심 모듈 단위 시험(그대로 재사용)</div></div>
+      <div class="num"><div class="v">5<small>건</small><span class="fz">동결 뒤 확정</span></div><div class="l">실제 Claude 키 시험(문서 분석·꼼꼼히 읽기·검색·인계 포인트)</div></div>
+      <div class="num"><div class="v" style="font-size:11pt">Chrome·Edge</div><div class="l">화면 자동 점검(file:// 더블클릭) <span class="fz">동결 뒤 확정</span></div></div>
+    </div>
+  </div>
+
+  <div class="block xp"><span class="tag spr">확산 가능성 · 다음 단계</span>
+    <h2>같은 핵심을 그대로 옮겨 넓힙니다</h2>
+    <p><b>지금</b> 단일 HTML·브라우저 저장, <b>합쳐 불러오기</b>로 서버 없이 팀 지도. <b>다음</b> 사내 인증·문서함·전자결재 연계 — 바꿀 곳은 저장·로그인·문서 수집뿐, 지도 모델·문서 읽기 규칙·AI 인용 검사는 브라우저 기능을 쓰지 않아 그대로 옮겨집니다. <b>이후</b> 부서 → 조직 지도, 사내 LLM.</p>
+    <p class="small"><b>지금의 한계</b> 스캔 PDF(글자 없음)는 「별도 확인 필요」 경고 · 키는 브라우저에 평문 저장(공용 PC 금지, 조직 서비스는 서버 중계로) · 가상 데이터만, 실제 사람 관찰은 아직</p>
+  </div>
+  <div class="foot"><span>「동결 뒤 확정」 숫자는 기능 동결 뒤 다시 세어 고칩니다 · 화면 속 이름·기관은 모두 가상</span><span>2 / 2</span></div>
+</section>
+</body>
+</html>
