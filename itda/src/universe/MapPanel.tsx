@@ -36,7 +36,9 @@ function gidOfOrigin(d: Derived, view: any, o: Origin): string | null {
 }
 
 export function MapPanel({ data, scope, height = 600, showRisk = true, testid = 'itda-map' }: { data: AppState; scope: MapScope; height?: number; showRisk?: boolean; testid?: string }) {
-  const derived = useMemo(() => deriveMap(data, scope), [data, scope]);
+  // 팀·부서 지도는 항목이 많아 할 일(문서에서 온 조치)은 기본으로 숨긴다 — 「할 일 보기」로 켬. 업무·내 지도는 늘 보임
+  const [showTodo, setShowTodo] = useState(scope.kind !== 'all');
+  const derived = useMemo(() => deriveMap(data, scope, undefined, { actions: showTodo }), [data, scope, showTodo]);
   const view = useMapView(derived);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [selected, setSelected] = useState<string | null>(null);
@@ -72,7 +74,15 @@ export function MapPanel({ data, scope, height = 600, showRisk = true, testid = 
       <div className="min-w-0 space-y-2">
         <MapView derived={derived} view={view} expanded={expanded} selected={selectedNow} onSelect={setSelected} onToggle={toggle} marks={marks} height={height} testid={testid} />
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <MapLegend view={view} />
+          <div className="flex flex-wrap items-center gap-3">
+            <MapLegend view={view} />
+            {scope.kind === 'all' && (
+              <label className="flex items-center gap-1 text-2xs text-muted">
+                <input type="checkbox" checked={showTodo} onChange={(e) => setShowTodo(e.target.checked)} data-testid="map-show-todo" />
+                할 일 보기
+              </label>
+            )}
+          </div>
           <p className="text-2xs text-faint">항목을 누르면 오른쪽에 카드가 열립니다{scope.kind === 'all' ? ' · 팀은 두 번 누르면 펼치고 접습니다' : ''}</p>
         </div>
       </div>
