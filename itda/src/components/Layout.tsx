@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutDashboard, FolderKanban, Files, GitCommitVertical, ScrollText, Search, ArrowRightLeft, ChevronLeft, Menu, RotateCcw, UserRound, Bot, X, ArrowDownUp } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, Files, GitCommitVertical, ScrollText, Search, ArrowRightLeft, ChevronLeft, Menu, RotateCcw, UserRound, Bot, X, ArrowDownUp, Orbit } from 'lucide-react';
 import { DataTransfer } from './DataTransfer';
 import { NewWorkModal } from './NewWorkModal';
 import { useRouter } from '../lib/router';
@@ -55,6 +55,7 @@ const NAV = [
   { to: '/meetings', label: '회의록', Icon: ScrollText },
   { to: '/search', label: 'AI 업무 검색', Icon: Search },
   { to: '/handover', label: '업무 인계 관리', Icon: ArrowRightLeft },
+  { to: '/universe', label: '업무 유니버스', Icon: Orbit },
 ];
 
 function Brand() {

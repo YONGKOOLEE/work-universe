@@ -156,3 +156,10 @@ h3 {
   background: rgb(var(--line2));
   border-radius: 8px;
 }
+
+/* 업무 유니버스 지도(CR-24): 유니버스 그래프의 확대·축소 단추 */
+[data-testid='itda-map'], [data-testid='itda-workmap'] { position: relative; overflow: hidden; }
+.zoom-tools { position: absolute; right: 10px; bottom: 10px; z-index: 6; display: flex; gap: 4px; }
+.zoom-tools button { min-width: 34px; height: 30px; padding: 0 9px; border-radius: 6px; font-size: 15px; line-height: 1; background: rgb(var(--surface)); color: rgb(var(--ink)); border: 1px solid rgb(var(--line2)); box-shadow: 0 1px 2px rgb(var(--shadow) / 0.08); }
+.zoom-tools button:hover { border-color: rgb(var(--brand)); color: rgb(var(--brand)); }
+.zoom-tools button:last-child { font-size: 12.5px; }

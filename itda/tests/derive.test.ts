@@ -106,3 +106,12 @@ describe('deriveMap ③ 전체(팀으로 접기)', () => {
     expect(roots).toEqual(['가상 부서', '가상결제팀', '가상정산팀']);
   });
 });
+
+import { shortTitle } from '../src/universe/derive';
+describe('할 일 이름 줄이기', () => {
+  it('날짜·「까지」·끝 「예정임」을 떼고 22자에서 자른다', () => {
+    expect(shortTitle('2026. 12. 31.까지 약관 및 시행세칙 개정안을 마련할 계획임.')).toBe('약관 및 시행세칙 개정안을 마련');
+    expect(shortTitle('참가기관은 2026. 11. 30.까지 전산 영향도 검토 결과를 제출할 예정임.')).toBe('참가기관은 전산 영향도 검토 결과를 제출');
+    expect(shortTitle('불일치 3건 재조회')).toBe('불일치 3건 재조회');
+  });
+});

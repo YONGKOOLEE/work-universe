@@ -1,4 +1,5 @@
 import { NEW_WORK, openNewWork } from '../lib/newWork';
+import { WorkMap } from '../universe/WorkMap';
 import { useEffect, useState } from 'react';
 import {
   Sparkles, Pencil, ArrowRightLeft, Gavel, ListTodo, AlertTriangle, Plus, Check, Building2, CircleDot, History, Camera, ScrollText, ChevronRight, Ban, Eye, EyeOff, Users,
@@ -12,7 +13,7 @@ import { WORK_STATUSES, type Stmt, type Work, type WorkStatus } from '../lib/typ
 import { workIssues } from '../ai/engine';
 import { fmtDate, fmtDateTime, relDays, dateKey, cx, uid, today as todayLocal } from '../lib/util';
 
-type Tab = 'overview' | 'docs' | 'timeline' | 'meetings' | 'actions' | 'history';
+type Tab = 'overview' | 'map' | 'docs' | 'timeline' | 'meetings' | 'actions' | 'history';
 
 export default function WorkDetail({ id }: { id: string }) {
   const { s, update, log, touch, toast } = useStore();
@@ -279,6 +280,7 @@ export default function WorkDetail({ id }: { id: string }) {
           onChange={setTab}
           tabs={[
             { id: 'overview', label: '업무 개요' },
+            { id: 'map', label: '업무 지도' },
             { id: 'docs', label: '관련 문서', count: docs.length },
             { id: 'timeline', label: '추진 타임라인', count: events.length },
             { id: 'meetings', label: '회의록 및 의사결정', count: decisions.length },
@@ -288,6 +290,7 @@ export default function WorkDetail({ id }: { id: string }) {
         />
         <div className="pt-5">
           {tab === 'overview' && <Overview w={w} />}
+          {tab === 'map' && <WorkMap workId={w.id} />}
           {tab === 'docs' && <DocsTab w={w} onAdd={() => setDocOpen(true)} />}
           {tab === 'timeline' && (
             <Card className="p-4 sm:p-5">

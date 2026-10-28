@@ -56,6 +56,8 @@ function load(): AppState {
 export function canSee(s: AppState, workId: string, userId: string) {
   const w = s.works.find((x) => x.id === workId);
   if (!w) return false;
+  // 전체 보기 사용자(팀장 역할, CR-24 D24-4)는 모든 업무를 본다
+  if (s.users.find((u) => u.id === userId)?.role === 'lead') return true;
   return w.owners.includes(userId) || s.handovers.some((h) => h.workId === workId && h.toId === userId && h.status !== 'confirmed');
 }
 

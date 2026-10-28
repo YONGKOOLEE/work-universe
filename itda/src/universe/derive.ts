@@ -153,10 +153,19 @@ function addWorkBody(b: DocBuilder, c: Ctx, w: Work, workNode: string) {
 }
 
 function addAction(b: DocBuilder, c: Ctx, a: Action, workNode: string) {
-  const aid = b.node({ kind: 'action', id: a.id }, 'work', a.title, { subtype: '할 일', attrs: { 상태: a.status, ...(a.due ? { 마감: day(a.due) } : {}) } });
+  const aid = b.node({ kind: 'action', id: a.id }, 'work', shortTitle(a.title), { subtype: '할 일', description: a.title, attrs: { 상태: a.status, ...(a.due ? { 마감: day(a.due) } : {}) } });
   b.edge('contains', workNode, aid);
   const pid = a.ownerId ? addPerson(b, c, a.ownerId) : null;
   if (pid) b.edge('performs', pid, aid);
+}
+
+/** 할 일 이름: 문서에서 뽑은 조치는 문장 전체라 지도에 그대로 쓰면 빽빽하다. 날짜·「까지」를 떼고 ACTION_LABEL_MAX자에서 자른다(전체는 설명·카드에) */
+export const ACTION_LABEL_MAX = 22;
+export function shortTitle(t: string): string {
+  let x = String(t).replace(/\s+/g, ' ').trim();
+  x = x.replace(/\d{4}\.\s*\d{1,2}\.\s*\d{1,2}\.?\s*(?:까지\s*)?/g, '').replace(/\s+/g, ' ').trim(); // 날짜는 마감으로 따로 보인다
+  x = x.replace(/(?:할|될)?\s*(?:예정|계획)임\.?$|함\.?$|임\.?$/, '').trim();
+  return x.length > ACTION_LABEL_MAX ? `${x.slice(0, ACTION_LABEL_MAX - 1)}…` : x || t;
 }
 
 function workAttrs(w: Work): Record<string, string> {
