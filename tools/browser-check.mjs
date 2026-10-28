@@ -5564,6 +5564,15 @@ async function checkBrowser(browser, port) {
       check('CR-22 W 「지도 관리」 공간: 제목 「지도 관리」, 「새 업무 지도」「업무 지도 묶기」「가져오기·내보내기」 단추(id 그대로)가 이 공간 안에 크기를 갖고 보임, 추가 열기·편집 되감기 입구가 있고 「사람·업무·문서 추가」 입구는 단추 하나(아래 상자 제목줄 없음)',
         ed.space === 'edit' && ed.title === '지도 관리' && admin.bs.map((b) => b.text).join('|') === '새 업무 지도|업무 지도 묶기|가져오기·내보내기' && admin.bs.every((b) => b.inAdmin && b.w > 40 && b.h > 10) && (await w22.inSec('edit', '[data-testid=goal-add-open]')) && ((await w22.inSec('edit', '[data-testid=btn-rewind]')) || (await w22.inSec('edit', '[data-testid=rewind-grouped-note]'))) && admin.addH === 0, JSON.stringify({ ed, admin })); // CR-22 K: 「사람·업무·문서 추가」는 단추 하나가 입구(아래 접힌 상자의 제목줄은 숨겨 두 번 보이지 않음)
       await shot(s.cdp, `${browser.name}-cr22-5-edit`);
+      // 작성 주체 보이기(사용자 질문 10-28): 「지도 관리」 첫 화면 한 줄 + 지도 중심 카드의 읽기 전용 줄
+      const own1 = await raw(s.cdp, "(() => { const e = document.querySelector('[data-testid=ws-map-owner]'); const u = window.__wu.doc.universe; return { text: e ? e.textContent : null, w: e ? e.getBoundingClientRect().width : 0, exp: `이 지도: ${u.name} · 작성 주체 ${u.owner}` }; })()");
+      check('작성 주체: 「지도 관리」 첫 화면에 「이 지도: <이름> · 작성 주체 <주체>」 한 줄', own1.text === own1.exp && own1.w > 0, JSON.stringify(own1));
+      await raw(s.cdp, "window.__wu.select(window.__wu.cy.nodes().filter((n) => n.data('core_type') === 'root')[0].id())");
+      await sleep(200);
+      const own2 = await raw(s.cdp, "(() => { const e = document.querySelector('#detail [data-testid=card-map-owner]'); const u = window.__wu.doc.universe; return { text: e ? e.textContent : null, exp: `작성 주체: ${u.owner}`, w: e ? e.getBoundingClientRect().width : 0 }; })()");
+      check('작성 주체: 지도 중심 카드에 「작성 주체: <주체>」 읽기 전용 줄', own2.text === own2.exp && own2.w > 0, JSON.stringify(own2));
+      await raw(s.cdp, "window.__wu.select(null)"); // 선택을 풀어 「지도 관리」 첫 화면으로 되돌린다(뒤 점검이 그 화면을 쓴다)
+      await sleep(200);
       // 이동한 단추는 하던 일 그대로
       const dlg = async (btn, dlgId) => {
         await raw(s.cdp, `document.getElementById('${btn}').click()`);
@@ -5811,6 +5820,13 @@ async function checkBrowser(browser, port) {
       await c21Click('json-export');
       await sleep(300);
       check('CR-21 A 「백업」 → JSON 내보내기 → 가져오기·내보내기 창의 「내보내기」 탭이 열림', await evaluate(s.cdp, "document.getElementById('import-dialog').open && document.querySelector('[data-testid=import-tab-export]').classList.contains('active')"));
+      await evaluate(s.cdp, "document.getElementById('import-dialog').close()");
+      // 「초기화」 → 접힌 「고급」 안의 「가상 데이터 초기화」까지(사용자 점검 10-28): 「고급」이 펼쳐지고 단추가 창 안에 보이며 강조된다. 단추는 누르지 않는다
+      await c21Type('초기화');
+      await c21Click('reset');
+      await sleep(350);
+      const rj = await evaluate(s.cdp, "(() => { const d = document.getElementById('import-dialog'); const b = document.querySelector('[data-testid=reset-all]'); const z = document.querySelector('[data-testid=import-advanced]'); const r = b.getBoundingClientRect(); const dr = d.getBoundingClientRect(); return { open: d.open, adv: z.open, w: r.width, h: r.height, inView: r.top >= dr.top - 1 && r.bottom <= dr.bottom + 1, flash: b.classList.contains('goal-flash') }; })()");
+      check('「초기화」 결과 → 가져오기·내보내기 창이 열리고 「고급」이 펼쳐지며 「가상 데이터 초기화」 단추가 창 안에 보이고 강조됨', rj.open && rj.adv && rj.w > 0 && rj.h > 0 && rj.inView && rj.flash, JSON.stringify(rj));
       await evaluate(s.cdp, "document.getElementById('import-dialog').close()");
       // 키보드: ↓ → Enter, Esc
       await c21Type('기록');

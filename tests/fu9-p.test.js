@@ -56,7 +56,7 @@ test('FU9-24 찾기: 지우기·삭제·지워·없애기는 항목 숨기기·�
   assert.deepEqual(top('되돌리기', 2).sort(), ['hidden', 'rewind']);
   const reset = searchFeatures('초기화')[0];
   assert.match(reset.where, /전부 지웁니다/);
-  assert.equal(reset.go, 'dlg:import:doc');
+  assert.equal(reset.go, 'dlg:import:doc:reset-all');
 });
 
 test('FU9-25·26 찾기: 다른 PC·옮기기·이사는 JSON 내보내기·가져오기, 다시 묻기는 통합 확인', () => {
