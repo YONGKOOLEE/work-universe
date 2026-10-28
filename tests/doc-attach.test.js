@@ -20,6 +20,7 @@ import { AI_DOC_MAX_CHUNKS, chunkDocument, labelKeys, readDocumentAi } from '../
 import { TEXT_LIMITS, defaultSelection } from '../app/src/rules/text-extract.js';
 import { createProvider } from '../app/src/llm/providers.js';
 import { createFakeClient } from '../app/src/llm/fake-client.js';
+import { DOC_ATTACH_EXAMPLE } from '../app/data/doc-attach-example.js';
 import { docAttachDialog } from '../app/src/ui/doc-attach.js';
 import { FEATURES, featureBlock, searchFeatures } from '../app/src/view/feature-index.js';
 import { actionPlan } from '../app/src/view/card.js';
@@ -433,14 +434,14 @@ const withDom = (fn) => async () => {
   try { await fn(body); } finally { uninstallDom(); }
 };
 
-function openDialog({ app = openApp(), aiReady = false, readAi = null, target = '' } = {}) {
+function openDialog({ app = openApp(), aiReady = false, readAi = null, target = '', example = null } = {}) {
   const dialog = new FakeEl('dialog');
   dialog.open = false;
   dialog.showModal = () => { dialog.open = true; };
   dialog.close = () => { dialog.open = false; dialog.fire('close'); };
   document.body.append(dialog);
   const saved = [];
-  const open = docAttachDialog({ dialog, app, getView: () => app.view, aiReady: () => aiReady, readAi: readAi || (() => null), today: () => TODAY, onSaved: (r, ctx) => saved.push({ r, ctx }) });
+  const open = docAttachDialog({ dialog, app, getView: () => app.view, aiReady: () => aiReady, readAi: readAi || (() => null), today: () => TODAY, example, onSaved: (r, ctx) => saved.push({ r, ctx }) });
   open(target);
   const q = (id) => dialog.querySelector(`[data-testid=${id}]`);
   const all = (prefix) => dialog.querySelectorAll(`[data-testid^=${prefix}]`);
@@ -711,4 +712,25 @@ test('H2-② 화면: 체크한 새 조직·주제는 「문서 「…」에 참�
   const org = app.doc.nodes.find((n) => n.label === '정산팀' && n.core_type === 'org');
   const docNode = app.doc.nodes.find((n) => n.core_type === 'artifact' && n.label.startsWith('문자메시지 발송 서비스'));
   assert.ok(org && docNode && app.doc.edges.some((e) => e.source === docNode.id && e.target === org.id && e.core_type === 'references'));
+}));
+
+test('H2-⑦ 화면: 「예시 문서 넣기」는 글 칸을 예시로 채우고(기한은 오늘 +7·+14일), 대상이 없으면 「대사 확인」을 고르며, 읽으면 할 일 2·이슈 1·주의 1', withDom(() => {
+  assert.equal(openDialog().q('doc-attach-example'), null, '예시를 주지 않으면 단추가 없다');
+  const d = openDialog({ example: DOC_ATTACH_EXAMPLE });
+  assert.equal(d.q('doc-attach-example').textContent, '예시 문서 넣기: 대사 확인 개선 회의록(샘플 「월말 정산 점검」용)');
+  assert.equal(d.q('doc-attach-target').value, '');
+  d.q('doc-attach-input').value = '덮어쓸 글';
+  d.q('doc-attach-example').click();
+  const t = d.q('doc-attach-input').value;
+  assert.ok(t.startsWith('대사 확인 개선 회의록') && !t.includes('{D') && !t.includes('2026. 11. 6.'));
+  assert.ok(t.includes('윤바다 2026. 11. 11.') && t.includes('서하늘 2026. 11. 4.'), '오늘(2026-10-28) +7일·+14일');
+  assert.equal(d.q('doc-attach-target').value, TARGET);
+  d.q('doc-attach-read').click();
+  assert.equal(d.rows('doc-attach-task').length, 2);
+  assert.equal(d.rows('doc-attach-task').filter((_, i) => d.q(`doc-attach-task-check-${i}`).checked).length, 2, '기한이 지나지 않아 둘 다 체크');
+  assert.equal(d.rows('doc-attach-memo').length, 2);
+  const picked = openDialog({ example: DOC_ATTACH_EXAMPLE, target: 'N-003' });
+  picked.q('doc-attach-example').click();
+  assert.equal(picked.q('doc-attach-target').value, 'N-003', '이미 고른 대상은 바꾸지 않는다');
+  assert.equal(DOC_ATTACH_EXAMPLE.text('2026-12-25').includes('2027. 1. 1.'), true, '해를 넘겨도 YYYY. M. D. 꼴');
 }));

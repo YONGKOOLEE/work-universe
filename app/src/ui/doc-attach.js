@@ -82,7 +82,7 @@ function errorText(error, kind, relation) {
 
 /**
  * @param {{dialog:HTMLDialogElement, app:object, getView:()=>object, aiReady:()=>boolean, readAi:(text:string)=>(Promise<object|null>|null),
- *   today:()=>string, onSaved:(result:object, ctx:{targetId:string, notice:string})=>void}} o
+ *   today:()=>string, example?:{title:string, targetLabel:string, text:(today:string)=>string}, onSaved:(result:object, ctx:{targetId:string, notice:string})=>void}} o
  *   readAi: Claude로 읽기(llm/ai-doc-attach.js readDocumentAi를 감싼 것). null을 돌려주면 키가 없는 것
  * @returns {(targetId?:string)=>void} 대화상자를 여는 함수(대상 업무 id를 주면 미리 골라진다)
  */
@@ -433,6 +433,19 @@ export function docAttachDialog(o) {
     if (was !== st.stale) render();
   }
 
+  // 예시 문서 넣기: 글 칸을 예시로 채운다(가져오기 창의 예시 단추처럼 이미 있는 글은 덮어쓴다). 대상이 아직 없으면 「대사 확인」 업무를 고른다
+  function fillExample() {
+    if (st.busy || !o.example) return;
+    input.value = o.example.text(o.today());
+    fileName.textContent = '';
+    if (!st.targetId) {
+      const hit = worksOf(o.app.doc).filter((w) => w.label === o.example.targetLabel);
+      if (hit.length === 1) { st.targetId = hit[0].id; select.value = hit[0].id; }
+    }
+    onInput();
+    render();
+  }
+
   function build(works) {
     input = el('textarea', { id: 'doc-attach-input', rows: 8, 'data-testid': 'doc-attach-input', placeholder: DOC_ATTACH.placeholder, oninput: onInput });
     select = el('select', { id: 'doc-attach-target', 'data-testid': 'doc-attach-target', 'aria-label': '붙일 업무', onchange: (e) => { st.targetId = e.target.value; onInput(); } },
@@ -458,6 +471,7 @@ export function docAttachDialog(o) {
       el('div', { class: 'row' },
         el('label', { class: 'file-pick' }, `${DOC_ATTACH.file} `, (fileInput = el('input', { type: 'file', accept: '.md,.txt,.markdown,.pdf,.hwp,.hwpx,.docx,text/plain,text/markdown', 'data-testid': 'doc-attach-file', onchange: onFile }))),
         fileName),
+      ...(o.example ? [el('div', { class: 'row' }, el('button', { type: 'button', 'data-testid': 'doc-attach-example', onclick: fillExample }, `예시 문서 넣기: ${o.example.title}`))] : []),
       el('div', { class: 'row' }, readBtn, aiBtn, aiBtn ? null : el('span', { class: 'muted small', 'data-testid': 'doc-attach-ai-note' }, DOC_ATTACH.noKey)),
       busyLine,
       previewBox,
