@@ -5,6 +5,8 @@ import { Button, Card, CardHead, Field, Mono, inputCls } from '../components/ui'
 import { addPerson, editPerson, removePerson, setPersonStatus, isLeft, type PersonInput } from '../lib/people';
 import { clone, cx } from '../lib/util';
 import type { AppState } from '../lib/types';
+import { OrgSection } from '../components/OrgSection';
+import { effectiveOrgs, orgShort, orgTree } from '../lib/orgs';
 
 type Form = { id: string | null; name: string; dept: string; title: string; empNo: string; role: 'member' | 'lead' };
 
@@ -14,6 +16,7 @@ export default function People() {
   const [formErr, setFormErr] = useState('');
   const [notice, setNotice] = useState<{ id: string; lines: string[]; kind: 'blocked' | 'left' } | null>(null);
 
+  const orgList = orgTree(effectiveOrgs(raw));
   const ownedCount = (id: string) => raw.works.filter((w) => w.owners.includes(id)).length;
   const open = (u?: AppState['users'][number]) => {
     setFormErr('');
@@ -82,8 +85,16 @@ export default function People() {
               <Field label="이름" htmlFor="pp-name">
                 <input id="pp-name" className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
               </Field>
-              <Field label="부서" htmlFor="pp-dept">
-                <input id="pp-dept" className={inputCls} value={form.dept} onChange={(e) => setForm({ ...form, dept: e.target.value })} />
+              <Field label="소속 조직" htmlFor="pp-dept">
+                <select id="pp-dept" className={inputCls} value={form.dept} onChange={(e) => setForm({ ...form, dept: e.target.value })}>
+                  {!orgList.some(({ org }) => org.name === form.dept) && <option value={form.dept}>{orgShort(form.dept) || '선택하세요'}</option>}
+                  {orgList.map(({ org, depth }) => (
+                    <option key={org.id} value={org.name}>
+                      {'\u00a0\u00a0'.repeat(depth)}
+                      {orgShort(org.name)} ({org.level})
+                    </option>
+                  ))}
+                </select>
               </Field>
               <Field label="직급" htmlFor="pp-title">
                 <input id="pp-title" className={inputCls} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
@@ -157,7 +168,7 @@ export default function People() {
           <thead>
             <tr className="border-b border-line bg-sunken/60 text-left text-xs text-muted">
               <th className="px-4 py-2.5 font-semibold">이름</th>
-              <th className="px-3 py-2.5 font-semibold">부서</th>
+              <th className="px-3 py-2.5 font-semibold">소속 조직</th>
               <th className="px-3 py-2.5 font-semibold">직급</th>
               <th className="px-3 py-2.5 font-semibold">사번</th>
               <th className="px-3 py-2.5 font-semibold">역할</th>
@@ -176,7 +187,7 @@ export default function People() {
                     {u.name}
                     {isMe && <span className="ml-1.5 rounded bg-brandsoft px-1.5 text-2xs font-semibold text-brand">사용 중</span>}
                   </td>
-                  <td className="px-3 py-3">{u.dept}</td>
+                  <td className="px-3 py-3">{orgShort(u.dept)}</td>
                   <td className="px-3 py-3">{u.title}</td>
                   <td className="px-3 py-3">{u.empNo ? <Mono>{u.empNo}</Mono> : <span className="text-faint">—</span>}</td>
                   <td className="px-3 py-3">{u.role === 'lead' ? '팀장' : '팀원'}</td>
@@ -226,6 +237,8 @@ export default function People() {
           </tbody>
         </table>
       </Card>
+
+      <OrgSection />
     </div>
   );
 }

@@ -60,14 +60,14 @@ describe('parseBackup', () => {
 
 describe('createSeed', () => {
   const REAL = /국무회의|행정안전부|모바일 신분증|금융결제원|주민등록|mois\.go\.kr|의안/;
-  it("linked: 시연 상태(업무 10·문서 7·이벤트 14·결정 6·조치 16·이력 17·인계 1·스냅샷 1)이고 실제 기관명이 없다", () => {
+  it("linked: 시연 상태(업무 15·문서 7·이벤트 14·결정 6·조치 16·이력 17·인계 1·스냅샷 1)이고 실제 기관명이 없다", () => {
     const s = createSeed('linked');
     expect(s.schema).toBe(SCHEMA);
-    expect([s.works.length, s.docs.length, s.events.length, s.decisions.length, s.actions.length, s.history.length]).toEqual([10, 7, 14, 6, 16, 17]); // 업무 8→10: 인계 위험 인사이트 시연용 W-009·W-010(2026-10-29)
+    expect([s.works.length, s.docs.length, s.events.length, s.decisions.length, s.actions.length, s.history.length]).toEqual([15, 7, 14, 6, 16, 17]); // 업무 8→10: 인계 위험 인사이트 시연용 W-009·W-010, 10→15: 조직 계층(부·본부) 시연용 W-011~W-015(2026-10-29 사용자 결정)
     expect([s.handovers.length, s.snapshots.length]).toEqual([1, 1]);
     expect(s.works.every((w) => Array.isArray(w.nextIds) && Array.isArray(w.topics))).toBe(true);
     expect(s.mapHidden).toEqual([]);
-    expect(s.users.map((u) => u.empNo)).toEqual(['V-1001', 'V-1002', 'V-1003', 'V-1004', 'V-1005', 'V-1006', 'V-1007']);
+    expect(s.users.map((u) => u.empNo)).toEqual(['V-1001', 'V-1002', 'V-1003', 'V-1004', 'V-1005', 'V-1006', 'V-1007', 'V-1008', 'V-1009', 'V-1010']); // V-1008~1010: 조직 계층 시연용(2026-10-29)
     const text = JSON.stringify(s);
     expect(text).not.toMatch(REAL);
     expect(text).toContain('한빛결제원(가상)');

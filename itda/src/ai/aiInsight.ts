@@ -8,7 +8,8 @@ import type { AppState, Work } from '../lib/types';
 import { S, type LlmClient } from './llm';
 import { fmtDate } from '../lib/util';
 import { isLeft } from '../lib/people';
-import type { MapScope } from '../universe/derive';
+import { worksInScope, type MapScope } from '../universe/derive';
+import { effectiveOrgs, orgShort, subtreeNames } from '../lib/orgs';
 import { handoverInsights, INSIGHT_NAMES } from '../universe/insights';
 
 export type AiInsightKind = 'dependency' | 'deadline' | 'knowledge' | 'overlap' | 'gap' | 'handover';
@@ -93,17 +94,8 @@ export interface InsightInput {
 const clip = (t: string, n: number) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
 const flat = (t: string) => String(t ?? '').replace(/\s+/g, ' ').trim();
 
-/** 범위 안의 업무(내 지도: 내 담당, 업무 지도: 그 업무와 바로 이어진 업무, 팀: 전체) */
-export function worksInScope(s: AppState, scope: MapScope): Work[] {
-  if (scope.kind === 'mine') return s.works.filter((w) => w.owners.includes(scope.userId));
-  if (scope.kind === 'work') {
-    const w = s.works.find((x) => x.id === scope.workId);
-    if (!w) return [];
-    const near = new Set([w.id, ...(w.parentId ? [w.parentId] : []), ...w.relatedIds, ...w.nextIds, ...s.works.filter((x) => x.nextIds.includes(w.id) || x.parentId === w.id).map((x) => x.id)]);
-    return s.works.filter((x) => near.has(x.id));
-  }
-  return s.works;
-}
+// 범위 안의 업무는 지도와 같은 기준(derive.worksInScope)
+export { worksInScope };
 
 function workLines(s: AppState, w: Work): string[] {
   const name = (id: string) => s.users.find((u) => u.id === id)?.name ?? id;
@@ -157,7 +149,8 @@ export function buildInsightInput(s: AppState, scope: MapScope, asOf: string): I
     w.ownerHistory.forEach((p) => involved.add(p.userId));
   }
   for (const a of s.actions) if (lines.has(a.workId)) involved.add(a.ownerId);
-  const people = s.users.filter((u) => scope.kind === 'all' || involved.has(u.id));
+  const members = scope.kind === 'org' ? subtreeNames(effectiveOrgs(s), scope.orgId) : null;
+  const people = s.users.filter((u) => scope.kind === 'all' || involved.has(u.id) || !!members?.has(u.dept));
   const userIds = new Set(people.map((u) => u.id));
   const peopleText = people.map((u) => {
     const owns = s.works.filter((w) => w.owners.includes(u.id));
@@ -166,7 +159,7 @@ export function buildInsightInput(s: AppState, scope: MapScope, asOf: string): I
   const rules = handoverInsights(s, scope, asOf).items.map((x) => `- ${INSIGHT_NAMES[x.kind]}: ${x.title} — ${clip(x.detail, 100)}`);
   const user = [
     `<기준일>${asOf}</기준일>`,
-    `<범위>${scope.kind === 'all' ? '팀·부서 전체' : scope.kind === 'mine' ? '한 사람의 담당 업무' : '업무 하나와 이어진 업무'} · 업무 ${works.length}개${truncated ? ` (업무가 많아 ${truncated}개는 빼고 보냄)` : ''}</범위>`,
+    `<범위>${scope.kind === 'all' ? '조직 전체' : scope.kind === 'org' ? `조직 「${orgShort(effectiveOrgs(s).find((o) => o.id === scope.orgId)?.name ?? '')}」과 아래 조직` : scope.kind === 'mine' ? '한 사람의 담당 업무' : '업무 하나와 이어진 업무'} · 업무 ${works.length}개${truncated ? ` (업무가 많아 ${truncated}개는 빼고 보냄)` : ''}</범위>`,
     `<업무 기록>\n${blocks.join('\n\n') || '(업무 없음)'}\n</업무 기록>`,
     `<사람>\n${peopleText.join('\n') || '(없음)'}\n</사람>`,
     `<규칙 인사이트가 이미 찾은 것>\n${rules.join('\n') || '(없음)'}\n</규칙 인사이트가 이미 찾은 것>`,

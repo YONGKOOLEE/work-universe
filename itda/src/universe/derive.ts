@@ -1,7 +1,8 @@
 // AppState → 유니버스 문서(파생, CR-24 D24-1·D24-2). 저장하지 않고 화면을 그릴 때마다 만든다.
 // 지도의 항목마다 원래 AppState의 무엇인지(origin)를 함께 돌려줘, 지도에서 고치면 AppState 명령으로 바꿀 수 있게 한다.
 // 브라우저 기능을 쓰지 않는다(vitest로 검증).
-import type { AppState, Work, User, Doc, Action, Stmt } from '../lib/types';
+import type { AppState, Work, User, Doc, Action, Stmt, Org } from '../lib/types';
+import { effectiveOrgs, orgChildren, orgOfName, subtreeNames, NO_ORG } from '../lib/orgs';
 
 export type OriginKind = 'root' | 'work' | 'user' | 'doc' | 'action' | 'org' | 'topic';
 export interface Origin {
@@ -9,8 +10,24 @@ export interface Origin {
   id: string; // work/user/doc/action: AppState ID, org/topic: 이름, root: 범위 이름
 }
 
-/** 지도 범위: ① 업무 하나 ② 사람 한 명의 업무 ③ 전체(팀·부서로 접어 봄) */
-export type MapScope = { kind: 'work'; workId: string } | { kind: 'mine'; userId: string } | { kind: 'all'; title?: string };
+/** 지도 범위: ① 업무 하나 ② 사람 한 명의 업무 ③ 조직 하나(팀·부·본부·회사, 아래 조직은 접어 봄) ④ 전체 조직 */
+export type MapScope = { kind: 'work'; workId: string } | { kind: 'mine'; userId: string } | { kind: 'org'; orgId: string } | { kind: 'all'; title?: string };
+
+/** 범위 안의 업무(내 지도: 내 담당, 업무 지도: 그 업무와 바로 이어진 업무, 조직: 그 조직과 아래 조직, 전체: 모두) */
+export function worksInScope(s: AppState, scope: MapScope): Work[] {
+  if (scope.kind === 'mine') return s.works.filter((w) => w.owners.includes(scope.userId));
+  if (scope.kind === 'work') {
+    const w = s.works.find((x) => x.id === scope.workId);
+    if (!w) return [];
+    const near = new Set([w.id, ...(w.parentId ? [w.parentId] : []), ...w.relatedIds, ...w.nextIds, ...s.works.filter((x) => x.nextIds.includes(w.id) || x.parentId === w.id).map((x) => x.id)]);
+    return s.works.filter((x) => near.has(x.id));
+  }
+  if (scope.kind === 'org') {
+    const names = subtreeNames(effectiveOrgs(s), scope.orgId);
+    return s.works.filter((w) => names.has(String(w.dept || '').trim()));
+  }
+  return s.works;
+}
 
 /** 숨김 키(AppState.mapHidden): 「종류:ID」 */
 export const hideKey = (o: Origin) => `${o.kind}:${o.id}`;
@@ -289,36 +306,72 @@ export function deriveMap(s: AppState, scope: MapScope, now = new Date().toISOSt
     return { doc, docs, resolve: (id) => docs.get(id) ?? null, origin, expanded: new Set() };
   }
 
-  // ③ 전체: 팀(업무의 담당 부서)마다 문서 하나 + 부서 문서가 묶음. 같은 사람(사번)·범위 밖으로 이어진 업무는 동일성 연결로 합친다
-  const title = scope.title || '전체 업무';
-  const top = s.works.filter((w) => !w.parentId || !c.works.has(w.parentId));
-  const teams = new Map<string, Work[]>();
-  for (const w of top) {
-    const t = orgLabel(w.dept || '') || '소속 미정';
-    if (!teams.has(t)) teams.set(t, []);
-    teams.get(t)!.push(w);
+  return deriveOrgs(s, c, scope, now, hidden, origin, docs);
+}
+
+/**
+ * ③④ 조직 범위: 조직마다 문서 하나(그 조직이 담당하는 업무), 위 조직 문서가 아래 조직 문서를 묶는다(refs) — 회사 → 본부 → 부 → 팀.
+ * 업무는 자기 담당 조직 문서에 들어가고, 다른 조직의 상위 업무·관련 업무는 「이 지도 밖」 항목으로 그렸다가 동일성 연결로 합친다(팀끼리 연결).
+ * 업무가 하나도 없는 조직(아래까지)은 그리지 않는다. 처음엔 범위 조직만 펼치고 아래 조직은 접는다(화면이 붐비지 않게).
+ */
+function deriveOrgs(s: AppState, c: Ctx, scope: Extract<MapScope, { kind: 'org' } | { kind: 'all' }>, now: string, hidden: Set<string>, origin: Map<string, Origin>, docs: Map<string, UDoc>): Derived {
+  const orgs = effectiveOrgs(s);
+  const deptOf = (w: Work) => orgOfName(orgs, w.dept)?.id ?? `none:${NO_ORG}`;
+  const all: Org[] = s.works.some((w) => !orgOfName(orgs, w.dept)) ? [...orgs, { id: `none:${NO_ORG}`, name: NO_ORG, level: '팀', parentId: null }] : orgs;
+  const direct = new Map<string, Work[]>();
+  for (const w of s.works) {
+    const k = deptOf(w);
+    if (!direct.has(k)) direct.set(k, []);
+    direct.get(k)!.push(w);
   }
-  const root = new DocBuilder('U-all', now, hidden, origin);
-  root.node({ kind: 'root', id: title }, 'root', title);
-  const rootDoc = finish(root, title, '부서');
-  docs.set(rootDoc.universe.id, rootDoc);
-  const expanded = new Set<string>();
-  const teamDocs: UDoc[] = [];
-  [...teams.keys()].sort().forEach((team, i) => {
-    const b = new DocBuilder(`U-team-${i + 1}`, now, hidden, origin);
-    b.teamRoot = team;
-    b.otherTeams = new Set([...teams.keys()].filter((t) => t !== team));
-    b.node({ kind: 'org', id: team }, 'root', team, {}, true);
-    fillWorks(b, c, withDescendants(c, teams.get(team)!.map((w) => w.id)), (w) => (teams.get(team)!.some((t) => t.id === w.id) ? 'ROOT' : null));
+  const count = (id: string): number => (direct.get(id)?.length ?? 0) + orgChildren(all, id).reduce((n, ch) => n + count(ch.id), 0);
+  const known = new Set(all.map((o) => o.id));
+  const roots = scope.kind === 'org' ? all.filter((o) => o.id === scope.orgId) : all.filter((o) => (!o.parentId || !known.has(o.parentId)) && count(o.id) > 0);
+  // 소속 연결(사람 → 조직)은 그 사람 조직 문서에서만 그린다 — 그래서 지도에 들어갈 조직 이름을 먼저 모은다
+  const inTree = new Set<string>();
+  const collect = (o: Org) => {
+    inTree.add(orgLabel(o.name));
+    for (const ch of orgChildren(all, o.id)) if (count(ch.id) > 0) collect(ch);
+  };
+  roots.forEach(collect);
+
+  let seq = 0;
+  const orgDocs: UDoc[] = [];
+  const build = (o: Org): UDoc => {
+    seq += 1;
+    const label = orgLabel(o.name);
+    const b = new DocBuilder(`U-org-${seq}`, now, hidden, origin);
+    b.teamRoot = label;
+    b.otherTeams = new Set([...inTree].filter((x) => x !== label));
+    b.node({ kind: 'org', id: label }, 'root', label, {}, true);
+    const list = direct.get(o.id) || [];
+    const ids = new Set(list.map((w) => w.id));
+    fillWorks(b, c, list, (w) => (w.parentId && ids.has(w.parentId) ? null : 'ROOT'));
     for (const e of b.edges) if (e.source === 'ROOT') e.source = 'N-000';
-    const doc = finish(b, team, '팀');
+    const doc = finish(b, label, o.level);
     docs.set(doc.universe.id, doc);
-    teamDocs.push(doc);
-    rootDoc.refs.push({ child_universe_id: doc.universe.id, added_at: now });
-  });
-  // 동일성 연결: 같은 원래 항목(사람·업무·조직·주제)이 여러 팀 문서에 있으면 하나로 합친다
+    orgDocs.push(doc);
+    for (const ch of orgChildren(all, o.id).filter((x) => count(x.id) > 0).sort((a, b2) => a.name.localeCompare(b2.name, 'ko'))) {
+      const cd = build(ch);
+      doc.refs.push({ child_universe_id: cd.universe.id, added_at: now });
+    }
+    return doc;
+  };
+
+  let rootDoc: UDoc;
+  if (roots.length === 1) rootDoc = build(roots[0]);
+  else {
+    const title = (scope.kind === 'all' && scope.title) || '전체 조직';
+    const root = new DocBuilder('U-all', now, hidden, origin);
+    root.node({ kind: 'root', id: title }, 'root', title);
+    rootDoc = finish(root, title, '전체');
+    docs.set(rootDoc.universe.id, rootDoc);
+    for (const r of roots.sort((a, b2) => a.name.localeCompare(b2.name, 'ko'))) rootDoc.refs.push({ child_universe_id: build(r).universe.id, added_at: now });
+  }
+
+  // 동일성 연결: 같은 원래 항목(사람·업무·조직·주제)이 여러 조직 문서에 있으면 하나로 합친다
   const byKey = new Map<string, string[]>();
-  for (const d of teamDocs) {
+  for (const d of orgDocs) {
     for (const n of d.nodes) {
       const o = origin.get(`${d.universe.id}/${n.id}`);
       if (!o || n.id === 'N-000' || o.kind === 'root' || o.kind === 'action' || o.kind === 'doc') continue;
@@ -345,7 +398,7 @@ export function deriveMap(s: AppState, scope: MapScope, now = new Date().toISOSt
       });
     }
   }
-  return { doc: rootDoc, docs, resolve: (id) => docs.get(id) ?? null, origin, expanded };
+  return { doc: rootDoc, docs, resolve: (id) => docs.get(id) ?? null, origin, expanded: new Set() };
 }
 
 function personHasEmpNo(c: Ctx, key: string) {

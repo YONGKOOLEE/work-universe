@@ -8,6 +8,7 @@ import { WorkCard } from '../components/WorkCard';
 import { WORK_STATUSES, type Work } from '../lib/types';
 import { workIssues } from '../ai/engine';
 import { fmtDate, cx } from '../lib/util';
+import { effectiveOrgs, orgShort, orgTree, subtreeNames } from '../lib/orgs';
 
 export default function Works() {
   const { s, me } = useStore();
@@ -18,20 +19,25 @@ export default function Works() {
   const [owner, setOwner] = useState(me.role === 'lead' ? 'all' : me.id);
   useEffect(() => setOwner(me.role === 'lead' ? 'all' : me.id), [me.id, me.role]);
   const [sort, setSort] = useState(query.get('sort') === 'updated' ? 'updated' : 'tree');
+  const [orgId, setOrgId] = useState('all');
+  const orgs = useMemo(() => effectiveOrgs(s), [s]);
+  const tree = useMemo(() => orgTree(orgs), [orgs]);
   const [view, setView] = useState<'table' | 'cards'>('table');
   useEffect(() => {
     if (query.get('new') === '1') openNewWork();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const orgNames = useMemo(() => (orgId === 'all' ? null : subtreeNames(orgs, orgId)), [orgs, orgId]);
   const filtered = useMemo(() => {
     const t = q.trim();
     return s.works.filter(
       (w) =>
         (!t || [w.name, w.summary, w.id, ...w.keywords].join(' ').includes(t)) &&
         (status === 'all' || (status === 'active' ? w.status === '진행 중' || w.status === '운영 중' : w.status === status)) &&
-        (owner === 'all' || w.owners.includes(owner)),
+        (owner === 'all' || w.owners.includes(owner)) &&
+        (!orgNames || orgNames.has(String(w.dept || '').trim())),
     );
-  }, [s.works, q, status, owner]);
+  }, [s.works, q, status, owner, orgNames]);
 
   const ordered: { w: Work; depth: number }[] = useMemo(() => {
     if (sort === 'updated') return [...filtered].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map((w) => ({ w, depth: 0 }));
@@ -70,7 +76,7 @@ export default function Works() {
       <div className="flex flex-wrap items-center gap-2 text-[13px]" role="tablist" aria-label="업무 범위">
         {[
           { id: me.id, label: `내 업무 ${s.works.filter((w) => w.owners.includes(me.id)).length}` },
-          { id: 'all', label: `팀 전체 ${s.works.length}` },
+          { id: 'all', label: `전체 ${s.works.length}` },
         ].map((c) => (
           <button key={c.id} role="tab" aria-selected={owner === c.id} onClick={() => setOwner(c.id)} className={cx('rounded-full border px-3 py-1 font-medium', owner === c.id ? 'border-brand bg-brand text-onbrand' : 'border-line bg-surface text-muted hover:text-ink')} data-testid={`works-scope-${c.id === 'all' ? 'all' : 'mine'}`}>
             {c.label}
@@ -98,6 +104,15 @@ export default function Works() {
           {s.users.map((u) => (
             <option key={u.id} value={u.id}>
               {u.name}
+            </option>
+          ))}
+        </select>
+        <select id="works-org" className={cx(inputCls, '!w-auto')} value={orgId} onChange={(e) => setOrgId(e.target.value)} aria-label="조직">
+          <option value="all">전체 조직</option>
+          {tree.map(({ org, depth }) => (
+            <option key={org.id} value={org.id}>
+              {'  '.repeat(depth)}
+              {orgShort(org.name)} ({org.level})
             </option>
           ))}
         </select>

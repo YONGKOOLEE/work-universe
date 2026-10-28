@@ -228,7 +228,7 @@ export function DataTransfer({ open, onClose }: { open: boolean; onClose: () => 
                 </ul>
               </div>
               <p className="rounded bg-surface px-2 py-1.5 text-xs">
-                추가될 내용: 사람 <b>{counts.users}</b>명 · 업무 <b>{counts.works}</b>건 (합침 {counts.worksMerged}건) · 문서 <b>{counts.docs}</b>건 · 결정 <b>{counts.decisions}</b>건 · 조치 <b>{counts.actions}</b>건 · 인계 <b>{counts.handovers}</b>건
+                추가될 내용: 사람 <b>{counts.users}</b>명 · 업무 <b>{counts.works}</b>건 (합침 {counts.worksMerged}건) · 문서 <b>{counts.docs}</b>건 · 결정 <b>{counts.decisions}</b>건 · 조치 <b>{counts.actions}</b>건 · 인계 <b>{counts.handovers}</b>건{counts.orgs > 0 && <> · 조직 <b>{counts.orgs}</b>개 추가</>}
               </p>
               <p className="text-2xs text-faint">같은 업무로 합칠 때 지금 업무의 내용이 우선이고, 비어 있는 항목만 채움. 같은 제목·작성일 문서와 같은 결정·조치는 한 번만 들어감 (필요하면 먼저 '내보내기'로 백업)</p>
               <div className="flex gap-2">

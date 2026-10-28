@@ -164,7 +164,7 @@ function MapViewInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const display = useMemo(() => projectView(view, { expanded }), [view, expanded]);
+  const display = useMemo(() => projectView(view, { expanded, deepSummary: true }), [view, expanded]);
 
   useEffect(() => {
     const g = graph.current;

@@ -1,5 +1,5 @@
 // 합쳐 불러오기 — 동료가 내보낸 백업을 지금 데이터에 더한다(팀 지도용). 순수 함수만(브라우저 기능 없음).
-import type { Action, AppState, Cite, Decision, Doc, Handover, HistoryEntry, Snapshot, Stmt, TEvent, User, Work } from './types';
+import type { Action, AppState, Org, Cite, Decision, Doc, Handover, HistoryEntry, Snapshot, Stmt, TEvent, User, Work } from './types';
 import { clone, nextId, uid } from './util';
 // @ts-expect-error 유니버스 순수 모듈(JS) — 비슷한 업무 점수(주제 3, 산출물 유형 2, 이름 낱말 1)
 import { tokensOf, WEIGHTS } from '../../../app/src/rules/insight.js';
@@ -72,6 +72,7 @@ export interface MergeCounts {
   actions: number;
   events: number;
   handovers: number;
+  orgs: number;
 }
 export interface MergePlan {
   people: PersonMatch[];
@@ -143,6 +144,12 @@ const hoKey = (h: Pick<Handover, 'workId' | 'fromId' | 'toId' | 'baseDate'>) => 
 const sameDoc = (c: Doc, d: Doc, mappedWorkIds: string[]) =>
   docKey(c) === docKey(d) && (mappedWorkIds.length === 0 ? c.workIds.length === 0 : mappedWorkIds.some((w) => c.workIds.includes(w)));
 
+/** 조직 합집합: 이름이 지금 없는 들어온 조직 */
+const newOrgs = (current: AppState, incoming: AppState): Org[] => {
+  const have = new Set((current.orgs ?? []).map((o) => o.name));
+  return (incoming.orgs ?? []).filter((o) => !have.has(o.name));
+};
+
 /** 선택을 반영한 추가 건수(미리 보기·요약용) */
 export function previewCounts(current: AppState, incoming: AppState, plan: MergePlan, choices: MergeChoices): MergeCounts {
   const pm = resolvePeople(plan, choices);
@@ -161,6 +168,7 @@ export function previewCounts(current: AppState, incoming: AppState, plan: Merge
     actions: incoming.actions.filter((a) => !act.has(actKey(a, mw(a.workId)))).length,
     events: incoming.events.filter((e) => !ev.has(evKey(e))).length,
     handovers: incoming.handovers.filter((h) => !current.handovers.some((c) => hoKey(c) === hoKey({ ...h, workId: mw(h.workId), fromId: pm.get(h.fromId) ?? h.fromId, toId: pm.get(h.toId) ?? h.toId }))).length,
+    orgs: newOrgs(current, incoming).length,
   };
 }
 
@@ -308,6 +316,20 @@ export function applyMerge(current: AppState, incoming: AppState, choices: Merge
     registeredBy: mu(d.registeredBy),
   });
 
+  // ── 2.5) 조직(이름이 같으면 지금 것 그대로, 없는 것만 새 번호 O-###로 더함. 상위는 이름으로 다시 잇는다) ──
+  const addOrgs = newOrgs(cur, inc);
+  if (addOrgs.length) {
+    cur.orgs = [...(cur.orgs ?? [])];
+    const incName = new Map((inc.orgs ?? []).map((o) => [o.id, o.name]));
+    let oNo = cur.orgs.reduce((m, o) => Math.max(m, Number(/^O-(\d+)$/.exec(o.id)?.[1] ?? 0)), 0);
+    const byName = new Map<string, string>(cur.orgs.map((o) => [o.name, o.id]));
+    for (const o of addOrgs) byName.set(o.name, `O-${String((oNo += 1)).padStart(3, '0')}`);
+    for (const o of addOrgs) {
+      const pName = o.parentId ? incName.get(o.parentId) : undefined;
+      cur.orgs.push({ id: byName.get(o.name)!, name: o.name, level: o.level, parentId: pName ? byName.get(pName) ?? null : null });
+    }
+  }
+
   // ── 3) 사람 ──
   for (const u of inc.users) {
     const to = uMap.get(u.id)!;
@@ -431,7 +453,7 @@ export function applyMerge(current: AppState, incoming: AppState, choices: Merge
   cur.mapHidden = [...hidden];
 
   // ── 8) 기록 ──
-  const summary = `사람 ${inc.users.length}명(같은 사람 ${pm.size}) · 업무 ${inc.works.length}건(합침 ${wm.size}) · 문서 ${counts.docs}건 · 결정 ${counts.decisions} · 조치 ${counts.actions} · 인계 ${counts.handovers}`;
+  const summary = `사람 ${inc.users.length}명(같은 사람 ${pm.size}) · 업무 ${inc.works.length}건(합침 ${wm.size}) · 문서 ${counts.docs}건 · 결정 ${counts.decisions} · 조치 ${counts.actions} · 인계 ${counts.handovers}${counts.orgs ? ` · 조직 ${counts.orgs}` : ''}`;
   const logWork = [...wm.values()][0] ?? wMap.get(inc.works[0]?.id ?? '') ?? cur.works[0]?.id;
   if (logWork) {
     let id: string;

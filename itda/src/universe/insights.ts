@@ -3,7 +3,8 @@
 // 인계 준비도(6항목)는 넣지 않았다: 표준 양식 항목이 업무잇다 「필수 항목 미작성」 점검과 겹치고, 진행 중 메모를 미해결 이슈로 세어 잡음이 많다.
 // 브라우저 기능을 쓰지 않는다(vitest로 검증).
 import type { AppState } from '../lib/types';
-import { deriveMap, type Derived, type MapScope } from './derive';
+import { deriveMap, worksInScope, type Derived, type MapScope } from './derive';
+import { effectiveOrgs, subtreeNames } from '../lib/orgs';
 // @ts-expect-error 유니버스 순수 모듈(JS)
 import { buildView } from '../../../app/src/view/view.js';
 // @ts-expect-error 유니버스 순수 모듈(JS)
@@ -117,6 +118,14 @@ export function handoverInsights(s: AppState, scope: MapScope, asOf: string): In
   if (scope.kind === 'mine') {
     const mineIds = new Set(s.works.filter((w) => w.owners.includes(scope.userId)).map((w) => w.id));
     out = items.filter((x) => (x.kind === 'dense' || x.kind === 'sole_person' ? x.userIds[0] === scope.userId : mineIds.has(x.workIds[0])));
+    for (const k of Object.keys(counts) as InsightKind[]) counts[k] = out.filter((x) => x.kind === k).length;
+  }
+  // 조직 지도: 다른 조직의 상위·관련 업무를 「이 지도 밖」으로 그리므로 같은 이유로 이 조직(아래 포함) 업무·사람 것만 남긴다
+  if (scope.kind === 'org') {
+    const ids = new Set(worksInScope(s, scope).map((w) => w.id));
+    const names = subtreeNames(effectiveOrgs(s), scope.orgId);
+    const member = (u?: string) => !!u && names.has(s.users.find((y) => y.id === u)?.dept ?? '');
+    out = items.filter((x) => (x.kind === 'dense' || x.kind === 'sole_person' ? member(x.userIds[0]) || x.workIds.some((w) => ids.has(w)) : ids.has(x.workIds[0])));
     for (const k of Object.keys(counts) as InsightKind[]) counts[k] = out.filter((x) => x.kind === k).length;
   }
   const rank = { high: 0, mid: 1, low: 2 };

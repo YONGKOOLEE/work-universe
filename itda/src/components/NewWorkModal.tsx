@@ -7,6 +7,7 @@ import { useRouter } from '../lib/router';
 import { detectDuplicates } from '../ai/engine';
 import type { Stmt, Work } from '../lib/types';
 import { cx, nextId } from '../lib/util';
+import { effectiveOrgs, orgShort, orgTree } from '../lib/orgs';
 
 type Choice = 'append' | 'child' | 'separate';
 
@@ -124,6 +125,7 @@ export function NewWorkModal({ open, onClose }: { open: boolean; onClose: () => 
     toast(`${id} 업무를 등록했습니다 — 문서함·타임라인·회의록에서도 선택됨`);
   };
 
+  const orgList = useMemo(() => orgTree(effectiveOrgs(s)), [s]);
   const parentName = s.works.find((w) => w.id === parent)?.name;
 
   return (
@@ -158,8 +160,16 @@ export function NewWorkModal({ open, onClose }: { open: boolean; onClose: () => 
             <textarea id="nw-cur" className={cx(inputCls, 'min-h-[56px]')} value={cur} onChange={(e) => setCur(e.target.value)} placeholder="예: 참가기관 의견 수렴 중" />
           </Field>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="담당 부서" htmlFor="nw-dept">
-              <input id="nw-dept" className={inputCls} value={dept} onChange={(e) => setDept(e.target.value)} />
+            <Field label="담당 조직" htmlFor="nw-dept">
+              <select id="nw-dept" className={inputCls} value={dept} onChange={(e) => setDept(e.target.value)}>
+                {!orgList.some(({ org }) => org.name === dept) && <option value={dept}>{orgShort(dept) || '소속 미정'}</option>}
+                {orgList.map(({ org, depth }) => (
+                  <option key={org.id} value={org.name}>
+                    {'  '.repeat(depth)}
+                    {orgShort(org.name)} ({org.level})
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="담당자 (복수 선택 가능)">
               <div className="flex min-h-[38px] flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-line2 bg-surface px-3 py-2">

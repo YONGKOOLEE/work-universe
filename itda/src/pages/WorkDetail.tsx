@@ -13,6 +13,7 @@ import { Timeline } from '../components/Timeline';
 import { DocRegisterModal } from '../components/DocRegisterModal';
 import { WORK_STATUSES, type Stmt, type Work, type WorkStatus } from '../lib/types';
 import { workIssues } from '../ai/engine';
+import { effectiveOrgs, orgPathText } from '../lib/orgs';
 import { CheckFindings, useClaudeCheck } from '../ai/CheckFindings';
 import { fmtDate, fmtDateTime, relDays, dateKey, cx, uid, today as todayLocal } from '../lib/util';
 
@@ -140,7 +141,7 @@ export default function WorkDetail({ id }: { id: string }) {
             </button>
             )}
           </Meta>
-          <Meta k="소관 부서">{w.dept.replace(' (시연용 가상 부서)', '')}<span className="ml-1 text-2xs text-faint">가상</span></Meta>
+          <Meta k="담당 조직">{orgPathText(effectiveOrgs(s), w.dept)}<span className="ml-1 text-2xs text-faint">가상</span></Meta>
           <Meta k="소관 기관">{w.agency}</Meta>
           <Meta k="최초 등록">{fmtDate(w.createdAt)}</Meta>
           <Meta k="최근 갱신">{fmtDate(w.updatedAt)} <span className="text-2xs text-faint">v{w.version}</span></Meta>

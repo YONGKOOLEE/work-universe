@@ -5,6 +5,7 @@ import { Button, Card, CardHead, Mono, Empty } from '../components/ui';
 import { WorkCard } from '../components/WorkCard';
 import { workIssues } from '../ai/engine';
 import { useAI } from '../ai/claude';
+import { effectiveOrgs, orgPathText } from '../lib/orgs';
 import { handoverInsights, insightSummary, INSIGHT_NAMES } from '../universe/insights';
 import { daysBetween, fmtDate, relDays, cx, localDay } from '../lib/util';
 
@@ -60,7 +61,7 @@ export default function Dashboard() {
           <h1 className="mt-0.5 text-[22px] font-bold tracking-tight">{me.name}님의 업무 현황</h1>
           <p className="mt-1 text-[13px] text-muted" data-testid="app-oneliner">업무잇다는 문서에서 결정·일정·할 일(담당·기한)을 뽑아 업무에 쌓고, 업무 화면을 그대로 인계하며, 쌓인 업무를 「업무 유니버스」 지도로 넓게 봅니다.</p>
         </div>
-        <p className="text-xs text-muted">{me.dept}</p>
+        <p className="text-xs text-muted">{orgPathText(effectiveOrgs(s), me.dept)}</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
@@ -91,7 +92,7 @@ export default function Dashboard() {
                 sub={
                   raw.works.length === 0
                     ? "등록된 업무가 하나도 없음. 동료가 내보낸 파일이 있으면 상단 '데이터 옮기기' → '합쳐 불러오기'로 더하기. 새로 시작하려면 업무 관리에서 업무 등록."
-                    : `팀의 다른 업무 ${raw.works.length - mine.length}건은 업무 관리 「팀 전체」에서 볼 수 있음.`
+                    : `팀의 다른 업무 ${raw.works.length - mine.length}건은 업무 관리 「전체」에서 볼 수 있음.`
                 }
               />
             </Card>

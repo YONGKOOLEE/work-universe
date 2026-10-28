@@ -270,6 +270,7 @@ export interface AppState {
   handovers: Handover[];
   snapshots: Snapshot[];
   mapHidden: string[]; // 지도에서 숨긴 항목 키
+  orgs?: Org[]; // 조직 계층(팀 → 부 → 본부 → 회사, 2026-10-29 사용자 결정). 없으면 업무·사람의 dept 글자를 팀으로 본다(lib/orgs.ts)
   privateMemos?: PrivateMemo[]; // 「나만 보기」 메모 — 쓴 사람에게만 보인다(열람 범위에서 거름, 2026-10-29 사용자 결정)
   searchLog: string[];
   focus: Record<string, string>; // 사용자별로 마지막에 보던 업무 ('all' 또는 업무 ID)
@@ -282,4 +283,19 @@ export interface PrivateMemo {
   userId: string;
   text: string;
   at: string;
+}
+
+/** 조직 단계. 위(회사)에서 아래(팀) 순서 */
+export type OrgLevel = '회사' | '본부' | '부' | '팀';
+export const ORG_LEVELS: OrgLevel[] = ['회사', '본부', '부', '팀'];
+
+/**
+ * 조직(2026-10-29 사용자 결정: 업무가 모여 팀, 팀이 모여 부, 부가 모여 본부, 회사 전체).
+ * 업무·사람의 dept는 조직 이름(name)을 그대로 가리킨다 — 이름을 바꾸면 dept도 함께 바뀐다(lib/orgs.ts editOrg).
+ */
+export interface Org {
+  id: string;
+  name: string;
+  level: OrgLevel;
+  parentId: string | null;
 }

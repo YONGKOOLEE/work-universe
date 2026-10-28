@@ -17,17 +17,19 @@ const citeOk = (c: { docId: string; anchor?: string }) => {
 };
 
 describe('시연 데이터(linked) 참조 무결성', () => {
-  it('사용자: 사번 V-숫자4자리, 팀장 1명, 팀 2개', () => {
-    expect(s.users.length).toBe(7);
+  it('사용자: 사번 V-숫자4자리, 팀장 1명, 소속 조직 5곳(팀 4·부 1)', () => {
+    expect(s.users.length).toBe(10); // 7→10: 조직 계층 시연용 부장·다른 부·본부 팀원(2026-10-29 사용자 결정)
     expect(s.users.every((u) => /^V-\d{4}$/.test(u.empNo ?? ''))).toBe(true);
     expect(s.users.filter((u) => u.role === 'lead').length).toBe(1);
-    expect(new Set(s.users.map((u) => u.dept)).size).toBe(2);
+    expect(new Set(s.users.map((u) => u.dept)).size).toBe(5);
+    expect(s.users.every((u) => (s.orgs || []).some((o) => o.name === u.dept))).toBe(true);
     expect(s.currentUserId).toBe('U1');
     expect(s.mapHidden).toEqual([]);
     expect(s.focus).toEqual({});
   });
   it('업무 참조: owners·ownerHistory·parentId·relatedIds·nextIds·doc.workIds', () => {
-    expect(s.works.length).toBe(10); // 인계 위험 인사이트 시연용 업무 2개(W-009·W-010) 더함, 2026-10-29
+    expect(s.works.length).toBe(15); // 인계 위험 인사이트 시연용 W-009·W-010, 조직 계층 시연용 W-011~W-015(2026-10-29)
+    expect(s.works.every((w) => (s.orgs || []).some((o) => o.name === w.dept))).toBe(true);
     for (const w of s.works) {
       expect(w.owners.every((o) => userIds.has(o)), w.id).toBe(true);
       expect(w.ownerHistory.every((p) => userIds.has(p.userId)), w.id).toBe(true);
@@ -98,9 +100,10 @@ describe('시연 데이터(linked) 참조 무결성', () => {
 });
 
 describe('시연 데이터(linked) → 업무 유니버스 지도', () => {
-  it('전체 지도: 팀 2개·사람 7명 한 번씩·혼자만 아는 일 1건 이상', () => {
+  it('전체 지도: 회사 → 본부 2개, 사람 10명 한 번씩·혼자만 아는 일 1건 이상', () => {
     const d = deriveMap(s, { kind: 'all', title: '가상 부서' }, '2026-10-29T09:00:00.000Z');
-    expect(d.doc.refs.length).toBe(2);
+    expect(d.doc.universe.name).toBe('우리 기관');
+    expect(d.doc.refs.length).toBe(2); // 결제서비스본부·경영지원본부
     const v = buildView(d.doc, d.resolve);
     expect(v.missing).toEqual([]);
     const people = v.nodes.filter((n: any) => n.core_type === 'person' && !n.hidden).map((n: any) => n.label).sort();

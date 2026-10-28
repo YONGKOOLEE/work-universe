@@ -1,13 +1,30 @@
 // ─────────────────────────────────────────────────────────────
 // 시연용 가상 조직 데이터 (T-55) — 모두 가상. 실제 사람·기관·업무가 아니다.
-//  · 한 부서 안 두 팀(디지털신원팀·출금이체팀), 사용자 7명, 업무 8건
+//  · 한 부서 안 두 팀(디지털신원팀·출금이체팀) + 다른 부·본부의 작은 팀(2026-10-29 조직 계층), 사용자 10명, 업무 15건
 //  · demo-linked.json(W-001 등)을 그대로 두고 그 위에 더한다.
 // ─────────────────────────────────────────────────────────────
-import type { Action, AppState, Cite, Decision, Doc, DocType, EventType, Handover, HistoryEntry, Prov, Snapshot, SourceStatus, Stmt, TEvent, User, Work } from '../lib/types';
+import type { Action, AppState, Org, Cite, Decision, Doc, DocType, EventType, Handover, HistoryEntry, Prov, Snapshot, SourceStatus, Stmt, TEvent, User, Work } from '../lib/types';
 import { clone } from '../lib/util';
 
 export const TEAM_ID = '디지털신원팀 (시연용 가상 부서)';
 export const TEAM_PAY = '출금이체팀 (시연용 가상 부서)';
+// 조직 계층(2026-10-29 사용자 결정: 업무 → 팀 → 부 → 본부 → 회사). 지금 두 팀은 전자금융부 아래, 다른 부·본부에는 작은 팀만 둔다
+const V = (n: string) => `${n} (시연용 가상 부서)`;
+export const DEPT_EFIN = V('전자금융부');
+export const TEAM_SETTLE = V('정산관리팀');
+export const TEAM_SEC = V('보안점검팀');
+export const ORGS: Org[] = [
+  { id: 'O-001', name: V('우리 기관'), level: '회사', parentId: null },
+  { id: 'O-002', name: V('결제서비스본부'), level: '본부', parentId: 'O-001' },
+  { id: 'O-003', name: DEPT_EFIN, level: '부', parentId: 'O-002' },
+  { id: 'O-004', name: TEAM_ID, level: '팀', parentId: 'O-003' },
+  { id: 'O-005', name: TEAM_PAY, level: '팀', parentId: 'O-003' },
+  { id: 'O-006', name: V('정산운영부'), level: '부', parentId: 'O-002' },
+  { id: 'O-007', name: TEAM_SETTLE, level: '팀', parentId: 'O-006' },
+  { id: 'O-008', name: V('경영지원본부'), level: '본부', parentId: 'O-001' },
+  { id: 'O-009', name: V('정보보호부'), level: '부', parentId: 'O-008' },
+  { id: 'O-010', name: TEAM_SEC, level: '팀', parentId: 'O-009' },
+];
 const AG = '한빛결제원(가상)';
 
 export const ORG_USERS: User[] = [
@@ -18,6 +35,9 @@ export const ORG_USERS: User[] = [
   { id: 'U5', name: '정하준', dept: TEAM_PAY, title: '주무관', empNo: 'V-1005', role: 'member' },
   { id: 'U6', name: '강예린', dept: TEAM_PAY, title: '주무관', empNo: 'V-1006', role: 'member' },
   { id: 'U7', name: '윤재민', dept: TEAM_PAY, title: '주무관 · 신규 전입', empNo: 'V-1007', role: 'member' },
+  { id: 'U8', name: '서지안', dept: DEPT_EFIN, title: '부장', empNo: 'V-1008', role: 'member' },
+  { id: 'U9', name: '문태오', dept: TEAM_SETTLE, title: '주무관', empNo: 'V-1009', role: 'member' },
+  { id: 'U10', name: '배하린', dept: TEAM_SEC, title: '주무관', empNo: 'V-1010', role: 'member' },
 ];
 
 const T = (d: string) => `${d}T09:00:00.000Z`;
@@ -178,6 +198,48 @@ export function extendLinked(base: AppState): AppState {
       status: '운영 중', createdAt: T('2025-09-01'), updatedAt: T('2026-10-20'), version: 5, topics: ['참가기관'], relatedIds: ['W-005'],
       summary: '분기별 참가기관 협의체 회의 일정·안건·회의록 관리',
       purpose: [st('p1', '참가기관 협의체 회의를 분기마다 열고 안건과 회의록을 관리한다.')],
+    }),
+  );
+
+  // 부·본부까지(2026-10-29): 부 업무가 두 팀 업무를 묶는 상위 업무(통합 과제), 다른 부·본부 팀 업무는 팀을 넘는 연결로
+  s.orgs = clone(ORGS);
+  for (const id of ['W-001', 'W-003', 'W-005']) s.works.find((w) => w.id === id)!.parentId = 'W-011';
+  s.works.push(
+    blankWork({
+      id: 'W-011', name: '출금동의 제도 개편 총괄', dept: DEPT_EFIN, owners: ['U8'], type: '정책·제도',
+      ownerHistory: [{ userId: 'U8', from: '2026-08-01', to: null, note: '업무 등록 시 지정' }],
+      createdAt: T('2026-08-01'), updatedAt: T('2026-10-21'), version: 3, topics: ['참가기관', '약관'],
+      summary: '디지털신원팀·출금이체팀의 출금동의 관련 업무를 부 단위로 묶어 일정·쟁점을 관리',
+      purpose: [st('p1', '비대면 출금동의 추진, 약관 개정, 참가기관 영향도 취합을 한 일정으로 맞춘다.')],
+      current: [st('c1', '두 팀 업무의 마감이 11월에 몰려 있어 주간 점검 회의로 맞추는 중임.')],
+    }),
+    blankWork({
+      id: 'W-012', name: '일별 정산 결과 검증', dept: TEAM_SETTLE, owners: ['U9'],
+      ownerHistory: [{ userId: 'U9', from: '2026-03-02', to: null, note: '업무 등록 시 지정' }],
+      status: '운영 중', createdAt: T('2026-03-02'), updatedAt: T('2026-10-23'), version: 4, topics: ['정산'], relatedIds: ['W-004'], nextIds: ['W-013'],
+      summary: '출금이체팀 월 정산 자료와 일별 정산 결과를 맞춰 보는 검증',
+      purpose: [st('p1', '일별 정산 결과가 월 정산 자료와 맞는지 매일 확인한다.')],
+    }),
+    blankWork({
+      id: 'W-013', name: '정산 마감 보고', dept: TEAM_SETTLE, owners: ['U9'],
+      ownerHistory: [{ userId: 'U9', from: '2026-03-02', to: null, note: '업무 등록 시 지정' }],
+      status: '운영 중', createdAt: T('2026-03-02'), updatedAt: T('2026-10-05'), version: 2, topics: ['정산'],
+      summary: '월말 정산 마감 결과를 부서장에게 보고',
+      purpose: [st('p1', '월말 정산 마감 결과와 차이 건을 정리해 보고한다.')],
+    }),
+    blankWork({
+      id: 'W-014', name: '전자금융 보안 취약점 점검', dept: TEAM_SEC, owners: ['U10'],
+      ownerHistory: [{ userId: 'U10', from: '2026-07-01', to: null, note: '업무 등록 시 지정' }],
+      createdAt: T('2026-07-01'), updatedAt: T('2026-10-16'), version: 2, topics: ['본인확인'], relatedIds: ['W-001'],
+      summary: '비대면 출금동의 등 새 전자금융 절차의 보안 취약점 점검',
+      purpose: [st('p1', '새로 도입하는 비대면 본인확인 절차의 보안 취약점을 점검한다.')],
+    }),
+    blankWork({
+      id: 'W-015', name: '접근권한 정기 점검', dept: TEAM_SEC, owners: ['U10'],
+      ownerHistory: [{ userId: 'U10', from: '2026-07-01', to: null, note: '업무 등록 시 지정' }],
+      status: '운영 중', createdAt: T('2026-07-01'), updatedAt: T('2026-10-02'), version: 2,
+      summary: '전산 시스템 접근권한을 분기마다 점검',
+      purpose: [st('p1', '분기마다 전산 시스템 접근권한 부여 현황을 점검한다.')],
     }),
   );
 

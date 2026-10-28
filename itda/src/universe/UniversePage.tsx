@@ -1,35 +1,41 @@
-// 메뉴 「업무 유니버스」(CR-24 D24-3 ②③): 내 지도 / 팀·부서 지도. 팀·부서 지도는 모두가 본다(사용자 결정 2026-10-29) — 남의 업무는 카드에서 읽기 전용.
+// 메뉴 「업무 유니버스」(CR-24 D24-3 ②③): 내 지도 / 우리 팀 · 우리 부 · 본부 · 회사(조직 계층, 사용자 결정 2026-10-29).
+// 조직 지도는 모두가 본다 — 남의 업무는 카드에서 읽기 전용. 위 조직을 고르면 아래 조직은 접힌 도형으로 시작한다.
 // 화면 시안(2026-10-29): 기본 · 가 우주 · 나 정돈 — 앱 틀은 그대로, 이 공간만 바뀐다(mapStyle.ts).
 import { useEffect, useMemo, useState } from 'react';
 import { Orbit, Briefcase, Users, AlertTriangle, FileText } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { Chips } from '../components/ui';
 import { cx, today } from '../lib/util';
-import type { MapScope } from './derive';
+import { worksInScope, type MapScope } from './derive';
+import { effectiveOrgs, myOrgChain, orgShort, worksOfOrg } from '../lib/orgs';
 import { MapPanel } from './MapPanel';
 import { handoverInsights } from './insights';
 import { MAP_STYLES, scopeClass, useMapStyle } from './mapStyle';
 
-type Scope = 'mine' | 'all';
+type Scope = string; // 'mine' | 'org:<조직 ID>' | 'all'
 
 export default function UniversePage() {
   const { s, me } = useStore();
   const lead = me.role === 'lead';
   const [style, setStyle] = useMapStyle();
-  const [scope, setScope] = useState<Scope>(lead ? 'all' : 'mine');
-  // 사용자를 바꾸면 그 사람의 기본 범위로(팀장 = 팀·부서 지도, 그 외 = 내 지도)
-  useEffect(() => setScope(lead ? 'all' : 'mine'), [me.id, lead]);
-  const orgName = useMemo(() => {
-    const depts = [...new Set(s.works.map((w) => w.dept.replace(/\s*\((?:시연용 )?가상[^)]*\)\s*$/, '').trim()).filter(Boolean))];
-    return depts.length === 1 ? depts[0] : '팀·부서 전체';
-  }, [s.works]);
-  const mapScope: MapScope = useMemo(() => (scope === 'all' ? { kind: 'all', title: orgName } : { kind: 'mine', userId: me.id }), [scope, me.id, orgName]);
+  // 범위 칩: 내 지도 → 내 조직부터 위로(팀 → 부 → 본부 → 회사). 업무가 없는 조직은 뺀다. 맨 위 조직이 전체가 아니면 「전체」를 더한다
+  const chain = useMemo(() => myOrgChain(s, me.id).map((o) => ({ o, n: worksOfOrg(s, o.id).length })).filter((x) => x.n > 0), [s, me.id]);
+  const topAll = chain.length > 0 && chain[chain.length - 1].n === s.works.length;
+  // 기본 범위: 팀장은 한 단계 위 조직(자기 팀과 옆 팀이 접혀 보임), 그 밖은 내 지도
+  const defaultScope = lead && chain.length ? `org:${(chain[1] ?? chain[0]).o.id}` : 'mine';
+  const [scope, setScope] = useState<Scope>(defaultScope);
+  useEffect(() => setScope(defaultScope), [me.id, lead]); // eslint-disable-line react-hooks/exhaustive-deps
+  const mapScope: MapScope = useMemo(() => {
+    if (scope === 'mine') return { kind: 'mine', userId: me.id };
+    if (scope.startsWith('org:') && effectiveOrgs(s).some((o) => o.id === scope.slice(4))) return { kind: 'org', orgId: scope.slice(4) };
+    return { kind: 'all', title: '전체 조직' };
+  }, [scope, me.id, s]);
   const mineCount = s.works.filter((w) => w.owners.includes(me.id)).length;
 
   // 시안의 숫자 띠: 이 지도에 든 업무·사람·문서와 인계 위험
   const stats = useMemo(() => {
     if (style === 'basic') return null;
-    const works = mapScope.kind === 'all' ? s.works : s.works.filter((w) => w.owners.includes(me.id));
+    const works = worksInScope(s, mapScope);
     const ids = new Set(works.map((w) => w.id));
     const people = new Set(works.flatMap((w) => [...w.owners, ...w.ownerHistory.map((p) => p.userId)]));
     const docs = s.docs.filter((d) => d.workIds.some((x) => ids.has(x))).length;
@@ -56,7 +62,8 @@ export default function UniversePage() {
           <Chips<Scope>
             items={[
               { id: 'mine', label: `내 지도 · 업무 ${mineCount}` },
-              { id: 'all', label: `팀·부서 지도 · 업무 ${s.works.length}` },
+              ...chain.map(({ o, n }) => ({ id: `org:${o.id}`, label: `${orgShort(o.name)} · 업무 ${n}` })),
+              ...(topAll ? [] : [{ id: 'all', label: `전체 · 업무 ${s.works.length}` }]),
             ]}
             value={scope}
             onChange={setScope}
@@ -102,9 +109,9 @@ export default function UniversePage() {
         </div>
       ) : (
         <>
-          {mapScope.kind === 'all' && (
+          {mapScope.kind !== 'mine' && (
             <p className={cx('px-3 py-2 text-[12.5px] text-ink', style === 'basic' ? 'rounded-md bg-brandsoft/60' : 'glass rounded-xl border')} data-testid="map-expand-hint">
-              <b>팀 도형(큰 원, ＋숫자)을 두 번 누르면</b> 그 팀의 업무·사람이 펼쳐집니다. 다시 두 번 누르면 접힙니다. 내 업무가 아닌 것은 보기와 「나만 보기」 메모만 할 수 있습니다.
+              <b>조직 도형(큰 원, ＋숫자)을 두 번 누르면</b> 그 조직의 업무·사람과 아래 조직이 펼쳐집니다. 다시 두 번 누르면 접힙니다. 팀끼리 이어진 업무는 접힌 도형 사이의 선으로 보입니다. 내 업무가 아닌 것은 보기와 「나만 보기」 메모만 할 수 있습니다.
             </p>
           )}
           <MapPanel key={scope + me.id} data={s} scope={mapScope} height={640} framed={false} />

@@ -64,7 +64,12 @@ export function exposureOf(view, gid, index = null) {
  * @param {{expanded?: Set<string>}} [opts] 펼친 하위 유니버스 ID
  * @returns {{nodes:object[], edges:object[], rootGid:string, collapsed:Map<string,{hidden_count:number}>}}
  */
-export function projectView(view, { expanded = new Set() } = {}) {
+/**
+ * @param {{expanded?:Set<string>, deepSummary?:boolean}} [opts] deepSummary: 접힌 하위의 하위(손자 이하) 유니버스의 연결도
+ *   가장 가까운 보이는 유니버스 꼭지로 모아 요약 연결로 보인다(업무잇다 조직 지도 — 회사 단계에서도 본부끼리 이어진 선이 보이게, 2026-10-29).
+ *   기본은 끔(기존 동작 그대로).
+ */
+export function projectView(view, { expanded = new Set(), deepSummary = false } = {}) {
   const rootId = view.universe_id;
 
   // 1) 어떤 유니버스를 보여 줄지: 기준 + 그 하위. 펼친 유니버스는 다시 그 하위까지
@@ -113,6 +118,8 @@ export function projectView(view, { expanded = new Set() } = {}) {
   for (const e of view.edges) {
     if (!e.hidden && !e.synthetic && e.core_type === 'contains' && !parentOf.has(e.target)) parentOf.set(e.target, e.source);
   }
+  const parentU = new Map();
+  for (const { parent, child } of view.ref_links) if (!parentU.has(child)) parentU.set(child, parent);
   const repOf = (gid) => {
     let g = gid;
     const seen = new Set();
@@ -121,7 +128,18 @@ export function projectView(view, { expanded = new Set() } = {}) {
       seen.add(g);
       g = parentOf.get(g);
     }
-    return g || null;
+    if (g || !deepSummary) return g || null;
+    // 포함 관계로 못 올라가면: 그 노드의 유니버스부터 위로 올라가 처음 보이는 유니버스 꼭지
+    let u = view.getNode(gid)?.universe_id;
+    const seenU = new Set();
+    while (u && !seenU.has(u)) {
+      seenU.add(u);
+      const root = view.universes.get(u) ? toGid(u, view.universes.get(u).root_node_id) : null;
+      const rep = root ? view.canonical(root) : null;
+      if (rep && visible.has(rep)) return rep;
+      u = parentU.get(u);
+    }
+    return null;
   };
 
   // 4) 연결: 끝점을 대리 노드로 옮기고, 같은 (출발, 도착, 관계)는 하나로 모은다
@@ -130,7 +148,7 @@ export function projectView(view, { expanded = new Set() } = {}) {
   // 숨긴 노드의 연결은 요약 연결로도 되살리지 않는다(그래프와 상세·개요 연결 수가 같은 말을 하도록, 여섯 번째 검토 C-5)
   const hiddenEnd = (g) => { const n = view.getNode(g); return !!n && n.hidden; };
   for (const e of view.edges) {
-    if (e.hidden || !shownU.has(e.universe_id) || hiddenEnd(e.source) || hiddenEnd(e.target)) continue;
+    if (e.hidden || (!deepSummary && !shownU.has(e.universe_id)) || hiddenEnd(e.source) || hiddenEnd(e.target)) continue;
     const s = repOf(e.source);
     const t = repOf(e.target);
     if (!s || !t || s === t) continue;

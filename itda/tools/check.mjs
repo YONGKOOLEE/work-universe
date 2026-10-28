@@ -132,7 +132,7 @@ try {
   });
 
   // 2
-  await check('02 김도윤 내 지도·팀 지도 안내', async () => {
+  await check('02 김도윤 내 지도·조직 지도(팀 → 부 → 본부 → 회사)', async () => {
     await nav('#/universe', mapReady);
     const labels = await H('labels()');
     const n = await H('nodes()');
@@ -140,12 +140,25 @@ try {
     await must(labels.some((l) => String(l).includes('김도윤의 업무')), `중심 라벨 없음: ${labels.slice(0, 5).join('|')}`);
     await must(await H(`click('button', '내 지도')`) || true, '');
     await shot('02-내지도');
-    await must(await H(`click('button', '팀·부서 지도')`), '팀·부서 지도 칩 없음');
-    await sleep(500);
-    // 팀·부서 지도는 모두가 본다(2026-10-29) — 팀원 김도윤도 지도가 그려진다
-    await must(await wait(`window.__h.has('팀 도형') && window.__h.nodes() > 3`, 6000), '팀원에게 팀·부서 지도가 안 보임');
+    // 조직 지도는 모두가 본다(2026-10-29) — 팀원 김도윤도 자기 팀부터 회사까지 칩이 있다
+    for (const c of ['디지털신원팀 · 업무', '전자금융부 · 업무', '결제서비스본부 · 업무', '우리 기관 · 업무']) await must(await ev(`!!window.__h.find('button', ${JSON.stringify(c)})`), `범위 칩 「${c}」 없음`);
+    await must(await H(`click('button', '디지털신원팀 · 업무')`), '팀 칩 누르기 실패');
+    await must(await wait(`window.__h.nodes() > 3 && window.__h.labels().some((l) => String(l).includes('디지털신원팀'))`, 6000), '팀원에게 팀 지도가 안 보임');
     await shot('02-팀지도-팀원');
-    return `노드 ${n}, 중심 「김도윤의 업무」`;
+    // 회사 지도: 처음엔 본부 둘만 접혀 있고, 본부 사이 연결이 선으로 보인다
+    await must(await H(`click('button', '우리 기관 · 업무')`), '회사 칩 누르기 실패');
+    await must(await wait(`window.__h.labels().some((l) => String(l).includes('경영지원본부'))`, 6000), '회사 지도에 본부가 없음');
+    await sleep(600);
+    const top = await ev(`(() => { const cy = window.__h.cy(); return { works: cy.nodes().filter((x) => x.data('core_type') === 'work').length, roots: cy.nodes().filter((x) => x.data('core_type') === 'root').map((x) => x.data('label')), cross: cy.edges().filter((e) => { const ab = String(e.source().data('label')) + '|' + String(e.target().data('label')); return ab.includes('결제서비스본부') && ab.includes('경영지원본부'); }).length }; })()`);
+    await must(top.works === 0, `회사 지도 첫 화면에 업무 ${top.works}개(접혀 있어야 함)`);
+    await must(top.cross > 0, '본부 사이 연결 선 없음');
+    await shot('02-회사지도');
+    // 본부를 두 번 누르면 부가 펼쳐진다
+    const before = await H('nodes()');
+    await ev(`(() => { const t = window.__h.node('결제서비스본부').first(); t.emit('dbltap'); return true; })()`);
+    await must(await wait(`window.__h.labels().some((l) => String(l).includes('전자금융부'))`, 4000), `본부를 펼쳐도 부가 안 보임(노드 ${before})`);
+    await shot('02-회사지도-본부펼침');
+    return `노드 ${n}, 중심 「김도윤의 업무」 / 회사 지도 본부 [${top.roots.join(', ')}], 본부 사이 선 ${top.cross}`;
   });
 
   // 3
@@ -464,10 +477,37 @@ try {
     return `확인 창 → 취소, 인계 화면 받는 사람 ${who}, W-004 담당 ${owners}`;
   });
 
+  await check('15 조직 화면(추가·지우기)·업무 관리 조직 거르기', async () => {
+    await must(await H(`user('박지훈')`), '박지훈 전환 실패');
+    await nav('#/people', `!!document.querySelector('[data-testid="org-section"]')`);
+    const rows = await ev(`document.querySelectorAll('[data-testid="org-row"]').length`);
+    await must(rows >= 10, `조직 ${rows}개`);
+    await H(`setId('org-add-name', '점검용임시팀')`);
+    await H(`setId('org-add-level', '팀')`);
+    await H(`setId('org-add-parent', 'O-009')`);
+    await sleep(150);
+    await must(await H(`clickId('org-add-save')`), '조직 추가 단추 없음');
+    await must(await wait(`document.querySelectorAll('[data-testid="org-row"]').length === ${rows + 1} && window.__h.has('점검용임시팀')`, 3000), '조직이 안 늘어남');
+    await shot('15-조직-추가');
+    const id = await ev(`(() => { const k = Object.keys(localStorage).find((x) => x.startsWith('worklink')); return JSON.parse(localStorage.getItem(k)).orgs.find((o) => o.name === '점검용임시팀').id; })()`);
+    await must(await H(`clickId('org-remove-${id}')`), '조직 지우기 단추 없음');
+    await must(await wait(`document.querySelectorAll('[data-testid="org-row"]').length === ${rows}`, 3000), '조직이 안 지워짐');
+    // 쓰이는 조직은 지우지 못한다
+    await must(await H(`clickId('org-remove-O-010')`), '보안점검팀 지우기 단추 없음');
+    await must(await wait(`!!document.querySelector('[data-testid="org-error"]')`, 2000), '쓰이는 조직 지우기 오류 안내 없음');
+    await nav('#/works', `!!document.getElementById('works-org')`);
+    await ev(`(() => { window.__h.setVal(document.getElementById('works-org'), 'O-009'); return true; })()`);
+    await sleep(300);
+    const n = await ev(`document.querySelectorAll('tbody tr').length`);
+    await must(n === 2, `정보보호부 거르기 결과 ${n}행(2행이어야 함)`);
+    await shot('15-업무관리-조직거르기');
+    return `조직 ${rows}개, 추가·지우기 확인, 쓰이는 조직 지우기 막힘, 정보보호부 업무 ${n}건`;
+  });
+
   await check('13 남의 업무는 읽기 전용·나만 보기 메모', async () => {
     await must(await H(`user('김도윤')`), '김도윤 전환 실패');
-    await nav('#/works', `window.__h.has('팀 전체')`);
-    await must(await H(`clickId('works-scope-all')`), '「팀 전체」 칩 없음');
+    await nav('#/works', `!!document.querySelector('[data-testid="works-scope-all"]')`);
+    await must(await H(`clickId('works-scope-all')`), '「전체」 칩 없음');
     await sleep(300);
     await nav('#/works/W-004', `window.__h.has('출금이체 월 정산')`);
     await must(await ev(`!!document.querySelector('[data-testid="work-readonly"]')`), '남의 업무에 읽기 전용 안내 없음');
