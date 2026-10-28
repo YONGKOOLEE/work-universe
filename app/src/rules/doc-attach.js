@@ -27,6 +27,8 @@ export const DOC_ATTACH_LIMITS = Object.freeze({
   historyLines: 12,
   ownersPerTask: 4,
   headingMax: 40, // 절 제목으로 보는 줄의 길이
+  joinMinPrev: 30, // 끊긴 줄 이어 붙이기: 앞 줄이 이 글자 수 이상일 때만(PDF 줄바꿈 폭 근처. 표 칸처럼 짧은 줄은 잇지 않는다)
+  memoShortMax: 12, // 메모로 만들지 않는 짧은 줄(날짜·이름·부서 꼴, 문장 끝 없음)의 길이
   headerMax: 40, // 쪽 머리글(「A사 … | 업무기록」)로 보는 줄의 길이
 });
 
@@ -138,6 +140,48 @@ function headingOf(t, seq, hasMd) {
 /** 쪽 머리글 꼴: 짧고 「 | 」로 나뉜 줄(PDF를 복사하면 쪽마다 붙는다) */
 const isHeaderLike = (l) => l.length <= DOC_ATTACH_LIMITS.headerMax && /\s[|｜]\s/.test(l);
 
+
+// ── PDF에서 복사한 글 다듬기(쪽 머리글·끊긴 줄) ──────────────────────────────
+
+const SENTENCE_END = /(?:[.!?。:：)）\]】]|다)$/;
+const DATE_ONLY = /^\d{4}\.\s*\d{1,2}\.\s*\d{1,2}\.?$/;
+const DATE_END = /(?:\d{4}\.\s*\d{1,2}\.\s*\d{1,2}\.?|\d{1,2}월\s*\d{1,2}일?|\d{1,2}월\s*[말초중]|\d{1,2}[:：]\d{2})$/;
+const BLOCK_START = /^(?:#{1,6}\s|\d{1,2}\s*[.)]\s*\S|[①-⑳]|[■□▣◆◇●○▶•·*【[]|[-–—]\s)/;
+const LABEL_START = /^\S{2,20}[:：]\s/;
+const pageKey = (l) => l.replace(/\s*\d{1,3}$/, ''); // 쪽 번호가 붙은 머리글(「… 업무기록1」)도 같은 줄로 본다
+
+/** 쪽 머리글(짧고 「 | 」로 나뉜 줄)과 그 앞의 쪽 번호만 있는 줄(1~3자리 숫자)을 뺀다. 머리글은 앞이 쪽 번호이거나 되풀이될 때만 */
+function dropPageHeaders(lines) {
+  const count = new Map();
+  for (const l of lines) count.set(pageKey(l), (count.get(pageKey(l)) || 0) + 1);
+  const drop = new Set();
+  lines.forEach((l, i) => {
+    if (!isHeaderLike(l)) return;
+    const prevNum = i > 0 && /^\d{1,3}$/.test(lines[i - 1]);
+    if (!prevNum && count.get(pageKey(l)) < 2) return;
+    drop.add(i);
+    if (prevNum) drop.add(i - 1);
+  });
+  return lines.filter((_, i) => !drop.has(i));
+}
+
+/** 줄 끝이 문장 끝이 아닌 채 끊긴 줄을 다음 줄과 공백 하나로 잇는다(표·제목·글머리표·날짜만 있는 줄 앞에서는 잇지 않는다). 첫 줄(제목)은 잇지 않는다 */
+function joinBrokenLines(lines) {
+  const out = [];
+  let inTable = false;
+  lines.forEach((l, i) => {
+    if (BLOCK_START.test(l) && /^(?:#{1,6}\s|\d{1,2}\s*[.)]\s)/.test(l)) inTable = false; // 새 절
+    const prev = out.length ? out[out.length - 1] : null;
+    const prevHeading = prev !== null && prev.length <= DOC_ATTACH_LIMITS.headingMax && BLOCK_START.test(prev) && !SENTENCE_END.test(prev);
+    const can = i > 1 && prev !== null && !inTable && prev.length >= DOC_ATTACH_LIMITS.joinMinPrev && !SENTENCE_END.test(prev) && !DATE_END.test(prev) && !prevHeading
+      && !BLOCK_START.test(l) && !LABEL_START.test(l) && !DATE_ONLY.test(l) && !taskHeader(l);
+    if (can) out[out.length - 1] = `${prev} ${l}`;
+    else out.push(l);
+    if (taskHeader(l) || /^(?:과제|할\s?일|실행\s?과제)$/.test(l)) inTable = true; // 표 머리줄 뒤에서는 줄을 잇지 않는다(칸이 한 줄씩 떨어진 표 포함)
+  });
+  return out;
+}
+
 /**
  * 글 → {title, titleLine, sections:[{num, title, lines[]}]}. 첫 절(title '')은 제목 앞 머리말이다.
  * 빈 줄·※ 줄은 버린다. 번호 절 제목은 앞 번호 다음 번호일 때만(목록의 「1. …」을 제목으로 보지 않게)
@@ -149,7 +193,7 @@ export function splitDocument(text) {
   const seen = new Map();
   for (const l of all) if (l) seen.set(l, (seen.get(l) || 0) + 1);
   const running = (l) => (seen.get(l) || 0) >= 2 && l.length >= 6 && l.length <= DOC_ATTACH_LIMITS.headerMax && !/^#{1,6}\s|^\d{1,2}\s*[.)]\s|^[■□▣◆◇●○▶【[]/.test(l) && !/[.다]$/.test(l) && !/	/.test(l) && !/\s{2,}/.test(l) && !taskHeader(l);
-  const lines = all.filter((l) => l && !DOC_ATTACH_WORDS.skipLine.test(l) && !DOC_ATTACH_WORDS.pageNumber.test(l) && !running(l));
+  const lines = joinBrokenLines(dropPageHeaders(all.filter(Boolean)).filter((l) => !DOC_ATTACH_WORDS.skipLine.test(l) && !DOC_ATTACH_WORDS.pageNumber.test(l) && !running(l)));
   const firstAt = lines.findIndex((l) => !isHeaderLike(l)); // 머리글 꼴 줄은 제목 후보에서 뺀다(본문에는 남긴다)
   const first = firstAt >= 0 && firstAt < 4 ? lines[firstAt] : lines[0] || '';
   const head8 = lines.slice(0, 8);
@@ -254,6 +298,13 @@ export function taskHeader(line) {
   return { order, cells: cells ? tokens : null, tokens };
 }
 
+/** 칸이 한 줄씩 떨어진 표(PDF 복사)의 머리줄: 「과제」「담당」「기한」이 이 순서로 연속한 세 줄 → 첫 줄 위치(없으면 -1) */
+function verticalHeaderAt(lines) {
+  const W = DOC_ATTACH_WORDS.head;
+  const one = (l) => squash(l.replace(/할 일/g, '할일').replace(/실행 과제/g, '실행과제'));
+  return lines.findIndex((l, i) => i + 2 < lines.length && W.task.test(one(l)) && W.owner.test(one(lines[i + 1])) && W.due.test(one(lines[i + 2])));
+}
+
 const NAME_PIECE = /^[\p{L}\p{N}·()]{2,20}$/u;
 /** 담당 칸 → 사람(역할) 이름들. 「/」「,」로 나눈다. 읽을 수 없으면 null(그 행을 읽지 않는다) */
 export function ownersOf(cell) {
@@ -303,6 +354,9 @@ function readRow(line, header, ctx = {}) {
     task = cells[header.order.indexOf('task')];
     ownerCell = cells[header.order.indexOf('owner')];
     dueCell = cells[header.order.indexOf('due')];
+  } else if (header.vertical) {
+    ({ task, ownerCell, dueCell } = ctx.parts); // 칸이 한 줄씩 떨어진 표: 세 줄을 한 행으로 묶어 받는다
+    spaced = true;
   } else {
     // 공백만 있는 표(PDF에서 복사한 글): 머리줄이 「과제 담당 기한」 순서일 때만
     if (header.order.join() !== 'task,owner,due') return { why: '공백만 있는 표는 「과제 담당 기한」 순서일 때만 읽음' };
@@ -421,25 +475,35 @@ export function readDocumentRule(text, { doc, targetId, today = todayDefault() }
   const seenTask = new Set();
   const usedSections = [];
   for (const s of sections) {
-    const hi = s.lines.findIndex((l) => taskHeader(l));
-    if (hi < 0) continue;
-    const header = taskHeader(s.lines[hi]);
+    const hi0 = s.lines.findIndex((l) => taskHeader(l));
+    const vi = verticalHeaderAt(s.lines);
+    if (hi0 < 0 && vi < 0) continue;
+    const vertical = vi >= 0 && (hi0 < 0 || vi < hi0);
+    const hi = vertical ? vi + 2 : hi0;
+    const header = vertical ? { cells: null, order: ['task', 'owner', 'due'], tokens: ['과제', '담당', '기한'], vertical: true } : taskHeader(s.lines[hi]);
     usedSections.push(s.title);
     const rowsOf = s.lines.slice(hi + 1);
+    // 칸이 한 줄씩 떨어진 표는 세 줄씩 한 행으로 묶는다(꼴이 맞지 않는 첫 지점부터는 읽지 못한 줄로 둔다 — 억지로 짝을 맞추지 않는다)
+    const units = vertical ? Array.from({ length: Math.ceil(rowsOf.length / 3) }, (_, k) => rowsOf.slice(k * 3, k * 3 + 3)).map((g) => ({ raw: g, line: g.join(' '), parts: g.length === 3 ? { task: g[0], ownerCell: g[1], dueCell: g[2] } : null })) : rowsOf.map((line) => ({ raw: [line], line }));
     // 공백뿐인 표: 담당 낱말이 같은 표의 다른 행에서도 담당으로 쓰였는지 세어 둔다(행마다 한 번)
     const counts = new Map();
     if (!header.cells) {
-      for (const line of rowsOf) {
-        const sp = splitSpaceRow(line);
+      for (const u of units) {
+        const sp = u.parts ? { ownerCell: u.parts.ownerCell } : vertical ? null : splitSpaceRow(u.line);
         if (sp) for (const p of new Set(ownerPieces(sp.ownerCell))) counts.set(p, (counts.get(p) || 0) + 1);
       }
     }
     const rowCtx = { counts, names };
     let okRows = 0;
-    for (const line of rowsOf) {
-      const r = readRow(line, header, rowCtx);
+    for (let ui = 0; ui < units.length; ui += 1) {
+      const { line, parts } = units[ui];
+      const r = vertical && !parts ? { why: '표의 칸이 세 줄(과제·담당·기한)로 이어지지 않음' } : readRow(line, header, { ...rowCtx, parts });
       if (r.skip) continue;
       if (r.why) {
+        if (vertical) { // 이 행부터 끝까지 읽지 못한 줄
+          for (const u of units.slice(ui)) for (const raw of u.raw) unread.push({ text: clip(raw, 160), why: r.why, section: s.title });
+          break;
+        }
         unread.push({ text: clip(line, 160), why: r.why, section: s.title });
         if (okRows > 0) break; // 첫 성공 행 뒤에 읽지 못한 줄이 나오면 표는 거기서 끝난다(표 아래 산문을 할 일로 읽지 않게)
         continue;
@@ -497,6 +561,8 @@ export function readDocumentRule(text, { doc, targetId, today = todayDefault() }
     if (usedSections.includes(s.title)) continue; // 할 일 표가 있는 절의 줄은 메모로 읽지 않는다
     usedMemoSections.push(s.title);
     for (const sentence of itemsOf(s.lines, { speaker: true })) {
+      // 날짜만 있는 줄·짧은 이름/부서 꼴 줄(문장 끝 없음)은 표 칸이 밀려 들어온 조각이라 메모로 만들지 않는다
+      if (DATE_ONLY.test(sentence) || (sentence.length <= DOC_ATTACH_LIMITS.memoShortMax && !/[.!?]$|다$|요$/.test(sentence))) { unread.push({ text: clip(sentence, 160), why: '날짜·이름만 있는 짧은 줄은 메모로 읽지 않음', section: s.title }); continue; }
       if (memos.length >= DOC_ATTACH_LIMITS.maxMemos) { memoCapped += 1; continue; }
       const note = `${clip(sentence, DOC_ATTACH_LIMITS.memoMax)}${sourceOf(category)}`;
       const exists = (doc.events || []).some((e) => e.type === 'memo' && e.payload && e.payload.target_id === targetId && String(e.note || '').trim() === note);

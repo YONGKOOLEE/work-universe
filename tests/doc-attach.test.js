@@ -26,7 +26,7 @@ import { actionPlan } from '../app/src/view/card.js';
 import { FakeEl, installDom, uninstallDom } from './dom-stub.js';
 
 const DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'doc-attach');
-const FIX = Object.fromEntries(fs.readdirSync(DIR).map((f) => [f.slice(0, 1), fs.readFileSync(path.join(DIR, f), 'utf8')]));
+const FIX = Object.fromEntries(fs.readdirSync(DIR).filter((f) => f.endsWith('.txt')).map((f) => [f.slice(0, 1), fs.readFileSync(path.join(DIR, f), 'utf8')]));
 const FAKE_KEY = ['sk', 'ant', 'x'.repeat(8), 'FAKEKEY', 'y'.repeat(12)].join('-');
 const TODAY = '2026-10-28';
 const NOW = '2026-10-28T09:00:00+09:00';
