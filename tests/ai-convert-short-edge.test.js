@@ -235,3 +235,31 @@ test('문서로 더하기 Claude 읽기: 덩어리 제안을 합쳐도 연결 �
   assert.equal(m.edges.length, 1);
   assert.equal(m.edges[0].verb, '작성');
 });
+
+test('칸 덩어리 순서(실제 붙여 넣기 2026 실행 계획 표): 절 제목이 끼어 담당 칸이 멀어도 k번째 과제 ↔ k번째 담당으로 남는다', () => {
+  const t = readFileSync(new URL('./fixtures/ai-convert/paste-2026-실행계획표.txt', import.meta.url), 'utf8');
+  const rows = ['계약별 인상 가능 여부 검토', '고객별 매출 시나리오 및 손익 검증', '안내문·FAQ·개별 변경합의', '요금 엔진·청구서 회귀 테스트', '최종 시행 승인 및 사후 모니터링'];
+  const ok = (quote, person, work) => shortEdgeQuoteOk(t, quote, [person, work], rows);
+  // 아침 2차 시험에서 버려졌던 5개
+  assert.equal(ok('영업/고객지원', '영업팀', '안내문·FAQ·개별 변경합의'), true);
+  assert.equal(ok('영업/고객지원', '고객지원팀', '안내문·FAQ·개별 변경합의'), true);
+  assert.equal(ok('기술/재무정산', '기술운영팀', '요금 엔진·청구서 회귀 테스트'), true);
+  assert.equal(ok('기술/재무정산', '재무정산팀', '요금 엔진·청구서 회귀 테스트'), true);
+  assert.equal(ok('사업본부', '사업본부장', '최종 시행 승인 및 사후 모니터링'), true);
+  // 순번이 다른 짝은 버린다(3번째 담당 칸 ↔ 4번째 과제)
+  assert.equal(ok('영업/고객지원', '영업팀', '요금 엔진·청구서 회귀 테스트'), false);
+  assert.equal(ok('사업본부', '사업본부장', '안내문·FAQ·개별 변경합의'), false);
+  // 행 이름 목록이 없거나 과제 수와 칸 수가 다르면 순서로 맞추지 않는다
+  assert.equal(shortEdgeQuoteOk(t, '사업본부', ['사업본부장', '최종 시행 승인 및 사후 모니터링']), false);
+  assert.equal(shortEdgeQuoteOk(t, '사업본부', ['사업본부장', '최종 시행 승인 및 사후 모니터링'], rows.slice(0, 4)), false);
+});
+
+test('칸 덩어리 순서(2016 붙여 넣기 원문): 다음 절로 밀린 담당 칸도 순번이 맞으면 남는다', () => {
+  const t = readFileSync(new URL('./fixtures/ai-convert/paste-2016회의록.txt', import.meta.url), 'utf8');
+  const rows = ['고객 안내문·FAQ 배포', '계약변경 대상 분류 및 동의 수령', '요금버전·정산 테스트', '인상 후 이탈률·민원 모니터링'];
+  // 「개발운영/재무정산」은 9글자라 짧은 인용이 아니다(보통 검사로 받음). 짧은 칸 「영업기획」은 2번째 담당 칸 ↔ 2번째 과제
+  assert.equal(shortEdgeQuoteOk(t, '영업기획', ['영업기획팀', '계약변경 대상 분류 및 동의 수령'], rows), true);
+  assert.equal(shortEdgeQuoteOk(t, '영업기획', ['영업기획팀', '고객 안내문·FAQ 배포'], rows), false);
+  assert.equal(shortEdgeQuoteOk(t, '서비스사업', ['서비스사업팀', '인상 후 이탈률·민원 모니터링'], rows), true);
+  assert.equal(shortEdgeQuoteOk(t, '서비스사업', ['서비스사업팀', '요금버전·정산 테스트'], rows), false);
+});

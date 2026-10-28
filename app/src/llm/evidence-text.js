@@ -71,9 +71,10 @@ export const EDGE_SHORT_QUOTE = { minChars: 2, lineWindow: 3 };
  * @param {string} text 문서 원문
  * @param {string} quote 모델이 준 인용(짧은 것)
  * @param {string[]} endLabels 연결 양 끝 항목 이름
+ * @param {string[]} [rowLabels] 표의 행 이름이 될 수 있는 항목 이름들(업무 이름 전부) — 칸 덩어리 순서 맞추기(tableRankOk)에 쓴다
  * @returns {boolean}
  */
-export function shortEdgeQuoteOk(text, quote, endLabels) {
+export function shortEdgeQuoteOk(text, quote, endLabels, rowLabels = []) {
   const q = normalizeQuote(quote);
   if (q.length >= QUOTE_MIN) return false; // 짧지 않은 인용은 이 길이 밖(보통 검사)
   if ((q.match(/[\p{L}\p{N}]/gu) || []).length < EDGE_SHORT_QUOTE.minChars) return false;
@@ -87,9 +88,54 @@ export function shortEdgeQuoteOk(text, quote, endLabels) {
   // 인용이 들어 있는 이름(인용 「재무정산」과 「재무정산팀」)은 그 줄 자체라 근거가 못 된다
   const lines = String(text).split(/\r\n?|\n/).map(normalizeQuote);
   const w = EDGE_SHORT_QUOTE.lineWindow;
+  // 칸이 한 줄씩 떨어진 표로 확인되면 표 순서가 정답이다 — 줄 거리 창은 세로 표에서 이웃 행의 과제와도 짝을 맞춰 버린다
+  const ranked = tableRankOk(text, q, named, ends, rowLabels);
+  if (ranked !== null) return ranked;
   return lines.some((line, i) => {
     if (!line.includes(q)) return false;
     const near = lines.slice(Math.max(0, i - w), i + w + 1);
     return named.some((n) => ends.some((l) => l !== n && !l.includes(q) && near.some((x) => x.includes(l))));
   });
+}
+
+/**
+ * 칸 덩어리 순서 맞추기(PDF에서 복사한 표): 칸이 한 줄씩 떨어지면 「과제 줄 n개 → 담당 줄 n개 → 기한 줄 n개」 덩어리로 나오고,
+ * 쪽이 바뀌면 다음 절 제목이 덩어리 사이에 끼어 담당 칸이 과제 이름과 lineWindow줄보다 멀어진다(2026 회의록 실행 계획 표, 사용자 원문 2026-10-28).
+ * 그때는 표 안에서 k번째 과제 줄과 k번째 담당 줄이 짝이다. 아래를 모두 만족할 때만 받는다(억지로 짝 맞추지 않게 좁게):
+ * 인용이 한 줄 전체(칸 하나)이고, 그 위 maxBack줄 안에 머리 낱말 줄(「담당」 등)이 있고, 머리줄부터 긴 문장 줄 전까지(표 범위)에서
+ * 행 이름 줄(rowLabels와 같은 줄)과 칸 줄(날짜·절 제목·머리 낱말이 아닌 짧은 줄)의 수가 같고, 인용 줄의 순번 = 다른 끝(행 이름)의 순번.
+ */
+export const TABLE_RANK = { maxBack: 30, maxSpan: 40, cellMax: 30, headWords: ['과제', '담당', '담당자', '담당부서', '기한', '일정', '완료일', '책임', '책임자', '비고', '구분'] };
+
+/** @returns {boolean|null} 표 구조로 판정했으면 참·거짓, 칸 덩어리 표가 아니면 null(줄 거리 창으로 판정) */
+function tableRankOk(text, q, named, ends, rowLabels) {
+  const rows = new Set((rowLabels || []).map(normalizeQuote).filter(Boolean));
+  if (rows.size < 2) return null;
+  const raw = String(text).split(/\r\n?|\n/).map((l) => l.trim());
+  const norm = raw.map(normalizeQuote);
+  const heads = new Set(TABLE_RANK.headWords);
+  const isDate = (l) => /^\d{4}\.\s*\d{1,2}\s*[\.월]/.test(l) || /^\d{4}(?:-\d{2}|년)/.test(l); // 「2026. 11. 13.」·「2017. 3월 말」·「2026-11」·「2026년 …」
+  const isHeading = (l) => /^\d{1,2}\s*[.)]\s+\S/.test(l) || /^#{1,6}\s/.test(l);
+  for (let i = 0; i < raw.length; i += 1) {
+    if (norm[i] !== q) continue; // 칸 하나가 한 줄 전체여야 한다
+    let h = -1;
+    for (let k = i - 1; k >= Math.max(0, i - TABLE_RANK.maxBack); k -= 1) if (norm[k] === '담당' || norm[k] === '담당자' || norm[k] === '담당부서') { h = k; break; }
+    if (h < 0) continue;
+    const cells = [];
+    const tasks = [];
+    for (let k = h + 1; k < Math.min(raw.length, h + 1 + TABLE_RANK.maxSpan); k += 1) {
+      const l = raw[k];
+      if (!l) continue;
+      if (rows.has(norm[k])) { tasks.push(norm[k]); continue; }
+      if (norm[k].length > TABLE_RANK.cellMax || /다\.?$/.test(l)) break; // 긴 문장 줄이 나오면 표가 끝났다
+      if (heads.has(norm[k]) || isDate(l) || isHeading(l)) continue;
+      cells.push(k);
+    }
+    if (tasks.length < 2 || tasks.length !== cells.length) continue;
+    const rank = cells.indexOf(i);
+    if (rank < 0) continue;
+    const row = tasks[rank];
+    return named.some((n) => ends.some((l) => l !== n && l === row));
+  }
+  return null;
 }

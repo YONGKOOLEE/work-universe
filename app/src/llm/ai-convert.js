@@ -135,7 +135,7 @@ export function verifyAiConvert(text, parsed) {
     if (typeof quote !== 'string') return '원문 인용이 없음';
     const q = normalizeQuote(quote);
     const shape = quoteShapeProblem(q);
-    if (shape === 'short' && ends && shortEdgeQuoteOk(text, quote, ends)) return null;
+    if (shape === 'short' && ends && shortEdgeQuoteOk(text, quote, ends, kept.works.map((w) => w.label))) return null;
     if (shape === 'short') return `원문 인용이 ${AI_CONVERT_MIN_QUOTE}글자 미만`;
     if (shape === 'long') return `원문 인용이 ${QUOTE_MAX}글자 초과(원문을 통째로 베낀 인용)`;
     if (shape) return `원문 인용에 글자·숫자가 ${AI_CONVERT_MIN_QUOTE}개 미만`;
