@@ -46,6 +46,8 @@ export const DOC_ATTACH_WORDS = Object.freeze({
   /** 담당 칸에 있어도 사람(역할)으로 만들지 않는 값 */
   noOwner: ['미정', '미지정', '미배정', '없음', 'tbd', 'n/a', '-', '해당없음', '전원', '전체', '각팀', '각자'],
   skipLine: /^※/,
+  /** 담당 칸 낱말이 동사·형용사 끝맺음(「검토한다」)이면 사람 이름이 아니다. 「윤바다」처럼 「다」로 끝나는 이름은 걸리지 않게 어미 꼴만 본다(지도에 있는 이름은 늘 받는다) */
+  verbTail: /(?:[하한되된했됐있없이였간온갔왔]다|[는겠았었]다)$/,
   /** 쪽 머리글·바닥글: 쪽 번호만 있는 줄(「- 3 -」「3 / 12」「페이지 3」) */
   pageNumber: /^(?:[-–—]\s*\d{1,4}\s*[-–—]|\d{1,4}\s*[/／]\s*\d{1,4}|(?:페이지|쪽|page|p\.?)\s*\d{1,4}(?:\s*[/／]\s*\d{1,4})?)$/i,
   /** 담당 칸에 오면 사람(역할)이 아닌 낱말(접속사·흔한 말) → 그 행을 읽지 않는다 */
@@ -307,7 +309,7 @@ function verticalHeaderAt(lines) {
 
 const NAME_PIECE = /^[\p{L}\p{N}·()]{2,20}$/u;
 /** 담당 칸 → 사람(역할) 이름들. 「/」「,」로 나눈다. 읽을 수 없으면 null(그 행을 읽지 않는다) */
-export function ownersOf(cell) {
+export function ownersOf(cell, names = null) {
   const v = oneLine(cell);
   if (!v) return [];
   if (DOC_ATTACH_WORDS.noOwner.includes(squash(v).toLowerCase())) return [];
@@ -315,7 +317,8 @@ export function ownersOf(cell) {
   if (!pieces.length || pieces.length > DOC_ATTACH_LIMITS.ownersPerTask) return null;
   const out = [];
   for (const p of pieces) {
-    if (!NAME_PIECE.test(p) || /다$/.test(p) || !/\p{L}/u.test(p) || DOC_ATTACH_WORDS.stopOwner.includes(p)) return null; // 숫자뿐·접속사는 담당이 아니다
+    const known = !!(names && names.has(normalizeLabel(p))); // 지도에 있는 사람·조직 이름은 늘 받는다
+    if (!NAME_PIECE.test(p) || (!known && DOC_ATTACH_WORDS.verbTail.test(p)) || !/\p{L}/u.test(p) || (!known && DOC_ATTACH_WORDS.stopOwner.includes(p))) return null; // 숫자뿐·접속사는 담당이 아니다
     if (DOC_ATTACH_WORDS.noOwner.includes(p.toLowerCase())) continue;
     if (!out.includes(p)) out.push(p);
   }
@@ -367,7 +370,7 @@ function readRow(line, header, ctx = {}) {
   }
   task = oneLine(task || '');
   if (!taskNameOk(task)) return { why: '과제 이름을 읽을 수 없음' };
-  const owners = ownersOf(ownerCell || '');
+  const owners = ownersOf(ownerCell || '', ctx.names);
   if (owners === null) return { why: '담당을 사람·역할 이름으로 읽을 수 없음' };
   let uncertain = false;
   if (spaced) {

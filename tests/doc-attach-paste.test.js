@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SAMPLES } from '../app/data/index.js';
-import { readDocumentRule, splitDocument } from '../app/src/rules/doc-attach.js';
+import { ownersOf, readDocumentRule, splitDocument } from '../app/src/rules/doc-attach.js';
 
 const DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'doc-attach');
 const rd = (...p) => fs.readFileSync(path.join(DIR, ...p), 'utf8');
@@ -74,4 +74,17 @@ test('H2-⑥ 쪽 번호만 있는 줄 다음의 쪽 머리글(「1」⏎「A사 
   const text = ['1', head, ...body.slice(0, 10), '2', head, ...body.slice(10)].join('\n');
   assert.equal(read(text).title, '문자메시지 발송 서비스 월정산 업무매뉴얼');
   assert.equal(read([`${head}1`, ...body].join('\n')).title, '문자메시지 발송 서비스 월정산 업무매뉴얼');
+});
+
+test('H2 담당 이름이 「다」로 끝나도(윤바다) 읽는다: 동사 끝맺음만 거절, 지도에 있는 이름은 늘 받는다 — 데모 회의록 고정', () => {
+  const p = read(rd('demo-대사확인.txt'));
+  assert.deepEqual(p.tasks.map((t) => [t.label, t.owners.map((o) => [o.label, !!o.match])]), [
+    ['불일치 원인 코드표 정리', [['서하늘', true]]],
+    ['대사 결과 이중 확인 절차 마련', [['윤바다', true]]],
+  ]);
+  assert.equal(p.memos.filter((m) => m.category === 'issue').length, 1);
+  assert.equal(p.memos.filter((m) => m.category === 'caution').length, 1);
+  assert.equal(ownersOf('검토한다'), null);
+  assert.deepEqual(ownersOf('윤바다', new Set(['윤바다'])), ['윤바다']);
+  assert.equal(ownersOf('진행했다', new Set(['윤바다'])), null);
 });
