@@ -3067,7 +3067,7 @@ async function checkBrowser(browser, port) {
     const calls1 = await calls();
     await clickTestId(s.cdp, 'btn-ai-convert');
     await waitFor(s.cdp, "(document.querySelector('[data-testid=ai-convert-live]') || {}).textContent === '' && !!document.querySelector('[data-testid=import-ai-chip]')", 3000);
-    check('CR-15 T-37 같은 글로 다시 「AI로 변환」을 눌러도 호출이 늘지 않음', calls1 === 1 && (await calls()) === calls1, `호출 ${calls1}→${await calls()}`);
+    check('CR-15 T-37 같은 글로 다시 「AI로 변환」을 눌러도 호출이 늘지 않음', calls1 === 2 && /* 변환 1 + 검토 1(h3) */ (await calls()) === calls1, `호출 ${calls1}→${await calls()}`);
     // 5) 작성 주체를 넣고 가져오기 → 유니버스가 열리고 tags에 「AI 변환」
     await evaluate(s.cdp, "(() => { const i = document.getElementById('import-owner'); i.value = '가상 시스템분석팀'; i.dispatchEvent(new Event('input', { bubbles: true })); })()");
     await sleep(150);

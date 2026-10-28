@@ -19,7 +19,7 @@ import { createFakeClient } from '../app/src/llm/fake-client.js';
 const FAKE_KEY = ['sk', 'ant', 'x'.repeat(8), 'FAKEKEY', 'y'.repeat(12)].join('-');
 const NOW = '2026-10-23T09:00:00.000Z';
 const live = (client, extra = {}) => createProvider('claude_api', { pregen: PREGEN, apiKey: FAKE_KEY, client, cache: createLlmCache(null), ...extra });
-const run = (text, provider, extra = {}) => convertDocumentAsync(text, { provider, now: () => NOW, random: () => 0.5, ...extra });
+const run = (text, provider, extra = {}) => convertDocumentAsync(text, { provider, now: () => NOW, random: () => 0.5, review: false, ...extra }); // 변환 한 번의 동작을 보는 시험은 검토 호출을 끈다(검토는 tests/ai-review.test.js)
 
 // 업무가 여럿인 가상 문서(규칙 변환이 못 나누던 모양)
 const DOC = [
@@ -552,7 +552,7 @@ test('동기 변환: 키가 있으면 규칙 변환 결과 그대로 + ai 손잡
   // 손잡이로 실제 변환
   const r = await withKey.ai.run(DOC);
   assert.equal(r.ok, true);
-  assert.equal(fake.calls.length, 1);
+  assert.equal(fake.calls.length, 2); // 변환 1회 + 검토 1회(AI_REVIEW 기본 켬)
 });
 
 test('규칙 변환은 불변: doc-convert의 export 추가는 동작을 바꾸지 않는다(예시 문서 노드 수·태그)', () => {

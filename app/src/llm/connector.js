@@ -14,7 +14,7 @@ import { KEYLESS_PREGEN_REASON, KEYLESS_REASON, REASON_PREFIX, fingerprint, item
 import { validateDocument } from '../model/validate.js';
 import { describeEvidence, quoteInEvidence } from './evidence-text.js';
 import { buildDraftPrompt, buildExplainPrompt } from './prompts.js';
-import { aiResultToDocument, checkConvertInput, textFingerprint, verifyAiConvert } from './ai-convert.js';
+import { aiResultToDocument, checkConvertInput, contextFingerprint, filterReviewIssues, mergeReview, normalizeConvertContext, reviewDelta, summarizeKept, textFingerprint, verifyAiConvert } from './ai-convert.js';
 import { candidatesInputMessage, checkCandidatesInput, verifyAiCandidates, worksFingerprint } from './ai-candidates.js';
 import { checkExtractInput, existingItems, extractFingerprint, extractInputMessage, verifyAiExtract } from './ai-extract.js';
 import { TEXT_GROUPED_NOTE, isGroupedView } from '../rules/text-extract.js';
@@ -366,27 +366,44 @@ export async function explainInsightAsync(req, { provider = null, exists, view, 
 //   문서 내용이 브라우저 저장소에 남는다(R-28 ⑤: 응답 본문은 저장·내보내기에 넣지 않는다). 같은 문서를 다시 누를 때 호출을 아끼는 것이 목적이라 1건이면 충분하다.
 const convertMemo = new WeakMap();
 
+/** 문서 변환 뒤 검토(두 번째 호출)를 하는가. 기본 켬(문서 읽기 품질). 점검·시험이 바꿀 수 있게 한 곳에 둔다 */
+export const AI_REVIEW = { on: true };
+
 /**
  * 문서 → 유니버스 변환의 실시간 판. 모델 응답에서 원문 인용(quote)이 원문에 있는 항목만 남긴 뒤 12.2 문서로 만든다(llm/ai-convert.js).
- * 호출은 공급자의 convert(text) 하나뿐이다. 응답 검증(스키마·인용·연결 끝)은 여기서 하고, 사람 확인은 가져오기 미리 보기가 한다.
+ * 호출은 공급자의 convert(text, ctx)(+ 검토가 켜져 있으면 review(text, 첫 결과 요약, ctx))뿐이다. 응답 검증(스키마·인용·연결 끝)은 여기서 하고, 사람 확인은 가져오기 미리 보기가 한다.
+ * 검토(review): 첫 결과를 원문과 다시 맞대어 빠진 항목·연결·속성만 더하게 한다. 더한 것도 첫 결과와 똑같이 인용 검증을 거친다(mergeReview → verifyAiConvert).
+ *   검토가 어떤 이유로 실패해도(오류·시간 초과·형식·빈 응답) 첫 결과를 그대로 쓰고 review = {ok:false, reason}만 남긴다 — 변환 전체를 실패시키지 않는다.
+ * 지도에 붙이는 문서(문서로 더하기)는 context = {target, existing}을 넘긴다. 결과의 kept(검증을 통과한 항목·연결)를 그대로 쓰면 유니버스 문서를 만들지 않고도 항목 단위로 다룰 수 있다.
  * @param {string} text 문서 원문
- * @param {{provider:object|null, now?:()=>string, random?:()=>number}} opts
- * @returns {Promise<null | {ok:true, doc:object, report:object, method:'llm', model:string, fallback:null, cached:boolean, dropped:object[]} | {ok:false, fallback:{code:string, reason:string}}>}
- *   null: 실시간 공급자가 아님(키 없음). ok:false: 실패 — 화면이 규칙 변환 결과를 대신 보여 준다(R-04 ③)
+ * @param {{provider:object|null, now?:()=>string, random?:()=>number, context?:{target?:string, existing?:{type:string,label:string}[]}|null, review?:boolean, onStage?:((stage:'read'|'review')=>void)|null}} opts
+ *   context: 붙일 업무 이름과 지도의 기존 항목(유형 키·이름, 200개까지). review: 검토 호출 여부(기본 AI_REVIEW.on). onStage: 각 호출 직전에 'read'·'review'로 불린다(예외는 무시)
+ * @returns {Promise<null | {ok:true, doc:object, report:object, kept:object, method:'llm', model:string, fallback:null, cached:boolean, dropped:object[], review:null|{ok:false, reason:string}|{ok:true, added:{nodes:number, edges:number, memos:number, attrs:number}, issues:{kind:string, label:string, reason:string, quote:string}[], dropped:number, cached:boolean}} | {ok:false, fallback:{code:string, reason:string}}>}
+ *   null: 실시간 공급자가 아님(키 없음). ok:false: 실패 — 화면이 규칙 변환 결과를 대신 보여 준다(R-04 ③). review: 검토를 하지 않았으면 null. report.notes에는 검토 안내 코드를 더하지 않는다(미리 보기 화면은 review 필드를 따로 읽는다)
  */
-export async function convertDocumentAsync(text, { provider = null, now = localNowIso, random } = {}) {
+export async function convertDocumentAsync(text, { provider = null, now = localNowIso, random, context = null, review = AI_REVIEW.on, onStage = null } = {}) {
   if (!isLive(provider) || typeof provider.convert !== 'function') return null;
   const fail = (reason, code = FALLBACK) => ({ ok: false, fallback: { code, reason } });
+  const stage = (name) => {
+    try {
+      if (typeof onStage === 'function') onStage(name);
+    } catch {
+      // 화면 알림이 실패해도 변환은 계속한다
+    }
+  };
   const input = checkConvertInput(text);
   if (!input.ok) return fail(input.reason === 'empty' ? '변환할 문서가 비어 있습니다' : `문서가 너무 깁니다(${input.max.toLocaleString()}자 이하)`);
 
-  const key = `${textFingerprint(text)}|${provider.model || ''}`;
+  const ctx = normalizeConvertContext(context) || {};
+  const key = `${textFingerprint(text)}|${provider.model || ''}|${contextFingerprint(ctx)}`;
   const memo = convertMemo.get(provider);
-  let parsed = memo && memo.key === key ? memo.parsed : null;
+  const hit = memo && memo.key === key ? memo : null;
+  let parsed = hit ? hit.parsed : null;
   const cached = parsed !== null;
   if (!cached) {
+    stage('read');
     try {
-      parsed = await sharedRequest(provider, `convert|${key}`, () => provider.convert(text));
+      parsed = await sharedRequest(provider, `convert|${key}`, () => provider.convert(text, ctx));
     } catch (err) {
       return fail(err && err.message ? err.message : '알 수 없는 오류');
     }
@@ -399,10 +416,46 @@ export async function convertDocumentAsync(text, { provider = null, now = localN
       ? `원문 인용이 확인된 항목이 하나도 없습니다(뺀 항목 ${checked.dropped.length}개)`
       : '응답 형식 오류', checked.reason === 'empty' ? QUOTE_FAIL : FALLBACK);
   }
-  if (!cached) convertMemo.set(provider, { key, parsed });
-  const built = aiResultToDocument(checked.kept, { now: now(), model: provider.model || '', dropped: checked.dropped, random });
+  const entry = hit || { key, parsed, reviewParsed: null };
+  if (!cached) convertMemo.set(provider, entry);
+
+  // 검토(두 번째 호출): 실패해도 첫 결과를 쓴다
+  let kept = checked.kept;
+  let reviewResult = null;
+  if (review) {
+    reviewResult = await runReview();
+  }
+  async function runReview() {
+    if (typeof provider.review !== 'function') return { ok: false, reason: '이 공급자는 검토를 지원하지 않음' };
+    let rp = entry.reviewParsed;
+    const reviewCached = rp !== null;
+    try {
+      if (!reviewCached) {
+        stage('review');
+        const summary = summarizeKept(checked.kept);
+        rp = await sharedRequest(provider, `review|${key}`, () => provider.review(text, summary, ctx));
+      }
+    } catch (err) {
+      return { ok: false, reason: err && err.message ? err.message : '알 수 없는 오류' };
+    }
+    if (!rp || typeof rp !== 'object' || Array.isArray(rp)) return { ok: false, reason: '검토 응답 형식 오류' };
+    const merged = verifyAiConvert(text, mergeReview(parsed, rp, text));
+    if (!merged.ok) return { ok: false, reason: '검토 결과가 형식 검증을 통과하지 못함' };
+    if (!reviewCached) entry.reviewParsed = rp;
+    const added = reviewDelta(checked.kept, merged.kept);
+    if (added.nodes > 0 || added.edges > 0 || added.memos > 0 || added.attrs > 0) kept = merged.kept;
+    return {
+      ok: true,
+      added,
+      issues: filterReviewIssues(text, rp, kept),
+      dropped: Math.max(0, merged.dropped.length - checked.dropped.length),
+      cached: reviewCached,
+    };
+  }
+
+  const built = aiResultToDocument(kept, { now: now(), model: provider.model || '', dropped: checked.dropped, random });
   if (!built.ok) return fail('변환 결과가 형식 검증을 통과하지 못했습니다');
-  return { ok: true, doc: built.doc, report: built.report, method: 'llm', model: provider.model || '', fallback: null, cached, dropped: checked.dropped };
+  return { ok: true, doc: built.doc, report: built.report, kept, method: 'llm', model: provider.model || '', fallback: null, cached, dropped: checked.dropped, review: reviewResult };
 }
 
 // ── AI 연관 후보(CR-15 C, T-38) ──────────────────────────────────────────────
