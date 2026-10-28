@@ -289,7 +289,7 @@ try {
   await cap('AI 업무 검색 — 묻는 업무의 등록 자료로만 답함');
   await typeInto('main input', '비대면 출금동의 현재 추진 경과는?', 60);
   await click('button', '질문', { exact: true });
-  log.push(['검색', await waitPaused(`document.body.innerText.includes('AI 종합 답변') && !document.body.innerText.includes('근거를 찾는 중')`, 120000, ['Claude가 등록 자료에서 근거를 찾는 중…', '실제 약 15~20초 — 영상에서는 줄임'])]);
+  log.push(['검색', await waitPaused(`(document.querySelector('main') || document.body).innerText.includes('AI 종합 답변') && !(document.querySelector('main') || document.body).innerText.includes('근거를 찾는 중')`, 120000, ['Claude가 등록 자료에서 근거를 찾는 중…', '실제 약 15~20초 — 영상에서는 줄임'])]);
   await cap('문장마다 원문 확인·AI 추론·추가 확인 필요', '인용은 앱이 원문과 대조 — 맞지 않으면 확정하지 않음');
   await sleep(2000);
   await scrollMain(260);
