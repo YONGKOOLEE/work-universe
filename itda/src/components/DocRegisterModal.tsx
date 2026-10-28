@@ -141,6 +141,7 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
         else if (result.review) setAiMsg(`꼼꼼히 읽기: 빠진 항목 ${result.review.added}건을 더했고, 확인이 필요한 항목 ${result.review.flagged}건을 표시했습니다.`);
         if (result.truncatedInput) setAiMsg('문서가 길어 앞부분(약 6만 자)만 Claude에 보냈습니다. 뒷부분 내용은 반영 제안에 포함되지 않았습니다.');
       } catch (e) {
+        console.warn('[AI 호출 오류]', (e as any)?.code, String((e as any)?.message ?? e).slice(0, 300));
         const msg = ai.onError(e);
         setAiMsg(`${msg} 이번 분석은 규칙 기반 결과입니다.`);
         result = mockExtract(s, title, paras, def);

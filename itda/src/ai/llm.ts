@@ -59,8 +59,10 @@ function classify(err: any): LlmError {
   if (status === 401 || status === 403) return new LlmError('auth', '키 거부');
   if (status === 429) return new LlmError('rate', '한도');
   if (status === 413) return new LlmError('too_large', '너무 김');
-  if (name === 'APIConnectionTimeoutError') return new LlmError('timeout', '시간 초과');
-  if (name === 'APIConnectionError') return new LlmError('network', '연결 실패');
+  // 번들에서는 클래스 이름이 줄어들 수 있어 SDK 오류 문구로도 가른다
+  const msg = String(err?.message || '');
+  if (name === 'APIConnectionTimeoutError' || /timed out|timeout/i.test(msg)) return new LlmError('timeout', '시간 초과');
+  if (name === 'APIConnectionError' || /connection error|failed to fetch|network/i.test(msg)) return new LlmError('network', '연결 실패');
   if (status && status >= 500) return new LlmError('server', `서버 오류 ${status}`);
   return new LlmError('server', String(err?.message || err).slice(0, 200));
 }

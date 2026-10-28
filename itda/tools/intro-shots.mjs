@@ -16,7 +16,7 @@ const PAGE = pathToFileURL(resolve('dist-single/index.html')).href;
 const PDF = resolve('../.tmp/demo-docs/약관 개정 실무 회의록(시연용).pdf');
 
 await mkdir(OUT, { recursive: true });
-const b = await launch({ port: PORT, profile: `C:/AI/work-universe/.tmp/itda-shots-${PORT}`, width: 1440, height: 900 });
+const b = await launch({ port: PORT, profile: `C:/AI/work-universe/.tmp/itda-shots-${PORT}`, width: 1440, height: 900, network: USE_KEY });
 const { cdp, ev } = b;
 const shot = async (name, clip) => {
   const { data } = await cdp.send('Page.captureScreenshot', { format: 'png', ...(clip ? { clip: { ...clip, scale: 1 } } : {}) });

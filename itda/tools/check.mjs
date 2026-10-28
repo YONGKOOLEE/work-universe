@@ -51,7 +51,7 @@ const HELPERS = `
     nodes() { const cy = this.cy(); return cy ? cy.nodes().length : -1; },
     edges() { const cy = this.cy(); return cy ? cy.edges().length : -1; },
     labels() { const cy = this.cy(); return cy ? cy.nodes().map((n) => n.data('label')) : []; },
-    node(label) { const cy = this.cy(); return cy ? cy.nodes().filter((n) => String(n.data('label')).includes(label)) : null; },
+    node(label) { const cy = this.cy(); if (!cy) return null; const ex = cy.nodes().filter((n) => String(n.data('label')) === label); return ex.length ? ex : cy.nodes().filter((n) => String(n.data('label')).includes(label)); },
     tap(label) { const n = this.node(label); if (!n || !n.length) return false; n.first().emit('tap'); return true; },
     text() { return norm(document.body.innerText); },
     has(t) { return this.text().includes(t); },
@@ -236,12 +236,12 @@ try {
     const n2 = await H('nodes()');
     await must(e1 > e0 || n2 > n1, `잇기 후 선/노드 증가 없음 (edges ${e0}→${e1}, nodes ${n1}→${n2}, 선택: ${pick})`);
     await shot('04-잇기후');
-    if (linkNote) { await must(await H(`user('김도윤')`), '김도윤 복귀 실패'); await nav('#/universe', mapReady); }
+    if (linkNote) { await ev('window.__itdaMap = null; true'); await must(await H(`user('김도윤')`), '김도윤 복귀 실패'); await sleep(500); await H(`click('button', '내 지도')`); await must(await wait(mapReady, 6000), '김도윤 지도 안 그려짐'); await sleep(800); }
     // 숨기기
     await must(await H(`tap('비대면 출금동의 추진')`), '업무 노드 재선택 실패(3)');
     await wait(`!!document.querySelector('[data-testid="map-card"]')`, 3000);
     await must(await H(`clickId('map-hide')`), '숨기기 단추 없음');
-    const gone = await wait(`!window.__h.labels().some((l) => String(l).includes('비대면 출금동의 추진'))`, 4000);
+    const gone = await wait(`!window.__h.labels().some((l) => String(l) === '비대면 출금동의 추진')`, 4000);
     await must(gone, '숨긴 뒤에도 노드가 지도에 남음');
     await shot('04-숨긴후');
     await nav('#/works/W-001');

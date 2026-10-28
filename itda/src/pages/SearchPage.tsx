@@ -43,6 +43,7 @@ export default function SearchPage() {
           setBusy(false);
           return;
         }
+        console.warn('[AI 호출 오류]', (e as any)?.code, String((e as any)?.message ?? e).slice(0, 300));
         const msg = ai.onError(e);
         setAns(askAI(s, t));
         setMeta({ engine: 'mock', note: `${msg} 아래는 규칙 기반 답변입니다.` });
