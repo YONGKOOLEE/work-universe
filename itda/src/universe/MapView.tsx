@@ -23,6 +23,7 @@ const rgb = (name: string) => `rgb(${getComputedStyle(document.documentElement).
 // (가) 우주: 짙은 남색 바탕에서 또렷한 유형 색(dataviz 검증기, 바탕 #0b1430 — 2026-10-29)
 export const SPACE_COLORS = { root: '#a9c1ff', work: '#5b9bff', person: '#2fd3a0', artifact: '#f2b84b', org: '#b48cff', topic: '#ff6fa8' } as const;
 const SPACE_BG = '#0b1430';
+const MIX_NODE = '#142046'; // 가+나 노드 바탕(우주 바탕보다 한 단계 밝게)
 
 // (나) 정돈: 유형마다 선 아이콘(흰 바탕 노드 안). 24×24 선 그림, 색은 유형 색
 const ICONS: Record<string, string> = {
@@ -54,6 +55,41 @@ function themeFor(style: MapStyle) {
       nodeStyle: { 'background-opacity': 0.3, 'border-width': 2, 'underlay-color': col, 'underlay-opacity': 0.22, 'underlay-padding': 7, 'underlay-shape': 'ellipse', 'text-outline-color': SPACE_BG, 'font-weight': 'normal' },
       rootStyle: { 'underlay-opacity': 0.35, 'underlay-padding': 16, 'background-opacity': 0.95 },
       edgeStyle: { width: 1.1, opacity: 0.6, 'arrow-scale': 0.7, 'text-outline-color': SPACE_BG },
+    };
+  }
+  if (style === 'mix') {
+    // 가+나: 우주 바탕·빛 + 짙은 노드 안 유형 아이콘(유형 색) + 이름 띠(선이 지나가도 읽힘)
+    const types = SPACE_COLORS as Record<string, string>;
+    const col = (n: any) => types[n.data('core_type')] || '#8fa3c8';
+    return {
+      ...base,
+      bg: SPACE_BG,
+      text: '#e8eefc',
+      muted: '#a8b4d2',
+      edge: '#4a5d8f',
+      accent: '#8fb4ff',
+      select: '#ffffff',
+      types,
+      nodeStyle: {
+        'background-color': MIX_NODE,
+        'background-opacity': 1,
+        'border-width': 1.8,
+        'background-image': (n: any) => iconUri(n.data('core_type'), col(n)),
+        'background-width': '54%',
+        'background-height': '54%',
+        'background-clip': 'none',
+        'underlay-color': col,
+        'underlay-opacity': 0.2,
+        'underlay-padding': 6,
+        'underlay-shape': 'ellipse',
+        'text-background-color': SPACE_BG,
+        'text-background-opacity': 0.82,
+        'text-background-padding': 2,
+        'text-background-shape': 'roundrectangle',
+        'font-weight': 'normal',
+      },
+      rootStyle: { 'background-color': col, 'background-opacity': 1, 'border-width': 0, 'background-image': () => iconUri('root', SPACE_BG), 'background-width': '50%', 'background-height': '50%', 'underlay-opacity': 0.35, 'underlay-padding': 14 },
+      edgeStyle: { width: 1.1, opacity: 0.65, 'arrow-scale': 0.7, 'text-outline-color': SPACE_BG },
     };
   }
   if (style === 'clean') {
@@ -186,14 +222,14 @@ function MapViewInner({
     graph.current?.setSpaceMarks(marks && marks.cls ? { cls: marks.cls, gids: marks.gids, dim: !!marks.dim } : {});
   }, [marks]);
 
-  return <div ref={box} data-testid={testid} data-map-style={mapStyle} className={mapStyle === 'basic' ? 'w-full rounded-lg border border-line bg-surface' : `map-canvas map-canvas-${mapStyle} w-full`} style={{ height }} />;
+  return <div ref={box} data-testid={testid} data-map-style={mapStyle} className={mapStyle === 'basic' ? 'w-full rounded-lg border border-line bg-surface' : `map-canvas map-canvas-${mapStyle === 'mix' ? 'space' : mapStyle} w-full`} style={{ height }} />;
 }
 
 /** 범례: 지금 그린 유형만 */
 export function MapLegend({ view }: { view: any }) {
   const [style] = useMapStyle();
   const dark = isDark();
-  const colors = style === 'space' ? SPACE_COLORS : dark ? MAP_COLORS.dark : MAP_COLORS.light;
+  const colors = style === 'space' || style === 'mix' ? SPACE_COLORS : dark ? MAP_COLORS.dark : MAP_COLORS.light;
   const present = new Set<string>(view.nodes.filter((n: any) => !n.hidden).map((n: any) => n.core_type));
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-2xs text-muted">
@@ -201,7 +237,7 @@ export function MapLegend({ view }: { view: any }) {
         .filter((k) => present.has(k))
         .map((k) => (
           <span key={k} className="inline-flex items-center gap-1.5">
-            {style === 'clean' ? (
+            {style === 'clean' || style === 'mix' ? (
               <img src={iconUri(k, (colors as any)[k])} alt="" className="h-3.5 w-3.5" />
             ) : (
               <span className="inline-block h-2.5 w-2.5 rounded-full border-2" style={{ borderColor: (colors as any)[k], background: `${(colors as any)[k]}55`, boxShadow: style === 'space' ? `0 0 8px ${(colors as any)[k]}` : undefined }} />

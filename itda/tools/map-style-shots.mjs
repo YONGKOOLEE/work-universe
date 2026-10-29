@@ -11,7 +11,7 @@ const OUT = resolve(ROOT, '../.tmp/map-style');
 const HTML = resolve(ROOT, 'dist-single/index.html');
 const port = Number(process.argv[2] || 9871);
 const width = Number(process.argv[3] || 1440);
-const only = process.env.STYLES ? process.env.STYLES.split(',') : ['basic', 'space', 'clean'];
+const only = process.env.STYLES ? process.env.STYLES.split(',') : ['mix', 'basic', 'space', 'clean'];
 await mkdir(OUT, { recursive: true });
 
 const b = await launch({ port, profile: `C:/AI/work-universe/.tmp/itda-mapstyle-${port}`, width, height: Number(process.env.SHOT_H || 1300) });
@@ -35,7 +35,7 @@ try {
   for (const style of only) {
     await cdp.send('Page.navigate', { url: pathToFileURL(HTML).href });
     await wait('document.readyState === "complete" && !!document.getElementById("user-switch")', 15000);
-    await ev(`localStorage.clear(); ${style === 'basic' ? '' : `localStorage.setItem('itda-map-style', '${style}');`} true`);
+    await ev(`localStorage.clear(); ${`localStorage.setItem('itda-map-style', '${style}');`} true`);
     await cdp.send('Page.reload');
     await sleep(400);
     await wait('document.readyState === "complete" && !!document.getElementById("user-switch")', 15000);
