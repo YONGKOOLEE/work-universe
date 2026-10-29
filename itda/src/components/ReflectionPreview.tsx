@@ -26,7 +26,7 @@ export function ReflectionPreview({ props, setProps, paras, works, users = [], e
           제안 {props.length}건 · 원문 확인 {verifiedN}건 · 별도 확인 필요 {props.length - verifiedN}건
         </span>
         <div className="ml-auto flex gap-1.5">
-          <button className="rounded border border-fact/40 bg-surface px-2 py-1 text-xs font-medium text-fact hover:bg-factsoft" onClick={() => setProps((ps) => ps.map((p) => ({ ...p, approved: p.verified ? true : p.approved })))}>
+          <button className="rounded border border-fact/40 bg-surface px-2 py-1 text-xs font-medium text-fact hover:bg-factsoft" onClick={() => setProps((ps) => ps.map((p) => ({ ...p, approved: p.verified && !p.altOf ? true : p.approved })))}>
             원문 확인 항목 모두 승인
           </button>
           <button className="rounded border border-line2 bg-surface px-2 py-1 text-xs text-muted hover:text-ink" onClick={() => setProps((ps) => ps.map((p) => ({ ...p, approved: false })))}>

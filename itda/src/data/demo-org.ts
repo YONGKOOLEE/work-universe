@@ -35,7 +35,7 @@ export const ORG_USERS: User[] = [
   { id: 'U5', name: '정하준', dept: TEAM_PAY, title: '주무관', empNo: 'V-1005', role: 'member' },
   { id: 'U6', name: '강예린', dept: TEAM_PAY, title: '주무관', empNo: 'V-1006', role: 'member' },
   { id: 'U7', name: '윤재민', dept: TEAM_PAY, title: '주무관 · 신규 전입', empNo: 'V-1007', role: 'member' },
-  { id: 'U8', name: '서지안', dept: DEPT_EFIN, title: '부장', empNo: 'V-1008', role: 'member' },
+  { id: 'U8', name: '서지안', dept: DEPT_EFIN, title: '부장', empNo: 'V-1008', role: 'lead' },
   { id: 'U9', name: '문태오', dept: TEAM_SETTLE, title: '주무관', empNo: 'V-1009', role: 'member' },
   { id: 'U10', name: '배하린', dept: TEAM_SEC, title: '주무관', empNo: 'V-1010', role: 'member' },
 ];

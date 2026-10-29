@@ -1,7 +1,10 @@
 // 업무 지정형 AI 검색 답변 (규칙 기반) — 질문에 나온 업무를 찾아 그 업무 자료로만 답한다.
 import type { AppState, Prov, Stmt, TEvent, Work } from '../lib/types';
 import type { Answer, AnswerLine } from './engine';
-import { dateKey, fmtDate } from '../lib/util';
+import { dateKey, fmtDate, localDay } from '../lib/util';
+import { effectiveOrgs, orgShort } from '../lib/orgs';
+import { isLeft } from '../lib/people';
+import { handoverInsights, INSIGHT_NAMES, namesText, personImpact, riskTotals } from '../universe/insights';
 
 const STOP = new Set(['추진', '업무', '관련', '도입', '현재', '경과', '현황', '사업']);
 const norm = (t: string) => t.replace(/[\s·ㆍ\-_()「」『』'"]/g, '');
@@ -101,5 +104,75 @@ export function workAnswer(s: AppState, w: Work, q: string): Answer {
 export function sampleQuestions(s: AppState, fallback: string[]): string[] {
   if (!s.works.length) return fallback;
   const n = s.works[0].name.replace(/\s*추진$/, '');
-  return [`${n} 현재 추진 경과는?`, `${n} 추진 배경은?`, `${n} 향후 조치사항은?`, `${n} 주요 결정사항은?`];
+  return [`${n} 현재 추진 경과는?`, `${n} 추진 배경은?`, `${n} 향후 조치사항은?`, `${n} 주요 결정사항은?`, ...leaderQuestions(s)];
+}
+
+// ─── 사람·조직 위험 질문(팀장용) — 인사이트 계산으로 답한다 ───
+const josa = (name: string, a: string, b: string) => {
+  const c = name.charCodeAt(name.length - 1) - 0xac00;
+  return c >= 0 && c <= 11171 && c % 28 !== 0 ? a : b;
+};
+const QUIT = /빠지면|없으면|퇴직|전출|휴가|자리를\s*비|부재/; // 그 사람이 없을 때
+const RISKY = /위험|막히|막힘|인계/;
+const OWNS = /담당|맡은|맡고|맡아/;
+/** 팀장용 예시 질문 2개: 맡은 업무가 가장 많은 사람, 첫 업무의 조직 */
+export function leaderQuestions(s: AppState): string[] {
+  const load = new Map<string, number>();
+  for (const w of s.works) for (const o of w.owners) if (!isLeft(s.users.find((u) => u.id === o))) load.set(o, (load.get(o) ?? 0) + 1);
+  const top = [...load.entries()].sort((a, b) => b[1] - a[1])[0];
+  const name = top && s.users.find((u) => u.id === top[0])?.name;
+  const org = orgShort(s.works.find((w) => w.dept)?.dept ?? '');
+  return [...(name ? [`${name}${josa(name, '이', '가')} 빠지면 무엇이 막히나요?`] : []), ...(org ? [`${org}에서 인계 위험이 큰 업무는?`] : [])];
+}
+/** 답할 수 없을 때 붙이는 안내 */
+export const INSIGHT_GUIDE = '사람·조직별 인계 위험(누가 빠지면 무엇이 막히는지)은 「업무 유니버스 인사이트」에서 볼 수 있습니다.';
+
+const L = (text: string): AnswerLine => ({ text, prov: 'fact' }); // 기록에서 규칙으로 센 값
+
+/**
+ * 「정하준이 빠지면 무엇이 막히나요?」「디지털신원팀에서 인계 위험이 큰 업무는?」 같은 질문.
+ * 질문에 사람·조직 이름과 위험 말이 있으면 인사이트 계산으로 답한다. 아니면 null(다른 규칙이 이어받는다)
+ */
+export function riskAnswer(s: AppState, q: string, now = new Date()): Answer | null {
+  const asOf = localDay(now.toISOString());
+  const qn = q.replace(/\s+/g, '');
+  const hit = (re: RegExp) => re.test(qn);
+  if (!hit(QUIT) && !hit(RISKY) && !hit(OWNS)) return null;
+  const pos = (name: string) => qn.indexOf(name.replace(/\s+/g, ''));
+  const user = s.users.filter((u) => u.name.length >= 2 && pos(u.name) >= 0).sort((a, b) => pos(a.name) - pos(b.name))[0];
+  if (user) {
+    // 업무 이름이 질문에 통째로 있고 위험 말이 없으면 업무 답변이 맡는다(「김도윤이 맡은 OO 업무 현황」)
+    const target = findTargetWork(s, q);
+    if (!hit(QUIT) && !hit(RISKY) && target && qn.includes(norm(target.name))) return null;
+    const imp = personImpact(s, user.id, asOf);
+    if (!imp) return null;
+    const nm = user.name;
+    const list = (ws: { name: string }[]) => namesText(ws.map((w) => w.name), 4);
+    const lines: AnswerLine[] = [];
+    if (imp.left) lines.push(L(`${nm}${josa(nm, '은', '는')} 이미 전출·퇴직으로 표시되어 있습니다. 아래는 아직 ${nm} 이름으로 남은 업무 기준입니다.`));
+    lines.push(imp.works.length ? L(`${nm}${josa(nm, '이', '가')} 맡은 진행 중 업무 ${imp.works.length}개: ${list(imp.works)}`) : L(`${nm}${josa(nm, '이', '가')} 맡은 진행 중 업무가 없습니다.`));
+    if (imp.works.length) {
+      lines.push(imp.soleWorks.length ? L(`${imp.left ? '담당이 비어 있는' : '빠지면 담당이 비는'} 업무(혼자만 맡은 일) ${imp.soleWorks.length}개: ${list(imp.soleWorks)}`) : L('혼자만 맡은 업무는 없습니다. 모든 업무에 다른 재직 담당이 있습니다.'));
+      lines.push(imp.blocked.length ? L(`이어서 함께 막히는 업무 ${imp.blocked.length}개: ${list(imp.blocked)} (선후행·산출물로 이어진 업무)`) : L('선후행·산출물로 이어져 함께 막히는 업무는 없습니다.'));
+      lines.push(imp.candidates.length ? L(`인계 후보: ${imp.candidates.map((c) => `${c.name}(${c.direct ? '이전 담당' : '비슷한 일 경험'})`).join(', ')}`) : L('인계 후보: 비슷한 일을 해 본 사람을 찾지 못했습니다.'));
+      if (imp.readiness.length) lines.push(L(`인계 준비도(6점 만점): ${imp.readiness.map((r) => `「${r.work.name}」 ${r.score}/${r.total}`).join(', ')}`));
+    }
+    const ids = [...new Set([...imp.works, ...imp.blocked].map((w) => w.id))];
+    return { query: q, intent: 'risk-person', lines, evidence: [], events: [], works: ids, followups: leaderQuestions(s).filter((x) => !x.startsWith(nm)), scope: `업무 유니버스 인사이트 규칙으로 계산한 결과입니다(회사 전체 지도, ${asOf} 기준)` };
+  }
+  // 조직 이름이 있는 위험 질문
+  if (!hit(QUIT) && !hit(RISKY)) return null;
+  const org = effectiveOrgs(s)
+    .map((o) => ({ o, n: orgShort(o.name).replace(/\s+/g, '') }))
+    .filter((x) => x.n.length >= 2 && qn.includes(x.n))
+    .sort((a, b) => b.n.length - a.n.length)[0]?.o;
+  if (!org) return null;
+  const r = handoverInsights(s, { kind: 'org', orgId: org.id }, asOf);
+  const t = riskTotals(r.items);
+  const top = r.items.filter((x) => x.level !== 'low').slice(0, 5);
+  const lines: AnswerLine[] = [L(`${orgShort(org.name)}의 인계 위험: 위험 업무 ${t.works}건(항목 ${t.items}개, 높음 ${t.high}).`)];
+  for (const x of top) lines.push(L(`${INSIGHT_NAMES[x.kind]} — ${x.title}: ${x.detail}${x.next ? ` · ${x.next}` : ''}`));
+  if (!top.length) lines.push(L('높음·중간 위험 항목이 없습니다.'));
+  const ids = [...new Set(top.flatMap((x) => x.workIds))];
+  return { query: q, intent: 'risk-org', lines, evidence: [], events: [], works: ids, followups: leaderQuestions(s), scope: `업무 유니버스 인사이트 규칙으로 계산한 결과입니다(${orgShort(org.name)} 지도, ${asOf} 기준)` };
 }

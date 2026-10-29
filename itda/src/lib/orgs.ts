@@ -202,3 +202,9 @@ export function myOrgScope(s: Pick<AppState, 'orgs' | 'users' | 'works'>, userId
   if (!org) return { org: null, name: '전체', works: s.works };
   return { org, name: orgShort(org.name), works: worksOfOrg(s, org.id) };
 }
+
+/** 그 사람의 소속 조직과 아래 조직 전부의 이름. 소속 조직을 찾을 수 없으면 빈 집합(조직장 권한 판단용) */
+export function orgScopeNames(s: Pick<AppState, 'orgs' | 'users' | 'works'>, userId: string): Set<string> {
+  const org = myOrgChain(s, userId)[0];
+  return org ? subtreeNames(effectiveOrgs(s), org.id) : new Set<string>();
+}

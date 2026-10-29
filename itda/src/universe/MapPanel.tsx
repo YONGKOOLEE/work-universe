@@ -407,7 +407,7 @@ function WorkCardBody({ w, data, head, onPick, nav }: { w: AppState['works'][num
         </div>
       )}
 
-      {ro && <p className="mt-3 rounded bg-sunken px-2 py-1.5 text-2xs text-muted" data-testid="map-card-readonly">다른 담당자의 업무 — 보기와 「나만 보기」 메모만 할 수 있습니다(고치기는 담당자·팀장).</p>}
+      {ro && <p className="mt-3 rounded bg-sunken px-2 py-1.5 text-2xs text-muted" data-testid="map-card-readonly">다른 담당자의 업무 — 보기와 「나만 보기」 메모만 할 수 있습니다(고치기는 담당자와 그 업무가 속한 조직의 조직장).</p>}
       <div className={cx('mt-3 grid grid-cols-2 gap-1.5', ro && 'hidden')}>
         <EditBtn on={mode === 'owner'} onClick={() => setMode(mode === 'owner' ? null : 'owner')} icon={<UserPlus size={13} />} label="담당 넘기기·추가" testid="map-edit-owner" />
         <EditBtn on={mode === 'link'} onClick={() => setMode(mode === 'link' ? null : 'link')} icon={<Link2 size={13} />} label="업무 잇기" testid="map-edit-link" />
@@ -449,17 +449,22 @@ function FormBox({ children }: { children: React.ReactNode }) {
 function OwnerForm({ w, data, onDone }: { w: AppState['works'][number]; data: AppState; onDone: () => void }) {
   const apply = useApply();
   const others = selectableUsers(data.users).filter((u) => !(w.owners.length === 1 && w.owners[0] === u.id));
-  const [who, setWho] = useState(others.find((u) => !w.owners.includes(u.id))?.id ?? others[0]?.id ?? '');
+  // 받는 사람은 미리 골라 두지 않는다(처음 사용 점검 M-4: 기본값이 그대로 저장되는 실수를 막음)
+  const [who, setWho] = useState('');
   const [how, setHow] = useState<'hand' | 'add'>('hand');
   const [sure, setSure] = useState(false);
   const { raw } = useStore();
   const { nav } = useRouter();
-  const iOwn = w.owners.includes(raw.currentUserId);
+  const iOwn = w.owners.includes(raw.currentUserId); // 아니면 범위 안 조직장(이 폼은 고칠 수 있는 사람에게만 열린다)
   // 확정 전 인계가 있으면 담당만 바로 바꾸기를 막는다(확정 때 담당과 인계 기록이 어긋남, A-M7)
   const pending = pendingHandoverOf(raw, w.id);
   return (
     <FormBox>
-      <select className={inputCls} value={who} onChange={(e) => (setWho(e.target.value), setSure(false))} aria-label="담당할 사람" data-testid="map-owner-who">
+      <label className="block text-[12px] font-semibold text-muted" htmlFor="map-owner-who">
+        받는 사람
+      </label>
+      <select id="map-owner-who" className={inputCls} value={who} onChange={(e) => (setWho(e.target.value), setSure(false))} data-testid="map-owner-who">
+        <option value="">고르세요</option>
         {others.map((u) => (
           <option key={u.id} value={u.id}>
             {u.name} · {u.title}
@@ -521,7 +526,13 @@ function OwnerForm({ w, data, onDone }: { w: AppState['works'][number]; data: Ap
               인계 시작(정식 절차)
             </Button>
           ) : (
-            <p className="text-2xs text-muted">정식 인계(사전 점검·인수 확인·스냅샷)는 지금 담당자가 「업무 인계 관리」에서 시작합니다.</p>
+            // 담당자가 아닌 조직장(범위 안 업무): 담당자 대신 정식 인계를 시작한다(사용자 결정 2026-10-29)
+            <>
+              <Button className="w-full justify-center" variant="primary" onClick={() => nav(`/handover?new=${w.id}&to=${who}`)} disabled={!who || !w.owners.length} data-testid="map-owner-handover-proxy">
+                인계 시작(대신)
+              </Button>
+              <p className="text-2xs text-muted">{w.owners.length ? '조직장으로서 담당자 대신 정식 인계(사전 점검·인수 확인·스냅샷)를 시작합니다. 이력에 「대신 시작」이 남습니다.' : '담당자가 없는 업무라 인계를 시작할 수 없습니다. 아래로 담당만 지정하세요.'}</p>
+            </>
           )}
           <Button className="w-full justify-center" variant="subtle" onClick={() => setSure(true)} disabled={!who} data-testid="map-owner-save">
             담당만 바로 바꾸기

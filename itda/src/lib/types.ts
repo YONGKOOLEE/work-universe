@@ -241,6 +241,8 @@ export interface Handover {
   requests: HandoverRequest[];
   log: { at: string; byId: string; text: string }[];
   snapshotId?: string;
+  /** 조직장이 담당자 대신 시작했으면 그 조직장의 ID(없으면 담당자가 직접 시작). 사전 점검·제출은 이 경우에만 범위 안 조직장도 할 수 있다 */
+  startedById?: string;
   createdAt: string;
 }
 

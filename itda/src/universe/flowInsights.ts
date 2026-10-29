@@ -5,7 +5,8 @@
 // 그리고 키 없이 계산하는 「한눈에」 한 줄(overview). AI를 쓰지 않는다. 브라우저 기능을 쓰지 않는다(vitest로 검증).
 import type { AppState } from '../lib/types';
 import { deriveMap, worksInScope, type MapScope, type UDoc } from './derive';
-import { originIds, type FlowInsight, type FlowKind, type Insight, type InsightResult } from './insights';
+import { isLeft } from '../lib/people';
+import { namesText, originIds, riskTotals, soleWorksOf, type FlowInsight, type FlowKind, type Insight, type InsightResult } from './insights';
 // @ts-expect-error 유니버스 순수 모듈(JS)
 import { buildView } from '../../../app/src/view/view.js';
 // @ts-expect-error 유니버스 순수 모듈(JS)
@@ -91,6 +92,8 @@ export function flowInsights(s: AppState, scope: MapScope, asOf: string): FlowRe
   for (const it of rd.items as any[]) {
     if (it.score > READINESS_LOW) continue;
     push('low_readiness', it.score <= 1 ? 'high' : 'mid', wid(it.work.gid) ?? it.work.gid, it.work.label, `인계 준비 ${it.score}/${it.total} — 빠진 것: ${it.missing.map((m: any) => m.label).join(', ')}`, [it.work.gid]);
+    const last = items[items.length - 1];
+    if (last?.kind === 'low_readiness' && last.id === `low_readiness:${wid(it.work.gid) ?? it.work.gid}`) last.readiness = { score: it.score, total: it.total };
   }
 
   for (const n of view.nodes as any[]) {
@@ -99,9 +102,11 @@ export function flowInsights(s: AppState, scope: MapScope, asOf: string): FlowRe
     if (!w || !inScope.has(w)) continue;
     const r = similarExperts(view, { works: [n.gid], asOf });
     if (r.status !== 'ok') continue;
-    const direct = (r.direct as any[]).slice(0, SIMILAR_SHOW);
+    // 전출·퇴직한 사람은 인계 후보가 될 수 없으니 뺀다
+    const stays = (p: any) => !isLeft(s.users.find((u) => u.id === originIds(d, view, [p.gid]).userIds[0]));
+    const direct = (r.direct as any[]).filter(stays).slice(0, SIMILAR_SHOW);
     const directIds = new Set((r.direct as any[]).map((p) => p.gid));
-    const like = (r.people as any[]).filter((p) => !directIds.has(p.gid)).slice(0, SIMILAR_SHOW);
+    const like = (r.people as any[]).filter((p) => !directIds.has(p.gid) && stays(p)).slice(0, SIMILAR_SHOW);
     if (!direct.length && !like.length) continue;
     const parts = [
       direct.length ? `직접 해 본 이전 담당: ${direct.map((p) => p.label).join(', ')}` : '',
@@ -141,27 +146,61 @@ const bump = (m: Map<string, Set<string>>, k: string, id: string) => {
   m.get(k)!.add(id);
 };
 
-/** 범위의 「한눈에」 한 줄: 업무 수·높은 위험·가장 많이 걸린 사람/주제/외부기관. 같은 입력이면 같은 결과 */
+const josa = (name: string, a: string, b: string) => {
+  const c = name.charCodeAt(name.length - 1) - 0xac00;
+  return c >= 0 && c <= 11171 && c % 28 !== 0 ? a : b;
+};
+
+/** 가장 위험한 1~2건을 문장으로(AI 없이): ① 전출·퇴직·담당 끊긴 업무 ② 빠지면 가장 많이 막히는 사람 ③ (①②가 없으면) 혼자만 아는 업무 */
+function headlines(s: AppState, risk: InsightResult): string[] {
+  const out: string[] = [];
+  const gaps = risk.items.filter((x) => x.kind === 'gap' && x.level === 'high');
+  if (gaps.length) {
+    const left = gaps.filter((x) => x.detail.includes('전출·퇴직'));
+    if (left.length) {
+      const who = [...new Set(left.flatMap((x) => s.works.find((w) => w.id === x.workIds[0])?.owners ?? []).map((o) => s.users.find((u) => u.id === o)).filter((u) => isLeft(u)).map((u) => u!.name))];
+      out.push(`전출·퇴직한 ${who.join('·')}의 업무 ${left.length}개가 담당 없이 남았습니다`);
+    } else out.push(`담당자 없는 업무 ${gaps.length}개(${namesText(gaps.slice(0, 2).map((x) => x.title), 2)})`);
+  }
+  const people = risk.items
+    .filter((x) => x.kind === 'sole_person' && x.userIds[0])
+    .map((x) => ({ x, n: soleWorksOf(s, x.userIds[0]).length + (x.blockedWorkIds?.length ?? 0) }))
+    .sort((a, b) => b.n - a.n)[0];
+  if (people && people.n > 0) {
+    const nm = s.users.find((u) => u.id === people.x.userIds[0])?.name ?? people.x.title;
+    out.push(`${nm}${josa(nm, '이', '가')} 빠지면 업무 ${people.n}개가 막힙니다${people.x.readiness ? ` · 인계 준비 ${people.x.readiness.score}/${people.x.readiness.total}` : ''}`);
+  }
+  if (!out.length) {
+    const solo = risk.items.filter((x) => x.kind === 'solo' && x.level === 'high');
+    if (solo.length) out.push(`한 사람만 아는 업무 ${solo.length}개(${namesText(solo.slice(0, 2).map((x) => x.title), 2)})`);
+  }
+  return out.slice(0, 2);
+}
+
+/**
+ * 범위의 「한눈에」 한 줄: 가장 위험한 1~2건을 문장으로 + 짧은 숫자 요약(업무 수 · 위험 업무 n건(항목 m개)).
+ * 가장 많이 맡은 사람·주제·외부기관은 값(people·topics·agencies)으로만 남기고 문장에는 넣지 않는다. 같은 입력이면 같은 결과
+ */
 export function overview(s: AppState, scope: MapScope, risk: InsightResult, flow: FlowResult): Overview {
   const works = worksInScope(s, scope);
   const byUser = new Map<string, Set<string>>();
   const byTopic = new Map<string, Set<string>>();
   const byAgency = new Map<string, Set<string>>();
   for (const w of works) {
-    for (const u of w.owners) bump(byUser, s.users.find((x) => x.id === u)?.name ?? u, w.id);
+    // 전출·퇴직한 사람은 담당에서 빠진 것으로 센다
+    for (const u of w.owners) if (!isLeft(s.users.find((x) => x.id === u))) bump(byUser, s.users.find((x) => x.id === u)?.name ?? u, w.id);
     for (const t of w.topics || []) bump(byTopic, String(t).trim(), w.id);
     for (const p of w.partners || []) bump(byAgency, agencyName(p.name), w.id);
     const ag = agencyName(w.agency || '');
     if (ag && !UNKNOWN_AGENCY.test(ag)) bump(byAgency, ag, w.id);
   }
-  const high = [...risk.items, ...flow.items].filter((x) => x.level === 'high').length;
+  const all = [...risk.items, ...flow.items];
+  const high = all.filter((x) => x.level === 'high').length;
   const people = topN(byUser, 1, 1);
   const topics = topN(byTopic, 2, 2);
   const agencies = topN(byAgency, 2, 2);
-  const fmt = (l: { name: string; count: number }[]) => l.map((x) => `${x.name}(${x.count}개)`).join(', ');
-  const parts = [`업무 ${works.length}개`, `높은 위험 ${high}건`];
-  if (people.length) parts.push(`가장 많이 맡은 사람 ${fmt(people)}`);
-  if (topics.length) parts.push(`가장 많이 걸린 주제 ${fmt(topics)}`);
-  if (agencies.length) parts.push(`가장 많이 걸린 외부기관 ${fmt(agencies)}`);
-  return { works: works.length, high, people, topics, agencies, text: parts.join(SEP) };
+  const t = riskTotals(all);
+  const tail = `업무 ${works.length}개 · 위험 업무 ${t.works}건(항목 ${t.items}개${high ? `, 높음 ${high}` : ''})`;
+  const text = [...headlines(s, risk), tail].join(SEP);
+  return { works: works.length, high, people, topics, agencies, text };
 }

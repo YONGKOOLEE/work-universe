@@ -20,7 +20,7 @@ import { fmtDate, fmtDateTime, relDays, dateKey, cx, uid, today as todayLocal } 
 type Tab = 'overview' | 'map' | 'docs' | 'timeline' | 'meetings' | 'actions' | 'history';
 
 export default function WorkDetail({ id }: { id: string }) {
-  const { s, update, log, touch, toast } = useStore();
+  const { s, update, log, touch, toast, me } = useStore();
   const { query, nav } = useRouter();
   const [tab, setTab] = useState<Tab>((query.get('tab') as Tab) || 'overview');
   const [edit, setEdit] = useState(false);
@@ -32,8 +32,10 @@ export default function WorkDetail({ id }: { id: string }) {
   // Claude 점검(키가 있을 때, 「기록 점검」 줄의 단추). 결과는 화면에만
   const cc = useClaudeCheck(s, id);
   const w = s.works.find((x) => x.id === id);
-  // 남의 업무는 읽기 전용(사용자 결정 2026-10-29: 팀 업무는 모두가 보고, 고치기는 담당자·팀장)
+  // 남의 업무는 읽기 전용(사용자 결정 2026-10-29: 팀 업무는 모두가 보고, 고치기는 담당자와 자기 조직 범위의 조직장)
   const ro = !useCanEdit(id);
+  // 담당자가 아닌 조직장이 범위 안 업무에서 누르는 「인계 시작」은 담당자 대신 시작하는 흐름이다
+  const proxyStart = !ro && !!w && !w.owners.includes(me.id);
   useEffect(() => {
     if (w) setFocus(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -124,10 +126,10 @@ export default function WorkDetail({ id }: { id: string }) {
               </Button>
             )}
             {/* 남의 업무(읽기 전용)는 흐리게 하고 이유를 보인다(처음 사용 점검 M-10) */}
-            <span title={ro ? '지금 담당자(또는 팀장)만 인계를 시작할 수 있습니다. 담당자에게 요청하세요.' : undefined}>
+            <span title={ro ? '지금 담당자 또는 이 업무가 속한 조직의 조직장만 인계를 시작할 수 있습니다. 담당자에게 요청하세요.' : undefined}>
               <Button variant="subtle" disabled={ro} onClick={() => nav(`/handover?new=${w.id}`)} data-testid="work-handover-start">
                 <ArrowRightLeft size={14} />
-                인계 시작
+                {proxyStart ? '인계 시작(대신)' : '인계 시작'}
               </Button>
             </span>
           </div>
@@ -136,7 +138,7 @@ export default function WorkDetail({ id }: { id: string }) {
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-sunken/60 px-4 py-2.5 text-[13px] text-muted" data-testid="work-readonly">
             <Eye size={14} className="shrink-0" />
             <span className="flex-1">
-              {ownerNames(s, w.owners) || '담당자 없음'}의 업무입니다. 보기만 할 수 있고, 고치기는 담당자와 팀장이 합니다. 「나만 보기」 메모는 남길 수 있습니다.
+              {ownerNames(s, w.owners) || '담당자 없음'}의 업무입니다. 보기만 할 수 있고, 고치기는 담당자와 이 업무가 속한 조직의 조직장(팀장·부장)이 합니다. 「나만 보기」 메모는 남길 수 있습니다.
             </span>
           </div>
         )}

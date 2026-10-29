@@ -7,7 +7,7 @@ import type { AppState, Doc, Prov, Work, Cite, RelType } from '../lib/types';
 import { mapRiskIssues } from '../universe/risk';
 import { conceptsOf, similarity, coreConcepts, conceptLabel, dice } from './concepts';
 import { daysBetween, fmtDate, dateKey, localDay } from '../lib/util';
-import { findTargetWork, workAnswer } from './workAnswer';
+import { findTargetWork, INSIGHT_GUIDE, riskAnswer, workAnswer } from './workAnswer';
 
 export const workText = (w: Work) => [w.name, w.summary, ...w.keywords].join(' ');
 
@@ -244,6 +244,9 @@ export interface Answer {
 
 export function askAI(s: AppState, raw: string): Answer {
   const q = raw.replace(/\s+/g, ' ').trim();
+  // 사람·조직의 인계 위험 질문(팀장용)은 인사이트 계산으로 답함
+  const risk = riskAnswer(s, q);
+  if (risk) return risk;
   // 질문이 특정 업무를 가리키면 그 업무 자료로만 답함
   const target = findTargetWork(s, q) ?? (s.works.length === 1 ? s.works[0] : null);
   if (target) return workAnswer(s, target, q);
@@ -256,7 +259,7 @@ export function askAI(s: AppState, raw: string): Answer {
     return {
       query: q,
       intent: 'none',
-      lines: [{ text: '현재 등록된 업무·문서·회의록에서는 해당 내용을 확인할 수 없습니다. 관련 문서를 문서함에 등록하면 다시 검색할 수 있습니다.', prov: 'unverified' }],
+      lines: [{ text: '현재 등록된 업무·문서·회의록에서는 해당 내용을 확인할 수 없습니다. 관련 문서를 문서함에 등록하면 다시 검색할 수 있습니다.', prov: 'unverified' }, { text: INSIGHT_GUIDE, prov: 'unverified' }],
       evidence: [],
       events: [],
       works: [],
@@ -269,6 +272,7 @@ export function askAI(s: AppState, raw: string): Answer {
     lines: [
       { text: `질문과 일치하는 등록 자료를 찾았습니다: 문서 ${docHits.length}건, 타임라인 이벤트 ${evHits.length}건, 업무 ${workHits.length}건.`, prov: 'fact' },
       { text: '질문에 대한 직접적인 답변 문장은 등록 문서에서 찾지 못했습니다. 아래 근거 자료를 직접 확인해 주세요.', prov: 'unverified' },
+      { text: INSIGHT_GUIDE, prov: 'unverified' },
     ],
     evidence: docHits.slice(0, 5).map((d) => ({ docId: d.id, why: '키워드 일치' })),
     events: evHits.slice(0, 6).map((e) => e.id),
@@ -282,6 +286,8 @@ export const SAMPLE_QUESTIONS = [
   '출금동의 업무의 추진 배경은?',
   '출금동의 업무의 향후 조치사항은?',
   '출금동의 업무의 주요 결정사항은?',
+  '정하준이 빠지면 무엇이 막히나요?',
+  '디지털신원팀에서 인계 위험이 큰 업무는?',
 ];
 
 export function docOf(s: AppState, id: string): Doc | undefined {

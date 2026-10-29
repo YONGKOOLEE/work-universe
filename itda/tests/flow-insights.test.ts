@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { createSeed } from '../src/data/seed';
 import { worksInScope } from '../src/universe/derive';
-import { handoverInsights } from '../src/universe/insights';
+import { handoverInsights, riskTotals } from '../src/universe/insights';
 import { FLOW_KINDS, flowInsights, overview, READINESS_LOW } from '../src/universe/flowInsights';
 import { orgShort } from '../src/lib/orgs';
 
@@ -99,8 +99,10 @@ describe('한눈에 한 줄', () => {
     expect(ov.people).toEqual([{ name: '정하준', count: 3 }]);
     const settle = s.works.filter((w) => (w.topics || []).includes('정산')).length;
     expect(ov.topics[0]).toEqual({ name: '정산', count: settle });
-    expect(ov.text).toContain(`업무 ${s.works.length}개 · 높은 위험 ${ov.high}건`);
-    expect(ov.text).toContain(`정산(${settle}개)`);
+    // 변경(2026-10-29 M-8): 숫자 요약이 「업무 n개 · 높은 위험 n건」에서 「업무 n개 · 위험 업무 n건(항목 m개, 높음 h)」로 단위를 나눔. 주제 나열은 문장에서 뺌(값 topics는 유지)
+    const all = [...r.items, ...f.items];
+    const totals = riskTotals(all);
+    expect(ov.text).toContain(`업무 ${s.works.length}개 · 위험 업무 ${totals.works}건(항목 ${all.length}개, 높음 ${ov.high})`);
     expect(ov.agencies.every((a) => a.count >= 2)).toBe(true);
   });
   it('같은 입력이면 같은 문장', () => {
@@ -111,6 +113,6 @@ describe('한눈에 한 줄', () => {
     const mine = overview(s, sc, handoverInsights(s, sc, AS_OF), flowInsights(s, sc, AS_OF));
     expect(mine.works).toBe(s.works.filter((w) => w.owners.includes('U1')).length);
     const none = overview(s, { kind: 'mine', userId: 'U-NONE' }, { items: [], counts: {} as any, notes: [] }, { items: [], counts: {} as any, notes: [] });
-    expect(none.text).toBe('업무 0개 · 높은 위험 0건');
+    expect(none.text).toBe('업무 0개 · 위험 업무 0건(항목 0개)');
   });
 });

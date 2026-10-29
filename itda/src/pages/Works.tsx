@@ -8,21 +8,27 @@ import { WorkCard } from '../components/WorkCard';
 import { WORK_STATUSES, type Work } from '../lib/types';
 import { workIssues } from '../ai/engine';
 import { fmtDate, cx } from '../lib/util';
-import { effectiveOrgs, orgShort, orgTree, subtreeNames } from '../lib/orgs';
+import { effectiveOrgs, myOrgChain, orgShort, orgTree, subtreeNames } from '../lib/orgs';
 
 export default function Works() {
   const { s, me } = useStore();
   const { query, nav } = useRouter();
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<string>(query.get('status') === 'active' ? 'active' : 'all');
-  // 팀 업무는 모두 보이지만(2026-10-29) 처음에는 내 업무만 — 팀장은 전체
-  const [owner, setOwner] = useState(me.role === 'lead' ? 'all' : me.id);
-  useEffect(() => setOwner(me.role === 'lead' ? 'all' : me.id), [me.id, me.role]);
+  // 팀 업무는 모두 보이지만(2026-10-29) 처음에는 — 조직장은 자기 소속 조직(아래 조직 포함)의 업무, 팀원은 내 업무.
+  // 소속 조직을 찾을 수 없는 조직장은 팀원처럼 내 업무로 시작한다
+  const myOrgId = myOrgChain(s, me.id)[0]?.id ?? 'all';
+  const leadStart = me.role === 'lead' && myOrgId !== 'all';
+  const [owner, setOwner] = useState(leadStart ? 'all' : me.id);
+  const [orgId, setOrgId] = useState(leadStart ? myOrgId : 'all');
   const [sort, setSort] = useState(query.get('sort') === 'updated' ? 'updated' : 'tree');
-  const [orgId, setOrgId] = useState('all');
   const orgs = useMemo(() => effectiveOrgs(s), [s]);
   const tree = useMemo(() => orgTree(orgs), [orgs]);
   const [view, setView] = useState<'table' | 'cards'>('table');
+  useEffect(() => {
+    setOwner(leadStart ? 'all' : me.id);
+    setOrgId(leadStart ? myOrgId : 'all');
+  }, [me.id, me.role]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (query.get('new') === '1') openNewWork();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -86,7 +92,7 @@ export default function Works() {
             {c.label}
           </button>
         ))}
-        <span className="text-2xs text-faint">남의 업무는 열어 볼 수 있고, 고치기는 담당자·팀장이 합니다.</span>
+        <span className="text-2xs text-faint">남의 업무는 열어 볼 수 있고, 고치기는 담당자와 자기 조직 범위의 조직장이 합니다.</span>
       </div>
 
       <Card className="flex flex-wrap items-center gap-2 p-3">

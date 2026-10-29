@@ -10,8 +10,8 @@
   --line: 223 228 237;
   --line2: 204 211 224;
   --ink: 17 27 45;
-  --muted: 86 97 118;
-  --faint: 132 142 161;
+  --muted: 74 85 106;
+  --faint: 98 108 128;
   --navy: 20 41 92;
   --brand: 37 87 214;
   --brandsoft: 230 237 252;
@@ -19,13 +19,13 @@
   --factsoft: 225 244 238;
   --infer: 104 76 214;
   --infersoft: 238 234 252;
-  --warn: 166 98 0;
+  --warn: 150 88 0;
   --warnsoft: 253 242 222;
   --owner: 71 85 105;
   --ownersoft: 236 239 244;
   --danger: 196 43 43;
   --dangersoft: 252 232 232;
-  --ok: 16 128 72;
+  --ok: 12 118 64;
   --oksoft: 226 245 234;
   --side: 16 30 66;
   --sideink: 233 238 250;
@@ -44,7 +44,7 @@
     --line2: 55 67 95;
     --ink: 230 235 245;
     --muted: 160 171 192;
-    --faint: 118 130 155;
+    --faint: 126 138 163;
     --navy: 190 208 255;
     --brand: 120 160 255;
     --brandsoft: 30 44 82;
@@ -77,7 +77,7 @@
   --line2: 55 67 95;
   --ink: 230 235 245;
   --muted: 160 171 192;
-  --faint: 118 130 155;
+  --faint: 126 138 163;
   --navy: 190 208 255;
   --brand: 120 160 255;
   --brandsoft: 30 44 82;
@@ -148,13 +148,14 @@ h3 {
     transition: none !important;
   }
 }
-.scroll-thin::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* 스크롤바: 화면 밝기(자동·밝게·어둡게)를 따라 색을 정한다. color-scheme은 :root·[data-theme] 블록에 있고,
+   표준 scrollbar-color가 있으면 ::-webkit-scrollbar 꾸밈은 무시되므로 얇은 스크롤바도 scrollbar-width로 같이 정한다(처음 사용 점검 2 L-4) */
+html,
+.scroll-thin {
+  scrollbar-color: rgb(var(--line2)) rgb(var(--sunken));
 }
-.scroll-thin::-webkit-scrollbar-thumb {
-  background: rgb(var(--line2));
-  border-radius: 8px;
+.scroll-thin {
+  scrollbar-width: thin;
 }
 
 /* 업무 유니버스 지도(CR-24): 유니버스 그래프의 확대·축소 단추 */
@@ -174,7 +175,7 @@ h3 {
   --line2: 64 82 132;
   --ink: 234 240 252;
   --muted: 170 182 212;
-  --faint: 126 140 176;
+  --faint: 130 144 180;
   --navy: 190 208 255;
   --brand: 132 172 255;
   --brandsoft: 34 52 104;

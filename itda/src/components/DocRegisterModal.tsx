@@ -10,6 +10,7 @@ import { analyzeDocument, type DocAnalysis } from '../ai/engine';
 import { applyProposals, type Extraction, type Proposal } from '../ai/reflect';
 import { runExtraction } from '../ai/runExtract';
 import { extractPdf } from '../lib/pdf';
+import { readDocDate } from '../lib/paragraphs';
 import { docEventFor, EXCLUDED_DOC_TYPES } from '../lib/docEvents';
 import { DOC_TYPES, type Doc, type DocParagraph, type DocType, type RelType } from '../lib/types';
 import { cx, uid } from '../lib/util';
@@ -49,6 +50,14 @@ export function detectMeta(text: string, fileName: string) {
     if (wd) {
       date = `${wd[1]}-${pad(wd[2])}-${pad(wd[3])}`;
       dateSrc = wd[0];
+    }
+  }
+  // 「일시:」 줄이 없어도 본문 머리의 날짜 줄(예: 「2026. 10. 28.」)을 작성일로 읽는다(처음 사용 점검 1 L-7)
+  if (!date) {
+    const r = readDocDate(lines);
+    if (r) {
+      date = r.iso;
+      dateSrc = r.raw;
     }
   }
   if (date) {

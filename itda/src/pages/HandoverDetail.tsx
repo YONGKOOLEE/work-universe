@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { HandoverPoints } from '../universe/HandoverPoints';
-import { Check, Sparkles, Loader2, UserRound, Camera, ExternalLink, MessageSquareWarning, Send, ShieldCheck, Stamp } from 'lucide-react';
-import { useStore, userName } from '../lib/store';
+import { Check, Eye, Sparkles, Loader2, UserRound, Camera, ExternalLink, MessageSquareWarning, Send, ShieldCheck, Stamp } from 'lucide-react';
+import { canActAsSender, inLeadScope, useStore, userName } from '../lib/store';
 import { useRouter } from '../lib/router';
 import { Button, Card, CardHead, Mono, Empty, KV, inputCls, StatusBadge } from '../components/ui';
 import { HO_STATUS } from './Handover';
@@ -63,8 +63,13 @@ export default function HandoverDetail({ id }: { id: string }) {
   }
   const issues = workIssues(s, w);
   const openActs = s.actions.filter((a) => a.workId === w.id && a.status !== '완료');
-  const isFrom = me.id === h.fromId;
+  // 보내는 쪽 단계(사전 점검·보완·제출): 보내는 사람, 또는 조직장이 대신 시작한 인계의 범위 안 조직장
+  const isFrom = canActAsSender(raw, h, me.id);
+  const isFromParty = me.id === h.fromId; // 당사자 본인
   const isTo = me.id === h.toId;
+  // 당사자가 아닌 범위 안 조직장: 읽기 전용(진행 단추 없음)
+  const leadView = !isFrom && !isTo && inLeadScope(raw, h.workId, me.id);
+  const proxyBy = h.startedById ? userName(s, h.startedById) : '';
   const now = () => new Date().toISOString();
   const allChecked = CHECKS.every((c) => h.checklist[c.key]);
   const done = (i: number) => i < h.step || h.status === 'confirmed';
@@ -202,7 +207,23 @@ export default function HandoverDetail({ id }: { id: string }) {
         </ol>
       </Card>
 
-      {actor && actor !== me.id && (
+      {leadView && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-sunken/60 px-4 py-2.5 text-[13px] text-muted" data-testid="handover-lead-readonly">
+          <Eye size={15} className="shrink-0" />
+          <span className="flex-1">
+            <b className="text-ink">조직장 보기(읽기 전용)</b> — 당사자({userName(s, h.fromId)}·{userName(s, h.toId)})가 아니어서 진행 단계는 누를 수 없습니다.
+          </span>
+        </div>
+      )}
+      {isFrom && !isFromParty && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-brand/30 bg-brandsoft/50 px-4 py-2.5 text-[13px]" data-testid="handover-proxy-banner">
+          <UserRound size={15} className="shrink-0 text-brand" />
+          <span className="flex-1">
+            조직장이 대신 시작한 인계입니다({proxyBy}). 사전 점검·보완·제출은 {userName(s, h.fromId)} 또는 조직장이 할 수 있습니다.
+          </span>
+        </div>
+      )}
+      {!leadView && actor && actor !== me.id && !(isFrom && actor === h.fromId) && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-brand/30 bg-brandsoft/50 px-4 py-3 text-[13px]">
           <UserRound size={16} className="text-brand" />
           <span className="flex-1">
@@ -414,7 +435,7 @@ export default function HandoverDetail({ id }: { id: string }) {
                   </>
                 )}
                 {h.status === 'accepted' && (
-                  <Button variant="primary" disabled={!isTo && !isFrom} onClick={confirm}>
+                  <Button variant="primary" disabled={!isTo && !isFromParty} onClick={confirm}>
                     <Camera size={14} />
                     인계 확정 및 업무정보 스냅샷 보존
                   </Button>

@@ -17,10 +17,10 @@ const citeOk = (c: { docId: string; anchor?: string }) => {
 };
 
 describe('시연 데이터(linked) 참조 무결성', () => {
-  it('사용자: 사번 V-숫자4자리, 팀장 1명, 소속 조직 5곳(팀 4·부 1)', () => {
+  it('사용자: 사번 V-숫자4자리, 조직장 2명(팀장 박지훈·부장 서지안), 소속 조직 5곳(팀 4·부 1)', () => {
     expect(s.users.length).toBe(10); // 7→10: 조직 계층 시연용 부장·다른 부·본부 팀원(2026-10-29 사용자 결정)
     expect(s.users.every((u) => /^V-\d{4}$/.test(u.empNo ?? ''))).toBe(true);
-    expect(s.users.filter((u) => u.role === 'lead').length).toBe(1);
+    expect(s.users.filter((u) => u.role === 'lead').map((u) => u.id)).toEqual(['U3', 'U8']); // 서지안 role member→lead(2026-10-29 「조직 기준으로 정리」)
     expect(new Set(s.users.map((u) => u.dept)).size).toBe(5);
     expect(s.users.every((u) => (s.orgs || []).some((o) => o.name === u.dept))).toBe(true);
     expect(s.currentUserId).toBe('U1');

@@ -135,11 +135,14 @@ try {
   // 2
   await check('02 김도윤 내 지도·조직 지도(팀 → 부 → 본부 → 회사)', async () => {
     await nav('#/universe', mapReady);
+    // 첫 범위는 자기 소속 조직(사용자 결정 2026-10-29) → 「내 지도」 칩으로 바꿔 본다
+    const first = await H('labels()');
+    await must(first.some((l) => String(l).includes('디지털신원팀')), `첫 범위가 소속 팀이 아님: ${first.slice(0, 5).join('|')}`);
+    await must(await H(`click('button', '내 지도')`), '「내 지도」 칩 없음');
+    await must(await wait(`window.__h.labels().some((l) => String(l).includes('김도윤의 업무'))`, 6000), '내 지도로 안 바뀜');
     const labels = await H('labels()');
     const n = await H('nodes()');
     await must(n > 3, `노드 ${n}개`);
-    await must(labels.some((l) => String(l).includes('김도윤의 업무')), `중심 라벨 없음: ${labels.slice(0, 5).join('|')}`);
-    await must(await H(`click('button', '내 지도')`) || true, '');
     await shot('02-내지도');
     // 조직 지도는 모두가 본다(2026-10-29) — 팀원 김도윤도 자기 팀부터 회사까지 칩이 있다
     for (const c of ['디지털신원팀 · 업무', '전자금융부 · 업무', '결제서비스본부 · 업무', '우리 기관 · 업무']) await must(await ev(`!!window.__h.find('button', ${JSON.stringify(c)})`), `범위 칩 「${c}」 없음`);
@@ -167,6 +170,12 @@ try {
     await must(await H(`user('박지훈')`), '박지훈 전환 실패');
     await nav('#/universe', mapReady);
     await sleep(800);
+    // 팀장 첫 범위는 소속 팀 → 부 칩으로 두 팀을 함께 본다
+    const firstRoots = await ev(`window.__h.cy().nodes().filter((n) => n.data('core_type') === 'root').map((n) => n.data('label'))`);
+    await must(firstRoots.some((l) => l.includes('디지털신원팀')) && !firstRoots.some((l) => l.includes('출금이체팀')), `팀장 첫 범위가 소속 팀이 아님: ${firstRoots.join('|')}`);
+    await must(await H(`click('button', '전자금융부 · 업무')`), '부 칩 누르기 실패');
+    await wait(`window.__h.cy().nodes().filter((n) => n.data('core_type') === 'root').some((n) => String(n.data('label')).includes('출금이체팀'))`, 6000);
+    await sleep(500);
     const roots = await ev(`(() => { const cy = window.__h.cy(); return cy.nodes().filter((n) => n.data('core_type') === 'root').map((n) => n.data('label')); })()`);
     await must(roots.some((l) => l.includes('디지털신원팀')) && roots.some((l) => l.includes('출금이체팀')), `팀 중심: ${roots.join('|')}`);
     const risk = await ev(`(document.querySelector('[data-testid="map-risk"]')||{}).innerText || ''`);
@@ -293,7 +302,8 @@ try {
 
   // 6
   await check('06 스냅샷 인계 당시 ↔ 지금 지도', async () => {
-    await must(await H(`user('박지훈')`), '박지훈 전환 실패');
+    // 출금이체팀 인계(HO-002) — 조직 기준 열람(2026-10-29): 같은 부의 부장 서지안이 본다(다른 팀 팀장 박지훈은 못 봄)
+    await must(await H(`user('서지안')`), '서지안 전환 실패');
     await nav('#/snapshots/S-101', `!!document.querySelector('[data-testid="snapshot-maps"]')`);
     await sleep(1500);
     const two = await ev(`!!document.querySelector('[data-testid="snapshot-map-then"]') && !!document.querySelector('[data-testid="snapshot-map-now"]')`);
@@ -477,6 +487,10 @@ try {
     await must(await wait(`!!document.querySelector('[data-testid="map-card"]')`, 3000), '카드 안 열림');
     await must(await H(`clickId('map-edit-owner')`), '담당 넘기기 단추 없음');
     await must(await wait(`!!document.querySelector('[data-testid="map-owner-handover"]')`, 2000), '「인계 시작(정식 절차)」 단추 없음');
+    // 받는 사람은 미리 골라 두지 않는다(2026-10-29) → 강예린을 고른다
+    await must(await ev(`document.querySelector('[data-testid="map-owner-who"]').value === ''`), '받는 사람이 미리 골라져 있음');
+    await H(`setId('map-owner-who', 'U6')`);
+    await sleep(150);
     // 바로 바꾸기는 한 번 더 묻고, 묻는 동안 아무것도 바뀌지 않는다
     await must(await H(`clickId('map-owner-save')`), '「담당만 바로 바꾸기」 단추 없음');
     await must(await wait(`!!document.querySelector('[data-testid="map-owner-confirm-box"]')`, 2000), '바로 바꾸기 확인 창 없음');
@@ -586,13 +600,15 @@ try {
     const bg = () => ev(`getComputedStyle(document.body).backgroundColor`);
     const st = () => ev(`document.querySelector('[data-map-style]')?.dataset.mapStyle ?? ''`);
     await must((await ev(`document.querySelector('[data-testid="theme-toggle"]').dataset.value`)) === 'auto', '처음 밝기가 자동이 아님');
-    await must((await st()) === 'mix', `자동에서 지도 모양 ${await st()}(가+나여야 함)`);
+    // 자동은 PC 밝기를 따른다(2026-10-29): PC가 밝으면 흰 판(clean), 어두우면 우주 판(mix). 시안 단추는 숨김
+    const pcDark = await ev(`matchMedia('(prefers-color-scheme: dark)').matches`);
+    await must((await st()) === (pcDark ? 'mix' : 'clean'), `자동(PC ${pcDark ? '어두움' : '밝음'})에서 지도 모양 ${await st()}`);
+    await must(await ev(`!document.querySelector('[data-testid="map-style-mix"]')`), '시안 단추가 보임(숨겨야 함)');
     await must(await H(`clickId('theme-toggle')`), '밝기 단추 없음');
     await must(await wait(`document.documentElement.dataset.theme === 'light' && window.__h.nodes() > 0`, 4000), '밝게로 안 바뀜');
     await sleep(800);
     const lightStyle = await st();
     await must(lightStyle === 'clean', `밝게에서 지도 모양 ${lightStyle}(흰 판이어야 함)`);
-    await must(await ev(`document.querySelector('[data-testid="map-style-mix"]').getAttribute('aria-checked') === 'true'`), '밝게에서 시안 단추가 가+나에서 벗어남');
     const lightBg = await bg();
     await shot('16-밝게-지도');
     await must(await H(`clickId('theme-toggle')`), '밝기 단추 없음(2)');
@@ -613,6 +629,43 @@ try {
     await must(await wait(`!document.documentElement.dataset.theme`, 2000), '자동으로 안 돌아옴');
     await must(await H(`user('김도윤')`), '김도윤 복귀 실패');
     return `밝게 바탕 ${lightBg}·지도 흰 판 / 어둡게 바탕 ${darkBg}·우주 판 / 자동 복귀`;
+  });
+
+  // 18 조직 기준 권한·전출·퇴직 → 위험·규칙 검색(사람 질문) — 2026-10-29 사용자 결정
+  await check('18 조직 권한·전출·퇴직 위험 반영·사람 질문 검색', async () => {
+    await must(await H(`user('김도윤')`), '김도윤 전환 실패');
+    await nav('#/people', `!!document.querySelector('[data-testid="people-row"]')`);
+    await must(await ev(`!!document.querySelector('[data-testid="people-readonly-note"]') && !document.querySelector('[data-testid="people-add"]')`), '팀원에게 사람 편집 단추가 보임');
+    await must(await H(`user('박지훈')`), '박지훈 전환 실패');
+    await nav('#/works/W-004', `window.__h.has('출금이체 월 정산')`);
+    await must(await ev(`!!document.querySelector('[data-testid="work-readonly"]')`), '다른 팀 팀장이 W-004를 고칠 수 있음');
+    await must(await H(`user('서지안')`), '서지안 전환 실패');
+    await nav('#/works/W-004', `window.__h.has('출금이체 월 정산')`);
+    await sleep(300);
+    await must(await ev(`!document.querySelector('[data-testid="work-readonly"]')`), '부장이 같은 부 업무(W-004)를 못 고침');
+    // 규칙 검색: 사람이 빠지면 무엇이 막히나
+    await nav('#/search?q=' + encodeURIComponent('정하준이 빠지면 무엇이 막히나요?'), `window.__h.has('출금이체 월 정산') && window.__h.has('인계 후보')`);
+    await shot('18-검색-사람질문');
+    // 전출·퇴직 → 유니버스 「한눈에」에 바로 반영, 바로가기 단추
+    await nav('#/universe', mapReady);
+    const before = await ev(`document.querySelector('[data-testid="insight-summary"]').innerText`);
+    await nav('#/people', `!!document.querySelector('[data-testid="people-row"]')`);
+    await ev(`[...document.querySelectorAll('[data-testid="people-row"]')].find((r) => r.innerText.includes('정하준')).querySelector('[data-testid="people-left"]').click(); true`);
+    await must(await wait(`!!document.querySelector('[data-testid="people-confirm-left"]')`, 2000), '전출·퇴직 확인 창 없음');
+    await must(await ev(`document.querySelector('[data-testid="people-confirm-left"]').innerText.includes('출금이체 월 정산')`), '확인 창에 담당 업무 이름 없음');
+    await must(await H(`clickId('people-confirm-left-ok')`), '전출·퇴직 확인 단추 없음');
+    await must(await wait(`!!document.querySelector('[data-testid="people-left-handover"]')`, 2000), '「이 사람 업무 넘기기」 바로가기 없음');
+    await shot('18-전출퇴직-바로가기');
+    await nav('#/universe', mapReady);
+    const after = await ev(`document.querySelector('[data-testid="insight-summary"]').innerText`);
+    await shot('18-전출퇴직-인사이트');
+    await must(after !== before && after.includes('정하준') && after.includes('전출·퇴직'), `전출·퇴직이 한눈에 줄에 반영 안 됨: ${after}`);
+    // 되돌리기
+    await nav('#/people', `!!document.querySelector('[data-testid="people-row"]')`);
+    await ev(`[...document.querySelectorAll('[data-testid="people-row"]')].find((r) => r.innerText.includes('정하준')).querySelector('[data-testid="people-left"]').click(); true`);
+    await sleep(300);
+    await must(await H(`user('김도윤')`), '김도윤 복귀 실패');
+    return `팀원 사람 편집 막힘 · 박지훈 W-004 읽기 전용 · 서지안 W-004 편집 · 검색 답 · 한눈에: ${after.slice(0, 80)}`;
   });
 
   // 12

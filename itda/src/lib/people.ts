@@ -3,6 +3,7 @@
 // 고칠 것이 없으면 null을 돌려주고, 거절·막힘은 error / blocked로 알린다.
 // ─────────────────────────────────────────────────────────────
 import type { AppState, User } from './types';
+import { effectiveOrgs, orgOfName } from './orgs';
 
 export type UserRole = NonNullable<User['role']>;
 export interface PersonInput {
@@ -23,6 +24,13 @@ export function isLeft(u: User | undefined): boolean {
 /** 선택 목록에 보일 사람: 재직자 + 이미 선택·지정된 사람(keep) */
 export function selectableUsers(users: User[], keep: string[] = []): User[] {
   return users.filter((u) => !isLeft(u) || keep.includes(u.id));
+}
+
+/** 역할 표시: member는 팀원, lead는 소속 조직 단계에 따라 팀장·부장·본부장·대표(소속을 알 수 없으면 조직장) */
+export function roleLabel(s: Pick<AppState, 'orgs' | 'users' | 'works'>, u: User | undefined): string {
+  if (u?.role !== 'lead') return '팀원';
+  const level = orgOfName(effectiveOrgs(s), u.dept)?.level;
+  return level === '팀' ? '팀장' : level === '부' ? '부장' : level === '본부' ? '본부장' : level === '회사' ? '대표' : '조직장';
 }
 
 /** 표시 이름: 전출·퇴직이면 「(전출·퇴직)」을 붙인다 */

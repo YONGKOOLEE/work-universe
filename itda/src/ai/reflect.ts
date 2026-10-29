@@ -16,6 +16,7 @@ import { readDocumentRule, similarName } from '../../../app/src/rules/doc-attach
 // @ts-expect-error 업무 유니버스 순수 모듈(JS) — PDF 복사 글 읽는 법(프롬프트 8-1~8-3)
 import { CONVERT_PDF_RULES } from '../../../app/src/llm/prompts.js';
 import { uid, localDay } from '../lib/util';
+import { readDocDate } from '../lib/paragraphs';
 
 export type ProposalKind = 'decision' | 'event' | 'action' | 'overview' | 'topic';
 export type OverviewField = 'purpose' | 'background' | 'current' | 'cautions';
@@ -45,6 +46,7 @@ export interface Proposal {
   dateVerified: boolean;
   issue?: string;
   approved: boolean;
+  altOf?: string; // 같은 문장에서 나온 다른 종류(이벤트↔조치) 제안의 id — 이쪽은 「모두 승인」에서 빠지고 기본 선택하지 않는다
 }
 
 export interface Extraction {
@@ -154,7 +156,8 @@ const clip = (x: string, n: number) => {
 function typeOf(t: string): EventType {
   if (/의결|결정|확정|승인|채택/.test(t)) return '의사결정';
   if (/시행(?!령)|확대|개시|오픈|운영 개시/.test(t)) return '시행';
-  if (/공포|개정|제정|입법|법률|시행령|제출/.test(t)) return '법령';
+  // 입법·공포처럼 분명한 단서만 「법령」 — 「개정」「제출」은 약관·의견서에도 쓰여 단서가 못 된다(처음 사용 점검 1 M-1). 단서가 없으면 일반 유형 「업무 변경」
+  if (/공포|입법|국회|법률|법령|시행령|시행규칙|제정|법\s*개정|개정법/.test(t)) return '법령';
   if (/의결|결정|확정|승인|채택/.test(t)) return '의사결정';
   if (/개최|회의|위원회/.test(t)) return '회의';
   if (/보도|발표|공개/.test(t)) return '보도자료';
@@ -196,7 +199,12 @@ export function mockExtract(s: AppState, title: string, paras: DocParagraph[], d
       }
     }
   };
-  take('decision', /의결|결정|확정|승인|채택|합의/, 5, (x) => P({ kind: 'decision', text: clip(x.t, 90), quote: x.t, paraId: x.paraId, date: parseDates(x.t)[0]?.iso ?? null }));
+  // 결정 날짜가 문장에 없으면 문서 작성일(머리 날짜)을 기본으로 한다 — 본문에 있는 날짜라 원문 확인이 된다
+  const docDate = readDocDate(paras.map((p) => p.text));
+  take('decision', /의결|결정|확정|승인|채택|합의/, 5, (x) => {
+    const d = parseDates(x.t)[0];
+    return P({ kind: 'decision', text: clip(x.t, 90), quote: x.t, paraId: x.paraId, date: d?.iso ?? docDate?.iso ?? null, dateText: d?.raw ?? docDate?.raw ?? null });
+  });
   take('event', /시행|공포|의결|개최|발표|착수|제출|개정|확대|변경|출범/, 6, (x) => {
     const ds = parseDates(x.t);
     if (!ds.length) return null;
@@ -207,8 +215,9 @@ export function mockExtract(s: AppState, title: string, paras: DocParagraph[], d
     return P({ kind: 'event', text: clip(x.t, 70), quote: x.t, paraId: x.paraId, date: d.iso, dateText: d.raw, eventType: et, phase: phaseOf(et) });
   });
   take('action', /예정|계획|추진할|하기로|해야|할 것|조치할|마련할/, 5, (x) => {
-    const d = parseDates(x.t).find((z) => z.iso.length === 10);
-    return P({ kind: 'action', text: clip(x.t, 90), quote: x.t, paraId: x.paraId, date: d?.iso ?? null, dateText: d?.raw ?? null });
+    const d = parseDates(x.t).find((z) => z.iso.length === 10) ?? yearlessDue(x.t, docDate?.iso);
+    const o = ownerInSentence(s, x.t);
+    return P({ kind: 'action', text: clip(x.t, 90), quote: x.t, paraId: x.paraId, date: d?.iso ?? null, dateText: d?.raw ?? null, ...(o ? { ownerName: o.name, ownerId: o.id } : {}) });
   });
   const ov: [OverviewField, RegExp][] = [
     ['purpose', /목적|위하여|위해/],
@@ -229,6 +238,8 @@ export function mockExtract(s: AppState, title: string, paras: DocParagraph[], d
     } else out.push(t);
   }
 
+  markSameSentence(out);
+
   // 문서 제목과 같은 줄·「일시:」 같은 머리 정보는 요약 후보에서 뺀다(처음 사용 점검 2회차)
   const titleKey = title.replace(/\s+/g, '');
   const scored = sents
@@ -246,6 +257,63 @@ export function mockExtract(s: AppState, title: string, paras: DocParagraph[], d
     engine: 'mock',
     truncatedInput: false,
   };
+}
+
+// ─── 문장 속 담당자·기한, 같은 문장의 이벤트/조치 가리기 ───
+const FUTURE = /예정|하기로|까지|할 것|할 계획|하도록|해야/;
+const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const POSITION = '(?:님|씨|팀장|부장|과장|차장|대리|주임|사원|선임|책임|수석|실장|본부장|주무관|사무관)';
+// 이름이 아닌 낱말이 이름꼴(성씨+두 글자)로 보이는 흔한 경우
+const NOT_NAME_TAIL = /(회|부|팀|단|사|관|건|물|국|청)$/;
+const NOT_NAME = new Set(['이용자', '이사회', '소비자', '조사단']);
+
+/**
+ * 「이름은/는/이/가 … 하기로·할 예정·까지」 꼴의 담당: 시드 사용자 이름이면 그 사용자, 아니면 이름꼴 세 글자를 문서상 담당(사용자 아님)으로.
+ * 문장 앞쪽 이름만 본다(뒤쪽에 나온 사람이 담당이 아닐 수 있음) — 이름 뒤에 앞으로 할 일 표현이 있어야 한다.
+ */
+export function ownerInSentence(s: AppState, t: string): { name: string; id: string | null } | null {
+  const text = t.replace(/^[○□■▢◦●•\-※\s]+/, '');
+  let best: { name: string; id: string; at: number } | null = null;
+  for (const u of s.users) {
+    if (u.name.replace(/\s+/g, '').length < 2) continue;
+    const m = new RegExp(String.raw`(?:^|[\s,(])${esc(u.name)}${POSITION}?(?:은|는|이|가)\s`).exec(text);
+    if (m && FUTURE.test(text.slice(m.index)) && (!best || m.index < best.at)) best = { name: u.name, id: u.id, at: m.index };
+  }
+  if (best) return { name: best.name, id: best.id };
+  const g = /^([가-힣]{3})(?:은|는)\s/.exec(text);
+  if (g && FUTURE.test(text) && SURNAMES.includes(g[1][0]) && !NOT_NAME.has(g[1]) && !NOT_NAME_TAIL.test(g[1]) && !DOC_TAIL.test(g[1])) return { name: g[1], id: null };
+  return null;
+}
+
+/** 「11.20.까지」처럼 연도 없는 기한: 문서 작성일의 해로 읽고, 작성일보다 앞서면 다음 해로. 작성일을 모르면 null */
+export function yearlessDue(t: string, docIso?: string | null): { iso: string; raw: string } | null {
+  if (!docIso) return null;
+  const m = /(?<![\d.])(\d{1,2})\s*[.월]\s*(\d{1,2})\s*[.일]?\s*까지/.exec(t);
+  if (!m) return null;
+  const mo = +m[1];
+  const d = +m[2];
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  const y0 = +docIso.slice(0, 4);
+  const iso0 = `${y0}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  const iso = iso0 < docIso ? `${y0 + 1}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}` : iso0;
+  return { iso, raw: m[0].replace(/\s*까지$/, '').trim() };
+}
+
+/**
+ * 같은 원문 문장에서 이벤트와 조치가 함께 나오면 하나만 기본 선택한다: 앞으로 할 일(예정·하기로·까지)이거나 표의 할 일이면 조치,
+ * 이미 있었던 일이면 이벤트. 다른 쪽은 지우지 않고 altOf를 달아 「모두 승인」·기본 선택에서 뺀다(사용자가 직접 고를 수는 있음)
+ */
+export function markSameSentence(list: Proposal[]) {
+  const events = list.filter((p) => p.kind === 'event');
+  const actions = list.filter((p) => p.kind === 'action');
+  for (const e of events) {
+    const a = actions.find((x) => x.quote && e.quote && (qn(x.quote) === qn(e.quote) || (qn(x.quote).length >= 6 && qn(e.quote).includes(qn(x.quote)))));
+    if (!a) continue;
+    const future = a.source === 'rule' || FUTURE.test(e.quote);
+    const [win, lose] = future ? [a, e] : [e, a];
+    lose.altOf = win.id;
+    lose.issue = [lose.issue, `같은 문장이 ${win.kind === 'action' ? '조치' : '타임라인 사건'}로도 제안됨 — 하나만 선택하세요`].filter(Boolean).join(' · ');
+  }
 }
 
 // ─── 업무 유니버스 규칙으로 할 일·담당·기한 읽기(키 없을 때도) ───

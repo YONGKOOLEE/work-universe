@@ -2,15 +2,16 @@
 // 유니버스 규칙(app/src/rules/insight-risk.js·insight.js)을 그대로 부르고, 결과의 근거 항목(전역 ID)을 업무잇다 업무·사람 ID로 되돌린다.
 // 인계 준비도(6항목)는 넣지 않았다: 표준 양식 항목이 업무잇다 「필수 항목 미작성」 점검과 겹치고, 진행 중 메모를 미해결 이슈로 세어 잡음이 많다.
 // 브라우저 기능을 쓰지 않는다(vitest로 검증).
-import type { AppState } from '../lib/types';
+import type { AppState, User, Work } from '../lib/types';
 import { deriveMap, worksInScope, type Derived, type MapScope } from './derive';
 import { effectiveOrgs, subtreeNames } from '../lib/orgs';
+import { isLeft } from '../lib/people';
 // @ts-expect-error 유니버스 순수 모듈(JS)
 import { buildView } from '../../../app/src/view/view.js';
 // @ts-expect-error 유니버스 순수 모듈(JS)
-import { knowledgeConcentration, ripple } from '../../../app/src/rules/insight-risk.js';
+import { handoverReadiness, knowledgeConcentration, ripple } from '../../../app/src/rules/insight-risk.js';
 // @ts-expect-error 유니버스 순수 모듈(JS)
-import { densityGaps } from '../../../app/src/rules/insight.js';
+import { densityGaps, similarExperts } from '../../../app/src/rules/insight.js';
 
 export type InsightKind = 'solo' | 'bottleneck' | 'sole_person' | 'dense' | 'gap';
 export const INSIGHT_NAMES: Record<InsightKind, string> = {
@@ -26,8 +27,12 @@ export const INSIGHT_HELP: Record<InsightKind, string> = {
   bottleneck: '선후행·산출물로 이어져, 늦어지면 뒤 업무가 함께 늦어지는 업무',
   sole_person: '혼자 맡은 업무가 길목이라, 이 사람이 빠지면 이어진 업무까지 멈춤',
   dense: '지금 맡은 업무가 기준(3개) 이상인 사람',
-  gap: '지금 담당자가 없는 업무',
+  gap: '지금 담당자가 없는 업무. 담당자가 전출·퇴직한 업무도 여기에 올라옴',
 };
+/** 인계 후보로 보여 줄 사람 수 */
+export const CANDIDATE_SHOW = 2;
+/** 「빠지면 함께 막히는」 업무 이름을 적을 개수(나머지는 「외 n개」) */
+export const BLOCKED_SHOW = 3;
 /** 일 몰린 사람 기준(유니버스 기본값 3과 같다). 바꾸기 쉬운 곳 하나 */
 export const DENSE_N = 3;
 
@@ -43,6 +48,57 @@ export interface Insight {
   workIds: string[]; // 근거 업무(업무잇다 ID)
   userIds: string[]; // 근거 사람(업무잇다 ID)
   evidence: string[]; // 지도 전역 ID(지도에서 강조할 항목)
+  blockedWorkIds?: string[]; // 빠지면 함께 막히는 업무(빠지면 함께 막히는 사람)
+  next?: string; // 다음 행동 한 줄(예: 「인계 후보: 최민서(비슷한 일 경험)」). 후보가 없으면 없음
+  readiness?: { score: number; total: number }; // 인계 준비도 낮음 항목의 점수
+}
+
+/** 이름 목록을 「A」, 「B」, 「C」 외 n개 꼴로 */
+export function namesText(names: string[], show = BLOCKED_SHOW): string {
+  const shown = names.slice(0, show).map((x) => `「${x}」`).join(', ');
+  return names.length > show ? `${shown} 외 ${names.length - show}개` : shown;
+}
+
+export interface Candidate {
+  userId: string;
+  name: string;
+  direct: boolean; // 그 업무를 이전에 맡아 본 사람
+}
+const candidateText = (list: Candidate[]) => (list.length ? `인계 후보: ${list.map((c) => `${c.name}(${c.direct ? '이전 담당' : '비슷한 일 경험'})`).join(', ')}` : undefined);
+
+/** 지도 업무 항목의 전역 ID ← 업무잇다 업무 ID */
+function workGids(d: Derived, view: any): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const n of view.nodes as any[]) {
+    if (n.core_type !== 'work' || n.hidden) continue;
+    const w = originIds(d, view, [n.gid]).workIds[0];
+    if (w && !m.has(w)) m.set(w, n.gid);
+  }
+  return m;
+}
+
+/** 업무들을 이어받을 후보(유사 경험자 규칙). 전출·퇴직한 사람과 exclude는 뺀다 */
+function candidatesFor(s: AppState, d: Derived, view: any, gids: string[], asOf: string, exclude: string[] = []): Candidate[] {
+  if (!gids.length) return [];
+  const r = similarExperts(view, { works: gids, asOf });
+  if (r.status !== 'ok') return [];
+  const out: Candidate[] = [];
+  const add = (p: any, direct: boolean) => {
+    const userId = originIds(d, view, [p.gid]).userIds[0];
+    if (!userId || exclude.includes(userId) || out.some((x) => x.userId === userId)) return;
+    const u = s.users.find((x) => x.id === userId);
+    if (!u || isLeft(u)) return;
+    out.push({ userId, name: u.name, direct });
+  };
+  for (const p of r.direct as any[]) add(p, true);
+  const directIds = new Set((r.direct as any[]).map((p) => p.gid));
+  for (const p of r.people as any[]) if (!directIds.has(p.gid)) add(p, false);
+  return out.slice(0, CANDIDATE_SHOW);
+}
+
+/** 이 사람이 빠지면 지금 담당이 비는 업무(진행 중이고, 이 사람 말고 재직 중인 담당이 없음) */
+export function soleWorksOf(s: AppState, userId: string) {
+  return s.works.filter((w) => w.status !== '완료' && w.owners.includes(userId) && !w.owners.some((o) => o !== userId && !isLeft(s.users.find((u) => u.id === o))));
 }
 
 /** 규칙 인사이트(종류가 규칙 다섯 가지 중 하나) */
@@ -97,6 +153,15 @@ export function handoverInsights(s: AppState, scope: MapScope, asOf: string): In
     push('solo', it.level === 'high' ? 'high' : 'low', ids.workIds[0] ?? it.work.gid, it.work.label, `${it.person.label}만 해 본 업무 · 인계 기록 ${has ? '있음' : '없음'}${it.new_owner ? ` · 새로 맡음(${it.new_owner})` : ''}`, it.evidence);
   }
 
+  // 업무별 인계 준비도(6점 만점) — 사람 항목에 가장 낮은 업무의 점수를 붙인다
+  const rd = handoverReadiness(view, { asOf });
+  const readyOf = new Map<string, { score: number; total: number }>();
+  for (const it of (rd.items ?? []) as any[]) {
+    const wid = originIds(d, view, [it.work.gid]).workIds[0];
+    if (wid) readyOf.set(wid, { score: it.score, total: it.total });
+  }
+  const lowestReadiness = (ws: Work[]) => ws.map((w) => readyOf.get(w.id)).filter((x): x is { score: number; total: number } => !!x).sort((a, b) => a.score - b.score)[0] ?? null;
+
   const r = ripple(view, { asOf });
   if (r.insufficient) notes.push(`${INSIGHT_NAMES.bottleneck}: ${r.reason}`);
   for (const it of r.works) {
@@ -104,7 +169,13 @@ export function handoverInsights(s: AppState, scope: MapScope, asOf: string): In
   }
   for (const it of r.people) {
     const ids = originIds(d, view, [it.person.gid]);
-    push('sole_person', it.count >= 2 ? 'high' : 'mid', ids.userIds[0] ?? it.person.gid, it.person.label, `혼자 맡은 업무 ${it.sole_works}개 · 빠지면 이어진 업무 ${it.count}개가 함께 막힘`, it.evidence);
+    const blocked = originIds(d, view, it.reached as string[]).workIds;
+    const names = blocked.map((id) => s.works.find((w) => w.id === id)?.name).filter((x): x is string => !!x);
+    const userId = ids.userIds[0];
+    const low = userId ? lowestReadiness(soleWorksOf(s, userId)) : null;
+    push('sole_person', it.count >= 2 ? 'high' : 'mid', userId ?? it.person.gid, it.person.label, `혼자 맡은 업무 ${it.sole_works}개 · 빠지면 ${names.length ? `${namesText(names)} 업무가` : `이어진 업무 ${it.count}개가`} 함께 막힘${low ? ` · 인계 준비 최저 ${low.score}/${low.total}` : ''}`, it.evidence);
+    if (low) items[items.length - 1].readiness = low;
+    items[items.length - 1].blockedWorkIds = blocked;
   }
 
   const g = densityGaps(view, { asOf, n: DENSE_N });
@@ -113,9 +184,21 @@ export function handoverInsights(s: AppState, scope: MapScope, asOf: string): In
     push('dense', p.count >= DENSE_N + 2 ? 'high' : 'mid', p.gid, p.label, `지금 맡은 업무 ${p.count}개(기준 ${g.n}개 이상): ${p.works.slice(0, 3).map((w: any) => `「${w.label}」`).join(', ')}${p.works.length > 3 ? ` 외 ${p.works.length - 3}개` : ''}`, p.evidence_ids);
   }
   for (const w of g.gaps || []) {
+    const wid = originIds(d, view, [w.gid]).workIds[0];
+    const left = (s.works.find((x) => x.id === wid)?.owners ?? []).map((o) => s.users.find((u) => u.id === o)).filter((u) => isLeft(u));
     const why =
-      w.kind === 'scheduled' ? `${w.next_person?.label ?? '다음 담당'}이(가) ${w.next_start}부터 맡을 예정` : w.kind === 'ended' ? `이전 담당 ${w.last_person?.label ?? ''}(${w.last_end}까지) 뒤로 담당 없음` : '담당 기록 없음';
+      w.kind !== 'scheduled' && left.length ? `담당자 ${left.map((u) => u!.name).join('·')} 전출·퇴직 — 지금 담당이 없음` : w.kind === 'scheduled' ? `${w.next_person?.label ?? '다음 담당'}이(가) ${w.next_start}부터 맡을 예정` : w.kind === 'ended' ? `이전 담당 ${w.last_person?.label ?? ''}(${w.last_end}까지) 뒤로 담당 없음` : '담당 기록 없음';
     push('gap', w.kind === 'scheduled' ? 'low' : 'high', w.gid, w.label, why, w.evidence_ids);
+  }
+
+  // 다음 행동: 사람·업무 위험 항목에 인계 후보 한 줄(유사 경험자 규칙, 후보가 없으면 붙이지 않는다)
+  const gidOf = workGids(d, view);
+  for (const x of items) {
+    if (x.kind !== 'solo' && x.kind !== 'gap' && x.kind !== 'sole_person' && x.kind !== 'dense') continue;
+    const person = x.kind === 'sole_person' || x.kind === 'dense' ? x.userIds[0] : undefined;
+    const ws = person ? (x.kind === 'dense' ? s.works.filter((w) => w.status !== '완료' && w.owners.includes(person)) : soleWorksOf(s, person)) : x.workIds.slice(0, 1).map((id) => s.works.find((w) => w.id === id)!).filter(Boolean);
+    const gids = ws.map((w) => gidOf.get(w.id)).filter((g): g is string => !!g);
+    x.next = candidateText(candidatesFor(s, d, view, gids, asOf, person ? [person] : []));
   }
 
   // 내 지도: 「이 지도 밖」으로 그린 남의 업무는 담당 연결 없이 그려져 공백·혼자로 잘못 셀 수 있다 → 내 업무·나에 관한 것만 남긴다
@@ -146,8 +229,87 @@ export function evidenceGids(s: AppState, scope: MapScope, workIds: string[], us
   return out;
 }
 
-/** 사람 이름을 붙인 짧은 요약(대시보드 카드 머리) */
+/** 위험 업무 수(서로 다른 업무)와 항목 수. 한 업무가 여러 항목에 걸리므로 둘을 따로 센다(처음 사용 점검 M-8) */
+export function riskTotals(items: Insight[]): { works: number; items: number; high: number } {
+  const ws = new Set<string>();
+  for (const x of items) for (const w of x.kind === 'sole_person' || x.kind === 'dense' ? x.workIds : x.workIds.slice(0, 1)) ws.add(w);
+  return { works: ws.size, items: items.length, high: items.filter((x) => x.level === 'high').length };
+}
+
+/** 대시보드 카드 머리: 위험 업무 n건(항목 m개) + 종류별 항목 수 */
 export function insightSummary(r: InsightResult): string {
+  const t = riskTotals(r.items);
   const parts = (Object.keys(INSIGHT_NAMES) as InsightKind[]).filter((k) => r.counts[k] > 0).map((k) => `${INSIGHT_NAMES[k]} ${r.counts[k]}`);
-  return parts.length ? parts.join(' · ') : '찾은 위험 없음';
+  return parts.length ? `위험 업무 ${t.works}건(항목 ${t.items}개) · ${parts.join(' · ')}` : '찾은 위험 없음';
+}
+
+export interface PersonImpact {
+  user: User;
+  left: boolean;
+  works: Work[]; // 지금 맡은 진행 중 업무
+  soleWorks: Work[]; // 이 사람이 빠지면 담당이 비는 업무
+  blocked: Work[]; // 빠지면 함께 막히는 업무(혼자 맡은 업무에서 선후행·산출물로 이어진 업무)
+  candidates: Candidate[]; // 인계 후보(유사 경험자 규칙)
+  readiness: { work: Work; score: number; total: number }[]; // 맡은 업무의 인계 준비도(6점 만점)
+}
+
+/** 선후행(precedes)·산출물 참조(produces→references)로 이어진 업무 사슬. 업무 유니버스 ripple 규칙과 같은 연결(그 규칙은 상위 5명만 돌려줘 사람 하나를 물을 때는 직접 센다) */
+function reachFrom(view: any, starts: string[]): string[] {
+  const isKind = (g: string, k: string) => {
+    const n = view.getNode(g);
+    return !!n && n.core_type === k && !n.hidden;
+  };
+  const adj = new Map<string, string[]>();
+  const add = (a: string, b: string) => {
+    if (a === b) return;
+    if (!adj.has(a)) adj.set(a, []);
+    if (!adj.get(a)!.includes(b)) adj.get(a)!.push(b);
+  };
+  const producers = new Map<string, string[]>();
+  const referrers = new Map<string, string[]>();
+  for (const e of view.edges as any[]) {
+    if (e.hidden) continue;
+    if (e.core_type === 'precedes' && isKind(e.source, 'work') && isKind(e.target, 'work')) add(e.source, e.target);
+    else if (e.core_type === 'produces' && isKind(e.source, 'work') && isKind(e.target, 'artifact')) producers.set(e.target, [...(producers.get(e.target) ?? []), e.source]);
+    else if (e.core_type === 'references' && isKind(e.source, 'work') && isKind(e.target, 'artifact')) referrers.set(e.target, [...(referrers.get(e.target) ?? []), e.source]);
+  }
+  for (const [a, ws] of producers) for (const w of ws) for (const x of referrers.get(a) ?? []) add(w, x);
+  const seen = new Set(starts);
+  const queue = [...starts];
+  const out: string[] = [];
+  for (let i = 0; i < queue.length; i += 1) {
+    for (const to of adj.get(queue[i]) ?? []) {
+      if (seen.has(to)) continue;
+      seen.add(to);
+      queue.push(to);
+      out.push(to);
+    }
+  }
+  return out;
+}
+
+/** 사람 한 명이 빠지면(또는 이미 빠졌으면) 무엇이 막히는가 — 회사 전체 지도 기준. 규칙 검색·대시보드가 쓴다 */
+export function personImpact(s: AppState, userId: string, asOf: string): PersonImpact | null {
+  const user = s.users.find((u) => u.id === userId);
+  if (!user) return null;
+  const works = s.works.filter((w) => w.status !== '완료' && w.owners.includes(userId));
+  const soleWorks = soleWorksOf(s, userId);
+  const base = { user, left: isLeft(user), works, soleWorks };
+  if (!works.length) return { ...base, blocked: [], candidates: [], readiness: [] };
+  const d = deriveMap(s, { kind: 'all' }, undefined, { actions: false });
+  const view = buildView(d.doc, d.resolve);
+  const gidOf = workGids(d, view);
+  const gidsOf = (ws: Work[]) => ws.map((w) => gidOf.get(w.id)).filter((g): g is string => !!g);
+  const own = new Set(soleWorks.map((w) => w.id));
+  const blockedIds = new Set(originIds(d, view, reachFrom(view, gidsOf(soleWorks))).workIds.filter((id) => !own.has(id)));
+  const blocked = s.works.filter((w) => blockedIds.has(w.id));
+  const candidates = candidatesFor(s, d, view, gidsOf(soleWorks.length ? soleWorks : works), asOf, [userId]);
+  const rd = handoverReadiness(view, { asOf });
+  const readiness: PersonImpact['readiness'] = [];
+  for (const it of (rd.items ?? []) as any[]) {
+    const id = originIds(d, view, [it.work.gid]).workIds[0];
+    const w = works.find((x) => x.id === id);
+    if (w) readiness.push({ work: w, score: it.score, total: it.total });
+  }
+  return { ...base, blocked, candidates, readiness };
 }

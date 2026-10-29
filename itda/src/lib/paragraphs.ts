@@ -44,3 +44,20 @@ export function toParagraphs(lines: string[]): string[] {
   }
   return out;
 }
+
+/**
+ * 문서 작성일 읽기(처음 사용 점검 1 M-1·L-7): 머리 6줄 안에서 「일시/작성일: 2026. 10. 28.」 또는 줄 맨 앞(글머리표 허용)에서 시작하는 날짜.
+ * 본문 중간의 날짜(사건·기한)는 작성일이 아니므로 읽지 않는다. 못 찾으면 null
+ */
+const DOC_DATE_LINE = /^[○□■▢◦●•\-※\s]*(?:(?:일\s*시|일\s*자|작성\s*일(?:\s*자)?|회\s*의\s*일(?:\s*시)?|개\s*최\s*일(?:\s*시)?|날\s*짜)\s*[:：]\s*)?(\d{4})\s*[.년-]\s*(\d{1,2})\s*[.월-]\s*(\d{1,2})\s*[.일]?(?=\s*(?:\(.\))?\s*(?:\d{1,2}:\d{2}.*)?$)/;
+export function readDocDate(lines: string[]): { iso: string; raw: string } | null {
+  const head = lines.map((l) => l.trim()).filter(Boolean).slice(0, 6);
+  for (const l of head) {
+    const m = DOC_DATE_LINE.exec(l);
+    if (!m) continue;
+    const [y, mo, d] = [+m[1], +m[2], +m[3]];
+    if (y < 1990 || y > 2100 || mo < 1 || mo > 12 || d < 1 || d > 31) continue;
+    return { iso: `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`, raw: m[0].replace(/^[○□■▢◦●•\-※\s]*/, '').replace(/^[^\d]*:\s*/, '').trim() };
+  }
+  return null;
+}

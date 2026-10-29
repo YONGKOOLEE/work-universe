@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Plus, Pencil, Trash2, Network } from 'lucide-react';
-import { useStore } from '../lib/store';
+import { useCanEditPeople, useStore } from '../lib/store';
 import { Button, Card, CardHead, Field, inputCls } from './ui';
 import { addOrg, editOrg, removeOrg, effectiveOrgs, orgShort, orgTree, subtreeNames } from '../lib/orgs';
 import { clone } from '../lib/util';
@@ -14,6 +14,7 @@ type Draft = { name: string; level: OrgLevel; parentId: string };
 /** 조직 관리 — 업무 → 팀 → 부 → 본부 → 회사. 사람 화면 안에 놓는다 */
 export function OrgSection() {
   const { raw, update, toast } = useStore();
+  const canEditAll = useCanEditPeople(); // 조직 편집은 조직장만(사용자 결정 2026-10-29)
   const orgs = useMemo(() => effectiveOrgs(raw), [raw]);
   const tree = useMemo(() => orgTree(orgs), [orgs]);
   const [add, setAdd] = useState<Draft>({ name: '', level: '팀', parentId: '' });
@@ -29,6 +30,7 @@ export function OrgSection() {
   const countPeople = (o: Org) => raw.users.filter((u) => u.dept === o.name).length;
 
   const onAdd = () => {
+    if (!canEditAll) return;
     const input = { name: add.name, level: add.level, parentId: add.parentId || null };
     const r = addOrg(clone(raw), input);
     if ('error' in r) return setErr(r.error);
@@ -47,6 +49,7 @@ export function OrgSection() {
   };
 
   const onSave = (id: string) => {
+    if (!canEditAll) return;
     const patch = { name: draft.name, level: draft.level, parentId: draft.parentId || null };
     const r = editOrg(clone(raw), id, patch);
     if (r && 'error' in r) return setErr(r.error);
@@ -64,6 +67,7 @@ export function OrgSection() {
   };
 
   const onRemove = (id: string) => {
+    if (!canEditAll) return;
     const r = removeOrg(clone(raw), id);
     if ('error' in r) return setErr(r.error);
     update((d) => {
@@ -87,8 +91,9 @@ export function OrgSection() {
     <Card data-testid="org-section">
       <CardHead title="조직" icon={<Network size={16} />} />
       <div className="space-y-3 p-4">
-        <p className="text-xs text-muted">업무가 모여 팀, 팀이 모여 부, 부가 모여 본부, 본부가 모여 회사가 됩니다. 상위 조직을 바꾸는 것이 곧 조직개편이며, 아래 조직·업무가 함께 옮겨 갑니다.</p>
+        <p className="text-xs text-muted">업무가 모여 팀, 팀이 모여 부, 부가 모여 본부, 본부가 모여 회사가 됩니다. 상위 조직을 바꾸는 것이 곧 조직개편이며, 아래 조직·업무가 함께 옮겨 갑니다.{canEditAll ? '' : ' (보기만 할 수 있습니다)'}</p>
 
+        {canEditAll && (
         <div className="grid items-end gap-3 sm:grid-cols-[1.4fr_0.7fr_1.2fr_auto]">
           <Field label="새 조직 이름" htmlFor="org-add-name">
             <input id="org-add-name" className={inputCls} value={add.name} onChange={(e) => setAdd({ ...add, name: e.target.value })} data-testid="org-add-name" />
@@ -112,6 +117,7 @@ export function OrgSection() {
             추가
           </Button>
         </div>
+        )}
 
         {err && (
           <p className="text-xs text-danger" role="alert" data-testid="org-error">
@@ -122,7 +128,7 @@ export function OrgSection() {
         <ul className="divide-y divide-line rounded-md border border-line text-[13px]">
           {tree.map(({ org, depth }) => (
             <li key={org.id} className="px-3 py-2" data-testid="org-row">
-              {editId === org.id ? (
+              {canEditAll && editId === org.id ? (
                 <div className="grid items-end gap-2 sm:grid-cols-[1.4fr_0.7fr_1.2fr_auto]">
                   <input aria-label="조직 이름" className={inputCls} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
                   {levelSelect(draft.level, (l) => setDraft({ ...draft, level: l }), '조직 단계')}
@@ -153,16 +159,18 @@ export function OrgSection() {
                   <span className="text-2xs text-muted">
                     업무 {countWorks(org)} · 사람 {countPeople(org)}
                   </span>
-                  <span className="ml-auto flex gap-1">
-                    <Button size="sm" onClick={() => startEdit(org)} data-testid={`org-edit-${org.id}`}>
-                      <Pencil size={12} />
-                      고치기
-                    </Button>
-                    <Button size="sm" variant="danger" onClick={() => onRemove(org.id)} data-testid={`org-remove-${org.id}`}>
-                      <Trash2 size={12} />
-                      지우기
-                    </Button>
-                  </span>
+                  {canEditAll && (
+                    <span className="ml-auto flex gap-1">
+                      <Button size="sm" onClick={() => startEdit(org)} data-testid={`org-edit-${org.id}`}>
+                        <Pencil size={12} />
+                        고치기
+                      </Button>
+                      <Button size="sm" variant="danger" onClick={() => onRemove(org.id)} data-testid={`org-remove-${org.id}`}>
+                        <Trash2 size={12} />
+                        지우기
+                      </Button>
+                    </span>
+                  )}
                 </div>
               )}
             </li>

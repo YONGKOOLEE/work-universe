@@ -3,6 +3,7 @@
 // 브라우저 기능을 쓰지 않는다(vitest로 검증).
 import type { AppState, Work, User, Doc, Action, Stmt, Org } from '../lib/types';
 import { effectiveOrgs, orgChildren, orgOfName, subtreeNames, NO_ORG } from '../lib/orgs';
+import { displayName, isLeft } from '../lib/people';
 
 export type OriginKind = 'root' | 'work' | 'user' | 'doc' | 'action' | 'org' | 'topic';
 export interface Origin {
@@ -123,7 +124,8 @@ interface Ctx {
 function addPerson(b: DocBuilder, c: Ctx, userId: string): string | null {
   const u = c.users.get(userId);
   if (!u) return null;
-  const id = b.node({ kind: 'user', id: u.id }, 'person', u.name, { description: u.title || undefined, ...(u.empNo ? { emp_no: u.empNo } : {}) });
+  // 전출·퇴직한 사람은 지도에 남기되 이름 뒤에 꼬리표를 붙인다(지금 담당 연결은 아래 addWorkBody에서 뺀다)
+  const id = b.node({ kind: 'user', id: u.id }, 'person', displayName(u), { description: u.title || undefined, ...(u.empNo ? { emp_no: u.empNo } : {}) });
   const team = orgLabel(u.dept || '');
   if (!team || b.otherTeams.has(team)) return id;
   b.edge('belongs_to', id, team === b.teamRoot ? 'N-000' : b.node({ kind: 'org', id: team }, 'org', team));
@@ -133,8 +135,12 @@ function addPerson(b: DocBuilder, c: Ctx, userId: string): string | null {
 /** 업무 하나를 문서에 넣는다(담당·문서·조치·주제·메모·관계 기관). workNode: 이미 만든 노드 ID(지도 중심이면 N-000) */
 function addWorkBody(b: DocBuilder, c: Ctx, w: Work, workNode: string) {
   // 담당: 기간마다 수행 연결 + 시작·종료 이력. 기간 기록이 없는 현재 담당자는 기간 없이 잇는다
+  // 전출·퇴직한 사람의 지금 담당(끝나지 않은 기간·현 담당)은 빠진 것으로 본다 → 그 업무는 담당자 빈 업무·혼자만 아는 일 계산에 반영된다.
+  // 이미 끝난 담당 기간(이전 담당 이력)은 그대로 둔다.
+  const gone = (id: string) => isLeft(c.users.get(id));
   const periods = (w.ownerHistory || []).filter((p) => c.users.has(p.userId));
   for (const p of periods) {
+    if (gone(p.userId) && !p.to) continue;
     const pid = addPerson(b, c, p.userId);
     if (!pid) continue;
     b.edge('performs', pid, workNode, { period: { start: day(p.from), ...(p.to ? { end: day(p.to) } : {}) }, ...(p.note ? { note: p.note } : {}) });
@@ -142,6 +148,7 @@ function addWorkBody(b: DocBuilder, c: Ctx, w: Work, workNode: string) {
     if (p.to) b.event('assign_end', day(p.to), { person_id: pid, work_id: workNode });
   }
   for (const o of w.owners) {
+    if (gone(o)) continue;
     if (periods.some((p) => p.userId === o && !p.to)) continue;
     const pid = addPerson(b, c, o);
     if (pid) b.edge('performs', pid, workNode);

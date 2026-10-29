@@ -5,7 +5,7 @@ import { cx } from '../lib/util';
 import type { AppState } from '../lib/types';
 import type { MapScope } from './derive';
 import { effectiveOrgs, orgChain, orgOfName, orgShort } from '../lib/orgs';
-import { handoverInsights, INSIGHT_HELP, INSIGHT_NAMES, type FlowKind, type Insight, type InsightKind } from './insights';
+import { handoverInsights, INSIGHT_HELP, INSIGHT_NAMES, riskTotals, type FlowKind, type Insight, type InsightKind } from './insights';
 import { FLOW_GROUP_NAME, FLOW_HELP, FLOW_KINDS, FLOW_NAMES, flowInsights, overview } from './flowInsights';
 import { ClaudeInsights } from './ClaudeInsights';
 
@@ -34,6 +34,7 @@ export function InsightPanel({ data, scope, asOf, focusId, onFocus }: { data: Ap
   ];
   const empty = sections.every((x) => x.list.length === 0);
   const notes = [...r.notes, ...f.notes];
+  const totals = riskTotals(all);
   return (
     <div className="rounded-lg border border-line bg-surface p-4" data-testid="map-risk">
       <div className="flex items-center justify-between gap-2">
@@ -47,7 +48,10 @@ export function InsightPanel({ data, scope, asOf, focusId, onFocus }: { data: Ap
         {ov.text}
       </p>
       <div className="mt-2 flex flex-wrap items-center gap-1" role="tablist" aria-label="인사이트 종류">
-        <Chip on={kind === 'all'} onClick={() => setKind('all')} testid="insight-kind-all">전체 {all.length}</Chip>
+        <Chip on={kind === 'all'} onClick={() => setKind('all')} testid="insight-kind-all">전체 항목 {all.length}</Chip>
+        <span className="text-2xs text-faint" data-testid="insight-count-note" title="한 업무가 여러 항목(혼자만 아는 일·인계 준비도 낮음 등)에 함께 나올 수 있어 업무 수와 항목 수가 다릅니다">
+          위험 업무 {totals.works}건 · 항목 {totals.items}개
+        </span>
       </div>
       <ChipGroup title="인계 위험" kinds={KINDS} counts={r.counts} kind={kind} setKind={setKind} />
       <ChipGroup title={FLOW_GROUP_NAME} kinds={FLOW_KINDS} counts={f.counts} kind={kind} setKind={setKind} />
@@ -68,7 +72,7 @@ export function InsightPanel({ data, scope, asOf, focusId, onFocus }: { data: Ap
         const shown = more[sec.key] ? sec.list : sec.list.slice(0, SHOW);
         return (
           <div key={sec.key} className="mt-2" data-testid={`insight-group-${sec.key}`}>
-            <h4 className="px-1.5 text-2xs font-bold text-faint">{sec.title} {sec.list.length}</h4>
+            <h4 className="px-1.5 text-2xs font-bold text-faint">{sec.title} · 항목 {sec.list.length}개</h4>
             <ul className="mt-0.5 space-y-0.5">
               {shown.map((x) => (
                 <li key={x.id}>
@@ -85,6 +89,7 @@ export function InsightPanel({ data, scope, asOf, focusId, onFocus }: { data: Ap
                         <span className="shrink-0 text-2xs text-faint">{NAMES[x.kind]}</span>
                       </span>
                       <span className="block text-2xs leading-snug text-muted">{x.detail}</span>
+                      {x.next && <span className="block text-2xs font-medium leading-snug text-brand" data-testid="insight-next">{x.next}</span>}
                     </span>
                   </button>
                 </li>
