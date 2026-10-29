@@ -531,6 +531,36 @@ try {
     return '김도윤: W-004 읽기 전용·메모 남김 / 정하준: 메모 안 보임·편집 가능';
   });
 
+  await check('16 화면 밝기(자동 → 밝게 → 어둡게)·가+나 지도', async () => {
+    await must(await H(`user('박지훈')`), '박지훈 전환 실패');
+    await nav('#/universe', mapReady);
+    const bg = () => ev(`getComputedStyle(document.body).backgroundColor`);
+    const st = () => ev(`document.querySelector('[data-map-style]')?.dataset.mapStyle ?? ''`);
+    await must((await ev(`document.querySelector('[data-testid="theme-toggle"]').dataset.value`)) === 'auto', '처음 밝기가 자동이 아님');
+    await must((await st()) === 'mix', `자동에서 지도 모양 ${await st()}(가+나여야 함)`);
+    await must(await H(`clickId('theme-toggle')`), '밝기 단추 없음');
+    await must(await wait(`document.documentElement.dataset.theme === 'light' && window.__h.nodes() > 0`, 4000), '밝게로 안 바뀜');
+    await sleep(800);
+    const lightStyle = await st();
+    await must(lightStyle === 'clean', `밝게에서 지도 모양 ${lightStyle}(흰 판이어야 함)`);
+    await must(await ev(`document.querySelector('[data-testid="map-style-mix"]').getAttribute('aria-checked') === 'true'`), '밝게에서 시안 단추가 가+나에서 벗어남');
+    const lightBg = await bg();
+    await shot('16-밝게-지도');
+    await must(await H(`clickId('theme-toggle')`), '밝기 단추 없음(2)');
+    await must(await wait(`document.documentElement.dataset.theme === 'dark' && window.__h.nodes() > 0`, 4000), '어둡게로 안 바뀜');
+    await sleep(800);
+    await must((await st()) === 'mix', `어둡게에서 지도 모양 ${await st()}`);
+    const darkBg = await bg();
+    await must(lightBg !== darkBg, `밝게·어둡게 바탕색이 같음(${lightBg})`);
+    await shot('16-어둡게-지도');
+    await nav('#/dashboard', `!!document.querySelector('main')`);
+    await shot('16-어둡게-대시보드');
+    await must(await H(`clickId('theme-toggle')`), '밝기 단추 없음(3)');
+    await must(await wait(`!document.documentElement.dataset.theme`, 2000), '자동으로 안 돌아옴');
+    await must(await H(`user('김도윤')`), '김도윤 복귀 실패');
+    return `밝게 바탕 ${lightBg}·지도 흰 판 / 어둡게 바탕 ${darkBg}·우주 판 / 자동 복귀`;
+  });
+
   // 12
   const exc = logs.filter((l) => l.kind === 'exception');
   const err = logs.filter((l) => l.kind === 'error');

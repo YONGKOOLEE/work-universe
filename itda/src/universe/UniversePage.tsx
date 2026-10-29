@@ -10,14 +10,15 @@ import { worksInScope, type MapScope } from './derive';
 import { effectiveOrgs, myOrgChain, orgShort, worksOfOrg } from '../lib/orgs';
 import { MapPanel } from './MapPanel';
 import { handoverInsights } from './insights';
-import { MAP_STYLES, scopeClass, useMapStyle } from './mapStyle';
+import { MAP_STYLES, scopeClass, useEffectiveMapStyle, useMapStyle } from './mapStyle';
 
 type Scope = string; // 'mine' | 'org:<조직 ID>' | 'all'
 
 export default function UniversePage() {
   const { s, me } = useStore();
   const lead = me.role === 'lead';
-  const [style, setStyle] = useMapStyle();
+  const [chosen, setStyle] = useMapStyle();
+  const style = useEffectiveMapStyle(); // 가+나는 「밝게」에서 흰 판
   // 범위 칩: 내 지도 → 내 조직부터 위로(팀 → 부 → 본부 → 회사). 업무가 없는 조직은 뺀다. 맨 위 조직이 전체가 아니면 「전체」를 더한다
   const chain = useMemo(() => myOrgChain(s, me.id).map((o) => ({ o, n: worksOfOrg(s, o.id).length })).filter((x) => x.n > 0), [s, me.id]);
   const topAll = chain.length > 0 && chain[chain.length - 1].n === s.works.length;
@@ -74,9 +75,9 @@ export default function UniversePage() {
               <button
                 key={x.id}
                 role="radio"
-                aria-checked={style === x.id}
+                aria-checked={chosen === x.id}
                 onClick={() => setStyle(x.id)}
-                className={cx('rounded-full px-2 py-0.5 font-medium', style === x.id ? 'bg-brand text-onbrand' : 'text-muted hover:text-ink')}
+                className={cx('rounded-full px-2 py-0.5 font-medium', chosen === x.id ? 'bg-brand text-onbrand' : 'text-muted hover:text-ink')}
                 data-testid={`map-style-${x.id}`}
               >
                 {x.label}

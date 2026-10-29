@@ -1,7 +1,8 @@
 // 지도 그리기(CR-24 D24-3): 파생 문서 → 유니버스 view·접기(projectView) → 유니버스 그래프(Cytoscape). 업무잇다 화면 색에 맞춘 밝은·어두운 테마.
 import { useEffect, useMemo, useRef } from 'react';
 import type { Derived } from './derive';
-import { useMapStyle, type MapStyle } from './mapStyle';
+import { useEffectiveMapStyle, type MapStyle } from './mapStyle';
+import { isDarkNow, useTheme } from '../lib/theme';
 // @ts-expect-error 유니버스 순수 모듈(JS)
 import { buildView } from '../../../app/src/view/view.js';
 // @ts-expect-error 유니버스 순수 모듈(JS)
@@ -17,7 +18,7 @@ export const MAP_COLORS = {
 export const TYPE_NAMES: Record<string, string> = { root: '지도 중심', work: '업무·할 일', person: '사람', artifact: '문서', org: '조직', topic: '주제' };
 
 const FONT = '"Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif';
-const isDark = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches && document.documentElement.dataset.theme !== 'light';
+const isDark = isDarkNow;
 const rgb = (name: string) => `rgb(${getComputedStyle(document.documentElement).getPropertyValue(`--${name}`).trim().split(/\s+/).join(',')})`;
 
 // (가) 우주: 짙은 남색 바탕에서 또렷한 유형 색(dataviz 검증기, 바탕 #0b1430 — 2026-10-29)
@@ -143,10 +144,11 @@ export function useMapView(derived: Derived) {
   return useMemo(() => buildView(derived.doc, derived.resolve), [derived]);
 }
 
-/** 시안을 바꾸면 그래프를 새로 만든다(색·모양은 만들 때 정해짐) */
+/** 시안·화면 밝기를 바꾸면 그래프를 새로 만든다(색·모양은 만들 때 정해짐) */
 export function MapView(props: Parameters<typeof MapViewInner>[0]) {
-  const [style] = useMapStyle();
-  return <MapViewInner key={style} {...props} mapStyle={style} />;
+  const style = useEffectiveMapStyle();
+  const [theme] = useTheme();
+  return <MapViewInner key={`${style}-${theme}`} {...props} mapStyle={style} />;
 }
 
 function MapViewInner({
@@ -227,7 +229,8 @@ function MapViewInner({
 
 /** 범례: 지금 그린 유형만 */
 export function MapLegend({ view }: { view: any }) {
-  const [style] = useMapStyle();
+  const style = useEffectiveMapStyle();
+  useTheme(); // 밝기를 바꾸면 범례 색도 다시
   const dark = isDark();
   const colors = style === 'space' || style === 'mix' ? SPACE_COLORS : dark ? MAP_COLORS.dark : MAP_COLORS.light;
   const present = new Set<string>(view.nodes.filter((n: any) => !n.hidden).map((n: any) => n.core_type));

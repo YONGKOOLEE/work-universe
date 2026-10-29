@@ -10,7 +10,7 @@ import type { AppState } from '../lib/types';
 import { deriveMap, hideKey, type MapScope, type Origin, type Derived } from './derive';
 import { MapLegend, MapView, useMapView } from './MapView';
 import { InsightPanel } from './InsightPanel';
-import { scopeClass, useMapStyle } from './mapStyle';
+import { scopeClass, useEffectiveMapStyle } from './mapStyle';
 import type { Insight } from './insights';
 import { addMemo, addPrivateMemo, addTopic, assignOwner, linkWorks, LINK_NAMES, MEMO_NAMES, removeTopic, setMapHidden, unlinkWorks, type Change, type LinkKind, type MemoKind } from './commands';
 // @ts-expect-error 유니버스 순수 모듈(JS)
@@ -39,7 +39,7 @@ function gidOfOrigin(d: Derived, view: any, o: Origin): string | null {
 
 // framed: 시안(가 우주·나 정돈)의 공간 틀을 스스로 두른다(업무 상세 「업무 지도」 탭). 유니버스 메뉴는 화면 전체를 두르므로 false
 export function MapPanel({ data, scope, height = 600, showRisk = true, testid = 'itda-map', framed = true }: { data: AppState; scope: MapScope; height?: number; showRisk?: boolean; testid?: string; framed?: boolean }) {
-  const [mapStyle] = useMapStyle();
+  const mapStyle = useEffectiveMapStyle();
   // 팀·부서 지도는 항목이 많아 할 일(문서에서 온 조치)은 기본으로 숨긴다 — 「할 일 보기」로 켬. 업무·내 지도는 늘 보임
   const [showTodo, setShowTodo] = useState(scope.kind !== 'all');
   const derived = useMemo(() => deriveMap(data, scope, undefined, { actions: showTodo }), [data, scope, showTodo]);

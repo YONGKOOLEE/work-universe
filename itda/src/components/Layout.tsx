@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutDashboard, FolderKanban, Files, GitCommitVertical, ScrollText, Search, ArrowRightLeft, ChevronLeft, Menu, RotateCcw, UserRound, Bot, X, ArrowDownUp, Orbit, KeyRound, Users } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, Files, GitCommitVertical, ScrollText, Search, ArrowRightLeft, ChevronLeft, Menu, RotateCcw, UserRound, Bot, X, ArrowDownUp, Orbit, KeyRound, Users, Sun, Moon, Monitor } from 'lucide-react';
+import { THEME_LABELS, THEME_NEXT, useTheme } from '../lib/theme';
 import { DataTransfer } from './DataTransfer';
 import { NewWorkModal } from './NewWorkModal';
 import { useRouter } from '../lib/router';
@@ -22,6 +23,25 @@ function EngineNote() {
       <Bot size={13} className="mt-0.5 shrink-0" />
       <span>{txt}</span>
     </div>
+  );
+}
+
+/** 화면 밝기: 누를 때마다 자동(PC 따름) → 밝게 → 어둡게 */
+function ThemeToggle() {
+  const [t, setT] = useTheme();
+  const Icon = t === 'light' ? Sun : t === 'dark' ? Moon : Monitor;
+  return (
+    <button
+      className="flex items-center rounded-md p-1.5 text-muted hover:bg-sunken hover:text-ink"
+      onClick={() => setT(THEME_NEXT[t])}
+      title={`화면: ${THEME_LABELS[t]}${t === 'auto' ? '(PC 설정 따름)' : ''} — 누르면 ${THEME_LABELS[THEME_NEXT[t]]}`}
+      aria-label={`화면 밝기: ${THEME_LABELS[t]}`}
+      data-testid="theme-toggle"
+      data-value={t}
+    >
+      <Icon size={15} />
+      <span className="ml-1 hidden text-xs font-medium 2xl:inline">{THEME_LABELS[t]}</span>
+    </button>
   );
 }
 
@@ -277,6 +297,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 ))}
               </select>
             </label>
+            <ThemeToggle />
             <EngineToggle onSettings={() => setAiOpen(true)} />
             <Button variant="ghost" size="sm" onClick={() => setDataOpen(true)} title="데이터 옮기기 (백업 · 불러오기)">
               <ArrowDownUp size={14} />
