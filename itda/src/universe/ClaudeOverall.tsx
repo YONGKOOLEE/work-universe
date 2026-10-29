@@ -46,7 +46,7 @@ export function useClaudeOverall(s: AppState, scope: MapScope, asOf: string) {
       setSt((x) => ({ running: false, error: '', tick: x.tick + 1 }));
     } catch (e) {
       if (c.signal.aborted) return;
-      console.warn('Claude 전체 인사이트 실패', e);
+      console.warn('AI 전체 인사이트 실패', e);
       setSt((x) => ({ ...x, running: false, error: ai.onError(e) }));
     }
   }, [ai, available, s, scope, asOf, scopeKey, fp]);
@@ -64,10 +64,10 @@ export function OverallButton({ o }: { o: OverallState }) {
     <button
       className="inline-flex items-center gap-1 rounded border border-infer/30 bg-surface px-2 py-0.5 text-[12px] font-medium text-infer hover:bg-infersoft"
       onClick={() => void o.run()}
-      title="이 범위의 업무 기록 전체를 Claude에 보내, 팀 전체를 관통하는 것(공통 병목·같은 외부기관 의존·되풀이되는 결정 번복 등)을 찾습니다(「나만 보기」 메모는 보내지 않음)"
+      title="이 범위의 업무 기록 전체를 AI(지금: Claude)에 보내, 팀 전체를 관통하는 것(공통 병목·같은 외부기관 의존·되풀이되는 결정 번복 등)을 찾습니다(「나만 보기」 메모는 보내지 않음)"
       data-testid="claude-overall-run"
     >
-      <Layers size={12} /> {o.result ? (o.stale ? '바뀐 기록으로 전체 인사이트 다시' : '전체 인사이트 다시') : 'Claude로 전체 인사이트'}
+      <Layers size={12} /> {o.result ? (o.stale ? '바뀐 기록으로 전체 인사이트 다시' : '전체 인사이트 다시') : 'AI로 전체 인사이트'}
     </button>
   );
 }
@@ -132,7 +132,7 @@ export function OverallResults({ o, data, scope, focusId, onFocus }: { o: Overal
           )}
           {r.dropped > 0 && <p className="mt-1 text-2xs text-faint" data-testid="claude-overall-dropped">근거가 업무 기록에서 확인되지 않거나 한 업무뿐이라 뺀 항목 {r.dropped}개</p>}
           {r.truncated > 0 && <p className="mt-1 text-2xs text-faint">업무가 많아 최근 갱신순으로 일부만 보냈습니다(빠진 업무 {r.truncated}개).</p>}
-          <p className="mt-1 text-2xs text-faint">Claude가 쓴 해석입니다. 근거 인용이 실제 업무 기록에 있는지, 서로 다른 업무 둘 이상에 걸치는지는 앱이 확인했습니다. 결과는 이 탭에만 있고 저장·내보내기에 들어가지 않습니다.</p>
+          <p className="mt-1 text-2xs text-faint">AI(Claude)가 쓴 해석입니다. 근거 인용이 실제 업무 기록에 있는지, 서로 다른 업무 둘 이상에 걸치는지는 앱이 확인했습니다. 결과는 이 탭에만 있고 저장·내보내기에 들어가지 않습니다.</p>
         </div>
       )}
     </>

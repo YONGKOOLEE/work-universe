@@ -39,7 +39,7 @@ export function useClaudeInsights(s: AppState, scope: MapScope, asOf: string) {
       setSt((x) => ({ running: false, error: '', tick: x.tick + 1 }));
     } catch (e) {
       if (c.signal.aborted) return;
-      console.warn('Claude 인사이트 실패', e);
+      console.warn('AI 인사이트 실패', e);
       setSt((x) => ({ ...x, running: false, error: ai.onError(e) }));
     }
   }, [ai, available, s, scope, asOf, scopeKey, fp]);
@@ -48,7 +48,7 @@ export function useClaudeInsights(s: AppState, scope: MapScope, asOf: string) {
     setSt((x) => ({ ...x, running: false }));
   };
   const hit = cache.get(scopeKey);
-  return { available, keyButRule: !available && ai.status === 'available', running: st.running, error: st.error, result: hit?.result ?? null, stale: !!hit && hit.fp !== fp, run, cancel };
+  return { available, keyButRule: !available && ai.status === 'available', internal: ai.preferred === 'internal', running: st.running, error: st.error, result: hit?.result ?? null, stale: !!hit && hit.fp !== fp, run, cancel };
 }
 
 export function ClaudeInsights({ data, scope, asOf, focusId, onFocus }: { data: AppState; scope: MapScope; asOf: string; focusId: string | null; onFocus: (x: Insight | null) => void }) {
@@ -58,7 +58,7 @@ export function ClaudeInsights({ data, scope, asOf, focusId, onFocus }: { data: 
   if (!c.available)
     return (
       <p className="mt-3 border-t border-line pt-2 text-2xs text-faint" data-testid="insight-claude-hint">
-        {c.keyButRule ? '상단 AI 엔진에서 Claude를 고르면' : '상단 「AI 설정」에 본인 Claude API 키를 넣으면'} Claude가 업무 기록을 읽고 규칙이 못 보는 위험(숨은 의존·기한 몰림·한 사람만 아는 절차 등)을 더 찾고, 팀 전체를 관통하는 인사이트도 뽑습니다.
+        {c.internal ? '사내 LLM은 연결할 자리만 있어 지금은 규칙 인사이트만 보입니다. 상단 AI 엔진에서 Claude를 고르면(본인 키 필요)' : c.keyButRule ? '상단 AI 엔진에서 Claude를 고르면' : '상단 「AI 설정」에 본인 Claude API 키를 넣으면'} AI가 업무 기록을 읽고 규칙이 못 보는 위험(숨은 의존·기한 몰림·한 사람만 아는 절차 등)을 더 찾고, 팀 전체를 관통하는 인사이트도 뽑습니다.
       </p>
     );
   const r = c.result;
@@ -68,7 +68,7 @@ export function ClaudeInsights({ data, scope, asOf, focusId, onFocus }: { data: 
     <div className="mt-3 border-t border-line pt-3" data-testid="claude-insights">
       <div className="flex items-center justify-between gap-2">
         <h4 className="flex items-center gap-1.5 text-[13px] font-bold">
-          <Sparkles size={14} className="text-infer" /> Claude가 찾은 인사이트
+          <Sparkles size={14} className="text-infer" /> AI가 찾은 인사이트
         </h4>
         {r && <span className="rounded bg-infersoft px-1.5 text-2xs font-semibold text-infer">Claude API</span>}
       </div>
@@ -82,16 +82,16 @@ export function ClaudeInsights({ data, scope, asOf, focusId, onFocus }: { data: 
           <button
             className="inline-flex items-center gap-1 rounded border border-infer/30 bg-surface px-2 py-0.5 text-[12px] font-medium text-infer hover:bg-infersoft"
             onClick={() => void c.run()}
-            title="이 범위의 업무 기록·사람 목록을 Claude에 보내, 규칙이 못 보는 위험을 찾습니다(「나만 보기」 메모는 보내지 않음)"
+            title="이 범위의 업무 기록·사람 목록을 AI(지금: Claude)에 보내, 규칙이 못 보는 위험을 찾습니다(「나만 보기」 메모는 보내지 않음)"
             data-testid="claude-insight-run"
           >
-            <Sparkles size={12} /> {r ? (c.stale ? '바뀐 기록으로 다시 찾기' : '다시 찾기') : 'Claude로 더 찾기'}
+            <Sparkles size={12} /> {r ? (c.stale ? '바뀐 기록으로 다시 찾기' : '다시 찾기') : 'AI로 더 찾기'}
           </button>
         )}
         <OverallButton o={o} />
       </div>
       <OverallResults o={o} data={data} scope={scope} focusId={focusId} onFocus={onFocus} />
-      {c.error && <p className="mt-1.5 text-[12.5px] text-warn" data-testid="claude-insight-error">Claude 인사이트를 찾지 못했습니다: {c.error} 위의 규칙 인사이트는 그대로 쓸 수 있습니다.</p>}
+      {c.error && <p className="mt-1.5 text-[12.5px] text-warn" data-testid="claude-insight-error">AI 인사이트를 찾지 못했습니다: {c.error} 위의 규칙 인사이트는 그대로 쓸 수 있습니다.</p>}
       {r && (
         <>
           {c.stale && <p className="mt-1 text-2xs text-warn" data-testid="claude-insight-stale">찾은 뒤 기록이 바뀌었습니다. 아래는 이전 기록 기준입니다.</p>}

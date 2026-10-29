@@ -298,9 +298,9 @@ export default function WorkDetail({ id }: { id: string }) {
                 </button>
               ))}
               {cc.available && !ro && !cc.running && (
-                <button className="ml-auto inline-flex items-center gap-1 rounded border border-infer/30 bg-surface px-2 py-0.5 font-medium text-infer hover:bg-infersoft" onClick={() => void cc.run()} title="업무 기록과 연결 문서를 Claude가 대조해, 문서에는 있는데 기록에 빠진 것·서로 다른 것을 찾습니다" data-testid="work-claude-check">
+                <button className="ml-auto inline-flex items-center gap-1 rounded border border-infer/30 bg-surface px-2 py-0.5 font-medium text-infer hover:bg-infersoft" onClick={() => void cc.run()} title="업무 기록과 연결 문서를 AI(지금: Claude)가 대조해, 문서에는 있는데 기록에 빠진 것·서로 다른 것을 찾습니다" data-testid="work-claude-check">
                   <Sparkles size={12} />
-                  {cc.result ? 'Claude로 다시 점검' : 'Claude로 점검'}
+                  {cc.result ? 'AI로 다시 점검' : 'AI로 점검'}
                 </button>
               )}
             </div>

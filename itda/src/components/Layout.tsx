@@ -7,7 +7,7 @@ import { useRouter } from '../lib/router';
 import { useStore, useFocus, BUNDLED } from '../lib/store';
 import { cx } from '../lib/util';
 import { Button, Modal } from './ui';
-import { useAI } from '../ai/claude';
+import { useAI, INTERNAL_NOTICE, type EnginePref } from '../ai/claude';
 import { selectableUsers, displayName } from '../lib/people';
 
 function EngineNote() {
@@ -15,9 +15,11 @@ function EngineNote() {
   const txt =
     ai.engine === 'claude'
       ? `문서 분석·AI 검색을 Claude(${ai.model})로 합니다 — 본인 API 키 사용. 결과는 원문 대조를 거쳐 표시합니다.`
-      : ai.status === 'available'
-        ? '규칙 기반으로 동작 중입니다(키는 저장되어 있음 — 상단에서 Claude를 고르면 바로 사용).'
-        : '키가 없어 규칙 기반으로 동작합니다. 상단 「AI 설정」에 본인 Claude API 키를 넣으면 Claude가 분석합니다.';
+      : ai.preferred === 'internal'
+        ? INTERNAL_NOTICE
+        : ai.status === 'available'
+          ? '규칙 기반으로 동작 중입니다(키는 저장되어 있음 — 상단에서 Claude를 고르면 바로 사용).'
+          : '키가 없어 규칙 기반으로 동작합니다. 상단 「AI 설정」에 본인 Claude API 키를 넣으면 Claude가 분석합니다.';
   return (
     <div className="flex items-start gap-1.5 rounded-md border border-sidemuted/25 px-2 py-1.5" data-testid="engine-note">
       <Bot size={13} className="mt-0.5 shrink-0" />
@@ -45,22 +47,34 @@ function ThemeToggle() {
   );
 }
 
+/** AI 엔진: 규칙 / Claude / 사내 LLM(자리만). 고른 칸을 칠한다 — Claude는 키가 있을 때만 고를 수 있다 */
 function EngineToggle({ onSettings }: { onSettings: () => void }) {
   const ai = useAI();
+  const { toast } = useStore();
   const can = ai.status === 'available';
+  const on: EnginePref = ai.preferred === 'internal' ? 'internal' : ai.engine;
+  const seg = (e: EnginePref) => cx('flex items-center gap-1 px-2 py-1 font-semibold', on === e ? (e === 'claude' ? 'bg-brand text-onbrand' : 'bg-navy text-surface') : 'text-muted');
   return (
     <div className="flex items-center gap-1">
-      <div className="flex items-center rounded-md border border-line text-xs" title={can ? 'AI 엔진 선택: Claude(본인 키로 실시간 분석) 또는 규칙(키 없이, 밖으로 보내지 않음)' : '지금은 규칙 기반(키 없이 동작). 「AI 설정」에 본인 키를 넣으면 Claude를 쓸 수 있습니다'} role="group" aria-label="AI 엔진">
-        <button
-          className={cx('flex items-center gap-1 rounded-l-md px-2 py-1 font-semibold', ai.engine === 'claude' ? 'bg-brand text-onbrand' : 'text-muted')}
-          onClick={() => (can ? ai.setPreferred('claude') : onSettings())}
-          data-testid="engine-claude"
-        >
+      <div className="flex items-center rounded-md border border-line text-xs" title="AI 엔진 선택: 규칙(키 없이, 밖으로 보내지 않음) · Claude(본인 키로 실시간 분석) · 사내 LLM(연결할 자리만 — 지금은 규칙)" role="group" aria-label="AI 엔진" data-testid="engine-toggle" data-value={on}>
+        <button className={cx(seg('mock'), 'rounded-l-md')} onClick={() => ai.setPreferred('mock')} aria-pressed={on === 'mock'} data-testid="engine-rule">
+          규칙
+        </button>
+        <button className={seg('claude')} onClick={() => (can ? ai.setPreferred('claude') : onSettings())} aria-pressed={on === 'claude'} title={can ? 'Claude(본인 키)로 분석' : '키가 없습니다 — 누르면 「AI 설정」이 열립니다'} data-testid="engine-claude">
           <span className={cx('h-1.5 w-1.5 rounded-full', can ? 'bg-ok' : 'bg-faint')} />
           Claude
         </button>
-        <button className={cx('rounded-r-md px-2 py-1 font-semibold', ai.engine === 'mock' ? 'bg-navy text-surface' : 'text-muted')} onClick={() => ai.setPreferred('mock')} data-testid="engine-rule">
-          규칙
+        <button
+          className={cx(seg('internal'), 'rounded-r-md')}
+          onClick={() => {
+            ai.setPreferred('internal');
+            toast(INTERNAL_NOTICE);
+          }}
+          aria-pressed={on === 'internal'}
+          title={INTERNAL_NOTICE}
+          data-testid="engine-internal"
+        >
+          사내
         </button>
       </div>
       <button className="flex items-center rounded-md p-1.5 text-muted hover:bg-sunken hover:text-ink" onClick={onSettings} title="AI 설정(API 키)" aria-label="AI 설정" data-testid="ai-settings-open">
@@ -137,6 +151,7 @@ function AISettings({ open, onClose }: { open: boolean; onClose: () => void }) {
           <li>키는 이 브라우저 저장소에만 저장됩니다(암호화 없음). 데이터 옮기기·백업 파일에는 들어가지 않습니다.</li>
           <li>호출은 api.anthropic.com으로만 가고, 사용량은 본인 키로 과금됩니다. 키를 넣고 Claude 기능(문서 분석·점검·인사이트)을 쓰면 문서 본문과 업무 기록(담당자 이름 포함)이 전송됩니다(「나만 보기」 메모는 보내지 않음) — 실제 업무 문서는 회사의 외부 전송 기준을 확인한 뒤 쓰세요.</li>
           <li>브라우저에서 키를 직접 쓰는 방식은 시연·개인 도구용입니다. 조직 서비스로 쓰려면 서버 중계로 바꿔야 합니다.</li>
+          <li data-testid="ai-internal-note">사내 LLM: 상단 엔진의 「사내」 칸은 연결할 자리만 있습니다. 사용 방법이 정해지면 같은 자리에 연결하며, 지금 고르면 규칙 기반으로 동작합니다.</li>
         </ul>
       </div>
     </Modal>

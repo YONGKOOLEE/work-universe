@@ -110,7 +110,7 @@ export default function SearchPage() {
           <Loader2 size={16} className="animate-spin" />
           <span className="flex-1">
             {ai.engine === 'claude'
-              ? 'Claude가 등록 자료를 읽고 답변을 작성하는 중입니다. 처음 호출할 때는 사용 동의 창이 뜨며, 답변까지 보통 10~60초 걸립니다.'
+              ? 'AI(Claude)가 등록 자료를 읽고 답변을 작성하는 중입니다. 처음 호출할 때는 사용 동의 창이 뜨며, 답변까지 보통 10~60초 걸립니다.'
               : '등록된 업무·문서·회의록에서 근거를 찾는 중'}
           </span>
           {ai.engine === 'claude' && (
@@ -191,7 +191,7 @@ export default function SearchPage() {
                   )}
                 </p>
               ) : (
-                <p className="text-2xs text-faint">규칙 기반 답변 · 등록 자료에서 규칙으로 생성(키를 넣으면 Claude가 답함).</p>
+                <p className="text-2xs text-faint">규칙 기반 답변 · 등록 자료에서 규칙으로 생성(키를 넣고 상단 엔진에서 Claude를 고르면 AI가 답함).</p>
               )}
             </div>
           </Card>

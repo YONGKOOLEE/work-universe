@@ -219,7 +219,7 @@ export default function HandoverDetail({ id }: { id: string }) {
           {/* 2. 사전 점검(규칙 기반) */}
           <Card>
             <CardHead icon={<Sparkles size={16} />} title="사전 점검"
-              sub={cc.available ? '규칙 + Claude · 빈 항목·기한·갱신(규칙)과 문서에는 있는데 기록에 빠진 것·서로 다른 것(Claude)을 인계 전에 확인' : '규칙 기반 · 업무정보 빈 항목·기한·갱신 필요를 인계 전에 확인'}
+              sub={cc.available ? '규칙 + AI · 빈 항목·기한·갱신(규칙)과 문서에는 있는데 기록에 빠진 것·서로 다른 것(AI)을 인계 전에 확인' : '규칙 기반 · 업무정보 빈 항목·기한·갱신 필요를 인계 전에 확인'}
               right={
                 !h.precheckDone && isFrom ? (
                   <Button size="sm" variant="primary" onClick={precheck} disabled={running} data-testid="precheck-run">
@@ -228,7 +228,7 @@ export default function HandoverDetail({ id }: { id: string }) {
                 ) : h.precheckDone && cc.available && !cc.result && !cc.running ? (
                   <Button size="sm" onClick={() => void cc.run()} data-testid="precheck-claude">
                     <Sparkles size={14} />
-                    Claude로 점검
+                    AI로 점검
                   </Button>
                 ) : undefined
               }
@@ -263,7 +263,7 @@ export default function HandoverDetail({ id }: { id: string }) {
                     {!issues.length && <li className="text-[13px] text-fact">누락·갱신 필요 항목 없음</li>}
                   </ul>
                   <CheckFindings state={cc} className="mt-3 border-t border-line pt-3" />
-                  <p className="mt-3 text-2xs text-faint">점검 결과가 남아 있어도 제출할 수 있으며, 미해결 항목은 인수자에게 그대로 표시됩니다.{cc.available ? ' Claude가 찾은 것은 이 화면에만 보이고 인계 기록에는 건수만 남습니다.' : ''}</p>
+                  <p className="mt-3 text-2xs text-faint">점검 결과가 남아 있어도 제출할 수 있으며, 미해결 항목은 인수자에게 그대로 표시됩니다.{cc.available ? ' AI가 찾은 것은 이 화면에만 보이고 인계 기록에는 건수만 남습니다.' : ''}</p>
                 </>
               )}
             </div>

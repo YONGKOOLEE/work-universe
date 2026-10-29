@@ -37,7 +37,7 @@ export function useClaudeCheck(s: AppState, workId: string) {
       return r;
     } catch (e) {
       if (c.signal.aborted) return null;
-      console.warn('Claude 점검 실패', e);
+      console.warn('AI 점검 실패', e);
       setSt({ running: false, result: null, error: ai.onError(e) });
       return null;
     }
@@ -50,13 +50,13 @@ export function CheckFindings({ state, className }: { state: ClaudeCheckState; c
   if (state.running)
     return (
       <p className={cx('flex items-center gap-1.5 text-[13px] text-muted', className)} data-testid="claude-check-running">
-        <Loader2 size={14} className="animate-spin" /> Claude가 업무 기록과 연결 문서를 대조하는 중입니다(최대 90초)
+        <Loader2 size={14} className="animate-spin" /> AI(Claude)가 업무 기록과 연결 문서를 대조하는 중입니다(최대 90초)
       </p>
     );
   if (state.error)
     return (
       <p className={cx('text-[13px] text-warn', className)} data-testid="claude-check-error">
-        Claude 점검을 하지 못했습니다: {state.error} 규칙 점검 결과는 그대로 쓸 수 있습니다.
+        AI 점검을 하지 못했습니다: {state.error} 규칙 점검 결과는 그대로 쓸 수 있습니다.
       </p>
     );
   const r = state.result;
@@ -64,7 +64,7 @@ export function CheckFindings({ state, className }: { state: ClaudeCheckState; c
   return (
     <div className={className} data-testid="claude-check">
       <h4 className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold">
-        <Sparkles size={14} className="text-infer" /> Claude가 찾은 것 <span className="text-2xs font-normal text-muted">{r.findings.length}건 · 원문 인용 대조 통과</span>
+        <Sparkles size={14} className="text-infer" /> AI가 찾은 것 <span className="text-2xs font-normal text-muted">{r.findings.length}건 · 원문 인용 대조 통과</span>
       </h4>
       {r.findings.length === 0 ? (
         <p className="text-[13px] text-muted">업무 기록과 연결 문서 사이에서 더 찾은 것이 없습니다.</p>

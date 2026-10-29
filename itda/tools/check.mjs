@@ -335,6 +335,15 @@ try {
     const eng = await ev(`(() => { const c = document.querySelector('[data-testid="engine-claude"]'); const r = document.querySelector('[data-testid="engine-rule"]'); return { c: c && c.className, r: r && r.className, ct: c && c.getAttribute('aria-pressed') }; })()`);
     await must(eng.c && /bg-brand/.test(eng.c) && !/bg-brand/.test(eng.r || ''), `Claude 엔진 선택 표시 아님: ${JSON.stringify(eng)}`);
     await shot('08-AI설정');
+    await must(await ev(`!!document.querySelector('[data-testid="ai-internal-note"]')`), 'AI 설정에 사내 LLM 안내 없음');
+    // 사내 LLM(자리만): 고르면 「사내」 칸이 칠해지고 실제 동작은 규칙 — 안내 문구가 바뀐다. 다시 Claude로 돌려놓는다
+    await must(await H(`clickId('engine-internal')`), '사내 엔진 단추 없음');
+    await sleep(300);
+    const inn = await ev(`(() => { const g = document.querySelector('[data-testid="engine-toggle"]'); const n = document.querySelector('[data-testid="engine-note"]'); return { v: g && g.dataset.value, c: document.querySelector('[data-testid="engine-claude"]').className, note: n ? n.innerText : '' }; })()`);
+    await must(inn.v === 'internal' && !/bg-brand/.test(inn.c) && inn.note.includes('사내 LLM'), `사내 엔진 선택 표시·안내 아님: ${JSON.stringify(inn)}`);
+    await must(await H(`clickId('engine-claude')`), 'Claude 엔진 단추 없음');
+    await sleep(300);
+    await must((await ev(`document.querySelector('[data-testid="engine-toggle"]').dataset.value`)) === 'claude', 'Claude로 되돌리지 못함');
     // 창 닫기 → 데이터 옮기기
     await ev(`(() => { const e = window.__h.find('button','닫기') || window.__h.find('button','취소'); if (e) e.click(); else document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); return true; })()`);
     await sleep(400);

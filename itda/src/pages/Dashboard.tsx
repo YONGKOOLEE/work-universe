@@ -151,7 +151,7 @@ export default function Dashboard() {
           </ul>
           <p className="border-t border-line px-4 py-2 text-2xs text-faint">
             업무 유니버스의 위험 규칙(혼자만 아는 일·길목 업무·일 몰린 사람·담당자 빈 업무)으로 계산합니다. 키 없이 동작합니다.
-            {claudeOn && <span data-testid="dash-insight-claude"> 업무 유니버스 지도 오른쪽 「Claude로 더 찾기」로 Claude가 업무 기록을 읽고 더 찾습니다.</span>}
+            {claudeOn && <span data-testid="dash-insight-claude"> 업무 유니버스 지도 오른쪽 「AI로 더 찾기」로 AI가 업무 기록을 읽고 더 찾습니다.</span>}
           </p>
         </Card>
 

@@ -349,7 +349,7 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
               <div className="flex items-start gap-2 py-6 text-[13px] text-muted">
                 <Loader2 size={16} className="mt-0.5 animate-spin" />
                 <span>
-                  {ai.engine === 'claude' ? (stage === 'review' ? '2단계: 꼼꼼히 읽기 — 같은 문서를 한 번 더 읽고 빠진 항목·의심 항목을 찾는 중입니다(최대 1분 30초).' : `1단계: Claude가 문서를 읽고 결정·일정·조치(담당·기한)·개요·주제를 뽑는 중입니다(긴 문서는 최대 2분)${careful ? ' — 다음에 꼼꼼히 읽기가 이어집니다' : ''}.`) : '문장 분리 · 결정/일정/조치 문장 탐지 · 표의 담당·기한 읽기(업무 유니버스 규칙) · 원문 대조 중'}
+                  {ai.engine === 'claude' ? (stage === 'review' ? '2단계: 꼼꼼히 읽기 — 같은 문서를 한 번 더 읽고 빠진 항목·의심 항목을 찾는 중입니다(최대 1분 30초).' : `1단계: AI(Claude)가 문서를 읽고 결정·일정·조치(담당·기한)·개요·주제를 뽑는 중입니다(긴 문서는 최대 2분)${careful ? ' — 다음에 꼼꼼히 읽기가 이어집니다' : ''}.`) : '문장 분리 · 결정/일정/조치 문장 탐지 · 표의 담당·기한 읽기(업무 유니버스 규칙) · 원문 대조 중'}
                 </span>
               </div>
             )}

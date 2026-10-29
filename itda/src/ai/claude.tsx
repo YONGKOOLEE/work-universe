@@ -6,16 +6,20 @@ import { createClient, DEFAULT_MODEL, errorText as llmErrorText, loadKey, saveKe
 import { createProvider } from '../../../app/src/llm/providers.js';
 
 export type Engine = 'claude' | 'mock';
+/** 고르는 엔진: 규칙 / Claude / 사내 LLM(업무 유니버스처럼 자리만 — 고르면 규칙으로 동작, 사용자 결정 2026-10-29) */
+export type EnginePref = Engine | 'internal';
+export const ENGINE_LABELS: Record<EnginePref, string> = { mock: '규칙', claude: 'Claude', internal: '사내 LLM' };
+export const INTERNAL_NOTICE = '사내 LLM은 연결할 자리만 있습니다(사용 방법이 정해지면 연결). 지금은 규칙 기반으로 동작하며 밖으로 보내는 것이 없습니다.';
 type Status = 'available' | 'unavailable';
 
 interface AICtx {
   engine: Engine; // 실제로 쓸 엔진
-  preferred: Engine;
+  preferred: EnginePref;
   status: Status; // 키가 있으면 available
   client: LlmClient | null;
   universeProvider: any; // 업무 유니버스 연결부용 Claude 공급자(키가 있을 때만)
   model: string;
-  setPreferred: (e: Engine) => void;
+  setPreferred: (e: EnginePref) => void;
   /** 키 저장(빈 값이면 지움). 키는 이 브라우저 저장소에만 둔다 */
   setKey: (key: string | null, model?: string) => void; // key null = 키는 그대로, 모델만 바꿈
   /** 호출 실패 → 화면 문구. 키가 거부되면 이번 화면에서는 규칙 기반으로 */
@@ -28,9 +32,10 @@ const PREF_KEY = 'worklink-ai-engine';
 export function AIProvider({ children }: { children: React.ReactNode }) {
   const [{ key, model }, setStored] = useState(loadKey);
   const [denied, setDenied] = useState(false);
-  const [preferred, setPref] = useState<Engine>(() => {
+  const [preferred, setPref] = useState<EnginePref>(() => {
     try {
-      return (localStorage.getItem(PREF_KEY) as Engine) || 'claude';
+      const v = localStorage.getItem(PREF_KEY);
+      return v === 'mock' || v === 'internal' ? v : 'claude';
     } catch {
       return 'claude';
     }

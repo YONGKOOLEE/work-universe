@@ -139,7 +139,7 @@ export function DocReanalyzeModal({ open, onClose, docId }: { open: boolean; onC
         {busy && (
           <div className="flex items-start gap-2 py-4 text-[13px] text-muted">
             <Loader2 size={16} className="mt-0.5 animate-spin" />
-            <span>{ai.engine === 'claude' ? (stage === 'review' ? '2단계: 꼼꼼히 읽기 중입니다(최대 1분 30초).' : '1단계: Claude가 등록 원문을 읽는 중입니다(긴 문서는 최대 2분).') : '규칙으로 원문을 읽는 중입니다.'}</span>
+            <span>{ai.engine === 'claude' ? (stage === 'review' ? '2단계: 꼼꼼히 읽기 중입니다(최대 1분 30초).' : '1단계: AI(Claude)가 등록 원문을 읽는 중입니다(긴 문서는 최대 2분).') : '규칙으로 원문을 읽는 중입니다.'}</span>
           </div>
         )}
         {ext && !busy && (

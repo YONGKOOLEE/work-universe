@@ -71,7 +71,7 @@ export function HandoverPoints({ data, workId, fromId, toId }: { data: AppState;
           ai.engine === 'claude' && ai.universeProvider ? (
             <Button size="sm" onClick={refine} disabled={busy} data-testid="handover-points-refine">
               {busy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              Claude로 문장 다듬기
+              AI로 문장 다듬기
             </Button>
           ) : undefined
         }
