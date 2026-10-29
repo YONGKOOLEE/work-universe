@@ -1,6 +1,7 @@
 // 합쳐 불러오기 — 동료가 내보낸 백업을 지금 데이터에 더한다(팀 지도용). 순수 함수만(브라우저 기능 없음).
-import type { Action, AppState, Org, Cite, Decision, Doc, Handover, HistoryEntry, Snapshot, Stmt, TEvent, User, Work } from './types';
+import type { Action, AppState, DeletedDoc, Org, Cite, Decision, Doc, Handover, HistoryEntry, Snapshot, Stmt, TEvent, User, Work } from './types';
 import { clone, nextId, uid } from './util';
+import { findTomb, stripDocRefs } from './docDelete';
 // @ts-expect-error 유니버스 순수 모듈(JS) — 비슷한 업무 점수(주제 3, 산출물 유형 2, 이름 낱말 1)
 import { tokensOf, WEIGHTS } from '../../../app/src/rules/insight.js';
 
@@ -125,7 +126,7 @@ export interface MergePlan {
   people: PersonMatch[];
   works: WorkMatch[];
   /** 합쳐 불러오기가 가져오지 않는 것(들어온 나만 보기 메모, 지도 숨김) 건수 */
-  skipped: { privateMemos: number; mapHidden: number };
+  skipped: { privateMemos: number; mapHidden: number; deletedDocs?: number };
   /** 같은 업무(또는 후보)인데 내용이 다른 칸 */
   conflicts: MergeConflict[];
   /** 기본 선택 기준으로 추가될 건수 */
@@ -191,7 +192,8 @@ export function planMerge(current: AppState, incoming: AppState): MergePlan {
       return c ? workConflicts(c, incoming.works.find((x) => x.id === m.incomingId)!) : [];
     }),
   );
-  const skipped = { privateMemos: (incoming.privateMemos ?? []).length, mapHidden: (incoming.mapHidden ?? []).length };
+  const goneDocs = incoming.docs.filter((d) => findTomb(current.deletedDocs, d) && !current.docs.some((c) => docKey(c) === docKey(d))).length; // 지금 쪽에서 지운 문서(지금 다시 올려 있는 같은 문서는 뺀다)
+  const skipped = { privateMemos: (incoming.privateMemos ?? []).length, mapHidden: (incoming.mapHidden ?? []).length, ...(goneDocs ? { deletedDocs: goneDocs } : {}) };
   const base: MergePlan = { people, works, skipped, conflicts, counts: undefined as unknown as MergeCounts };
   base.counts = previewCounts(current, incoming, base, {});
   return base;
@@ -282,7 +284,7 @@ export function previewCounts(current: AppState, incoming: AppState, plan: Merge
     usersSame: pm.size,
     works: incoming.works.length - wm.size,
     worksMerged: wm.size,
-    docs: incoming.docs.filter((d) => !current.docs.some((c) => sameDoc(c, d, d.workIds.map(mw)))).length,
+    docs: incoming.docs.filter((d) => !findTomb(current.deletedDocs, d) && !current.docs.some((c) => sameDoc(c, d, d.workIds.map(mw)))).length,
     decisions: incoming.decisions.filter((d) => !dec.has(decKey(d, mw(d.workId)))).length,
     actions: incoming.actions.filter((a) => !act.has(actKey(a, mw(a.workId)))).length,
     events: incoming.events.filter((e) => !ev.has(evKey(e))).length,
@@ -334,13 +336,23 @@ export function applyMerge(current: AppState, incoming: AppState, choices: Merge
   // 문서·결정·조치·이벤트: 합쳐진 업무에서 같은 것은 중복 추가 안 함
   const dMap = new Map<string, string>();
   const dupDocs = new Set<string>();
-  const allocD = allocator(new Set(cur.docs.map((x) => x.id)));
+  const allocD = allocator(new Set([...cur.docs.map((x) => x.id), ...(cur.deletedDocs ?? []).map((x) => x.id)])); // 지운 문서의 번호는 다시 쓰지 않는다(옛 참조가 새 문서를 가리키지 않게)
+  const goneDocs = new Map<string, DeletedDoc>(); // 들어온 문서 ID → 지운 문서 흔적(지금 쪽에서 지운 문서는 들여오지 않는다)
   for (const d of inc.docs) {
+    // 지금 있는 문서와 같으면 그것이 먼저다(지웠다가 같은 제목·작성일로 다시 올린 문서의 인용을 삭제 처리하지 않는다)
     const hit = cur.docs.find((c) => sameDoc(c, d, d.workIds.map(mw)));
     if (hit) {
       dMap.set(d.id, hit.id);
       dupDocs.add(d.id);
-    } else dMap.set(d.id, allocD(d.id));
+      continue;
+    }
+    const tomb = findTomb(cur.deletedDocs, d);
+    if (tomb) {
+      dMap.set(d.id, tomb.id);
+      goneDocs.set(d.id, tomb);
+      continue;
+    }
+    dMap.set(d.id, allocD(d.id));
   }
   const decMap = new Map<string, string>();
   const dupDec = new Set<string>();
@@ -467,6 +479,22 @@ export function applyMerge(current: AppState, incoming: AppState, choices: Merge
     if (!target) {
       // 따로 두는(새) 업무: 원본 표시를 남겨 다음 불러오기에서 이 업무로 맞춘다
       cur.works.push({ ...r, importedFrom: uniq([...(w.importedFrom ?? []), importKey(w)]) });
+      // 마지막 AI 점검 결과도 새 업무 ID·사람 ID로 옮긴다(합쳐진 업무는 지금 쪽 저장값을 그대로 둔다)
+      const ac = inc.aiChecks?.[w.id];
+      if (ac) {
+        // 대응이 없는 문서 ID는 들어온 번호를 그대로 두지 않는다(지금 데이터의 다른 문서와 겹치면 엉뚱한 문서로 이어짐) → 인용을 비운다.
+        // 인용도 기록 줄도 없는 항목은 quote만 남고 화면에서 「근거 문서 없음」으로 보인다
+        const live = (id: string) => dMap.has(id) && !goneDocs.has(id);
+        cur.aiChecks = {
+          ...(cur.aiChecks ?? {}),
+          [r.id]: {
+            ...ac,
+            byId: mu(ac.byId),
+            ...(ac.docIds ? { docIds: ac.docIds.filter(live).map(md).sort() } : {}),
+            findings: ac.findings.map((f) => (f.cite ? { ...f, cite: dMap.has(f.cite.docId) ? { ...f.cite, docId: md(f.cite.docId) } : null } : f)),
+          },
+        };
+      }
       continue;
     }
     const before = JSON.stringify(target);
@@ -533,6 +561,7 @@ export function applyMerge(current: AppState, incoming: AppState, choices: Merge
 
   // ── 5) 문서·결정·조치·이벤트·이력 ──
   for (const d of inc.docs) {
+    if (goneDocs.has(d.id)) continue;
     const r = redoc(d);
     if (dupDocs.has(d.id)) {
       const have = cur.docs.find((c) => c.id === r.id);
@@ -607,6 +636,9 @@ export function applyMerge(current: AppState, incoming: AppState, choices: Merge
     cur.snapshots.push(r);
   }
 
+  // 지운 문서를 가리키는 들어온 인용·관계는 정리한다(내용은 남기고 근거만 낮춤 — 지울 때와 같은 규칙). 인계 스냅샷은 그대로
+  for (const tomb of new Set(goneDocs.values())) stripDocRefs(cur, tomb.id, tomb.title);
+
   // ── 7) 지도 숨김·나만 보기 메모는 가져오지 않는다(지금 데이터 그대로) ──
 
   // ── 8) 기록 ──
@@ -623,8 +655,8 @@ export function applyMerge(current: AppState, incoming: AppState, choices: Merge
 
 /** 가져오지 않는 것을 밝히는 한 줄(요약·미리 보기 공용). 없으면 빈 글 */
 export function skippedLine(k: MergePlan['skipped']): string {
-  const parts = [k.privateMemos ? `나만 보기 메모 ${k.privateMemos}건` : '', k.mapHidden ? `지도 숨김 ${k.mapHidden}건` : ''].filter(Boolean);
-  return parts.length ? `${parts.join('과 ')}은 가져오지 않음` : '';
+  const parts = [k.privateMemos ? `나만 보기 메모 ${k.privateMemos}건` : '', k.mapHidden ? `지도 숨김 ${k.mapHidden}건` : '', k.deletedDocs ? `삭제한 문서 ${k.deletedDocs}건` : ''].filter(Boolean);
+  return parts.length ? `${parts.join(parts.length > 2 ? ', ' : '과 ')}은 가져오지 않음` : '';
 }
 const skippedNote = (k: MergePlan['skipped']) => (skippedLine(k) ? ` · ${skippedLine(k)}` : '');
 
@@ -648,6 +680,7 @@ export function checkIntegrity(s: AppState): string[] {
   const U = new Set(s.users.map((x) => x.id));
   const W = new Set(s.works.map((x) => x.id));
   const D = new Set(s.docs.map((x) => x.id));
+  const DS = new Set([...D, ...(s.deletedDocs ?? []).map((x) => x.id)]); // 인계 스냅샷은 지운 문서의 옛 참조를 그대로 가진다
   const E = new Set(s.events.map((x) => x.id));
   const H = new Set(s.handovers.map((x) => x.id));
   const SN = new Set(s.snapshots.map((x) => x.id));
@@ -666,7 +699,8 @@ export function checkIntegrity(s: AppState): string[] {
   const need = (set: Set<string>, id: string | null | undefined, where: string) => {
     if (id && !set.has(id)) bad.push(`${where} → ${id}`);
   };
-  const cites = (a: Cite[] | undefined, where: string) => a?.forEach((c) => need(D, c.docId, `${where}.cite`));
+  let DOCS = D; // 지금 점검 중인 곳이 알아볼 문서 ID(스냅샷 안에서는 DS)
+  const cites = (a: Cite[] | undefined, where: string) => a?.forEach((c) => need(DOCS, c.docId, `${where}.cite`));
   const work = (w: Work, where: string, links: boolean) => {
     if (links) {
       need(W, w.parentId, `${where}.parentId`);
@@ -686,10 +720,10 @@ export function checkIntegrity(s: AppState): string[] {
     need(U, d.registeredBy, `doc ${d.id}.registeredBy`);
   });
   const ev = (e: TEvent, where: string) => {
-    e.docIds.forEach((x) => need(D, x, `${where}.docIds`));
+    e.docIds.forEach((x) => need(DOCS, x, `${where}.docIds`));
     cites(e.cite, where);
     e.causes.forEach((c) => cites(c.cite, `${where}.causes`));
-    need(D, e.autoDocId, `${where}.autoDocId`);
+    need(DOCS, e.autoDocId, `${where}.autoDocId`);
   };
   s.events.forEach((e) => {
     e.workIds.forEach((x) => need(W, x, `event ${e.id}.workIds`));
@@ -719,6 +753,7 @@ export function checkIntegrity(s: AppState): string[] {
     h.requests.forEach((q) => need(U, q.byId, `handover ${h.id}.requests`));
     h.log.forEach((l) => need(U, l.byId, `handover ${h.id}.log`));
   });
+  DOCS = DS;
   s.snapshots.forEach((sn) => {
     need(H, sn.handoverId, `snapshot ${sn.id}.handoverId`);
     need(W, sn.workId, `snapshot ${sn.id}.workId`);
@@ -729,7 +764,7 @@ export function checkIntegrity(s: AppState): string[] {
     });
     sn.actions.forEach((a) => need(U, a.ownerId, `snapshot ${sn.id}.action`));
     sn.events.forEach((e) => ev(e, `snapshot ${sn.id}.event`));
-    sn.docs.forEach((d) => need(D, d.id, `snapshot ${sn.id}.docs`));
+    sn.docs.forEach((d) => need(DS, d.id, `snapshot ${sn.id}.docs`));
   });
   need(U, s.currentUserId, 'currentUserId');
   return bad;

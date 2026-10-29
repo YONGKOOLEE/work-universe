@@ -169,7 +169,7 @@ export default function SearchPage() {
                 <div key={i} className={'border-l-[3px] pl-3 ' + (l.prov === 'fact' ? 'border-fact' : l.prov === 'inference' ? 'border-infer' : l.prov === 'owner' ? 'border-owner' : 'border-warn')}>
                   <p className="text-[14.5px] leading-relaxed">{l.text}</p>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    <ProvChip prov={l.prov} />
+                    <ProvChip prov={l.prov} label={l.label} />
                     {l.cite?.map((c, j) => <CiteLink key={j} c={c} />)}
                   </div>
                 </div>

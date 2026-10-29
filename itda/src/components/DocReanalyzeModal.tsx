@@ -60,7 +60,7 @@ export function DocReanalyzeModal({ open, onClose, docId }: { open: boolean; onC
     const c = new AbortController();
     ctl.current = c;
     const md = analyzeDocument(s, doc.title, paras.map((p) => p.text).join('\n'), doc.writtenAt);
-    const out = await runExtraction(ai, s, doc.title, paras, def, doc.writtenAt, c.signal, { review: careful, onStage: setStage });
+    const out = await runExtraction(ai, s, doc.title, paras, def, doc.writtenAt, c.signal, { review: careful, onStage: setStage, docType: doc.type });
     if (ctl.current !== c) return; // 창을 닫거나 다시 시작해 이 분석은 버려졌다 — 늦게 온 결과를 쓰지 않는다
     if (out.cancelled) {
       // 취소(분석 중지·엔진 변경)는 규칙 결과로 대체하지 않고 「취소됨」으로 끝낸다

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Upload, Copy } from 'lucide-react';
 import { useStore, parseBackup } from '../lib/store';
 import { Button, Modal } from './ui';
@@ -7,13 +7,17 @@ import type { AppState } from '../lib/types';
 import { applyMerge, planMerge, previewCounts, conflictKey, defaultSamePerson, resolveWorks, skippedLine, exportBackupState, replaceKeepingOtherMemos, type ConflictChoice, type MergeChoices } from '../lib/mergeImport';
 
 /** 데이터 옮기기 — 다른 PC·브라우저·동료와는 저장소가 달라 데이터가 공유되지 않으므로 백업 파일로 이동(바꿔 불러오기·합쳐 불러오기) */
-export function DataTransfer({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function DataTransfer({ open, onClose, initialTab }: { open: boolean; onClose: () => void; initialTab?: 'export' | 'import' }) {
   const { raw, replace, toast } = useStore();
   const [tab, setTab] = useState<'export' | 'import'>('export');
   const [text, setText] = useState('');
   const [err, setErr] = useState('');
   const [pending, setPending] = useState<AppState | null>(null);
   const [mode, setMode] = useState<'replace' | 'merge'>('merge');
+  // 바로 찾기 등에서 열 때 탭을 골라 연다(열릴 때마다 맞춤)
+  useEffect(() => {
+    if (open && initialTab) setTab(initialTab);
+  }, [open, initialTab]);
   const [confirmReplace, setConfirmReplace] = useState(false);
   const [choices, setChoices] = useState<MergeChoices>({});
   const fileRef = useRef<HTMLInputElement>(null);

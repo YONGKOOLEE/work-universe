@@ -5,6 +5,8 @@ interface RouterCtx {
   path: string;
   query: URLSearchParams;
   nav: (to: string) => void;
+  /** 지금 주소를 바꿔치기(뒤로 가기 기록을 쌓지 않음) */
+  replace: (to: string) => void;
   back: () => void;
   canBack: boolean;
 }
@@ -47,6 +49,7 @@ export function RouterProvider({ children }: { children: React.ReactNode }) {
     path: pathname,
     query: new URLSearchParams(qs ?? ''),
     nav: (to) => setStack((s) => (s[s.length - 1] === to ? s : [...s.slice(-30), to])),
+    replace: (to) => setStack((s) => (s[s.length - 1] === to ? s : [...s.slice(0, -1), to])),
     back: () => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s)),
     canBack: stack.length > 1,
   };

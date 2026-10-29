@@ -161,9 +161,10 @@ export type DocType =
   | '보도자료'
   | '추진계획'
   | '결과보고서'
+  | '업무 매뉴얼'
   | '보고자료'
   | '기타';
-export const DOC_TYPES: DocType[] = ['검토보고서', '보고자료', '법령 개정자료', '회의록', '보도자료', '추진계획', '결과보고서', '기타'];
+export const DOC_TYPES: DocType[] = ['검토보고서', '보고자료', '법령 개정자료', '회의록', '보도자료', '추진계획', '결과보고서', '업무 매뉴얼', '기타'];
 
 export type RelType = '유사' | '선행' | '후속' | '근거' | '개정' | '대체';
 export interface DocRelation {
@@ -274,10 +275,42 @@ export interface AppState {
   handovers: Handover[];
   snapshots: Snapshot[];
   mapHidden: string[]; // 지도에서 숨긴 항목 키
+  deletedDocs?: DeletedDoc[]; // 지운 문서 기록(합쳐 불러오기에서 되살아나지 않게). 선택 칸이라 스키마 번호는 그대로
   orgs?: Org[]; // 조직 계층(팀 → 부 → 본부 → 회사, 2026-10-29 사용자 결정). 없으면 업무·사람의 dept 글자를 팀으로 본다(lib/orgs.ts)
   privateMemos?: PrivateMemo[]; // 「나만 보기」 메모 — 쓴 사람에게만 보인다(열람 범위에서 거름, 2026-10-29 사용자 결정)
+  aiChecks?: Record<string, AiCheckRecord>; // 업무 ID → 마지막 AI 점검 결과(업무 내용이 아니라 버전·갱신일에 영향 없음, 2026-10-29 사용자 결정 「마지막 결과만 저장」)
   searchLog: string[];
   focus: Record<string, string>; // 사용자별로 마지막에 보던 업무 ('all' 또는 업무 ID)
+}
+
+export type AiCheckKind = 'missing_action' | 'missing_due' | 'conflict' | 'stale' | 'missing_info' | 'risk';
+export interface AiCheckFinding {
+  kind: AiCheckKind;
+  severity: 'high' | 'mid' | 'low';
+  title: string;
+  detail: string;
+  quote: string;
+  cite: Cite | null;
+  recordLine: string | null;
+}
+/** 업무마다 마지막 AI 점검 1개. API 키·프롬프트 원문은 담지 않는다 */
+export interface AiCheckRecord {
+  at: string; // ISO
+  byId: string; // 점검한 사람
+  engine: 'claude';
+  model: string;
+  workVersion: number; // 점검할 때의 Work.version — 지금 값과 다르면 「점검 뒤 기록이 바뀜」
+  docIds?: string[]; // 점검할 때 이 업무에 연결돼 있던 문서 ID(정렬). 지금 연결 문서가 다르면 「점검 뒤 기록이 바뀜」(없으면 버전만 비교)
+  findings: AiCheckFinding[];
+  dropped: number;
+}
+
+/** 지운 문서의 흔적: 같은 제목+작성일 문서는 합쳐 불러오기에서 들여오지 않는다. id는 인계 스냅샷에 남은 옛 참조를 알아보는 데 쓴다 */
+export interface DeletedDoc {
+  id: string;
+  title: string;
+  writtenAt: string;
+  at: string;
 }
 
 /** 「나만 보기」 메모: 업무에 붙지만 쓴 사람만 본다. 업무 기록·인계·지도 파생에는 들어가지 않는다 */

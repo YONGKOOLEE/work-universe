@@ -108,8 +108,16 @@ export function Mono({ children, className }: { children: React.ReactNode; class
 
 export function CiteLink({ c }: { c: Cite }) {
   const { nav } = useRouter();
-  const { s } = useStore();
+  const { s, raw } = useStore();
   const d = s.docs.find((x) => x.id === c.docId);
+  // 지워진 문서(전체 데이터에도 없음)를 가리키는 옛 인용 — 이동하지 않고 「삭제된 문서」로 보인다
+  if (!d && !raw.docs.some((x) => x.id === c.docId))
+    return (
+      <span className="inline-flex max-w-full items-center gap-1 rounded border border-line2 px-1.5 py-px text-2xs text-faint" title={c.label ? `삭제된 문서: ${c.label}` : '삭제된 문서'} data-testid="cite-deleted">
+        <FileText size={11} className="shrink-0" />
+        <span className="truncate">삭제된 문서</span>
+      </span>
+    );
   const label = c.label ?? d?.title ?? c.docId;
   return (
     <button

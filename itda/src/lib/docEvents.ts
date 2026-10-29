@@ -1,10 +1,18 @@
 // 문서 → 타임라인 자동 등록
-// 회의록·기타를 제외한 모든 문서는 등록 시 연결 업무의 타임라인에 '문서' 이벤트로 올라간다.
+// 회의록·업무 매뉴얼·기타를 제외한 모든 문서는 등록 시 연결 업무의 타임라인에 '문서' 이벤트로 올라간다.
 // 타임라인에서 삭제하면 doc.timelineOff = true 로 표시해 다시 만들지 않는다.
 import type { AppState, Doc, TEvent } from './types';
 import { localDay } from './util';
 
-export const EXCLUDED_DOC_TYPES = ['회의록', '기타'];
+export const EXCLUDED_DOC_TYPES = ['회의록', '업무 매뉴얼', '기타'];
+
+const MANUAL_TITLE = /매뉴얼|지침서|절차서|업무\s*가이드|업무\s*안내서/;
+
+/** 제목·본문 단서로 문서 유형을 짐작한다(순수). 회의록 단서가 먼저, 없으면 제목에 매뉴얼류 낱말이 있을 때 '업무 매뉴얼', 아니면 null */
+export function guessDocType(title: string, isMinutes = false): '회의록' | '업무 매뉴얼' | null {
+  if (isMinutes) return '회의록';
+  return MANUAL_TITLE.test(title) ? '업무 매뉴얼' : null;
+}
 
 export function docEventFor(doc: Doc): TEvent | null {
   if (EXCLUDED_DOC_TYPES.includes(doc.type) || doc.timelineOff || !doc.workIds.length) return null;

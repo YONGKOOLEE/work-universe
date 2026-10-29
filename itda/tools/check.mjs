@@ -668,6 +668,101 @@ try {
     return `팀원 사람 편집 막힘 · 박지훈 W-004 읽기 전용 · 서지안 W-004 편집 · 검색 답 · 한눈에: ${after.slice(0, 80)}`;
   });
 
+  // 19 사용자 검수 반영(2026-10-29): 마지막 AI 점검 저장·바로 찾기(Ctrl+K)·업무 매뉴얼 유형·문서 삭제
+  await check('19 AI 점검 저장·바로 찾기·업무 매뉴얼·문서 삭제', async () => {
+    await must(await H(`user('김도윤')`), '김도윤 전환 실패');
+    await nav('#/works/W-001', `window.__h.has('비대면 출금동의')`);
+    // 키 없이 화면을 보려고, 저장된 점검 결과 하나를 저장소에 넣는다(점검 뒤 기록이 바뀐 상태 = 지난 버전)
+    const injected = await ev(`(() => {
+      const k = Object.keys(localStorage).find((x) => x.startsWith('worklink'));
+      if (!k) return 'no-key';
+      const o = JSON.parse(localStorage.getItem(k)); const st = o.state ?? o; const w = st.works.find((x) => x.id === 'W-001');
+      st.aiChecks = { 'W-001': { at: '2026-10-29T05:32:00.000Z', byId: w.owners[0], engine: 'claude', model: 'claude-opus-5-5', workVersion: w.version - 1,
+        findings: [{ kind: 'missing_action', severity: 'high', title: '시험용 저장 결과', detail: '점검 도구가 넣은 가상 결과', quote: '개정 조문 초안 구성은 10월 중 확정할 예정임.', cite: { docId: 'D-101', anchor: 'p-4' }, recordLine: null }], dropped: 0 } };
+      localStorage.setItem(k, JSON.stringify(o)); return 'ok';
+    })()`);
+    await must(injected === 'ok', `저장소 키를 못 찾음(${injected})`);
+    await cdp.send('Page.reload');
+    await sleep(300);
+    await wait('document.readyState === "complete" && !!document.getElementById("user-switch")', 15000);
+    await ev(HELPERS);
+    await nav('#/works/W-001', `!!document.querySelector('[data-testid="ai-check-saved"]')`);
+    const saved = await ev(`document.querySelector('[data-testid="ai-check-saved"]').innerText`);
+    await must(await ev(`!!document.querySelector('[data-testid="ai-check-at"]') && !!document.querySelector('[data-testid="ai-check-stale"]')`), `저장 결과의 일시·「기록 바뀜」 표시 없음: ${saved}`);
+    await ev(`document.querySelector('[data-testid="ai-check-saved"]').scrollIntoView({ block: 'center' }); true`);
+    await shot('19-AI점검-저장');
+    // 바로 찾기: Ctrl+K → 초성 → 합쳐 불러오기
+    const ctrlK = () => ev(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', ctrlKey: true, bubbles: true })); true`);
+    const esc = () => ev(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true })); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true })); true`);
+    const items = () => ev(`[...document.querySelectorAll('[data-testid="quick-find-item"]')].map((e) => e.dataset.kind + ':' + e.innerText.replace(/\\s+/g, ' ')).join(' | ')`);
+    await ctrlK();
+    await must(await wait(`!!document.querySelector('[data-testid="quick-find-input"]')`, 2000), 'Ctrl+K로 바로 찾기가 안 열림');
+    await H(`setId('quick-find-input', 'ㄷㅇㅌ')`);
+    await sleep(200);
+    await must(/action:[^|]*데이터 옮기기/.test(await items()), `초성 ㄷㅇㅌ로 데이터 옮기기를 못 찾음: ${await items()}`);
+    await H(`setId('quick-find-input', '합쳐')`);
+    await sleep(200);
+    await shot('19-바로찾기');
+    await must(await H(`click('[data-testid="quick-find-item"]', '합쳐 불러오기')`), `「합쳐 불러오기」 결과 없음: ${await items()}`);
+    await must(await wait(`!!document.querySelector('input[name="dt-mode"][value="merge"]:checked')`, 3000), '합쳐 불러오기가 불러오기 탭·합치기 모드로 안 열림');
+    await shot('19-바로찾기-합쳐불러오기');
+    await esc();
+    await must(await wait(`!document.querySelector('input[name="dt-mode"]')`, 2000), 'Esc로 데이터 옮기기 창이 안 닫힘');
+    // 문서 찾기 → 업무 매뉴얼 유형
+    await ctrlK();
+    await must(await wait(`!!document.querySelector('[data-testid="quick-find-input"]')`, 2000), '바로 찾기가 다시 안 열림');
+    await H(`setId('quick-find-input', '오류 대응')`);
+    await sleep(200);
+    const docHit = await H(`click('[data-testid="quick-find-item"][data-kind="doc"]', '오류 대응 매뉴얼')`);
+    if (docHit) {
+      await must(await wait(`location.hash.includes('D-105') && window.__h.has('업무 매뉴얼')`, 3000), `문서로 이동하지 않았거나 유형이 업무 매뉴얼이 아님(${await ev('location.hash')})`);
+    } else {
+      await esc(); // 김도윤 보기 범위 밖일 수 있다 — 범위 밖이면 결과에 없어야 맞다
+    }
+    // 질문은 AI 업무 검색으로 넘기는 줄
+    await ctrlK();
+    await must(await wait(`!!document.querySelector('[data-testid="quick-find-input"]')`, 2000), '바로 찾기가 세 번째로 안 열림');
+    await H(`setId('quick-find-input', '정하준이 빠지면 무엇이 막히나요')`);
+    await sleep(200);
+    await must(await ev(`!!document.querySelector('[data-testid="quick-find-ask"]')`), '질문에 「AI 업무 검색으로 묻기」 줄이 없음');
+    await esc();
+    await must(await wait(`!document.querySelector('[data-testid="quick-find-input"]')`, 2000), 'Esc로 바로 찾기가 안 닫힘');
+    // 문서함에 있는 채로 바로 찾기 「문서 등록」 → 등록 창이 열림(검토 6)
+    await nav('#/docs', `!!document.querySelector('main')`);
+    await ctrlK();
+    await must(await wait(`!!document.querySelector('[data-testid="quick-find-input"]')`, 2000), '문서함에서 바로 찾기가 안 열림');
+    await H(`setId('quick-find-input', '문서 등록')`);
+    await sleep(200);
+    await must(await H(`click('[data-testid="quick-find-item"][data-kind="action"]', '문서 등록')`), `「문서 등록」 기능이 결과에 없음: ${await items()}`);
+    await must(await wait(`!!document.getElementById('dr-type')`, 3000), '문서함에서 고른 「문서 등록」이 등록 창을 안 엶');
+    await must(await ev(`[...document.querySelectorAll('#dr-type option')].some((o) => o.value === '업무 매뉴얼')`), '등록 창 유형에 업무 매뉴얼이 없음');
+    await esc();
+    await sleep(300);
+    // 문서 삭제(올린 사람·담당): 영향 건수 → 삭제 → 문서함, 업무 화면은 그대로 열리고 지운 문서는 안내 화면
+    // D-101은 김도윤 업무와 남의 업무(약관·시행세칙 개정안 마련)에 걸려 있음 → 김도윤은 단추 꺼짐 + 이유, 팀장 박지훈은 삭제 가능(검토 3)
+    await nav('#/docs/D-101', `!!document.querySelector('[data-testid="doc-delete"]')`);
+    await must(await ev(`document.querySelector('[data-testid="doc-delete"]').disabled && !!document.querySelector('[data-testid="doc-delete-blocked"]')`), '남의 업무에 걸린 문서인데 김도윤에게 삭제 단추가 켜져 있음(또는 이유 없음)');
+    const blocked = await ev(`document.querySelector('[data-testid="doc-delete-blocked"]').innerText`);
+    await shot('19-문서삭제-막힘');
+    await must(await H(`user('박지훈')`), '박지훈 전환 실패');
+    await nav('#/docs/D-101', `!!document.querySelector('[data-testid="doc-delete"]') && !document.querySelector('[data-testid="doc-delete"]').disabled`);
+    await must(await H(`clickId('doc-delete')`), '문서 삭제 단추 없음');
+    await must(await wait(`!!document.querySelector('[data-testid="doc-delete-confirm"]')`, 2000), '삭제 확인 창 없음');
+    const impact = await ev(`document.querySelector('[data-testid="doc-delete-confirm"]').innerText.replace(/\\s+/g, ' ')`);
+    await shot('19-문서삭제-확인');
+    await must(await H(`clickId('doc-delete-do')`), '삭제 확인 단추 없음');
+    await must(await wait(`/^#\\/docs\\/?(\\?|$)/.test(location.hash)`, 3000), `삭제 뒤 문서함으로 안 감(${await ev('location.hash')})`);
+    // 저장된 점검 결과가 지운 문서(D-101)를 근거로 들었으면 머리말에 「근거 문서 일부 삭제됨」
+    await nav('#/works/W-001', `!!document.querySelector('[data-testid="ai-check-saved"]')`);
+    await must(await ev(`!!document.querySelector('[data-testid="ai-check-docs-gone"]')`), '근거 문서를 지웠는데 저장 결과에 「근거 문서 일부 삭제됨」이 없음');
+    await nav('#/docs/D-101', `window.__h.has('문서를 찾을 수 없습니다')`);
+    await nav('#/docs/D-105', `!!document.querySelector('main')`);
+    await sleep(300);
+    await must(await ev(`!document.querySelector('[data-testid="doc-delete"]')`), '고칠 수 없는 사람에게 문서 삭제 단추가 보임(박지훈·D-105)');
+    await must(await H(`user('김도윤')`), '김도윤 복귀 실패');
+    return `저장 결과: ${saved.slice(0, 60)} · 매뉴얼 문서 찾기 ${docHit ? '이동' : '범위 밖'} · 김도윤 막힘: ${blocked.slice(0, 50)} · 박지훈 삭제 영향: ${impact.slice(0, 90)}`;
+  });
+
   // 12
   const exc = logs.filter((l) => l.kind === 'exception');
   const err = logs.filter((l) => l.kind === 'error');

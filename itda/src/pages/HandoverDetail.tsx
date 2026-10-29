@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { HandoverPoints } from '../universe/HandoverPoints';
 import { Check, Eye, Sparkles, Loader2, UserRound, Camera, ExternalLink, MessageSquareWarning, Send, ShieldCheck, Stamp } from 'lucide-react';
-import { canActAsSender, inLeadScope, useStore, userName } from '../lib/store';
+import { canActAsSender, canEdit, inLeadScope, useStore, userName } from '../lib/store';
 import { useRouter } from '../lib/router';
 import { Button, Card, CardHead, Mono, Empty, KV, inputCls, StatusBadge } from '../components/ui';
 import { HO_STATUS } from './Handover';
@@ -246,10 +246,10 @@ export default function HandoverDetail({ id }: { id: string }) {
                   <Button size="sm" variant="primary" onClick={precheck} disabled={running} data-testid="precheck-run">
                     {running ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}점검 실행
                   </Button>
-                ) : h.precheckDone && cc.available && !cc.result && !cc.running ? (
+                ) : h.precheckDone && cc.available && !cc.running && canEdit(raw, h.workId, me.id) ? (
                   <Button size="sm" onClick={() => void cc.run()} data-testid="precheck-claude">
                     <Sparkles size={14} />
-                    AI로 점검
+                    {cc.result || cc.saved ? 'AI로 다시 점검' : 'AI로 점검'}
                   </Button>
                 ) : undefined
               }
@@ -259,7 +259,10 @@ export default function HandoverDetail({ id }: { id: string }) {
                 cc.running ? (
                   <CheckFindings state={cc} />
                 ) : (
-                  <p className="text-[13px] text-muted">{isFrom ? "'점검 실행'을 눌러 인계 전 업무정보 상태를 확인하세요." : '인계자가 사전 점검을 실행하기 전입니다.'}</p>
+                  <>
+                    <p className="text-[13px] text-muted">{isFrom ? "'점검 실행'을 눌러 인계 전 업무정보 상태를 확인하세요." : '인계자가 사전 점검을 실행하기 전입니다.'}</p>
+                    {cc.saved && <CheckFindings state={cc} className="mt-3 border-t border-line pt-3" />}
+                  </>
                 )
               ) : (
                 <>
@@ -284,7 +287,7 @@ export default function HandoverDetail({ id }: { id: string }) {
                     {!issues.length && <li className="text-[13px] text-fact">누락·갱신 필요 항목 없음</li>}
                   </ul>
                   <CheckFindings state={cc} className="mt-3 border-t border-line pt-3" />
-                  <p className="mt-3 text-2xs text-faint">점검 결과가 남아 있어도 제출할 수 있으며, 미해결 항목은 인수자에게 그대로 표시됩니다.{cc.available ? ' AI가 찾은 것은 이 화면에만 보이고 인계 기록에는 건수만 남습니다.' : ''}</p>
+                  <p className="mt-3 text-2xs text-faint">점검 결과가 남아 있어도 제출할 수 있으며, 미해결 항목은 인수자에게 그대로 표시됩니다.{cc.available ? ' AI가 찾은 것은 업무마다 마지막 결과 하나가 저장되어 이 화면과 업무 상세에 보이고, 인계 기록에는 건수만 남습니다.' : ''}</p>
                 </>
               )}
             </div>

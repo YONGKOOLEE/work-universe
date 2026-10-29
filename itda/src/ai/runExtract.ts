@@ -21,7 +21,7 @@ export async function runExtraction(
   def: string,
   writtenAt: string,
   signal: AbortSignal | undefined,
-  opts: { review?: boolean; onStage?: (stage: 'read' | 'review') => void },
+  opts: { review?: boolean; onStage?: (stage: 'read' | 'review') => void; docType?: string },
 ): Promise<ExtractOutcome> {
   if (ai.engine === 'claude' && ai.client) {
     try {

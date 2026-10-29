@@ -10,8 +10,9 @@ import { analyzeDocument, type DocAnalysis } from '../ai/engine';
 import { applyProposals, type Extraction, type Proposal } from '../ai/reflect';
 import { runExtraction } from '../ai/runExtract';
 import { extractPdf } from '../lib/pdf';
+import { forgetTombFor } from '../lib/docDelete';
 import { readDocDate } from '../lib/paragraphs';
-import { docEventFor, EXCLUDED_DOC_TYPES } from '../lib/docEvents';
+import { docEventFor, EXCLUDED_DOC_TYPES, guessDocType } from '../lib/docEvents';
 import { DOC_TYPES, type Doc, type DocParagraph, type DocType, type RelType } from '../lib/types';
 import { cx, uid } from '../lib/util';
 
@@ -107,6 +108,7 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
   const [works, setWorks] = useState<string[]>(presetWork ? [presetWork] : []);
   const [rels, setRels] = useState<string[]>([]);
   const ctl = useRef<AbortController | null>(null);
+  const typeTouched = useRef(false); // 사용자가 유형을 직접 골랐는가(골랐으면 파일·제목 짐작이 덮어쓰지 않음)
 
   const paras = pdfParas ?? textParas(text);
 
@@ -129,6 +131,7 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
     setRels([]);
     setAiMsg('');
     setWorks(presetWork ? [presetWork] : []);
+    typeTouched.current = false;
   };
   const close = () => {
     reset();
@@ -157,7 +160,7 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
     }
     const c = new AbortController();
     ctl.current = c;
-    const out = await runExtraction(ai, s, title, paras, def, writtenAt, c.signal, { review: careful, onStage: setStage });
+    const out = await runExtraction(ai, s, title, paras, def, writtenAt, c.signal, { review: careful, onStage: setStage, docType: type });
     if (ctl.current !== c) return; // 창을 닫거나 다시 시작해 이 분석은 버려졌다 — 늦게 온 결과를 쓰지 않는다
     if (out.cancelled) {
       // 취소(분석 중지·엔진 변경)는 규칙 결과로 대체하지 않고 「취소됨」으로 끝낸다
@@ -200,8 +203,10 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
       }
       setFileName(f.name);
       const meta = detectMeta(extracted, f.name);
-      if (!title) setTitle(meta.title ?? f.name.replace(/\.[^.]+$/, ''));
-      if (meta.isMinutes) setType('회의록');
+      const effTitle = title || (meta.title ?? f.name.replace(/\.[^.]+$/, ''));
+      if (!title) setTitle(effTitle);
+      const guess = guessDocType(effTitle, meta.isMinutes);
+      if (guess && !typeTouched.current) setType(guess); // 사용자가 유형을 직접 골랐으면 덮어쓰지 않는다
       if (meta.date) {
         setWrittenAt(meta.date);
         setDateNote(`원문 '${meta.dateSrc}'에서 작성일을 자동으로 입력했습니다`);
@@ -239,6 +244,7 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
         fileName,
         analyzedBy: ext.engine,
       };
+      forgetTombFor(d, doc); // 지웠던 문서를 다시 올리면 그 삭제 기록은 더 이상 쓰지 않는다
       d.docs.push(doc);
       const pushed = d.docs[d.docs.length - 1];
       works.forEach((w) => log(d, w, '문서 등록', `'${doc.title}' 등록 · ${ext.engine === 'claude' ? 'Claude' : '규칙 기반'} 분석`));
@@ -322,7 +328,10 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
             </Field>
             <div className="grid gap-3 sm:grid-cols-3">
               <Field label="문서 유형" htmlFor="dr-type">
-                <select id="dr-type" className={inputCls} value={type} onChange={(e) => setType(e.target.value as DocType)}>
+                <select id="dr-type" className={inputCls} value={type} onChange={(e) => {
+                    typeTouched.current = true;
+                    setType(e.target.value as DocType);
+                  }}>
                   {DOC_TYPES.map((t) => (
                     <option key={t}>{t}</option>
                   ))}

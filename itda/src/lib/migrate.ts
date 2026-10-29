@@ -4,14 +4,15 @@
 // - User: empNo·role 은 선택 값이라 채우지 않음
 // 사용자가 등록한 데이터는 그대로 보존한다. 3~5 버전은 지원하지 않는다.
 import type { AppState } from './types';
+import { cleanAiChecks } from './aiChecks';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
 
 export function migrate(input: Any, now = new Date()): AppState {
   const s: Any = input;
-  if (s.schema === 7) return s as AppState;
-  if (s.schema === 6) return toV7(s, now);
+  if (s.schema === 7) return cleanAiChecks(s as AppState); // aiChecks(선택 칸): 잘못된 모양은 버린다
+  if (s.schema === 6) return cleanAiChecks(toV7(s, now));
   throw new Error(`지원하지 않는 데이터 버전입니다 (schema ${s.schema})`);
 }
 

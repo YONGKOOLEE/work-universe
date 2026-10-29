@@ -12,7 +12,7 @@ import { fmtDate, cx, dateKey } from '../lib/util';
 
 export default function Docs() {
   const { s } = useStore();
-  const { query, nav } = useRouter();
+  const { query, nav, replace } = useRouter();
   const [q, setQ] = useState('');
   const [type, setType] = useState('all');
   // 선택 업무는 업무 관리·타임라인·회의록과 공유 ('연결 업무 없음'만 문서함 전용)
@@ -31,7 +31,22 @@ export default function Docs() {
     if (qw) setWork(qw);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const [open, setOpen] = useState(query.get('new') === '1');
+  const newFlag = query.get('new') === '1';
+  const [open, setOpen] = useState(newFlag);
+  // 이미 문서 화면에 있을 때 바로 찾기의 「문서 등록」(?new=1)으로 와도 창이 열리게 주소의 new 값을 따라간다
+  useEffect(() => {
+    if (newFlag) setOpen(true);
+  }, [newFlag]);
+  const closeRegister = () => {
+    setOpen(false);
+    if (newFlag) {
+      // 주소의 ?new=1을 지워, 같은 주소로 다시 와도 열리고 새로 고침해도 다시 안 열리게(기록은 쌓지 않음)
+      const p = new URLSearchParams(query);
+      p.delete('new');
+      const qs = p.toString();
+      replace('/docs' + (qs ? '?' + qs : ''));
+    }
+  };
   const [withSub, setWithSub] = useState(false);
 
   // 업무 계층 순서 (상위 → 하위)
@@ -199,7 +214,7 @@ export default function Docs() {
           </table>
         )}
       </Card>
-      {open && <DocRegisterModal open onClose={() => setOpen(false)} presetWork={selected?.id} />}
+      {open && <DocRegisterModal open onClose={closeRegister} presetWork={selected?.id} />}
     </div>
   );
 }

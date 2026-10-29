@@ -7,18 +7,22 @@ import { jsonSchemaOutputFormat } from '@anthropic-ai/sdk/helpers/json-schema';
 export const DEFAULT_MODEL = 'claude-opus-5-5';
 export const KEY_STORE = 'itda-anthropic-key';
 export const MODEL_STORE = 'itda-anthropic-model';
-export const LLM_EFFORT = 'medium';
+export type LlmEffort = 'low' | 'medium' | 'high';
+/** 기본 생각 깊이. 호출 종류별로 LIMITS의 effort가 있으면 그것을 쓴다 */
+export const LLM_EFFORT: LlmEffort = 'medium';
 
-/** 호출 종류별 상한(화면 대기 문구와 같은 값) */
-export const LIMITS = {
+/** 호출 종류별 상한(화면 대기 문구와 같은 값)과 생각 깊이.
+ *  점검은 문서와 기록을 하나하나 대조해야 해서 'high'(가상 데이터 실측 2026-10-29: medium 15초 → high 17.5초). 전체 인사이트는 high로 35초 → 64초에 결과가 나아지지 않아 medium(한도 120초) */
+type LimitKind = 'extract' | 'review' | 'ask' | 'check' | 'insight' | 'overall' | 'explain';
+export const LIMITS: Record<LimitKind, { maxTokens: number; timeoutMs: number; effort?: LlmEffort }> = {
   extract: { maxTokens: 32000, timeoutMs: 120000 }, // 문서 분석(긴 문서)
   review: { maxTokens: 16000, timeoutMs: 90000 }, // 꼼꼼히 읽기(두 번째 대조 호출)
   ask: { maxTokens: 8000, timeoutMs: 60000 }, // AI 업무 검색
-  check: { maxTokens: 16000, timeoutMs: 90000 }, // 사전 점검·업무 점검(Claude)
+  check: { maxTokens: 16000, timeoutMs: 90000, effort: 'high' }, // 사전 점검·업무 점검(Claude)
   insight: { maxTokens: 16000, timeoutMs: 120000 }, // 지도 인사이트(Claude): 출력은 점검과 비슷(최대 8개), 입력이 팀 전체 업무라 점검보다 김 → 시간만 늘림
   overall: { maxTokens: 16000, timeoutMs: 120000 }, // 팀 전체 인사이트(Claude): 입력은 인사이트와 같고 출력은 3~5개 — 같은 한도
   explain: { maxTokens: 4000, timeoutMs: 45000 }, // 지도 요약 문장
-} as const;
+};
 
 export type LlmErrorCode = 'auth' | 'model' | 'rate' | 'timeout' | 'network' | 'refusal' | 'format' | 'too_large' | 'cancelled' | 'server';
 export class LlmError extends Error {
@@ -111,7 +115,7 @@ export function createClient(apiKey: string, model = DEFAULT_MODEL, sdk: any = n
             max_tokens: lim.maxTokens,
             system,
             messages: [{ role: 'user', content: user }],
-            output_config: { effort: LLM_EFFORT, format: { ...jsonSchemaOutputFormat(schema as any), parse: parseJsonOrNull } },
+            output_config: { effort: lim.effort ?? LLM_EFFORT, format: { ...jsonSchemaOutputFormat(schema as any), parse: parseJsonOrNull } },
           },
           { timeout: lim.timeoutMs, maxRetries: 0, signal },
         );

@@ -4,6 +4,7 @@ import { createSeed, SCHEMA } from '../data/seed';
 import { migrate } from './migrate';
 import { nextId, uid } from './util';
 import { orgScopeNames } from './orgs';
+import { affectedWorkIds } from './docDelete';
 
 /**
  * 제출본: HTML 안에 넣어 둔 초기 데이터(window.__WORKLINK_SEED__).
@@ -30,8 +31,7 @@ export function parseBackup(text: string): AppState {
     throw new Error('JSON 형식이 아닙니다');
   }
   if (!s || typeof s !== 'object' || !Array.isArray(s.works) || !Array.isArray(s.docs) || !Array.isArray(s.users)) throw new Error('업무잇다 데이터 형식이 아닙니다');
-  if (s.schema === SCHEMA) return s as AppState;
-  if (s.schema === 6) return migrate(s);
+  if (s.schema === SCHEMA || s.schema === 6) return migrate(s);
   throw new Error(`지원하지 않는 데이터 버전입니다 (schema ${s.schema})`);
 }
 
@@ -40,8 +40,7 @@ function load(): AppState {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const s = JSON.parse(raw);
-      if (s.schema === SCHEMA) return s as AppState;
-      if (s.schema === 6) return migrate(s); // 이전 버전 데이터 보존 변환
+      if (s.schema === SCHEMA || s.schema === 6) return migrate(s); // aiChecks 정리 + 이전 버전 데이터 보존 변환
     }
   } catch {
     /* 저장소 접근 불가 — 초기 데이터로 시작 */
@@ -78,6 +77,34 @@ export function canEdit(s: AppState, workId: string, userId: string) {
   const w = s.works.find((x) => x.id === workId);
   if (!w) return false;
   return w.owners.includes(userId) || inLeadScope(s, workId, userId);
+}
+
+export interface DocDeleteAccess {
+  /** 지울 수 있다 */
+  ok: boolean;
+  /** 단추를 보인다(지울 수 있거나, 일부 업무만 고칠 수 있거나, 올린 사람) */
+  show: boolean;
+  /** 이 사람이 고칠 수 없어 막는 업무 */
+  blocked: { id: string; name: string }[];
+}
+
+/**
+ * 올린 문서를 지울 수 있는가. 문서를 지우면 연결된 업무와 이 문서를 인용한 모든 업무의 근거가 낮아지고 버전이 오른다.
+ * 그러므로 그 업무 전부를 지금 사용자가 고칠 수 있을 때만 허용한다(canEdit 그대로, 새 권한 규칙 없음 — 올린 사람도 마찬가지).
+ * 영향 업무가 하나도 없는 문서(연결·인용 없음)는 올린 사람만. 하나도 못 고치는 사람에게는 단추를 숨기고, 일부만 고치거나 올린 사람이면 단추를 보이되 막는다.
+ */
+export function docDeleteAccess(s: AppState, docId: string, userId: string): DocDeleteAccess {
+  const d = s.docs.find((x) => x.id === docId);
+  if (!d) return { ok: false, show: false, blocked: [] };
+  const ids = affectedWorkIds(s, docId);
+  const blocked = ids.filter((w) => !canEdit(s, w, userId)).map((w) => ({ id: w, name: s.works.find((x) => x.id === w)?.name ?? w }));
+  const ok = ids.length ? !blocked.length : d.registeredBy === userId;
+  const someEditable = ids.length > blocked.length;
+  return { ok, show: ok || someEditable || d.registeredBy === userId, blocked };
+}
+
+export function canDeleteDoc(s: AppState, docId: string, userId: string) {
+  return docDeleteAccess(s, docId, userId).ok;
 }
 
 /** 사람·조직을 추가·고치기·전출·삭제할 수 있는가: 조직장만 */

@@ -228,6 +228,7 @@ export interface AnswerLine {
   text: string;
   prov: Prov;
   cite?: Cite[];
+  label?: string; // 근거 표시를 바꿔 부를 때(예: AI 검색의 「업무 기록 기준」)
 }
 export interface Answer {
   query: string;

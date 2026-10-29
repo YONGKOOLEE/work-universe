@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { LayoutDashboard, FolderKanban, Files, GitCommitVertical, ScrollText, Search, ArrowRightLeft, ChevronLeft, Menu, RotateCcw, UserRound, Bot, X, ArrowDownUp, Orbit, KeyRound, Users, Sun, Moon, Monitor } from 'lucide-react';
 import { THEME_LABELS, THEME_NEXT, useTheme } from '../lib/theme';
 import { DataTransfer } from './DataTransfer';
+import { QuickFind } from './QuickFind';
+import type { ActionId } from '../lib/quickFind';
 import { NewWorkModal } from './NewWorkModal';
 import { useRouter } from '../lib/router';
 import { useStore, useFocus, BUNDLED } from '../lib/store';
@@ -237,12 +239,30 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [dataOpen, setDataOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [dataTab, setDataTab] = useState<'export' | 'import'>('export');
+  const [theme, setTheme] = useTheme();
   useEffect(() => {
     const h = () => setNewOpen(true);
     window.addEventListener('open-new-work', h);
     return () => window.removeEventListener('open-new-work', h);
   }, []);
   const [q, setQ] = useState('');
+  // 바로 찾기의 「기능」 실행: 이 화면이 가진 창을 연다
+  const runAction = (a: ActionId) => {
+    if (a === 'data') {
+      setDataTab('export');
+      setDataOpen(true);
+    } else if (a === 'merge') {
+      setDataTab('import'); // 불러오기 탭의 기본 방식이 「합쳐 불러오기」
+      setDataOpen(true);
+    } else if (a === 'new-work') setNewOpen(true);
+    else if (a === 'ai-settings') setAiOpen(true);
+    else if (a === 'ai-engine') toast('AI 엔진은 상단 오른쪽의 「규칙 · Claude · 사내」 칸에서 고릅니다');
+    else if (a === 'theme') {
+      setTheme(THEME_NEXT[theme]);
+      toast(`화면: ${THEME_LABELS[THEME_NEXT[theme]]}`);
+    }
+  };
 
   return (
     <div className="flex h-full">
@@ -317,9 +337,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 ))}
               </select>
             </label>
+            <QuickFind onAction={runAction} />
             <ThemeToggle />
             <EngineToggle onSettings={() => setAiOpen(true)} />
-            <Button variant="ghost" size="sm" onClick={() => setDataOpen(true)} title="데이터 옮기기 (백업 · 불러오기)">
+            <Button variant="ghost" size="sm" onClick={() => {
+                setDataTab('export');
+                setDataOpen(true);
+              }}
+              title="데이터 옮기기 (백업 · 불러오기)">
               <ArrowDownUp size={14} />
               <span className="hidden md:inline">데이터 옮기기</span>
             </Button>
@@ -359,7 +384,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       <NewWorkModal open={newOpen} onClose={() => setNewOpen(false)} />
       <AISettings open={aiOpen} onClose={() => setAiOpen(false)} />
-      <DataTransfer open={dataOpen} onClose={() => setDataOpen(false)} />
+      <DataTransfer open={dataOpen} onClose={() => setDataOpen(false)} initialTab={dataTab} />
 
       <Modal open={resetOpen} onClose={() => setResetOpen(false)} title={BUNDLED ? '처음 상태로 되돌리기' : '모든 데이터 지우기'}>
         <p className="mb-2 text-[13px] text-muted">

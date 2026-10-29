@@ -275,7 +275,7 @@ function EventTitle({ e }: { e: TEvent }) {
 }
 
 function EventDetail({ e, onPick }: { e: TEvent; onPick: (id: string) => void }) {
-  const { s } = useStore();
+  const { s, raw } = useStore();
   const { nav } = useRouter();
   const byId = Object.fromEntries(s.events.map((x) => [x.id, x]));
   const followers = s.events.filter((x) => x.causes.some((c) => c.eventId === e.id));
@@ -315,7 +315,7 @@ function EventDetail({ e, onPick }: { e: TEvent; onPick: (id: string) => void })
               return (
                 <button key={id} onClick={() => nav(`/docs/${id}`)} className="inline-flex items-center gap-1 rounded border border-line2 px-1.5 py-px text-2xs text-muted hover:text-ink">
                   <Link2 size={11} />
-                  {d?.title ?? id}
+                  {d?.title ?? (raw.docs.some((x) => x.id === id) ? id : '삭제된 문서')}
                 </button>
               );
             })}

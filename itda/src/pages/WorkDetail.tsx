@@ -292,7 +292,7 @@ export default function WorkDetail({ id }: { id: string }) {
             )}
           </Glance>
         </dl>
-        {(issues.length > 0 || (cc.available && !ro)) && (
+        {(issues.length > 0 || cc.saved || (cc.available && !ro)) && (
           <div className="border-t border-line bg-sunken/50 px-4 py-2.5">
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <span className="flex items-center gap-1 font-semibold text-warn"><AlertTriangle size={13} />기록 점검</span>
@@ -305,7 +305,7 @@ export default function WorkDetail({ id }: { id: string }) {
               {cc.available && !ro && !cc.running && (
                 <button className="ml-auto inline-flex items-center gap-1 rounded border border-infer/30 bg-surface px-2 py-0.5 font-medium text-infer hover:bg-infersoft" onClick={() => void cc.run()} title="업무 기록과 연결 문서를 AI(지금: Claude)가 대조해, 문서에는 있는데 기록에 빠진 것·서로 다른 것을 찾습니다" data-testid="work-claude-check">
                   <Sparkles size={12} />
-                  {cc.result ? 'AI로 다시 점검' : 'AI로 점검'}
+                  {cc.result || cc.saved ? 'AI로 다시 점검' : 'AI로 점검'}
                 </button>
               )}
             </div>
