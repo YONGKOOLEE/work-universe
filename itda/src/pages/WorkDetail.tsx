@@ -2,7 +2,7 @@ import { NEW_WORK, openNewWork } from '../lib/newWork';
 import { WorkMap } from '../universe/WorkMap';
 import { useEffect, useState } from 'react';
 import {
-  Sparkles, Pencil, ArrowRightLeft, Gavel, ListTodo, AlertTriangle, Plus, Check, Building2, CircleDot, History, Camera, ScrollText, ChevronRight, Ban, Eye, EyeOff, Users,
+  Sparkles, Pencil, ArrowRightLeft, Gavel, ListTodo, AlertTriangle, Plus, Check, Building2, CircleDot, History, Camera, ScrollText, ChevronRight, Ban, Eye, EyeOff, Users, RefreshCw,
 } from 'lucide-react';
 import { PrivateMemos } from '../components/PrivateMemos';
 import { ReadOnlyCtx, useCanEdit, useReadOnly, useStore, userName, ownerNames, useFocus } from '../lib/store';
@@ -27,6 +27,7 @@ export default function WorkDetail({ id }: { id: string }) {
   const [docOpen, setDocOpen] = useState(false);
   const [ownersOpen, setOwnersOpen] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
+  const [pickOpen, setPickOpen] = useState(false);
   const [, setFocus] = useFocus();
   // Claude 점검(키가 있을 때, 「기록 점검」 줄의 단추). 결과는 화면에만
   const cc = useClaudeCheck(s, id);
@@ -39,10 +40,16 @@ export default function WorkDetail({ id }: { id: string }) {
   }, [id, !!w]);
   if (!w) return <Empty title="업무를 찾을 수 없습니다" sub="지워졌거나 아직 불러오지 않은 업무입니다." action={<Button onClick={() => nav('/works')}>업무 목록</Button>} />;
 
+  const docs = s.docs.filter((d) => d.workIds.includes(w.id));
+  const nClaude = docs.filter((x) => x.analyzedBy === 'claude').length;
+  const nRule = docs.filter((x) => x.analyzedBy === 'mock').length;
+  const glanceSource = docs.length
+    ? `등록 문서에서 정리 · 분석: ${[nClaude && `Claude ${nClaude}`, nRule && `규칙 ${nRule}`, docs.length - nClaude - nRule > 0 && `기록 없음 ${docs.length - nClaude - nRule}`].filter(Boolean).join(' · ')} · 손으로 고친 기록 포함`
+    : '등록된 문서 없음 · 손으로 쓴 기록만 있음';
+  const reDocs = docs.filter((x) => x.paragraphs?.length);
   const parent = s.works.find((x) => x.id === w.parentId);
   const children = s.works.filter((x) => x.parentId === w.id);
   const related = s.works.filter((x) => w.relatedIds.includes(x.id));
-  const docs = s.docs.filter((d) => d.workIds.includes(w.id));
   const decisions = s.decisions.filter((d) => d.workId === w.id).sort((a, b) => dateKey(a.date).localeCompare(dateKey(b.date)));
   const actions = s.actions.filter((a) => a.workId === w.id);
   const open = actions.filter((a) => a.status !== '완료').sort((a, b) => (a.due ?? '9999').localeCompare(b.due ?? '9999'));
@@ -161,9 +168,31 @@ export default function WorkDetail({ id }: { id: string }) {
           <h2 className="flex items-center gap-2 text-[15px] font-semibold">
             <Sparkles size={16} className="text-brand" />
             업무 한눈에 보기
-            <span className="text-2xs font-normal text-muted">AI 정리 · 등록 자료 기준</span>
+            <span className="text-2xs font-normal text-muted" data-testid="glance-source">{glanceSource}</span>
           </h2>
-          <ProvLegend />
+          <div className="flex flex-wrap items-center gap-2">
+            {!ro && reDocs.length > 0 && (
+              <div className="relative">
+                <Button size="sm" variant="subtle" onClick={() => setPickOpen((x) => !x)} data-testid="glance-reanalyze" aria-expanded={pickOpen}>
+                  <RefreshCw size={13} />
+                  근거 문서 다시 분석
+                </Button>
+                {pickOpen && (
+                  <ul className="absolute right-0 z-20 mt-1 max-h-72 w-72 overflow-y-auto rounded-lg border border-line bg-surface py-1 text-[13px] shadow-pop" data-testid="glance-reanalyze-menu">
+                    {reDocs.map((x) => (
+                      <li key={x.id}>
+                        <button className="w-full px-3 py-2 text-left hover:bg-sunken/60" onClick={() => { setPickOpen(false); nav(`/docs/${x.id}?reanalyze=1`); }} data-testid={`glance-reanalyze-${x.id}`}>
+                          <span className="block font-medium">{x.title}</span>
+                          <span className="text-2xs text-muted">{x.analyzedBy === 'claude' ? 'Claude' : x.analyzedBy === 'mock' ? '규칙 기반' : '분석 기록 없음'} 분석</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+            <ProvLegend />
+          </div>
         </div>
         <dl className="divide-y divide-line">
           <Glance n="1" q="이 업무는 무엇인가?">

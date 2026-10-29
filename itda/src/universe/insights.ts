@@ -31,9 +31,12 @@ export const INSIGHT_HELP: Record<InsightKind, string> = {
 /** 일 몰린 사람 기준(유니버스 기본값 3과 같다). 바꾸기 쉬운 곳 하나 */
 export const DENSE_N = 3;
 
+/** 업무 흐름·반복 인사이트 종류(universe/flowInsights.ts): 인계 사슬·같은 주제 반복·인계 준비도 낮음·유사 경험자 */
+export type FlowKind = 'handover_chain' | 'topic_repeat' | 'low_readiness' | 'similar';
+
 export interface Insight {
   id: string;
-  kind: InsightKind | 'claude'; // claude: Claude 인사이트(ai/aiInsight.ts)를 지도에서 강조할 때
+  kind: InsightKind | FlowKind | 'claude'; // claude: Claude 인사이트(ai/aiInsight.ts)를 지도에서 강조할 때
   level: 'high' | 'mid' | 'low';
   title: string; // 업무 또는 사람 이름
   detail: string;
@@ -44,6 +47,8 @@ export interface Insight {
 
 /** 규칙 인사이트(종류가 규칙 다섯 가지 중 하나) */
 export type RuleInsight = Insight & { kind: InsightKind };
+/** 업무 흐름·반복 규칙 인사이트 */
+export type FlowInsight = Insight & { kind: FlowKind };
 
 export interface InsightResult {
   items: RuleInsight[];
@@ -52,7 +57,7 @@ export interface InsightResult {
 }
 
 /** 전역 ID(합쳐진 노드 포함) → 원래 업무잇다 항목 */
-function originIds(d: Derived, view: any, gids: string[]) {
+export function originIds(d: Derived, view: any, gids: string[]) {
   const workIds = new Set<string>();
   const userIds = new Set<string>();
   for (const gid of gids) {

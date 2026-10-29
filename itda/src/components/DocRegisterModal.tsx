@@ -7,7 +7,8 @@ import { canEdit, useStore } from '../lib/store';
 import { useRouter } from '../lib/router';
 import { useAI } from '../ai/claude';
 import { analyzeDocument, type DocAnalysis } from '../ai/engine';
-import { mockExtract, claudeExtract, applyProposals, type Extraction, type Proposal } from '../ai/reflect';
+import { applyProposals, type Extraction, type Proposal } from '../ai/reflect';
+import { runExtraction } from '../ai/runExtract';
 import { extractPdf } from '../lib/pdf';
 import { docEventFor, EXCLUDED_DOC_TYPES } from '../lib/docEvents';
 import { DOC_TYPES, type Doc, type DocParagraph, type DocType, type RelType } from '../lib/types';
@@ -139,23 +140,9 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
       setBusy(false);
       return;
     }
-    let result: Extraction;
-    if (ai.engine === 'claude' && ai.client) {
-      ctl.current = new AbortController();
-      try {
-        result = await claudeExtract(ai.client, s, title, paras, def, writtenAt, ctl.current.signal, { review: careful, onStage: setStage });
-        if (result.review && !result.review.ok) setAiMsg('꼼꼼히 읽기(두 번째 대조)는 실패해 첫 분석 결과만 보여 줍니다.');
-        else if (result.review) setAiMsg(`꼼꼼히 읽기: 빠진 항목 ${result.review.added}건을 더했고, 확인이 필요한 항목 ${result.review.flagged}건을 표시했습니다.`);
-        if (result.truncatedInput) setAiMsg('문서가 길어 앞부분(약 6만 자)만 Claude에 보냈습니다. 뒷부분 내용은 반영 제안에 포함되지 않았습니다.');
-      } catch (e) {
-        console.warn('[AI 호출 오류]', (e as any)?.code, String((e as any)?.message ?? e).slice(0, 300));
-        const msg = ai.onError(e);
-        setAiMsg(`${msg} 이번 분석은 규칙 기반 결과입니다.`);
-        result = mockExtract(s, title, paras, def);
-      }
-    } else {
-      result = mockExtract(s, title, paras, def);
-    }
+    ctl.current = new AbortController();
+    const { result, msg } = await runExtraction(ai, s, title, paras, def, writtenAt, ctl.current.signal, { review: careful, onStage: setStage });
+    if (msg) setAiMsg(msg);
     if (!result.keywords.length) result.keywords = md.keywords;
     if (!result.relatedWorks.length) result.relatedWorks = md.relatedWorks;
     setMockDoc(md);

@@ -14,7 +14,7 @@ const GROUPS: { kind: ProposalKind; title: string; Icon: React.ElementType; to: 
 const SOURCE_LABEL: Record<string, string> = { rule: '표·목록 규칙', review: '꼼꼼히 읽기' };
 const small = 'rounded border border-line2 bg-surface px-1.5 py-1 text-xs text-ink focus:border-brand focus:outline-none';
 
-export function ReflectionPreview({ props, setProps, paras, works, users = [] }: { props: Proposal[]; setProps: (f: (p: Proposal[]) => Proposal[]) => void; paras: DocParagraph[]; works: Work[]; users?: User[] }) {
+export function ReflectionPreview({ props, setProps, paras, works, users = [], emptyText = '이 문서에서 업무에 반영할 항목을 찾지 못했습니다. 문서만 등록됩니다.' }: { props: Proposal[]; setProps: (f: (p: Proposal[]) => Proposal[]) => void; paras: DocParagraph[]; works: Work[]; users?: User[]; emptyText?: string }) {
   const set = (id: string, patch: Partial<Proposal>, reverify = false) =>
     setProps((ps) => ps.map((p) => (p.id === id ? (reverify ? verify({ ...p, ...patch }, paras) : { ...p, ...patch }) : p)));
   const verifiedN = props.filter((p) => p.verified).length;
@@ -37,7 +37,7 @@ export function ReflectionPreview({ props, setProps, paras, works, users = [] }:
       <p className="border-b border-line px-4 py-2 text-xs text-muted">
         체크한 항목만 업무에 반영됩니다. 문구·날짜·대상 업무는 반영 전에 고칠 수 있습니다. '별도 확인 필요' 항목을 승인하면 해당 표시가 붙은 채로 반영되어, 업무 화면과 기록 점검에서 확인 대상으로 남습니다.
       </p>
-      {props.length === 0 && <p className="px-4 py-6 text-center text-[13px] text-muted">이 문서에서 업무에 반영할 항목을 찾지 못했습니다. 문서만 등록됩니다.</p>}
+      {props.length === 0 && <p className="px-4 py-6 text-center text-[13px] text-muted">{emptyText}</p>}
       {GROUPS.map((g) => {
         const list = props.filter((p) => p.kind === g.kind);
         if (!list.length) return null;

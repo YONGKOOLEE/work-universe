@@ -1,43 +1,56 @@
-// 인계 위험 인사이트 판(지도 오른쪽). 항목을 누르면 지도에서 근거 항목을 강조하고 그 업무·사람 카드를 연다.
+// 인사이트 판(지도 오른쪽): 한눈에 한 줄 + 인계 위험 + 업무 흐름·반복. 항목을 누르면 지도에서 근거 항목을 강조하고 그 업무·사람 카드를 연다.
 import { useMemo, useState } from 'react';
-import { AlertTriangle, Info } from 'lucide-react';
+import { Info, Lightbulb } from 'lucide-react';
 import { cx } from '../lib/util';
 import type { AppState } from '../lib/types';
 import type { MapScope } from './derive';
 import { effectiveOrgs, orgChain, orgOfName, orgShort } from '../lib/orgs';
-import { handoverInsights, INSIGHT_HELP, INSIGHT_NAMES, type Insight, type InsightKind } from './insights';
+import { handoverInsights, INSIGHT_HELP, INSIGHT_NAMES, type FlowKind, type Insight, type InsightKind } from './insights';
+import { FLOW_GROUP_NAME, FLOW_HELP, FLOW_KINDS, FLOW_NAMES, flowInsights, overview } from './flowInsights';
 import { ClaudeInsights } from './ClaudeInsights';
 
 const KINDS = Object.keys(INSIGHT_NAMES) as InsightKind[];
 const LEVEL_DOT = { high: 'bg-danger', mid: 'bg-warn', low: 'bg-faint' } as const;
 const SHOW = 6;
+type AnyKind = InsightKind | FlowKind;
+const NAMES: Record<string, string> = { ...INSIGHT_NAMES, ...FLOW_NAMES };
+const HELP: Record<string, string> = { ...INSIGHT_HELP, ...FLOW_HELP };
 
 export function InsightPanel({ data, scope, asOf, focusId, onFocus }: { data: AppState; scope: MapScope; asOf: string; focusId: string | null; onFocus: (x: Insight | null) => void }) {
   const r = useMemo(() => handoverInsights(data, scope, asOf), [data, scope, asOf]);
-  const [kind, setKind] = useState<InsightKind | 'all'>('all');
-  const [more, setMore] = useState(false);
+  const f = useMemo(() => flowInsights(data, scope, asOf), [data, scope, asOf]);
+  const ov = useMemo(() => overview(data, scope, r, f), [data, scope, r, f]);
+  const [kind, setKind] = useState<AnyKind | 'all'>('all');
+  const [more, setMore] = useState({ risk: false, flow: false });
   // 위 조직 지도: 위험을 한 단계 아래 조직별로 모아 보인다(부 → 팀별, 회사 → 본부별). 누르면 그 조직 것만
-  const groups = useMemo(() => rollup(data, scope, r.items), [data, scope, r.items]);
+  const all: Insight[] = useMemo(() => [...r.items, ...f.items], [r.items, f.items]);
+  const groups = useMemo(() => rollup(data, scope, all), [data, scope, all]);
   const [org, setOrg] = useState<string | null>(null);
   const orgOk = org && groups?.some((g) => g.id === org) ? org : null;
-  const list = r.items.filter((x) => (kind === 'all' || x.kind === kind) && (!orgOk || groups!.find((g) => g.id === orgOk)!.ids.has(x.id)));
-  const shown = more ? list : list.slice(0, SHOW);
+  const pass = (x: Insight) => (kind === 'all' || x.kind === kind) && (!orgOk || groups!.find((g) => g.id === orgOk)!.ids.has(x.id));
+  const sections = [
+    { key: 'risk' as const, title: '인계 위험', list: r.items.filter(pass) },
+    { key: 'flow' as const, title: FLOW_GROUP_NAME, list: f.items.filter(pass) },
+  ];
+  const empty = sections.every((x) => x.list.length === 0);
+  const notes = [...r.notes, ...f.notes];
   return (
     <div className="rounded-lg border border-line bg-surface p-4" data-testid="map-risk">
       <div className="flex items-center justify-between gap-2">
         <h3 className="flex items-center gap-1.5 text-[14px] font-bold">
-          <AlertTriangle size={15} className="text-warn" /> 인계 위험 인사이트
+          <Lightbulb size={15} className="text-warn" /> 인사이트
         </h3>
-        <span className="rounded bg-sunken px-1.5 text-2xs font-semibold text-muted" title="업무 유니버스의 위험 규칙으로 계산합니다(키 없이 동작)">규칙 기반</span>
+        <span className="rounded bg-sunken px-1.5 text-2xs font-semibold text-muted" title="업무 유니버스의 규칙으로 계산합니다(키 없이 동작)">규칙 기반</span>
       </div>
-      <div className="mt-2 flex flex-wrap gap-1" role="tablist" aria-label="인사이트 종류">
-        <Chip on={kind === 'all'} onClick={() => setKind('all')} testid="insight-kind-all">전체 {r.items.length}</Chip>
-        {KINDS.map((k) => (
-          <Chip key={k} on={kind === k} onClick={() => setKind(k)} disabled={!r.counts[k]} title={INSIGHT_HELP[k]} testid={`insight-kind-${k}`}>
-            {INSIGHT_NAMES[k]} {r.counts[k]}
-          </Chip>
-        ))}
+      <p className="mt-1.5 rounded bg-sunken/70 px-2 py-1.5 text-2xs leading-snug text-muted" data-testid="insight-summary">
+        <b className="mr-1 text-ink">한눈에</b>
+        {ov.text}
+      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-1" role="tablist" aria-label="인사이트 종류">
+        <Chip on={kind === 'all'} onClick={() => setKind('all')} testid="insight-kind-all">전체 {all.length}</Chip>
       </div>
+      <ChipGroup title="인계 위험" kinds={KINDS} counts={r.counts} kind={kind} setKind={setKind} />
+      <ChipGroup title={FLOW_GROUP_NAME} kinds={FLOW_KINDS} counts={f.counts} kind={kind} setKind={setKind} />
       {groups && (
         <div className="mt-2 flex flex-wrap items-center gap-1 text-2xs" data-testid="insight-orgs">
           <span className="font-semibold text-faint">조직별</span>
@@ -48,39 +61,58 @@ export function InsightPanel({ data, scope, asOf, focusId, onFocus }: { data: Ap
           ))}
         </div>
       )}
-      {kind !== 'all' && <p className="mt-1.5 flex items-start gap-1 text-2xs text-muted"><Info size={12} className="mt-px shrink-0" />{INSIGHT_HELP[kind]}</p>}
-      {list.length === 0 ? (
-        <p className="mt-2 text-[12.5px] text-muted">{r.notes.length ? r.notes.join(' · ') : '찾은 위험이 없습니다'}</p>
-      ) : (
-        <ul className="mt-2 space-y-0.5">
-          {shown.map((x) => (
-            <li key={x.id}>
-              <button
-                className={cx('flex w-full items-start gap-2 rounded px-1.5 py-1.5 text-left hover:bg-sunken', focusId === x.id && 'bg-brandsoft ring-1 ring-brand/30')}
-                onClick={() => onFocus(focusId === x.id ? null : x)}
-                aria-pressed={focusId === x.id}
-                data-testid="insight-item"
-              >
-                <span className={cx('mt-1.5 h-2 w-2 shrink-0 rounded-full', LEVEL_DOT[x.level])} />
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-baseline gap-1.5">
-                    <span className="truncate text-[12.5px] font-semibold">{x.title}</span>
-                    <span className="shrink-0 text-2xs text-faint">{INSIGHT_NAMES[x.kind]}</span>
-                  </span>
-                  <span className="block text-2xs leading-snug text-muted">{x.detail}</span>
-                </span>
+      {kind !== 'all' && <p className="mt-1.5 flex items-start gap-1 text-2xs text-muted"><Info size={12} className="mt-px shrink-0" />{HELP[kind]}</p>}
+      {empty && <p className="mt-2 text-[12.5px] text-muted">{notes.length ? notes.join(' · ') : '찾은 인사이트가 없습니다'}</p>}
+      {sections.map((sec) => {
+        if (!sec.list.length) return null;
+        const shown = more[sec.key] ? sec.list : sec.list.slice(0, SHOW);
+        return (
+          <div key={sec.key} className="mt-2" data-testid={`insight-group-${sec.key}`}>
+            <h4 className="px-1.5 text-2xs font-bold text-faint">{sec.title} {sec.list.length}</h4>
+            <ul className="mt-0.5 space-y-0.5">
+              {shown.map((x) => (
+                <li key={x.id}>
+                  <button
+                    className={cx('flex w-full items-start gap-2 rounded px-1.5 py-1.5 text-left hover:bg-sunken', focusId === x.id && 'bg-brandsoft ring-1 ring-brand/30')}
+                    onClick={() => onFocus(focusId === x.id ? null : x)}
+                    aria-pressed={focusId === x.id}
+                    data-testid="insight-item"
+                  >
+                    <span className={cx('mt-1.5 h-2 w-2 shrink-0 rounded-full', LEVEL_DOT[x.level])} />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-baseline gap-1.5">
+                        <span className="truncate text-[12.5px] font-semibold">{x.title}</span>
+                        <span className="shrink-0 text-2xs text-faint">{NAMES[x.kind]}</span>
+                      </span>
+                      <span className="block text-2xs leading-snug text-muted">{x.detail}</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {sec.list.length > SHOW && (
+              <button className="mt-1 text-2xs text-brand" onClick={() => setMore((v) => ({ ...v, [sec.key]: !v[sec.key] }))} data-testid={sec.key === 'risk' ? 'insight-more' : 'insight-more-flow'}>
+                {more[sec.key] ? '줄여 보기' : `${sec.list.length - SHOW}건 더 보기`}
               </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {list.length > SHOW && (
-        <button className="mt-1 text-2xs text-brand" onClick={() => setMore((v) => !v)} data-testid="insight-more">
-          {more ? '줄여 보기' : `${list.length - SHOW}건 더 보기`}
-        </button>
-      )}
+            )}
+          </div>
+        );
+      })}
       <p className="mt-2 text-2xs text-faint">항목을 누르면 지도에서 근거가 노랗게 강조됩니다. 다시 누르면 풀립니다.</p>
       <ClaudeInsights data={data} scope={scope} asOf={asOf} focusId={focusId} onFocus={onFocus} />
+    </div>
+  );
+}
+
+function ChipGroup<K extends AnyKind>({ title, kinds, counts, kind, setKind }: { title: string; kinds: K[]; counts: Record<K, number>; kind: AnyKind | 'all'; setKind: (k: K) => void }) {
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1" role="tablist" aria-label={title}>
+      <span className="mr-0.5 text-2xs font-semibold text-faint">{title}</span>
+      {kinds.map((k) => (
+        <Chip key={k} on={kind === k} onClick={() => setKind(k)} disabled={!counts[k]} title={HELP[k]} testid={`insight-kind-${k}`}>
+          {NAMES[k]} {counts[k]}
+        </Chip>
+      ))}
     </div>
   );
 }

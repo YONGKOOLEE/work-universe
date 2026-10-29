@@ -67,7 +67,8 @@ async function fresh() {
   await cdp.send('Page.navigate', { url: pathToFileURL(HTML).href });
   await wait('document.readyState === "complete" && document.querySelector("#root")?.children.length > 0', 15000);
   // CHECK_MAP_STYLE=basic|space|clean|mix: 유니버스 화면 시안을 켠 채로 점검(없으면 기본값 가+나)
-  await ev(`localStorage.clear(); ${/^(basic|space|clean|mix)$/.test(process.env.CHECK_MAP_STYLE || '') ? `localStorage.setItem('itda-map-style', '${process.env.CHECK_MAP_STYLE}');` : ''} true`);
+  // CHECK_THEME=light|dark: 화면 밝기를 고정한 채로 점검(16번은 자동에서 시작하므로 건너뜀)
+  await ev(`localStorage.clear(); ${/^(basic|space|clean|mix)$/.test(process.env.CHECK_MAP_STYLE || '') ? `localStorage.setItem('itda-map-style', '${process.env.CHECK_MAP_STYLE}');` : ''} ${/^(light|dark)$/.test(process.env.CHECK_THEME || '') ? `localStorage.setItem('itda-theme', '${process.env.CHECK_THEME}');` : ''} true`);
   await cdp.send('Page.reload');
   await sleep(300);
   await wait('document.readyState === "complete" && document.querySelector("#root")?.children.length > 0 && !!document.getElementById("user-switch")', 15000);
@@ -531,7 +532,44 @@ try {
     return '김도윤: W-004 읽기 전용·메모 남김 / 정하준: 메모 안 보임·편집 가능';
   });
 
-  await check('16 화면 밝기(자동 → 밝게 → 어둡게)·가+나 지도', async () => {
+  await check('17 근거 문서 다시 분석(규칙)·인사이트 두 묶음·한눈에 줄', async () => {
+    await must(await H(`user('김도윤')`), '김도윤 전환 실패');
+    await nav('#/works/W-001', `!!document.querySelector('[data-testid="glance-source"]')`);
+    const src = await ev(`document.querySelector('[data-testid="glance-source"]').innerText`);
+    await must(/분석|문서/.test(src), `한눈에 보기 출처 글이 이상함: ${src}`);
+    await must(await H(`clickId('glance-reanalyze')`), '「근거 문서 다시 분석」 단추 없음');
+    await must(await wait(`!!document.querySelector('[data-testid="glance-reanalyze-menu"] button')`, 2000), '문서 고르기 목록 없음');
+    await ev(`document.querySelector('[data-testid="glance-reanalyze-menu"] button').click(); true`);
+    await must(await wait(`!!document.querySelector('[data-testid="reanalyze-run"]')`, 4000), '다시 분석 창이 안 열림');
+    const runOnce = async () => {
+      await must(await H(`clickId('reanalyze-run')`), '분석 단추 없음');
+      await must(await wait(`/새 제안/.test(document.querySelector('[data-testid="reanalyze-status"]').innerText)`, 15000), '분석 결과가 안 나옴');
+      const t = await ev(`document.querySelector('[data-testid="reanalyze-status"]').innerText`);
+      const n = (re) => Number((t.match(re) || [])[1] ?? NaN);
+      return { t, approved: n(/승인 (\d+)/), fresh: n(/새 제안 (\d+)/) };
+    };
+    const a = await runOnce();
+    await shot('17-다시분석-미리보기');
+    await must(await H(`clickId('reanalyze-apply')`), '반영 단추 없음');
+    await must(await wait(`!document.querySelector('[data-testid="reanalyze-run"]')`, 3000), '반영 뒤 창이 안 닫힘');
+    const hash = await ev('location.hash');
+    await ev(`location.hash = ${JSON.stringify('#/docs/')} + location.hash.split('/docs/')[1].split('?')[0] + '?reanalyze=1'; true`);
+    await must(await wait(`!!document.querySelector('[data-testid="reanalyze-run"]')`, 4000), '두 번째 다시 분석 창이 안 열림');
+    const b = await runOnce();
+    await must(b.fresh <= a.fresh - a.approved, `같은 문서를 다시 분석했는데 새 제안이 줄지 않음(1차 ${a.t} / 2차 ${b.t})`);
+    await H(`clickId('reanalyze-cancel')`);
+    await sleep(200);
+    await must(await H(`user('박지훈')`), '박지훈 전환 실패');
+    await nav('#/universe', mapReady);
+    await must(await wait(`!!document.querySelector('[data-testid="insight-summary"]') && !!document.querySelector('[data-testid="insight-group-risk"]') && !!document.querySelector('[data-testid="insight-group-flow"]')`, 4000), '인사이트 한눈에 줄·두 묶음이 없음');
+    const sum = await ev(`document.querySelector('[data-testid="insight-summary"]').innerText`);
+    await ev(`document.querySelector('[data-testid="insight-group-flow"]').scrollIntoView({ block: 'center' }); true`);
+    await shot('17-인사이트-두묶음');
+    await must(await H(`user('김도윤')`), '김도윤 복귀 실패');
+    return `1차 ${a.t.split(' — ')[0]} → 2차 ${b.t.split(' — ')[0]} (${hash}) / ${sum.slice(0, 80)}`;
+  });
+
+  if (!process.env.CHECK_THEME) await check('16 화면 밝기(자동 → 밝게 → 어둡게)·가+나 지도', async () => {
     await must(await H(`user('박지훈')`), '박지훈 전환 실패');
     await nav('#/universe', mapReady);
     const bg = () => ev(`getComputedStyle(document.body).backgroundColor`);
@@ -552,6 +590,11 @@ try {
     await must((await st()) === 'mix', `어둡게에서 지도 모양 ${await st()}`);
     const darkBg = await bg();
     await must(lightBg !== darkBg, `밝게·어둡게 바탕색이 같음(${lightBg})`);
+    // 고르기 칸 목록 항목: 바탕과 글씨가 같은 밝기면 안 보인다(사용자 선택 칸 — 2026-10-29)
+    const opt = await ev(`(() => { const o = document.querySelector('#user-switch option'); const c = getComputedStyle(o); return c.backgroundColor + '|' + c.color; })()`);
+    const lum = (rgb) => { const [r, g, b] = rgb.match(/\d+/g).map(Number); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const [ob, oc] = opt.split('|');
+    await must(Math.abs(lum(ob) - lum(oc)) > 100, `어둡게에서 사용자 목록 항목 색 대비 부족(${opt})`);
     await shot('16-어둡게-지도');
     await nav('#/dashboard', `!!document.querySelector('main')`);
     await shot('16-어둡게-대시보드');

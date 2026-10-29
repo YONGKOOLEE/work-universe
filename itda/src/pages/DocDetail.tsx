@@ -1,15 +1,23 @@
-import { useEffect } from 'react';
-import { Sparkles, AlertTriangle, ArrowRight, Link2 } from 'lucide-react';
-import { useStore, userName } from '../lib/store';
+import { useEffect, useState } from 'react';
+import { Sparkles, AlertTriangle, ArrowRight, Link2, RefreshCw } from 'lucide-react';
+import { canEdit, useStore, userName } from '../lib/store';
 import { useRouter } from '../lib/router';
 import { Button, Card, CardHead, ProvChip, Mono, Empty, ExtLink, KV } from '../components/ui';
+import { DocReanalyzeModal } from '../components/DocReanalyzeModal';
 import { fmtDate, cx } from '../lib/util';
 
 export default function DocDetail({ id }: { id: string }) {
-  const { s } = useStore();
+  const { s, raw } = useStore();
   const { query, nav } = useRouter();
   const d = s.docs.find((x) => x.id === id);
   const anchor = query.get('anchor');
+  // 다시 분석: 연결된 업무 중 하나라도 내가 고칠 수 있으면(원문 문단이 있을 때). ?reanalyze=1 로 들어오면 바로 연다
+  const canRe = !!d?.paragraphs?.length && !!raw.docs.find((x) => x.id === id)?.workIds.some((w) => canEdit(raw, w, raw.currentUserId));
+  const [reOpen, setReOpen] = useState(false);
+  const wantRe = query.get('reanalyze') === '1';
+  useEffect(() => {
+    if (wantRe && canRe) setReOpen(true);
+  }, [wantRe, canRe]);
 
   useEffect(() => {
     if (!anchor || !d) return;
@@ -34,6 +42,12 @@ export default function DocDetail({ id }: { id: string }) {
         </div>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <h1 className="text-[22px] font-bold leading-tight tracking-tight">{d.title}</h1>
+          {canRe && (
+            <Button onClick={() => setReOpen(true)} data-testid="doc-reanalyze" title="등록 원문을 지금 엔진으로 다시 읽고, 아직 기록되지 않은 항목만 승인해 더합니다">
+              <RefreshCw size={14} />
+              다시 분석
+            </Button>
+          )}
         </div>
       </div>
 
@@ -46,7 +60,7 @@ export default function DocDetail({ id }: { id: string }) {
               <KV k="등록일">{fmtDate(d.registeredAt)} · {userName(s, d.registeredBy)}</KV>
               <KV k="출처">{d.source}</KV>
               {d.fileName && <KV k="원본 파일">{d.fileName}</KV>}
-              {d.analyzedBy && <KV k="AI 분석">{d.analyzedBy === 'claude' ? 'Claude' : '규칙 기반'}</KV>}
+              {d.analyzedBy && <KV k="AI 분석">{d.analyzedBy === 'claude' ? 'Claude' : '규칙 기반'}{d.analyzedAt ? ` · ${fmtDate(d.analyzedAt)}` : ''}</KV>}
               {d.url && <KV k="원문 링크"><ExtLink href={d.url}>원문 링크</ExtLink></KV>}
               <KV k="관련 업무">
                 {d.workIds.length ? (
@@ -152,6 +166,7 @@ export default function DocDetail({ id }: { id: string }) {
           )}
         </Card>
       </div>
+      {canRe && <DocReanalyzeModal open={reOpen} onClose={() => { setReOpen(false); if (wantRe) nav(`/docs/${d.id}`); }} docId={d.id} />}
     </div>
   );
 }

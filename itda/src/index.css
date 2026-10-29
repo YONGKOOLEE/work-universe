@@ -245,3 +245,10 @@ h3 {
   box-shadow: 0 1px 2px rgb(var(--shadow) / 0.05), 0 10px 30px rgb(var(--shadow) / 0.07);
 }
 .map-clean .zoom-tools button { border-radius: 999px; border-color: rgb(var(--line)); }
+
+/* 고르기 칸의 펼친 목록: 바탕이 투명한 고르기 칸은 목록이 흰 바탕 + 밝은 글씨(어둡게)로 그려져 안 보였다(사용자 2026-10-29). 목록 항목 색을 화면 토큰으로 고정 */
+select option,
+select optgroup {
+  background-color: rgb(var(--surface));
+  color: rgb(var(--ink));
+}

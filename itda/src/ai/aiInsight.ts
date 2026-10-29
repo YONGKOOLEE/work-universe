@@ -167,14 +167,14 @@ export function buildInsightInput(s: AppState, scope: MapScope, asOf: string): I
   return { user, lines, userIds, truncated };
 }
 
-const norm = (t: string) => t.replace(/\s+/g, '');
+export const norm = (t: string) => t.replace(/\s+/g, '');
 
 interface Raw {
   insights?: { kind?: string; level?: string; title?: string; detail?: string; refs?: { ref?: string; quote?: string }[]; people?: string[] }[];
 }
 
 /** 근거 하나 대조: 그 업무의 그 줄에 인용이 있으면 통과. 줄 번호가 틀려도 같은 업무의 다른 줄에 있으면 그 줄로 고친다(다른 업무까지는 찾지 않음) */
-function verifyRef(r: { ref?: string; quote?: string }, input: InsightInput): AiInsightRef | null {
+export function verifyRef(r: { ref?: string; quote?: string }, input: InsightInput): AiInsightRef | null {
   const quote = String(r?.quote ?? '').trim();
   const q = norm(quote);
   if (q.length < QUOTE_MIN) return null;

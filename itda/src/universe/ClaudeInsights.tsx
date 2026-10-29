@@ -8,17 +8,12 @@ import { useAI } from '../ai/claude';
 import { AI_INSIGHT_NAMES, buildInsightInput, claudeInsights, type AiInsight, type AiInsightResult } from '../ai/aiInsight';
 import type { MapScope } from './derive';
 import { evidenceGids, type Insight } from './insights';
+import { fingerprint, OverallButton, OverallResults, useClaudeOverall } from './ClaudeOverall';
 
 const LEVEL_DOT = { high: 'bg-danger', mid: 'bg-warn', low: 'bg-faint' } as const;
 
 // 범위 → 마지막 결과(이 탭 메모리). fp: 보낸 입력의 지문 — 기록이 바뀌었는지 가린다
 const cache = new Map<string, { fp: string; result: AiInsightResult }>();
-function fingerprint(t: string) {
-  let h = 2166136261;
-  for (let i = 0; i < t.length; i += 1) h = Math.imul(h ^ t.charCodeAt(i), 16777619);
-  return `${t.length}:${(h >>> 0).toString(36)}`;
-}
-
 export function useClaudeInsights(s: AppState, scope: MapScope, asOf: string) {
   const ai = useAI();
   const available = ai.engine === 'claude' && !!ai.client;
@@ -58,11 +53,12 @@ export function useClaudeInsights(s: AppState, scope: MapScope, asOf: string) {
 
 export function ClaudeInsights({ data, scope, asOf, focusId, onFocus }: { data: AppState; scope: MapScope; asOf: string; focusId: string | null; onFocus: (x: Insight | null) => void }) {
   const c = useClaudeInsights(data, scope, asOf);
+  const o = useClaudeOverall(data, scope, asOf);
   const [open, setOpen] = useState<number | null>(null);
   if (!c.available)
     return (
       <p className="mt-3 border-t border-line pt-2 text-2xs text-faint" data-testid="insight-claude-hint">
-        {c.keyButRule ? '상단 AI 엔진에서 Claude를 고르면' : '상단 「AI 설정」에 본인 Claude API 키를 넣으면'} Claude가 업무 기록을 읽고 규칙이 못 보는 위험(숨은 의존·기한 몰림·한 사람만 아는 절차 등)을 더 찾습니다.
+        {c.keyButRule ? '상단 AI 엔진에서 Claude를 고르면' : '상단 「AI 설정」에 본인 Claude API 키를 넣으면'} Claude가 업무 기록을 읽고 규칙이 못 보는 위험(숨은 의존·기한 몰림·한 사람만 아는 절차 등)을 더 찾고, 팀 전체를 관통하는 인사이트도 뽑습니다.
       </p>
     );
   const r = c.result;
@@ -76,21 +72,25 @@ export function ClaudeInsights({ data, scope, asOf, focusId, onFocus }: { data: 
         </h4>
         {r && <span className="rounded bg-infersoft px-1.5 text-2xs font-semibold text-infer">Claude API</span>}
       </div>
-      {c.running ? (
-        <p className="mt-1.5 flex items-center gap-1.5 text-[12.5px] text-muted" data-testid="claude-insight-running">
-          <Loader2 size={14} className="animate-spin" /> 업무 기록을 읽고 있습니다(최대 120초)
-          <button className="ml-auto text-2xs text-brand" onClick={c.cancel}>취소</button>
-        </p>
-      ) : (
-        <button
-          className="mt-1.5 inline-flex items-center gap-1 rounded border border-infer/30 bg-surface px-2 py-0.5 text-[12px] font-medium text-infer hover:bg-infersoft"
-          onClick={() => void c.run()}
-          title="이 범위의 업무 기록·사람 목록을 Claude에 보내, 규칙이 못 보는 위험을 찾습니다(「나만 보기」 메모는 보내지 않음)"
-          data-testid="claude-insight-run"
-        >
-          <Sparkles size={12} /> {r ? (c.stale ? '바뀐 기록으로 다시 찾기' : '다시 찾기') : 'Claude로 더 찾기'}
-        </button>
-      )}
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        {c.running ? (
+          <p className="flex items-center gap-1.5 text-[12.5px] text-muted" data-testid="claude-insight-running">
+            <Loader2 size={14} className="animate-spin" /> 업무 기록을 읽고 있습니다(최대 120초)
+            <button className="ml-2 text-2xs text-brand" onClick={c.cancel}>취소</button>
+          </p>
+        ) : (
+          <button
+            className="inline-flex items-center gap-1 rounded border border-infer/30 bg-surface px-2 py-0.5 text-[12px] font-medium text-infer hover:bg-infersoft"
+            onClick={() => void c.run()}
+            title="이 범위의 업무 기록·사람 목록을 Claude에 보내, 규칙이 못 보는 위험을 찾습니다(「나만 보기」 메모는 보내지 않음)"
+            data-testid="claude-insight-run"
+          >
+            <Sparkles size={12} /> {r ? (c.stale ? '바뀐 기록으로 다시 찾기' : '다시 찾기') : 'Claude로 더 찾기'}
+          </button>
+        )}
+        <OverallButton o={o} />
+      </div>
+      <OverallResults o={o} data={data} scope={scope} focusId={focusId} onFocus={onFocus} />
       {c.error && <p className="mt-1.5 text-[12.5px] text-warn" data-testid="claude-insight-error">Claude 인사이트를 찾지 못했습니다: {c.error} 위의 규칙 인사이트는 그대로 쓸 수 있습니다.</p>}
       {r && (
         <>

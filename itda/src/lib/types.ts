@@ -199,6 +199,7 @@ export interface Doc {
   fileName?: string;
   timelineOff?: boolean; // 타임라인 자동 이벤트를 사용자가 삭제함
   analyzedBy?: 'claude' | 'mock';
+  analyzedAt?: string; // 마지막으로 (다시) 분석한 시각
 }
 
 export interface HistoryEntry {
