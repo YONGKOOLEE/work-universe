@@ -147,7 +147,7 @@ export default function Works() {
           <Empty title="조건에 맞는 업무가 없습니다" sub="검색어나 필터를 바꿔 보세요." />
         </Card>
       ) : view === 'cards' ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 min-[2000px]:grid-cols-4">
           {ordered.map(({ w }) => (
             <WorkCard key={w.id} w={w} />
           ))}

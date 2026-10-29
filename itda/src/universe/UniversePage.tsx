@@ -13,10 +13,26 @@ import { MapPanel } from './MapPanel';
 import { handoverInsights } from './insights';
 import { scopeClass, useEffectiveMapStyle } from './mapStyle';
 
+/** 넓은 모니터(2000px 이상)에서는 본문이 넓어지는 만큼 지도도 키운다(사용자 결정 2026-10-29) */
+const WIDE_MIN = '(min-width: 2000px)';
+const WIDE_MAP_H = 860;
+function useWide(): boolean {
+  const [wide, setWide] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.(WIDE_MIN).matches);
+  useEffect(() => {
+    const m = window.matchMedia?.(WIDE_MIN);
+    if (!m) return;
+    const on = () => setWide(m.matches);
+    m.addEventListener('change', on);
+    return () => m.removeEventListener('change', on);
+  }, []);
+  return wide;
+}
+
 type Scope = string; // 'mine' | 'org:<조직 ID>' | 'all'
 
 export default function UniversePage() {
   const { s, me } = useStore();
+  const wide = useWide();
   const style = useEffectiveMapStyle(); // 가+나: 밝으면 흰 판, 어두우면 우주 판
   // 범위 칩: 내 지도 → 내 조직부터 위로(팀 → 부 → 본부 → 회사). 업무가 없는 윗 조직은 뺀다(내 소속 조직은 업무가 없어도 둔다 — 첫 범위이므로). 맨 위 조직이 전체가 아니면 「전체」를 더한다
   const chain = useMemo(() => myOrgChain(s, me.id).map((o) => ({ o, n: worksOfOrg(s, o.id).length })).filter((x, i) => i === 0 || x.n > 0), [s, me.id]);
@@ -103,7 +119,7 @@ export default function UniversePage() {
               <b>조직 도형(큰 원, 업무 수)을 두 번 누르면</b> 그 조직의 업무·사람과 아래 조직이 펼쳐집니다. 다시 두 번 누르면 접힙니다. 팀끼리 이어진 업무는 접힌 도형 사이의 선으로 보입니다. 고칠 수 있는 것은 내 담당 업무(조직장은 소속 조직 업무까지)이고, 나머지는 보기와 「나만 보기」 메모만 할 수 있습니다.
             </p>
           )}
-          <MapPanel key={scope + me.id} data={s} scope={mapScope} height={640} framed={false} />
+          <MapPanel key={scope + me.id + (wide ? ':wide' : '')} data={s} scope={mapScope} height={wide ? WIDE_MAP_H : 640} framed={false} />
         </>
       )}
     </div>

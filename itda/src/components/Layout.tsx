@@ -378,7 +378,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         )}
         <main id="main-scroll" className="flex-1 overflow-y-auto scroll-thin">
-          <div className="mx-auto w-full max-w-[1280px] px-4 py-5 sm:px-6 lg:py-7">{children}</div>
+          {/* 넓은 모니터(2000px 이상)만 본문을 넓힘 — 1920px 이하는 그대로(사용자 결정 2026-10-29) */}
+          <div className="mx-auto w-full max-w-[1280px] px-4 py-5 sm:px-6 lg:py-7 min-[2000px]:max-w-[1760px]">{children}</div>
         </main>
       </div>
 
