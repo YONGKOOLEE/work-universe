@@ -159,7 +159,7 @@ describe('합쳐 불러오기', () => {
     expect(m.keywords).toEqual(expect.arrayContaining(['지금키워드', '동료키워드']));
     expect(m.topics).toContain('동료주제');
     expect(m.purpose.length).toBe(incPurpose); // 비어 있어 들어온 것으로 채워짐
-    expect(m.current).toEqual(target.current); // 지금 것이 있으면 유지
+    expect(m.current.map((x) => x.text)).toEqual([...target.current.map((x) => x.text), '들어온 현황']); // 서술은 기본 둘 다 남김(2026-10-29 변경: 지금 것만 유지하던 동작 대체)
     const newcomer = state.users.find((u) => u.empNo === 'V-2001')!;
     expect(m.owners).toContain(newcomer.id);
     expect(m.owners).toEqual(expect.arrayContaining(target.owners));
@@ -290,5 +290,88 @@ describe('합쳐 불러오기 — 비슷한 업무 후보(유니버스 점수)',
     w.topics = [];
     b.docs.forEach((d) => (d.workIds = d.workIds.filter((x) => x !== 'W-004')));
     expect(planMerge(a, b).works.find((x) => x.incomingId === 'W-004')!.status).toBe('new');
+  });
+});
+
+describe('합쳐 불러오기 — 같은 칸을 다르게 고친 경우(2026-10-29)', () => {
+  /** 같은 이름 업무를 양쪽에서 다르게 고친 가상 데이터 */
+  function edited() {
+    const a = seed();
+    const b = colleague();
+    const t = a.works[0];
+    const w = b.works[0];
+    w.name = t.name;
+    t.current = [{ id: 's1', text: '지금 현황 가', prov: 'owner' }, { id: 's2', text: '공통 현황', prov: 'owner' }];
+    w.current = [{ id: 's1', text: '가져온 현황 나', prov: 'owner' }, { id: 's9', text: ' 공통  현황 ', prov: 'owner' }];
+    t.summary = '지금 요약';
+    w.summary = '가져온 요약';
+    w.agency = t.agency;
+    w.status = t.status;
+    w.type = t.type;
+    return { a, b, t, w };
+  }
+  const key = (id: string, f: string) => `${id}|${f}`;
+
+  it('계획에 다른 칸이 나오고, 같은 내용인 칸은 나오지 않는다', () => {
+    const { a, b, w } = edited();
+    const cf = planMerge(a, b).conflicts.filter((c) => c.incomingWorkId === w.id);
+    expect(cf.map((c) => c.field).sort()).toEqual(['current', 'summary']);
+    expect(cf.find((c) => c.field === 'current')).toMatchObject({ kind: 'list', label: '현재 진행 중인 사항' });
+    expect(cf.find((c) => c.field === 'summary')).toMatchObject({ kind: 'scalar', label: '업무 요약', current: '지금 요약', incoming: '가져온 요약' });
+  });
+
+  it('기본: 서술은 둘 다 남기되 같은 문장은 한 번만·ID 겹침 없음, 한 값은 지금 것, 기록이 남는다', () => {
+    const { a, b, t } = edited();
+    const { state, summary } = applyMerge(a, b);
+    const m = state.works.find((x) => x.id === t.id)!;
+    expect(m.current.map((x) => x.text)).toEqual(['지금 현황 가', '공통 현황', '가져온 현황 나']);
+    expect(new Set(m.current.map((x) => x.id)).size).toBe(3);
+    expect(m.summary).toBe('지금 요약');
+    const h = state.history.find((x) => x.workId === t.id && x.summary.includes('현재 진행 중인 사항 두 쪽 내용 함께 남김'))!;
+    expect(h.summary).toContain('업무 요약 지금 것 유지');
+    expect(summary).toContain('내용이 다른 업무 1건');
+    expect(checkIntegrity(state)).toEqual([]);
+  });
+
+  it('선택: 지금 것 / 가져온 것 / 둘 다', () => {
+    const { a, b, t, w } = edited();
+    const run = (fields: Record<string, 'both' | 'current' | 'incoming'>) => applyMerge(a, b, { fields }).state.works.find((x) => x.id === t.id)!;
+    const cur = run({ [key(w.id, 'current')]: 'current', [key(w.id, 'summary')]: 'current' });
+    expect(cur.current.map((x) => x.text)).toEqual(['지금 현황 가', '공통 현황']);
+    const inc = run({ [key(w.id, 'current')]: 'incoming', [key(w.id, 'summary')]: 'incoming' });
+    expect(inc.current.map((x) => x.text)).toEqual(['가져온 현황 나', ' 공통  현황 ']);
+    expect(inc.summary).toBe('가져온 요약');
+    const both = run({ [key(w.id, 'current')]: 'both' });
+    expect(both.current.length).toBe(3);
+    const r = applyMerge(a, b, { fields: { [key(w.id, 'summary')]: 'incoming' } });
+    expect(r.state.history.some((x) => x.summary.includes('업무 요약 가져온 것으로 바꿈'))).toBe(true);
+    expect(checkIntegrity(r.state)).toEqual([]);
+  });
+
+  it('후보 업무의 다른 칸은 계획에 있고, 합치기를 골랐을 때만 적용된다', () => {
+    const { a, b, t, w } = edited();
+    w.name = '전혀 다른 이름 업무';
+    w.topics = [...(t.topics ?? []), '가상주제1', '가상주제2'];
+    t.topics = [...(t.topics ?? []), '가상주제1', '가상주제2'];
+    const plan = planMerge(a, b);
+    const m = plan.works.find((x) => x.incomingId === w.id)!;
+    expect(m.status).toBe('candidate');
+    expect(plan.conflicts.some((c) => c.incomingWorkId === w.id && c.field === 'summary')).toBe(true);
+    const sep = applyMerge(a, b);
+    expect(sep.state.works.find((x) => x.id === t.id)!.current.length).toBe(2);
+    expect(sep.state.history.some((x) => x.summary.includes('두 쪽 내용 함께'))).toBe(false);
+    const joined = applyMerge(a, b, { works: { [w.id]: true }, fields: { [key(w.id, 'summary')]: 'incoming' } });
+    const jm = joined.state.works.find((x) => x.id === t.id)!;
+    expect(jm.summary).toBe('가져온 요약');
+    expect(jm.current.length).toBe(3);
+    expect(checkIntegrity(joined.state)).toEqual([]);
+  });
+
+  it('같은 시드 두 벌은 다른 칸이 없고 기록도 늘지 않는다', () => {
+    const a = seed();
+    const b = seed();
+    expect(planMerge(a, b).conflicts).toEqual([]);
+    const { state } = applyMerge(a, b);
+    expect(state.history.length).toBe(a.history.length + 1);
   });
 });

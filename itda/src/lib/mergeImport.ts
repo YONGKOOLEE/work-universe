@@ -74,9 +74,44 @@ export interface MergeCounts {
   handovers: number;
   orgs: number;
 }
+/** 같은 업무로 합칠 때 두 쪽 내용이 다른 칸(서술 목록 5칸 + 한 값 칸 4개). 후보 업무도 계획에는 담고, 화면은 합치기를 고른 것만 보임 */
+export interface MergeConflict {
+  incomingWorkId: string;
+  currentWorkId: string;
+  field: ConflictField;
+  /** 업무 화면에 보이는 칸 이름 */
+  label: string;
+  kind: 'list' | 'scalar';
+  /** 내용 미리 보기(서술 목록은 항목을 ' / '로 이음) */
+  current: string;
+  incoming: string;
+  /** 서술 목록만: 한쪽에만 있는 문장(미리 보기에서 무엇이 다른지 보이게) */
+  onlyCurrent?: string[];
+  onlyIncoming?: string[];
+}
+export type ConflictChoice = 'both' | 'current' | 'incoming';
+const LIST_FIELDS = ['purpose', 'background', 'current', 'cautions', 'rejected'] as const;
+const SCALAR_FIELDS = ['summary', 'agency', 'status', 'type'] as const;
+export type ConflictField = (typeof LIST_FIELDS)[number] | (typeof SCALAR_FIELDS)[number];
+/** 칸 이름 — WorkDetail 화면의 제목·입력 칸 이름과 같게 */
+export const CONFLICT_LABELS: Record<ConflictField, string> = {
+  purpose: '업무 목적',
+  background: '추진 배경',
+  current: '현재 진행 중인 사항',
+  cautions: '주요 유의사항',
+  rejected: '검토했으나 채택하지 않은 대안',
+  summary: '업무 요약',
+  agency: '소관 기관',
+  status: '진행 상태',
+  type: '업무 유형',
+};
+export const conflictKey = (incomingWorkId: string, field: string) => `${incomingWorkId}|${field}`;
+
 export interface MergePlan {
   people: PersonMatch[];
   works: WorkMatch[];
+  /** 같은 업무(또는 후보)인데 내용이 다른 칸 */
+  conflicts: MergeConflict[];
   /** 기본 선택 기준으로 추가될 건수 */
   counts: MergeCounts;
 }
@@ -85,6 +120,8 @@ export interface MergeChoices {
   people?: Record<string, boolean>;
   /** 들어온 업무 ID → true: 합치기 / false: 따로 두기. 없으면 기본값(후보가 있으면 합치기) */
   works?: Record<string, boolean>;
+  /** `${들어온 업무 ID}|${칸}` → 서술 목록: both(둘 다, 기본)/current/incoming · 한 값 칸: current(기본)/incoming */
+  fields?: Record<string, ConflictChoice>;
 }
 
 const empOf = (u: User) => (u.empNo ? normalizeEmpNo(u.empNo) : '');
@@ -113,9 +150,36 @@ export function planMerge(current: AppState, incoming: AppState): MergePlan {
     }
     return best ? { incomingId: w.id, name: w.name, status: 'candidate', currentId: best.w.id, currentName: best.w.name, score: best.score, reason: best.reason } : { incomingId: w.id, name: w.name, status: 'new' };
   });
-  const base: MergePlan = { people, works, counts: undefined as unknown as MergeCounts };
+  const conflicts = works.flatMap((m) => {
+    const c = m.currentId ? current.works.find((x) => x.id === m.currentId) : undefined;
+    return c ? workConflicts(c, incoming.works.find((x) => x.id === m.incomingId)!) : [];
+  });
+  const base: MergePlan = { people, works, conflicts, counts: undefined as unknown as MergeCounts };
   base.counts = previewCounts(current, incoming, base, {});
   return base;
+}
+
+const stmtText = (xs: Stmt[]) => xs.map((x) => x.text).join(' / ');
+/** 두 업무의 다른 칸. 한쪽이 비어 있으면 빈 칸을 채우면 되므로 충돌이 아님. 들어온 서술이 모두 지금에 있으면 잃는 것이 없어 충돌 아님 */
+function workConflicts(c: Work, w: Work): MergeConflict[] {
+  const out: MergeConflict[] = [];
+  const base = { incomingWorkId: w.id, currentWorkId: c.id };
+  for (const f of LIST_FIELDS) {
+    if (!c[f].length || !w[f].length) continue;
+    const have = new Set(c[f].map((x) => normText(x.text)));
+    if (w[f].every((x) => have.has(normText(x.text)))) continue;
+    const theirs = new Set(w[f].map((x) => normText(x.text)));
+    const onlyCurrent = c[f].filter((x) => !theirs.has(normText(x.text))).map((x) => x.text);
+    const onlyIncoming = w[f].filter((x) => !have.has(normText(x.text))).map((x) => x.text);
+    out.push({ ...base, field: f, label: CONFLICT_LABELS[f], kind: 'list', current: stmtText(c[f]), incoming: stmtText(w[f]), onlyCurrent, onlyIncoming });
+  }
+  for (const f of SCALAR_FIELDS) {
+    const a = String(c[f] ?? '');
+    const b = String(w[f] ?? '');
+    if (!a.trim() || !b.trim() || normText(a) === normText(b)) continue;
+    out.push({ ...base, field: f, label: CONFLICT_LABELS[f], kind: 'scalar', current: a, incoming: b });
+  }
+  return out;
 }
 
 function resolvePeople(plan: MergePlan, choices: MergeChoices) {
@@ -340,6 +404,8 @@ export function applyMerge(current: AppState, incoming: AppState, choices: Merge
   }
 
   // ── 4) 업무 ──
+  const conflictFields = new Set(plan.conflicts.filter((c) => wm.has(c.incomingWorkId)).map((c) => conflictKey(c.incomingWorkId, c.field)));
+  let conflictedWorks = 0;
   for (const w of inc.works) {
     const r = rework(w);
     const target = wm.has(w.id) ? cur.works.find((c) => c.id === r.id) : undefined;
@@ -357,9 +423,46 @@ export function applyMerge(current: AppState, incoming: AppState, choices: Merge
     target.keywords = uniq([...target.keywords, ...r.keywords]);
     const pk = new Set(target.partners.map((p) => `${normText(p.name)}|${normText(p.role)}`));
     for (const p of r.partners) if (!pk.has(`${normText(p.name)}|${normText(p.role)}`)) target.partners.push(p);
-    for (const f of ['purpose', 'background', 'current', 'cautions', 'rejected'] as const) if (target[f].length === 0) target[f] = r[f];
-    if (!target.summary) target.summary = r.summary;
-    if (!target.agency) target.agency = r.agency;
+    // 서술·한 값 칸: 비어 있으면 채움. 둘 다 있고 다르면 선택대로(서술 기본 둘 다, 한 값 기본 지금 것)
+    const changed: string[] = [];
+    for (const f of LIST_FIELDS) {
+      if (target[f].length === 0) target[f] = r[f];
+      else if (conflictFields.has(conflictKey(w.id, f))) {
+        const ch = choices.fields?.[conflictKey(w.id, f)] ?? 'both';
+        if (ch === 'incoming') target[f] = r[f];
+        else if (ch === 'both') {
+          const seen = new Set(target[f].map((x) => normText(x.text)));
+          const ids = new Set(target[f].map((x) => x.id));
+          for (const st of r[f]) {
+            const k = normText(st.text);
+            if (seen.has(k)) continue;
+            seen.add(k);
+            let id = st.id;
+            while (ids.has(id)) id = uid('s');
+            ids.add(id);
+            target[f].push({ ...st, id });
+          }
+        }
+        changed.push(`${CONFLICT_LABELS[f]} ${ch === 'both' ? '두 쪽 내용 함께 남김' : ch === 'incoming' ? '가져온 것으로 바꿈' : '지금 것 유지'}`);
+      }
+    }
+    for (const f of SCALAR_FIELDS) {
+      const t = target as unknown as Record<string, string>;
+      if (!t[f]) t[f] = (r as unknown as Record<string, string>)[f];
+      else if (conflictFields.has(conflictKey(w.id, f))) {
+        const inc = choices.fields?.[conflictKey(w.id, f)] === 'incoming';
+        if (inc) t[f] = (r as unknown as Record<string, string>)[f];
+        changed.push(`${CONFLICT_LABELS[f]} ${inc ? '가져온 것으로 바꿈' : '지금 것 유지'}`);
+      }
+    }
+    if (changed.length) {
+      conflictedWorks += 1;
+      let hid: string;
+      do hid = uid('H');
+      while (hUsed.has(hid));
+      hUsed.add(hid);
+      cur.history.push({ id: hid, workId: target.id, at: now, actorId: cur.currentUserId, kind: '합쳐 불러오기', summary: `합쳐 불러오기: ${changed.join(', ')}` });
+    }
     if (!target.parentId && r.parentId && r.parentId !== target.id && !wouldCycle(cur, target.id, r.parentId)) target.parentId = r.parentId;
     target.version += 1;
     target.updatedAt = now;
@@ -453,7 +556,7 @@ export function applyMerge(current: AppState, incoming: AppState, choices: Merge
   cur.mapHidden = [...hidden];
 
   // ── 8) 기록 ──
-  const summary = `사람 ${inc.users.length}명(같은 사람 ${pm.size}) · 업무 ${inc.works.length}건(합침 ${wm.size}) · 문서 ${counts.docs}건 · 결정 ${counts.decisions} · 조치 ${counts.actions} · 인계 ${counts.handovers}${counts.orgs ? ` · 조직 ${counts.orgs}` : ''}`;
+  const summary = `사람 ${inc.users.length}명(같은 사람 ${pm.size}) · 업무 ${inc.works.length}건(합침 ${wm.size}) · 문서 ${counts.docs}건 · 결정 ${counts.decisions} · 조치 ${counts.actions} · 인계 ${counts.handovers}${counts.orgs ? ` · 조직 ${counts.orgs}` : ''}${conflictedWorks ? ` · 내용이 다른 업무 ${conflictedWorks}건(칸 ${conflictFields.size})` : ''}`;
   const logWork = [...wm.values()][0] ?? wMap.get(inc.works[0]?.id ?? '') ?? cur.works[0]?.id;
   if (logWork) {
     let id: string;

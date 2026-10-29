@@ -388,7 +388,8 @@ try {
   await check('10 합쳐 불러오기', async () => {
     await must(await H(`click('button', '데이터 옮기기')`), '데이터 옮기기 단추 없음');
     await wait(`!!document.querySelector('textarea[aria-label="백업 데이터"]')`, 3000);
-    const json = await ev(`document.querySelector('textarea[aria-label="백업 데이터"]').value`);
+    // 가져온 파일의 첫 업무를 다른 사람이 고친 것처럼(현재 상황 한 줄 더함·요약 고침) — '내용이 다른 칸'이 나오는지 본다
+    const json = await ev(`(() => { const d = JSON.parse(document.querySelector('textarea[aria-label="백업 데이터"]').value); const w = d.works[0]; w.summary = (w.summary || '') + ' (다른 쪽에서 고친 요약)'; if (w.current.length) w.current.push({ ...w.current[0], id: 's-chk-1', text: '다른 담당자가 더한 현재 상황(점검용)' }); return JSON.stringify(d); })()`);
     const worksBefore = await ev(`JSON.parse(document.querySelector('textarea[aria-label="백업 데이터"]').value).works.length`);
     await must(await H(`click('button', '불러오기', true)`), '불러오기 탭 없음');
     await sleep(300);
@@ -397,7 +398,11 @@ try {
     await ev(`window.__h.setVal(document.getElementById('dt-paste'), ${JSON.stringify(json)}); true`);
     await must(await wait(`!!document.querySelector('[data-testid="merge-preview"]')`, 4000), '미리 보기 안 나옴');
     const prev = await ev(`document.querySelector('[data-testid="merge-preview"]').innerText.replace(/\\s+/g,' ').slice(0, 400)`);
+    const cf = await ev(`[...document.querySelectorAll('[data-testid="merge-conflict"]')].map((e) => e.dataset.field + ':' + e.querySelectorAll('[data-testid="merge-conflict-choice"]').length).join(',')`);
+    await must(cf === 'current:3,summary:2', `다른 칸 구역이 기대와 다름: ${cf}`);
     await shot('10-합치기-미리보기');
+    await ev(`document.querySelector('[data-testid="merge-conflicts"]').scrollIntoView({ block: 'center' }); true`);
+    await shot('10-합치기-다른칸');
     await must(await H(`clickId('merge-confirm')`), '합쳐 불러오기 확인 단추 없음');
     await sleep(800);
     await H(`click('button', '데이터 옮기기')`);
@@ -407,6 +412,8 @@ try {
     const worksAfter = await ev(`JSON.parse(document.querySelector('textarea[aria-label="백업 데이터"]').value).works.length`);
     const usersAfter = await ev(`JSON.parse(document.querySelector('textarea[aria-label="백업 데이터"]').value).users.length`);
     await must(worksAfter === worksBefore, `업무 수 ${worksBefore}→${worksAfter} (같은 업무는 합쳐져야 함)`);
+    const kept = await ev(`JSON.parse(document.querySelector('textarea[aria-label="백업 데이터"]').value).works.some((w) => w.current.some((x) => x.text.includes('다른 담당자가 더한 현재 상황')))`);
+    await must(kept, '다른 담당자가 더한 현재 상황이 합친 뒤 빠짐(기본은 둘 다 남기기)');
     return `업무 ${worksBefore}→${worksAfter}, 사용자 수 ${usersAfter}. 미리 보기: ${prev}`;
   });
 

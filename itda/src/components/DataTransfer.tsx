@@ -4,7 +4,7 @@ import { useStore, parseBackup } from '../lib/store';
 import { Button, Modal } from './ui';
 import { cx, localDay } from '../lib/util';
 import type { AppState } from '../lib/types';
-import { applyMerge, planMerge, previewCounts, type MergeChoices } from '../lib/mergeImport';
+import { applyMerge, planMerge, previewCounts, conflictKey, type ConflictChoice, type MergeChoices } from '../lib/mergeImport';
 
 /** 데이터 옮기기 — 다른 PC·브라우저·동료와는 저장소가 달라 데이터가 공유되지 않으므로 백업 파일로 이동(바꿔 불러오기·합쳐 불러오기) */
 export function DataTransfer({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -69,6 +69,10 @@ export function DataTransfer({ open, onClose }: { open: boolean; onClose: () => 
   const mergeOf = (id: string, def: boolean) => choices.works?.[id] ?? def;
   const setPerson = (id: string, v: boolean) => setChoices((c) => ({ ...c, people: { ...c.people, [id]: v } }));
   const setWork = (id: string, v: boolean) => setChoices((c) => ({ ...c, works: { ...c.works, [id]: v } }));
+
+  const setField = (key: string, v: ConflictChoice) => setChoices((c) => ({ ...c, fields: { ...c.fields, [key]: v } }));
+  // 다른 칸: 합치기로 정해진 업무만(후보는 합치기를 골랐을 때만 보임)
+  const shown = plan ? plan.conflicts.filter((c) => mergeOf(c.incomingWorkId, plan.works.find((w) => w.incomingId === c.incomingWorkId)?.status === 'same')) : [];
 
   return (
     <Modal open={open} onClose={close} title="데이터 옮기기 (백업 · 불러오기)">
@@ -227,10 +231,65 @@ export function DataTransfer({ open, onClose }: { open: boolean; onClose: () => 
                   ))}
                 </ul>
               </div>
+              {shown.length > 0 && (
+                <div data-testid="merge-conflicts">
+                  <p className="mb-1 font-medium">같은 업무인데 내용이 다른 칸 ({shown.length})</p>
+                  <p className="mb-1 text-2xs text-faint">서술 칸은 기본으로 둘 다 남기고, 한 값 칸은 지금 것을 유지함. 칸마다 바꿀 수 있음</p>
+                  <ul className="space-y-2">
+                    {shown.map((c) => {
+                      const key = conflictKey(c.incomingWorkId, c.field);
+                      const val = choices.fields?.[key] ?? (c.kind === 'list' ? 'both' : 'current');
+                      const opts: [ConflictChoice, string][] = c.kind === 'list' ? [['both', '둘 다'], ['current', '지금 것'], ['incoming', '가져온 것']] : [['current', '지금 것'], ['incoming', '가져온 것']];
+                      return (
+                        <li key={key} data-testid="merge-conflict" data-field={c.field} className="rounded border border-line bg-surface p-2 text-xs">
+                          <p className="mb-1 font-medium">
+                            {plan!.works.find((w) => w.incomingId === c.incomingWorkId)?.name} <span className="text-faint">· {c.label}</span>
+                          </p>
+                          {c.kind === 'list' ? (
+                            // 서술 칸: 한쪽에만 있는 문장을 보인다(같은 문장은 빼고)
+                            <div className="space-y-0.5">
+                              {[
+                                ['가져온 파일에만', c.onlyIncoming ?? []],
+                                ['지금에만', c.onlyCurrent ?? []],
+                              ].map(([t, xs]) =>
+                                (xs as string[]).length ? (
+                                  <p key={t as string} className="line-clamp-3" title={(xs as string[]).join(' / ')}>
+                                    <span className="text-faint">{t as string} {(xs as string[]).length}줄 </span>
+                                    {(xs as string[]).join(' / ')}
+                                  </p>
+                                ) : null,
+                              )}
+                            </div>
+                          ) : (
+                            <div className="space-y-0.5">
+                              <p className="line-clamp-3" title={c.current}>
+                                <span className="text-faint">지금 </span>
+                                {c.current}
+                              </p>
+                              <p className="line-clamp-3" title={c.incoming}>
+                                <span className="text-faint">가져온 파일 </span>
+                                {c.incoming}
+                              </p>
+                            </div>
+                          )}
+                          <div className="mt-1 flex flex-wrap gap-3">
+                            {opts.map(([v, t]) => (
+                              <label key={v} className="flex cursor-pointer items-center gap-1">
+                                <input type="radio" name={`mc-${key}`} data-testid="merge-conflict-choice" data-value={v} checked={val === v} onChange={() => setField(key, v)} />
+                                {t}
+                              </label>
+                            ))}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
               <p className="rounded bg-surface px-2 py-1.5 text-xs">
                 추가될 내용: 사람 <b>{counts.users}</b>명 · 업무 <b>{counts.works}</b>건 (합침 {counts.worksMerged}건) · 문서 <b>{counts.docs}</b>건 · 결정 <b>{counts.decisions}</b>건 · 조치 <b>{counts.actions}</b>건 · 인계 <b>{counts.handovers}</b>건{counts.orgs > 0 && <> · 조직 <b>{counts.orgs}</b>개 추가</>}
               </p>
-              <p className="text-2xs text-faint">같은 업무로 합칠 때 지금 업무의 내용이 우선이고, 비어 있는 항목만 채움. 같은 제목·작성일 문서와 같은 결정·조치는 한 번만 들어감 (필요하면 먼저 '내보내기'로 백업)</p>
+              <p className="text-2xs text-faint">같은 업무로 합칠 때 지금 업무의 내용이 우선이고, 비어 있는 항목은 채움(다른 칸은 위에서 고른 대로). 같은 제목·작성일 문서와 같은 결정·조치는 한 번만 들어감 (필요하면 먼저 '내보내기'로 백업)</p>
               <div className="flex gap-2">
                 <Button
                   data-testid="merge-confirm"
