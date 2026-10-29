@@ -104,6 +104,9 @@ interface Ctx {
   saveIssue: { kind: 'fail' | 'other-tab'; at: string } | null;
   /** 다른 탭에서 저장한 내용으로 이 탭을 바꾼다 */
   reloadFromStorage: () => void;
+  /** 다른 탭 경고 중 이 탭 내용으로 저장(덮어쓰기) */
+  overwriteFromThisTab: () => void;
+  /** 경고 닫기. 다른 탭 경고에서는 「이 탭 내용으로 저장(덮어쓰기)」와 같다(닫으면서 저장이 다시 시작되므로) */
   dismissSaveIssue: () => void;
 }
 const StoreCtx = createContext<Ctx | null>(null);
@@ -115,7 +118,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const [saveIssue, setSaveIssue] = useState<Ctx['saveIssue']>(null);
   const lastWritten = useRef<string | null>(null);
+  // 다른 탭 경고가 떠 있는 동안은 이 탭이 저장하지 않는다(업무 상세를 여는 focus 변경만으로도 다른 탭의 변경을 덮어쓰기 때문).
+  // 「다시 불러오기」 또는 「이 탭 내용으로 저장(덮어쓰기)」를 고르면 풀린다.
+  const blocked = useRef(false);
   useEffect(() => {
+    if (blocked.current) return;
     const text = JSON.stringify(raw);
     try {
       localStorage.setItem(KEY, text);
@@ -130,6 +137,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const on = (e: StorageEvent) => {
       if (e.key !== KEY || e.newValue === null || e.newValue === lastWritten.current) return;
+      blocked.current = true;
       setSaveIssue({ kind: 'other-tab', at: new Date().toISOString() });
     };
     window.addEventListener('storage', on);
@@ -138,7 +146,26 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const reloadFromStorage = () => {
     try {
       const text = localStorage.getItem(KEY);
-      if (text) setS(parseBackup(text));
+      const next = text ? parseBackup(text) : null; // 읽기에 실패하면 저장 멈춤을 유지한다
+      blocked.current = false;
+      if (next) setS(next);
+      setSaveIssue(null);
+    } catch {
+      setSaveIssue({ kind: 'fail', at: new Date().toISOString() });
+    }
+  };
+  const releaseBlock = () => {
+    if (!blocked.current) return;
+    blocked.current = false;
+    setSaveIssue((x) => (x?.kind === 'other-tab' ? null : x));
+  };
+  /** 이 탭 내용으로 저장(덮어쓰기): 저장 멈춤을 풀고 지금 내용을 바로 저장한다 */
+  const overwriteFromThisTab = () => {
+    blocked.current = false;
+    const text = JSON.stringify(raw);
+    try {
+      localStorage.setItem(KEY, text);
+      lastWritten.current = text;
       setSaveIssue(null);
     } catch {
       setSaveIssue({ kind: 'fail', at: new Date().toISOString() });
@@ -174,8 +201,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       s: view,
       raw,
       update,
-      reset: (mode) => setS(bundled() ?? createSeed(mode)),
-      replace: (next) => setS(next),
+      // 초기화·가져오기는 사용자가 데이터를 통째로 정하는 동작이라 다른 탭 경고의 저장 멈춤도 푼다
+      reset: (mode) => {
+        releaseBlock();
+        setS(bundled() ?? createSeed(mode));
+      },
+      replace: (next) => {
+        releaseBlock();
+        setS(next);
+      },
       me: raw.users.find((u) => u.id === raw.currentUserId) ?? raw.users[0],
       log,
       touch,
@@ -183,7 +217,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       toastMsg,
       saveIssue,
       reloadFromStorage,
-      dismissSaveIssue: () => setSaveIssue(null),
+      overwriteFromThisTab,
+      dismissSaveIssue: () => setSaveIssue((x) => (x?.kind === 'other-tab' ? x : null)), // 다른 탭 경고는 닫지 않는다 — 불러오기·이 탭으로 저장 중 하나를 고른다
     };
   }, [raw, view, toastMsg, saveIssue]); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -4,7 +4,8 @@
 // 브라우저 기능을 쓰지 않는다(vitest로 검증).
 import type { AppState, Cite, DocParagraph } from '../lib/types';
 import { workIssues } from './engine';
-import { locate } from './reflect';
+import { locate, normForMatch, spanOf } from './reflect';
+import { QUOTE_MIN } from './aiInsight';
 import { S, type LlmClient } from './llm';
 import { fmtDate } from '../lib/util';
 
@@ -19,7 +20,6 @@ export const CHECK_NAMES: Record<CheckKind, string> = {
   risk: '인계 위험',
 };
 export const CHECK_MAX = 8;
-const QUOTE_MIN = 8; // 인용 대조 최소 글자 수(공백 제외)
 const PARA_MAX = 60; // 문서마다 보내는 문단 수
 const PARA_CHARS = 600;
 
@@ -49,7 +49,7 @@ export const CHECK_SYSTEM = [
   '- risk: 원문에 근거가 있는 인계 위험(예: 한 사람만 아는 절차, 곧 다가오는 기한, 외부 회신 대기)',
   '규칙:',
   '1. 자료에 없는 내용을 지어내지 않습니다. 일반 상식으로 빈칸을 채우지 않습니다. 찾을 것이 없으면 빈 목록을 냅니다.',
-  '2. 항목마다 quote에 근거 원문을 글자 그대로 복사합니다(12~120자). ref에는 그 원문의 위치 표기를 그대로 씁니다: 문서 문단은 [D-101#p-3]의 「D-101#p-3」, 업무 기록 줄은 [기록#5]의 「기록#5」. conflict는 문서 쪽 원문을 quote로 씁니다.',
+  '2. 항목마다 quote에 근거 원문을 글자 그대로 복사합니다(12~120자). 줄 끝에 「(참고용·인용 불가)」가 붙은 기록 줄(업무명 머리줄)과 조치사항의 담당·기한 부분은 앱이 조립한 정보라 인용할 수 없습니다. ref에는 그 원문의 위치 표기를 그대로 씁니다: 문서 문단은 [D-101#p-3]의 「D-101#p-3」, 업무 기록 줄은 [기록#5]의 「기록#5」. conflict는 문서 쪽 원문을 quote로 씁니다.',
   '3. <규칙 점검이 이미 찾은 것>에 있는 내용(빈 칸, 기한 경과, 기한 미지정, 갱신 없음 등)은 다시 쓰지 않습니다.',
   `4. 최대 ${CHECK_MAX}개, 중요한 것부터. title은 25자 안팎 한 줄, detail은 무엇을 어떻게 보완하면 되는지 한두 문장. 한국어 존댓말이 아닌 개조식(~함, ~필요)으로 씁니다.`,
   '5. severity: high(인계 뒤 바로 문제가 됨: 다가오는 기한, 서로 다른 날짜·담당), mid(보완하면 좋음), low(참고).',
@@ -64,6 +64,7 @@ export interface CheckInput {
   user: string;
   ruleTitles: string[];
   lines: string[]; // 업무 기록 줄(기록#n = lines[n-1])
+  quotable: string[]; // 줄마다 근거로 인정하는 부분. 앱이 조립한 줄(업무명 머리줄)은 빈 문자열, 조치사항은 메타(담당·기한) 앞까지
   paras: Map<string, DocParagraph[]>; // 문서 ID → 보낸 문단
 }
 
@@ -75,16 +76,19 @@ export function buildCheckInput(s: AppState, workId: string, now = new Date()): 
   if (!w) return null;
   const name = (id: string) => s.users.find((u) => u.id === id)?.name ?? id;
   const lines: string[] = [];
-  const add = (t: string) => {
-    lines.push(t.replace(/\s+/g, ' ').trim());
+  const quotable: string[] = [];
+  const add = (t: string, meta: boolean | string = false) => {
+    const f = t.replace(/\s+/g, ' ').trim();
+    lines.push(f);
+    quotable.push(meta === true ? '' : typeof meta === 'string' ? f.slice(0, f.indexOf(meta) < 0 ? f.length : f.indexOf(meta)) : f);
   };
-  add(`업무명: ${w.name} (상태 ${w.status}, 담당 ${w.owners.map(name).join('·') || '없음'})`);
+  add(`업무명: ${w.name} (상태 ${w.status}, 담당 ${w.owners.map(name).join('·') || '없음'})`, true);
   if (w.summary) add(`요약: ${w.summary}`);
   for (const [label, list] of [['목적', w.purpose], ['배경', w.background], ['현재 진행', w.current], ['유의사항', w.cautions]] as const) for (const st of list) add(`${label}: ${st.text}`);
   for (const p of w.partners) add(`협의처: ${p.name} — ${p.role}`);
   const decs = s.decisions.filter((d) => d.workId === w.id && !d.hidden);
   for (const d of decs) add(`결정 ${fmtDate(d.date)}: ${d.title}${d.rationale?.text ? ` (이유: ${d.rationale.text})` : ''}`);
-  for (const a of s.actions.filter((x) => x.workId === w.id)) add(`조치사항 [${a.status}] ${a.title} — 담당 ${name(a.ownerId)}, 기한 ${a.due ? fmtDate(a.due) : '미지정'}`);
+  for (const a of s.actions.filter((x) => x.workId === w.id)) add(`조치사항 [${a.status}] ${a.title} — 담당 ${name(a.ownerId)}, 기한 ${a.due ? fmtDate(a.due) : '미지정'}`, ' — 담당 ');
   for (const e of s.events.filter((x) => x.workIds.includes(w.id) && x.source !== 'record')) add(`타임라인 ${fmtDate(e.date)}: ${e.title}`);
 
   const paras = new Map<string, DocParagraph[]>();
@@ -98,14 +102,14 @@ export function buildCheckInput(s: AppState, workId: string, now = new Date()): 
   const ruleTitles = workIssues(s, w, now).map((i) => `${i.title}${i.detail ? ` — ${clip(i.detail, 80)}` : ''}`);
   const user = [
     `<기준일>${fmtDate(now.toISOString())}</기준일>`,
-    `<업무 기록>\n${lines.map((t, i) => `[기록#${i + 1}] ${t}`).join('\n')}\n</업무 기록>`,
+    `<업무 기록>\n${lines.map((t, i) => `[기록#${i + 1}] ${t}${quotable[i] ? '' : ' (참고용·인용 불가)'}`).join('\n')}\n</업무 기록>`,
     `<연결 문서>\n${docBlocks.join('\n\n') || '(원문 문단이 있는 연결 문서 없음)'}\n</연결 문서>`,
     `<규칙 점검이 이미 찾은 것>\n${ruleTitles.map((t) => `- ${t}`).join('\n') || '(없음)'}\n</규칙 점검이 이미 찾은 것>`,
   ].join('\n\n');
-  return { user, ruleTitles, lines, paras };
+  return { user, ruleTitles, lines, quotable, paras };
 }
 
-const norm = (t: string) => t.replace(/\s+/g, '');
+const norm = (t: string) => normForMatch(t);
 
 interface Raw {
   findings?: { kind?: string; severity?: string; title?: string; detail?: string; quote?: string; ref?: string }[];
@@ -117,20 +121,27 @@ export function verifyFindings(raw: Raw, input: CheckInput, s: AppState): { find
   let dropped = 0;
   for (const f of (raw.findings ?? []).slice(0, CHECK_MAX * 2)) {
     if (!f || typeof f.title !== 'string' || !f.title.trim() || !CHECK_KINDS.includes(f.kind as CheckKind)) continue;
-    const quote = String(f.quote ?? '').trim();
+    let quote = String(f.quote ?? '').trim();
     const ref = String(f.ref ?? '').replace(/[[\]\s]/g, '');
     let cite: Cite | null = null;
     let recordLine: string | null = null;
     if (norm(quote).length >= QUOTE_MIN) {
       const rec = /^기록#(\d+)$/.exec(ref);
       if (rec) {
-        const line = input.lines[Number(rec[1]) - 1];
-        if (line && norm(line).includes(norm(quote))) recordLine = line;
+        const i = Number(rec[1]) - 1;
+        const line = input.lines[i];
+        // 앱이 조립한 부분(업무명 머리줄, 조치사항의 담당·기한)은 근거가 아니다
+        const span = line && input.quotable[i] ? spanOf(input.quotable[i], quote) : null;
+        if (span) {
+          recordLine = line;
+          quote = span;
+        }
       } else {
         const [docId, paraId] = ref.split('#');
         // 위치가 틀려도 같은 문서의 다른 문단에 인용이 있으면 그 문단으로 고친다(locate). 다른 문서까지는 찾지 않는다
         const hit = docId && input.paras.has(docId) ? locate(input.paras.get(docId)!, quote, paraId) : null;
         if (hit) {
+          quote = spanOf(hit.text, quote) ?? quote; // 화면에는 원문에서 일치한 구간을 보인다
           const d = s.docs.find((x) => x.id === docId);
           cite = { docId, anchor: hit.id === 'meta' ? undefined : hit.id, label: `${d?.title ?? docId}${hit.id === 'meta' ? '' : ` · ${hit.id}`}` };
         }

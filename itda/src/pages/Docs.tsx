@@ -163,7 +163,7 @@ export default function Docs() {
                         {d.summary.length > 0 ? (
                           <p className="mt-0.5 line-clamp-2 text-xs text-muted">{d.summary[0]}</p>
                         ) : (
-                          <p className="mt-0.5 text-xs text-warn">AI 분석 대기</p>
+                          <p className="mt-0.5 text-xs text-warn">분석 대기</p>
                         )}
                       </div>
                     </div>

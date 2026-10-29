@@ -31,13 +31,24 @@ export function displayName(u: User | undefined, fallback = ''): string {
   return isLeft(u) ? `${u.name} (전출·퇴직)` : u.name;
 }
 
-function nextUserId(users: User[]): string {
+/**
+ * 새 사람 번호: 남은 사람뿐 아니라 데이터 어디에든(업무·이력·메모·인계·스냅샷·열람 기억 등) 한 번이라도 쓰인
+ * U 번호의 최댓값보다 크게 매긴다. 지운 사람의 번호를 다시 쓰면 남은 흔적이 새 사람에게 붙기 때문이다(A-M4).
+ * 따옴표로 둘러싸인 값·키(「"U12"」)만 센다 — 글 속 우연한 글자로 번호가 커지는 일을 줄인다.
+ */
+function nextUserId(d: AppState): string {
   let max = 0;
-  for (const u of users) {
+  for (const u of d.users) {
     const m = /^U(\d+)$/.exec(u.id);
     if (m) max = Math.max(max, Number(m[1]));
   }
+  for (const m of JSON.stringify(d).matchAll(/"U(\d+)"/g)) max = Math.max(max, Number(m[1]));
   return `U${max + 1}`;
+}
+
+/** 이 사람이 쓴 「나만 보기」 메모 건수(사람을 지우면 함께 지워진다) */
+export function personPrivateMemoCount(d: AppState, id: string): number {
+  return (d.privateMemos || []).filter((m) => m.userId === id).length;
 }
 
 type Clean = { name: string; dept: string; title: string; empNo?: string; role?: UserRole };
@@ -57,7 +68,7 @@ function check(d: AppState, input: PersonInput, selfId?: string): { error: strin
 export function addPerson(d: AppState, input: PersonInput): { id: string; summary: string } | { error: string } {
   const r = check(d, input);
   if ('error' in r) return r;
-  const id = nextUserId(d.users);
+  const id = nextUserId(d);
   const u: User = { id, name: r.value.name, dept: r.value.dept, title: r.value.title, role: r.value.role ?? 'member' };
   if (r.value.empNo) u.empNo = r.value.empNo;
   d.users.push(u);
@@ -111,12 +122,15 @@ export function removePerson(d: AppState, id: string): { id: string; summary: st
   const used = personUsages(d, id);
   if (used.length) return { blocked: used };
   d.users = d.users.filter((x) => x.id !== id);
+  // 지운 사람의 「나만 보기」 메모도 함께 지운다(남기면 같은 번호를 쓰는 사람에게 보일 수 있음)
+  const memos = personPrivateMemoCount(d, id);
+  if (memos) d.privateMemos = (d.privateMemos || []).filter((m) => m.userId !== id);
   if (d.focus && id in d.focus) {
     const f = { ...d.focus };
     delete f[id];
     d.focus = f;
   }
-  return { id, summary: `사람 지움: ${u.name}` };
+  return { id, summary: `사람 지움: ${u.name}${memos ? ` (나만 보기 메모 ${memos}건도 지움)` : ''}` };
 }
 
 export function setPersonStatus(

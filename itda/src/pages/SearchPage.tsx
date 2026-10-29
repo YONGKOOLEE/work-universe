@@ -6,6 +6,7 @@ import { Card, ProvChip, CiteLink, SourceChip, ProvLegend, StatusBadge, Button }
 import { askAI, SAMPLE_QUESTIONS, type Answer } from '../ai/engine';
 import { fmtDate } from '../lib/util';
 import { useAI } from '../ai/claude';
+import { createSeq } from '../ai/llm';
 import { claudeAsk } from '../ai/claudeSearch';
 import { sampleQuestions } from '../ai/workAnswer';
 
@@ -18,11 +19,28 @@ export default function SearchPage() {
   const [meta, setMeta] = useState<{ engine: 'claude' | 'mock'; verify?: { checked: number; passed: number }; note?: string } | null>(null);
   const ai = useAI();
   const ctl = useRef<AbortController | null>(null);
+  const seq = useRef(createSeq()); // 요청 번호: 마지막 질문만 화면 상태를 바꾼다(L-6)
+  const timer = useRef<number | null>(null); // 규칙 경로의 지연 응답
+  const stopAll = () => {
+    ctl.current?.abort();
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    timer.current = null;
+    seq.current.cancelAll();
+  };
+  // 화면을 떠나면 진행 중인 호출과 대기 중인 규칙 응답을 끊는다. 엔진이 바뀌어도(규칙·사내로) 진행 중인 Claude 호출을 끊는다(M-4)
+  useEffect(() => stopAll, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (ctl.current) {
+      stopAll();
+      setBusy(false);
+    }
+  }, [ai.engine]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ask = async (text: string) => {
     const t = text.trim();
     if (!t) return;
-    ctl.current?.abort();
+    stopAll();
+    const id = seq.current.next();
     setQ(t);
     setBusy(true);
     setAns(null);
@@ -35,10 +53,11 @@ export default function SearchPage() {
       ctl.current = c;
       try {
         const r = await claudeAsk(ai.client, s, t, c.signal);
-        if (c.signal.aborted) return;
+        if (c.signal.aborted || !seq.current.isLatest(id)) return;
         setAns(r);
         setMeta({ engine: 'claude', verify: r.verify });
       } catch (e) {
+        if (!seq.current.isLatest(id)) return; // 뒤 질문이 이어받았다 — 앞 질문의 취소·오류는 화면을 건드리지 않는다
         if ((e as { code?: string })?.code === 'cancelled') {
           setBusy(false);
           return;
@@ -51,7 +70,9 @@ export default function SearchPage() {
       setBusy(false);
       return;
     }
-    window.setTimeout(() => {
+    timer.current = window.setTimeout(() => {
+      timer.current = null;
+      if (!seq.current.isLatest(id)) return;
       setAns(askAI(s, t));
       setMeta({ engine: 'mock' });
       setBusy(false);
@@ -134,7 +155,7 @@ export default function SearchPage() {
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-brandsoft/40 px-5 py-3">
               <h2 className="flex items-center gap-2 text-[15px] font-semibold">
                 <Sparkles size={16} className="text-brand" />
-                {meta?.engine === 'claude' ? 'AI 종합 답변' : 'AI 종합 답변 · 규칙 기반'}
+                {meta?.engine === 'claude' ? 'AI 종합 답변' : '규칙 기반 답변'}
               </h2>
               <ProvLegend />
             </div>

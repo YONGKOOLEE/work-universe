@@ -11,6 +11,7 @@ import { isLeft } from '../lib/people';
 import { worksInScope, type MapScope } from '../universe/derive';
 import { effectiveOrgs, orgShort, subtreeNames } from '../lib/orgs';
 import { handoverInsights, INSIGHT_NAMES } from '../universe/insights';
+import { normForMatch, spanOf } from './reflect';
 
 export type AiInsightKind = 'dependency' | 'deadline' | 'knowledge' | 'overlap' | 'gap' | 'handover';
 export const AI_INSIGHT_KINDS: AiInsightKind[] = ['dependency', 'deadline', 'knowledge', 'overlap', 'gap', 'handover'];
@@ -23,7 +24,7 @@ export const AI_INSIGHT_NAMES: Record<AiInsightKind, string> = {
   handover: '인계 중 위험',
 };
 export const AI_INSIGHT_MAX = 8;
-const QUOTE_MIN = 8; // 인용 대조 최소 글자 수(공백 제외) — Claude 점검과 같다
+export const QUOTE_MIN = 12; // 인용 대조 최소 글자 수(공백 제외) — 프롬프트(12~120자)와 같다. Claude 점검도 이 값을 쓴다
 const WORKS_MAX = 60; // 보내는 업무 수(넘으면 최근 갱신순으로 자르고 알림)
 const LINES_MAX = 40; // 업무마다 기록 줄 수
 const LINE_CHARS = 300;
@@ -63,7 +64,7 @@ export const INSIGHT_SYSTEM = [
   '규칙:',
   '1. 자료에 없는 내용을 지어내지 않습니다. 일반 상식으로 빈칸을 채우지 않습니다. 찾을 것이 없으면 빈 목록을 냅니다.',
   '2. 한 업무 안의 빈 칸(요약 없음, 기한 미지정 같은 것)은 다른 점검이 합니다. 여러 업무 사이, 또는 사람과 업무 사이를 가로지르는 것을 먼저 찾습니다.',
-  '3. 항목마다 refs에 근거를 1~3개 씁니다. ref는 [W-001#3]의 「W-001#3」을 그대로, quote는 그 줄의 원문을 글자 그대로 복사합니다(12~120자). 여러 업무에 걸친 항목은 업무마다 근거를 하나씩 씁니다.',
+  '3. 항목마다 refs에 근거를 1~3개 씁니다. ref는 [W-001#3]의 「W-001#3」을 그대로, quote는 그 줄의 원문을 글자 그대로 복사합니다(12~120자). 여러 업무에 걸친 항목은 업무마다 근거를 하나씩 씁니다. 줄 끝에 「(참고용·인용 불가)」가 붙은 줄은 앱이 조립한 정보(업무명·상태·담당·갱신일·연결 문서·담당 이력·인계 상태·연결 업무)라 근거로 쓸 수 없고, 조치사항 줄은 담당·기한 앞의 글만 인용할 수 있습니다.',
   '4. people에는 관련된 사람의 ID(<사람>의 대괄호 안 값, 예: U1)를 씁니다. 없으면 빈 목록.',
   '5. <규칙 인사이트가 이미 찾은 것>과 같은 말을 반복하지 않습니다. 같은 업무라도 규칙이 말하지 않은 이유·연결이면 씁니다.',
   '6. 원문에 없는 날짜·기한·담당을 만들지 않습니다. 원문이 「10월 중」처럼 막연하면 detail에도 그대로 쓰고, 특정 날짜로 바꾸지 않습니다.',
@@ -87,6 +88,7 @@ export const INSIGHT_SCHEMA = S.obj({
 export interface InsightInput {
   user: string;
   lines: Map<string, string[]>; // 업무 ID → 기록 줄(W-001#n = lines[n-1])
+  quotable: Map<string, string[]>; // 업무 ID → 줄마다 근거로 인정하는 부분(사람이 쓴 글). 앱이 조립한 줄은 빈 문자열, 조치사항은 메타(담당·기한) 앞까지
   userIds: Set<string>;
   truncated: number;
 }
@@ -97,34 +99,42 @@ const flat = (t: string) => String(t ?? '').replace(/\s+/g, ' ').trim();
 // 범위 안의 업무는 지도와 같은 기준(derive.worksInScope)
 export { worksInScope };
 
-function workLines(s: AppState, w: Work): string[] {
+const META_TAG = ' (참고용·인용 불가)';
+
+/** 업무 기록 줄과, 줄마다 근거로 인정하는 부분(quotable). 앱이 조립한 줄은 quotable이 빈 문자열 */
+function workLines(s: AppState, w: Work): { lines: string[]; quotable: string[] } {
   const name = (id: string) => s.users.find((u) => u.id === id)?.name ?? id;
   const wname = (id: string) => {
     const x = s.works.find((y) => y.id === id);
     return x ? `${x.name}(${x.id})` : id;
   };
   const out: string[] = [];
-  const add = (t: string) => {
+  const quotable: string[] = [];
+  // meta=true: 앱이 조립한 줄(근거 불가) / meta=문자열: 그 문자열 앞까지만 근거(조치사항의 담당·기한 앞)
+  const add = (t: string, meta: boolean | string = false) => {
     const f = flat(t);
-    if (f && out.length < LINES_MAX) out.push(clip(f, LINE_CHARS));
+    if (!f || out.length >= LINES_MAX) return;
+    const line = clip(f, LINE_CHARS);
+    out.push(line);
+    quotable.push(meta === true ? '' : typeof meta === 'string' ? line.slice(0, line.indexOf(meta) < 0 ? line.length : line.indexOf(meta)) : line);
   };
-  add(`업무명: ${w.name} (상태 ${w.status}, 유형 ${w.type || '미상'}, 담당 ${w.owners.map(name).join('·') || '없음'}, 최근 갱신 ${fmtDate(w.updatedAt)})`);
+  add(`업무명: ${w.name} (상태 ${w.status}, 유형 ${w.type || '미상'}, 담당 ${w.owners.map(name).join('·') || '없음'}, 최근 갱신 ${fmtDate(w.updatedAt)})`, true);
   if (w.summary) add(`요약: ${w.summary}`);
   for (const [label, list] of [['목적', w.purpose], ['배경', w.background], ['현재 진행', w.current], ['유의사항', w.cautions]] as const) for (const st of list) add(`${label}: ${st.text}`);
   for (const p of w.partners) add(`협의처: ${p.name}${p.role ? ` — ${p.role}` : ''}`);
-  if (w.parentId) add(`상위 업무: ${wname(w.parentId)}`);
-  for (const id of w.nextIds) add(`다음 업무(이 업무 뒤에 함): ${wname(id)}`);
-  for (const x of s.works.filter((y) => y.nextIds.includes(w.id))) add(`이전 업무(이 업무 앞에 함): ${wname(x.id)}`);
-  for (const id of w.relatedIds) add(`관련 업무: ${wname(id)}`);
+  if (w.parentId) add(`상위 업무: ${wname(w.parentId)}`, true);
+  for (const id of w.nextIds) add(`다음 업무(이 업무 뒤에 함): ${wname(id)}`, true);
+  for (const x of s.works.filter((y) => y.nextIds.includes(w.id))) add(`이전 업무(이 업무 앞에 함): ${wname(x.id)}`, true);
+  for (const id of w.relatedIds) add(`관련 업무: ${wname(id)}`, true);
   for (const d of s.decisions.filter((x) => x.workId === w.id && !x.hidden)) add(`결정 ${fmtDate(d.date)}: ${d.title}${d.rationale?.text ? ` (이유: ${d.rationale.text})` : ''}`);
-  for (const a of s.actions.filter((x) => x.workId === w.id)) add(`조치사항 [${a.status}] ${a.title} — 담당 ${name(a.ownerId)}, 기한 ${a.due ? fmtDate(a.due) : '미지정'}`);
-  for (const p of w.ownerHistory) add(`담당 이력: ${name(p.userId)} ${fmtDate(p.from)}~${p.to ? fmtDate(p.to) : '현재'}${p.note ? ` (${p.note})` : ''}`);
-  for (const h of s.handovers.filter((x) => x.workId === w.id)) add(`인계 ${h.id}: ${name(h.fromId)} → ${name(h.toId)}, 상태 ${h.status}, 기준일 ${fmtDate(h.baseDate)}`);
+  for (const a of s.actions.filter((x) => x.workId === w.id)) add(`조치사항 [${a.status}] ${a.title} — 담당 ${name(a.ownerId)}, 기한 ${a.due ? fmtDate(a.due) : '미지정'}`, ' — 담당 ');
+  for (const p of w.ownerHistory) add(`담당 이력: ${name(p.userId)} ${fmtDate(p.from)}~${p.to ? fmtDate(p.to) : '현재'}${p.note ? ` (${p.note})` : ''}`, true);
+  for (const h of s.handovers.filter((x) => x.workId === w.id)) add(`인계 ${h.id}: ${name(h.fromId)} → ${name(h.toId)}, 상태 ${h.status}, 기준일 ${fmtDate(h.baseDate)}`, true);
   const docs = s.docs.filter((d) => d.workIds.includes(w.id));
-  add(docs.length ? `연결 문서 ${docs.length}건: ${docs.slice(0, 6).map((d) => `${d.title}(${d.type})`).join(', ')}${docs.length > 6 ? ' 외' : ''}` : '연결 문서 없음');
+  add(docs.length ? `연결 문서 ${docs.length}건: ${docs.slice(0, 6).map((d) => `${d.title}(${d.type})`).join(', ')}${docs.length > 6 ? ' 외' : ''}` : '연결 문서 없음', true);
   const evs = s.events.filter((e) => e.workIds.includes(w.id) && e.source !== 'record').sort((a, b) => b.date.localeCompare(a.date)).slice(0, EVENTS_MAX);
   for (const e of evs) add(`타임라인 ${fmtDate(e.date)}: ${e.title}`);
-  return out;
+  return { lines: out, quotable };
 }
 
 /** 보낼 업무 기록·사람·규칙 인사이트 제목. s는 지금 사용자의 열람 범위로 거른 데이터(scopeFor) */
@@ -136,11 +146,13 @@ export function buildInsightInput(s: AppState, scope: MapScope, asOf: string): I
     works = [...works].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, WORKS_MAX);
   }
   const lines = new Map<string, string[]>();
+  const quotable = new Map<string, string[]>();
   const blocks: string[] = [];
   for (const w of works) {
-    const ls = workLines(s, w);
+    const { lines: ls, quotable: qs } = workLines(s, w);
     lines.set(w.id, ls);
-    blocks.push(`### ${w.id} ${w.name}\n${ls.map((t, i) => `[${w.id}#${i + 1}] ${t}`).join('\n')}`);
+    quotable.set(w.id, qs);
+    blocks.push(`### ${w.id} ${w.name}\n${ls.map((t, i) => `[${w.id}#${i + 1}] ${t}${qs[i] ? '' : META_TAG}`).join('\n')}`);
   }
   // 사람: 범위 안 업무에 담당·조치·이력으로 걸린 사람(팀 범위면 전체)
   const involved = new Set<string>();
@@ -164,19 +176,20 @@ export function buildInsightInput(s: AppState, scope: MapScope, asOf: string): I
     `<사람>\n${peopleText.join('\n') || '(없음)'}\n</사람>`,
     `<규칙 인사이트가 이미 찾은 것>\n${rules.join('\n') || '(없음)'}\n</규칙 인사이트가 이미 찾은 것>`,
   ].join('\n\n');
-  return { user, lines, userIds, truncated };
+  return { user, lines, quotable, userIds, truncated };
 }
 
-export const norm = (t: string) => t.replace(/\s+/g, '');
+/** 인용 대조용 정규화: 공백, 따옴표(“ ” ‘ ’ " '), 가운뎃점(· ・ ･ ㆍ) 차이를 무시한다 */
+export const norm = (t: string) => normForMatch(t);
 
 interface Raw {
   insights?: { kind?: string; level?: string; title?: string; detail?: string; refs?: { ref?: string; quote?: string }[]; people?: string[] }[];
 }
 
-/** 근거 하나 대조: 그 업무의 그 줄에 인용이 있으면 통과. 줄 번호가 틀려도 같은 업무의 다른 줄에 있으면 그 줄로 고친다(다른 업무까지는 찾지 않음) */
+/** 근거 하나 대조: 그 업무의 그 줄에서 사람이 쓴 부분(quotable)에 인용이 있으면 통과. 앱이 조립한 줄은 근거가 아니다.
+ *  줄 번호가 틀려도 같은 업무의 다른 줄에 있으면 그 줄로 고친다(다른 업무까지는 찾지 않음). 저장하는 quote는 모델 문자열이 아니라 원문에서 일치한 구간 */
 export function verifyRef(r: { ref?: string; quote?: string }, input: InsightInput): AiInsightRef | null {
-  const quote = String(r?.quote ?? '').trim();
-  const q = norm(quote);
+  const q = norm(String(r?.quote ?? ''));
   if (q.length < QUOTE_MIN) return null;
   const ref = String(r?.ref ?? '').replace(/[[\]\s]/g, '');
   const at = ref.lastIndexOf('#');
@@ -184,9 +197,13 @@ export function verifyRef(r: { ref?: string; quote?: string }, input: InsightInp
   const workId = ref.slice(0, at);
   const ls = input.lines.get(workId);
   if (!ls) return null; // 범위 밖·없는 업무
+  const qs = input.quotable.get(workId) ?? ls;
+  const has = (i: number) => !!qs[i] && norm(qs[i]).includes(q);
   const n = Number(ref.slice(at + 1));
-  const hit = Number.isInteger(n) && ls[n - 1] && norm(ls[n - 1]).includes(q) ? n : ls.findIndex((l) => norm(l).includes(q)) + 1;
-  return hit > 0 ? { workId, lineNo: hit, line: ls[hit - 1], quote } : null;
+  const hit = Number.isInteger(n) && has(n - 1) ? n : qs.findIndex((_, i) => has(i)) + 1;
+  if (hit <= 0) return null;
+  const quote = spanOf(qs[hit - 1], r.quote!);
+  return quote ? { workId, lineNo: hit, line: ls[hit - 1], quote } : null;
 }
 
 /** Claude 응답 → 근거 인용을 대조해 통과한 것만. 순수 함수(시험용으로 따로 둠) */

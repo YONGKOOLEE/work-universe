@@ -20,7 +20,7 @@ export const LIMITS = {
   explain: { maxTokens: 4000, timeoutMs: 45000 }, // 지도 요약 문장
 } as const;
 
-export type LlmErrorCode = 'auth' | 'rate' | 'timeout' | 'network' | 'refusal' | 'format' | 'too_large' | 'cancelled' | 'server';
+export type LlmErrorCode = 'auth' | 'model' | 'rate' | 'timeout' | 'network' | 'refusal' | 'format' | 'too_large' | 'cancelled' | 'server';
 export class LlmError extends Error {
   constructor(
     readonly code: LlmErrorCode,
@@ -35,6 +35,8 @@ export function errorText(e: unknown): string {
   switch (code) {
     case 'auth':
       return 'API 키가 거부되었습니다. 설정에서 키를 확인하세요.';
+    case 'model':
+      return '이 키로는 선택한 모델을 쓸 수 없습니다(권한 없음 또는 모델 이름 오류). 설정의 모델 칸을 확인하세요. 키 자체는 거부되지 않았습니다.';
     case 'rate':
       return '호출이 너무 잦거나 사용량 한도에 도달했습니다. 잠시 후 다시 시도하세요.';
     case 'timeout':
@@ -54,14 +56,16 @@ export function errorText(e: unknown): string {
   }
 }
 
-function classify(err: any): LlmError {
+export function classify(err: any): LlmError {
   if (err instanceof LlmError) return err;
   const status = err?.status;
   const name = err?.name || err?.constructor?.name || '';
   if (err instanceof Anthropic.APIUserAbortError || name === 'APIUserAbortError' || err?.name === 'AbortError' || /request was aborted/i.test(String(err?.message || ''))) return new LlmError('cancelled', '취소');
   if (err instanceof Anthropic.APIConnectionTimeoutError) return new LlmError('timeout', '시간 초과');
   if (err instanceof Anthropic.APIConnectionError) return new LlmError('network', '연결 실패');
-  if (status === 401 || status === 403) return new LlmError('auth', '키 거부');
+  if (status === 401) return new LlmError('auth', '키 거부');
+  // 403(권한 없음)·404(모델 없음)는 키 전체가 거부된 것이 아니라 이 키로 고른 모델을 쓸 수 없다는 뜻 — 업무 유니버스 연결부(forbidden·notfound)와 같은 분류
+  if (status === 403 || status === 404) return new LlmError('model', '모델 권한 없음 또는 모델 이름 오류');
   if (status === 429) return new LlmError('rate', '한도');
   if (status === 413) return new LlmError('too_large', '너무 김');
   // 번들에서는 클래스 이름이 줄어들 수 있어 SDK 오류 문구로도 가른다
@@ -154,4 +158,43 @@ export function saveKey(key: string, model: string) {
   } catch {
     /* 저장소를 못 쓰면 이번 화면에서만 쓴다 */
   }
+}
+
+// ---- 호출 수명 처리용 순수 도우미(시험 대상) ----
+
+/** 키 상태: 키 없음 / 키 있음 / 키가 거부됨(401). 거부된 키도 저장소에는 남아 있어 지울 수 있어야 한다 */
+export type KeyStatus = 'available' | 'denied' | 'none';
+export function keyStatusOf(key: string, denied: boolean): KeyStatus {
+  if (!key) return 'none';
+  return denied ? 'denied' : 'available';
+}
+
+/** Claude 결과 캐시 키: 범위·모델·현재 사용자. 사용자를 넣지 않으면 다른 사용자에게 남의 미확정 인계가 보인다 */
+export function insightCacheKey(scope: unknown, model: string, userId: string): string {
+  return `${userId}|${JSON.stringify(scope)}|${model}`;
+}
+
+/** 요청 번호: 마지막으로 시작한 요청만 상태를 바꾸게 한다(앞선 요청의 늦은 응답은 버림) */
+export function createSeq() {
+  let n = 0;
+  return {
+    next: () => (n += 1),
+    cancelAll: () => {
+      n += 1;
+    },
+    isLatest: (id: number) => id === n,
+  };
+}
+
+/** 업무 유니버스 연결부(refineDraftAsync)가 예외 대신 돌려주는 fallback 이유가 키 거부인지(providers.js: 「키가 맞지 않음」) */
+export function isAuthFallbackReason(reason: string | null | undefined): boolean {
+  return /키가 맞지 않음/.test(String(reason ?? ''));
+}
+/** 같은 연결부의 모델 권한·모델 이름 문제(「이 모델을 쓸 권한이 없음」·「모델 이름을 찾을 수 없음」) */
+export function isModelFallbackReason(reason: string | null | undefined): boolean {
+  return /모델을 쓸 권한|모델 이름을 찾을 수 없음/.test(String(reason ?? ''));
+}
+/** 다듬기 결과에서 Claude 문장이 하나라도 쓰였는지(method 'llm' 항목 수). 전부 규칙이면 「규칙 문장으로 남김」 */
+export function refinedUsedCount(r: { items?: Array<{ method?: string }> } | null | undefined): number {
+  return (r?.items ?? []).filter((i) => i && i.method === 'llm').length;
 }

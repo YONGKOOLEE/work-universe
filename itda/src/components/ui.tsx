@@ -58,8 +58,9 @@ const PROV: Record<Prov, { label: string; cls: string; Icon: React.ElementType }
   unverified: { label: '추가 확인 필요', cls: 'bg-warnsoft text-warn border-warn/30', Icon: CircleHelp },
   owner: { label: '담당자 작성', cls: 'bg-ownersoft text-owner border-owner/25', Icon: PenLine },
 };
-export function ProvChip({ prov, compact }: { prov: Prov; compact?: boolean }) {
-  const p = PROV[prov];
+/** label: 표시 문구를 바꾼다(예: 규칙으로 만든 추정은 「AI 추론」 대신 「규칙 추정」) */
+export function ProvChip({ prov, compact, label }: { prov: Prov; compact?: boolean; label?: string }) {
+  const p = { ...PROV[prov], label: label ?? PROV[prov].label };
   return (
     <span className={cx('inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-px text-2xs font-semibold', p.cls)} title={p.label}>
       <p.Icon size={11} strokeWidth={2.4} />

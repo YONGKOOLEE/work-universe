@@ -152,8 +152,12 @@ export function editOrg(d: AppState, id: string, patch: Partial<{ name: string; 
   const changed: string[] = [];
   if (name !== o.name) {
     changed.push(`이름 ${orgShort(o.name)} → ${orgShort(name)}`);
-    for (const u of d.users) if (u.dept === o.name) u.dept = name;
-    for (const w of d.works) if (w.dept === o.name) w.dept = name;
+    // dept는 앞뒤 공백을 무시하고 비교한다(effectiveOrgs가 같은 조직으로 보기 때문)
+    for (const u of d.users) if (String(u.dept || '').trim() === o.name) u.dept = name;
+    for (const w of d.works) if (String(w.dept || '').trim() === o.name) w.dept = name;
+    // 지도에서 숨긴 조직 키(org:<꼬리표 뗀 이름>)도 새 이름으로 옮긴다
+    const oldKeys = new Set([`org:${orgShort(o.name)}`, `org:${o.name}`]);
+    if (d.mapHidden?.some((k) => oldKeys.has(k))) d.mapHidden = [...new Set(d.mapHidden.map((k) => (oldKeys.has(k) ? `org:${orgShort(name)}` : k)))];
     o.name = name;
   }
   if (level !== o.level) {
@@ -175,7 +179,7 @@ export function removeOrg(d: AppState, id: string): Result {
   const o = eff.find((x) => x.id === id);
   if (!o) return { error: '조직을 찾을 수 없습니다' };
   if (orgChildren(eff, id).length) return { error: '아래 조직이 있어 지울 수 없습니다. 아래 조직을 먼저 옮기세요' };
-  const used = d.works.filter((w) => w.dept === o.name).length + d.users.filter((u) => u.dept === o.name).length;
+  const used = d.works.filter((w) => String(w.dept || '').trim() === o.name).length + d.users.filter((u) => String(u.dept || '').trim() === o.name).length;
   if (used) return { error: `이 조직에 속한 업무·사람(${used})이 있어 지울 수 없습니다` };
   d.orgs = (d.orgs || []).filter((x) => x.id !== id);
   return { id, summary: `조직 삭제: ${orgShort(o.name)}` };
@@ -187,4 +191,14 @@ export function myOrgChain(s: Pick<AppState, 'orgs' | 'users' | 'works'>, userId
   const u = s.users.find((x) => x.id === userId);
   const o = u ? orgOfName(orgs, u.dept) : null;
   return o ? orgChain(orgs, o.id) : [];
+}
+
+/**
+ * 대시보드·지도 기본 범위: 사용자가 속한 조직(하위 포함). 소속이 팀이면 그 팀, 부면 그 부.
+ * 소속 조직을 찾을 수 없으면(org=null) 회사 전체로 본다. name은 화면 라벨용(꼬리표 뗀 이름).
+ */
+export function myOrgScope(s: Pick<AppState, 'orgs' | 'users' | 'works'>, userId: string): { org: Org | null; name: string; works: AppState['works'] } {
+  const org = myOrgChain(s, userId)[0] ?? null;
+  if (!org) return { org: null, name: '전체', works: s.works };
+  return { org, name: orgShort(org.name), works: worksOfOrg(s, org.id) };
 }

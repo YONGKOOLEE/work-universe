@@ -31,6 +31,10 @@ const TYPE_CLS: Record<string, string> = {
   문서: 'bg-infersoft text-infer',
 };
 
+/** 이벤트의 「의미」가 앱이 붙인 자동 안내 문구인지(문서 등록 이벤트·문서에서 추출해 승인한 이벤트·작성일 없음 안내) — 이런 문구는 AI 해석이 아니다 */
+const AUTO_MEANING = /자동 추가된 이벤트|추출해 담당자가 승인한 이벤트|작성일이 입력되지 않아/;
+export const autoMeaning = (e: { meaning: string; autoDocId?: string }) => !!e.autoDocId || AUTO_MEANING.test(e.meaning);
+
 export function Timeline({ workId, initialEvent }: { workId: string; initialEvent?: string }) {
   const { s, raw, update, log, toast } = useStore();
   // 남의 업무 이벤트는 지울 수 없다(고치기는 담당자·팀장, 2026-10-29)
@@ -318,16 +322,24 @@ function EventDetail({ e, onPick }: { e: TEvent; onPick: (id: string) => void })
           {!e.cite.length && !e.docIds.length && <span className="text-xs text-warn">연결된 근거 문서 없음 — 원문 확보 필요</span>}
         </div>
       </section>
-      <section className="rounded-md border border-infer/25 bg-infersoft/60 p-3">
-        <h4 className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-infer">
-          <Sparkles size={12} />
-          AI가 분석한 의미
-        </h4>
-        <p>{e.meaning}</p>
-        <div className="mt-1.5">
-          <ProvChip prov="inference" />
-        </div>
-      </section>
+      {autoMeaning(e) ? (
+        // 앱이 문서 등록·반영 때 붙인 안내 문구 — AI가 분석한 해석이 아니므로 AI 표시를 달지 않는다
+        <section className="rounded-md border border-line bg-sunken/60 p-3">
+          <h4 className="mb-1 text-xs font-semibold text-muted">기록 메모(자동 문구)</h4>
+          <p>{e.meaning}</p>
+        </section>
+      ) : (
+        <section className="rounded-md border border-infer/25 bg-infersoft/60 p-3">
+          <h4 className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-infer">
+            <Sparkles size={12} />
+            AI가 분석한 의미
+          </h4>
+          <p>{e.meaning}</p>
+          <div className="mt-1.5">
+            <ProvChip prov="inference" />
+          </div>
+        </section>
+      )}
       <section>
         <h4 className="mb-2 text-xs font-semibold text-muted">선후 · 인과관계</h4>
         <div className="space-y-2">

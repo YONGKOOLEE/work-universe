@@ -1,7 +1,7 @@
 // 지도에서 고치기(CR-24 D24-5): 모든 동작은 AppState(초안 사본)를 고치는 명령이다. 지도는 고친 AppState에서 다시 파생한다.
 // 각 명령은 바꾼 업무 ID와 변경 이력 문장을 돌려준다(화면이 store.log·touch로 기록). 고칠 것이 없으면 null.
 // 브라우저 기능을 쓰지 않는다(vitest로 검증).
-import type { AppState, Stmt } from '../lib/types';
+import type { AppState, Handover, Stmt } from '../lib/types';
 
 export interface Change {
   workId: string;
@@ -14,15 +14,22 @@ const work = (d: AppState, id: string) => d.works.find((w) => w.id === id);
 let seq = 0;
 const sid = (prefix: string) => `${prefix}-${Date.now().toString(36)}${(seq += 1).toString(36)}`;
 
+/** 그 업무에 확정 전(작성·제출·보완·인수 완료) 인계가 있으면 그 인계 */
+export function pendingHandoverOf(d: AppState, workId: string): Handover | null {
+  return d.handovers.find((h) => h.workId === workId && h.status !== 'confirmed') ?? null;
+}
+
 /**
  * 담당 넘기기·추가. add: 공동 담당으로 더함, hand: 기존 담당을 모두 끝내고 이 사람만 담당
  * 담당 기간(ownerHistory)은 업무잇다 인계 확정과 같은 방식으로 남긴다(끝난 기간도 지우지 않음)
+ * 확정 전 인계가 있는 업무는 넘기기(hand)를 막는다 — 나중에 인계가 확정되면 담당과 인계 기록이 어긋난다(null). 화면은 pendingHandoverOf로 이유를 안내한다.
  */
 export function assignOwner(d: AppState, workId: string, userId: string, mode: 'add' | 'hand', today: string): Change | null {
   const w = work(d, workId);
   if (!w || !d.users.some((u) => u.id === userId)) return null;
   if (mode === 'add' && w.owners.includes(userId)) return null;
   if (mode === 'hand' && w.owners.length === 1 && w.owners[0] === userId) return null;
+  if (mode === 'hand' && pendingHandoverOf(d, workId)) return null;
   const before = [...w.owners];
   if (mode === 'hand') {
     for (const p of w.ownerHistory) if (!p.to && p.userId !== userId) p.to = today;

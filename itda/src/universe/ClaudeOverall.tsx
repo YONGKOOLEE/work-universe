@@ -5,6 +5,8 @@ import { Layers, Loader2 } from 'lucide-react';
 import { cx } from '../lib/util';
 import type { AppState } from '../lib/types';
 import { useAI } from '../ai/claude';
+import { insightCacheKey } from '../ai/llm';
+import { useStore } from '../lib/store';
 import { buildInsightInput } from '../ai/aiInsight';
 import { claudeOverall, type OverallFinding, type OverallResult } from '../ai/aiOverall';
 import type { MapScope } from './derive';
@@ -24,14 +26,22 @@ export type OverallState = ReturnType<typeof useClaudeOverall>;
 export function useClaudeOverall(s: AppState, scope: MapScope, asOf: string) {
   const ai = useAI();
   const available = ai.engine === 'claude' && !!ai.client;
-  const scopeKey = `${JSON.stringify(scope)}|${ai.model}`;
+  const { me } = useStore();
+  const scopeKey = insightCacheKey(scope, ai.model, me.id); // 사용자별로 나눈다(M-2)
   const fp = useMemo(() => (available ? fingerprint(buildInsightInput(s, scope, asOf).user) : ''), [available, s, scope, asOf]);
   const [st, setSt] = useState<{ running: boolean; error: string; tick: number }>({ running: false, error: '', tick: 0 });
   const ctl = useRef<AbortController | null>(null);
+  // 범위·사용자·모델이 바뀌면 진행 중인 호출을 끊고 상태를 비운다
   useEffect(() => {
     ctl.current?.abort();
     setSt((x) => ({ running: false, error: '', tick: x.tick + 1 }));
   }, [scopeKey]);
+  // 엔진이 바뀌면(규칙·사내로, 또는 키 거부로 규칙으로 내려가면) 진행 중인 호출을 끊는다 — 끊긴 결과는 캐시·화면에 넣지 않는다(M-4).
+  // 오류 문구는 지우지 않는다(키 거부 직후 엔진이 바뀌어도 그 안내가 남아야 한다)
+  useEffect(() => {
+    ctl.current?.abort();
+    setSt((x) => (x.running ? { ...x, running: false } : x));
+  }, [ai.engine]);
   useEffect(() => () => ctl.current?.abort(), []);
   const run = useCallback(async () => {
     if (!ai.client || !available) return;

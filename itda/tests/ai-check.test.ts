@@ -45,7 +45,7 @@ describe('Claude 점검 — 인용 대조', () => {
       {
         findings: [
           { kind: 'missing_action', severity: 'high', title: '재시도 기준 협의', detail: '조치로 등록 필요', quote: '재시도 횟수 기준은 2026. 11. 20.까지 참가기관과 협의할 계획', ref: `D-105#${para.id}` },
-          { kind: 'missing_info', severity: 'mid', title: '기록 줄', detail: '', quote: '자동이체 오류 대응 매뉴얼 정비', ref: '기록#1' },
+          { kind: 'missing_info', severity: 'mid', title: '기록 줄', detail: '', quote: '오류 유형 분류표 초안을 작성했고', ref: '기록#5' },
           { kind: 'conflict', severity: 'high', title: '지어낸 인용', detail: '', quote: '재시도는 다섯 번까지 허용하기로 확정함', ref: `D-105#${para.id}` },
           { kind: 'risk', severity: 'low', title: '짧은 인용', detail: '', quote: '오류', ref: `D-105#${para.id}` },
           { kind: 'risk', severity: 'low', title: '없는 문서', detail: '', quote: '재시도 횟수 기준은 2026. 11. 20.까지', ref: 'D-999#p-1' },
@@ -57,7 +57,7 @@ describe('Claude 점검 — 인용 대조', () => {
     );
     expect(r.findings.map((f) => f.title)).toEqual(['재시도 기준 협의', '기록 줄']);
     expect(r.findings[0].cite).toMatchObject({ docId: 'D-105', anchor: para.id });
-    expect(r.findings[1].recordLine).toContain('업무명');
+    expect(r.findings[1].recordLine).toContain('분류표');
     expect(r.dropped).toBe(3); // 모르는 종류는 버리되 「인용 미확인」으로 세지 않음
   });
   it('위치(문단 ID)가 틀려도 같은 문서 안에 인용이 있으면 그 문단으로 고친다', () => {
@@ -66,7 +66,7 @@ describe('Claude 점검 — 인용 대조', () => {
   });
   it('claudeCheck: 가짜 클라이언트 → 검증 결과, 요청은 check 상한·스키마', async () => {
     const seen: any[] = [];
-    const cli = fakeClient({ findings: [{ kind: 'risk', severity: 'high', title: '외부 협의 대기', detail: '기한 전에 협의 필요', quote: '참가기관과 협의할 계획임', ref: `D-105#${para.id}` }, { kind: 'risk', severity: 'high', title: '가짜', detail: '', quote: '없는 문장입니다 정말로', ref: `D-105#${para.id}` }] }, seen);
+    const cli = fakeClient({ findings: [{ kind: 'risk', severity: 'high', title: '외부 협의 대기', detail: '기한 전에 협의 필요', quote: '2026. 11. 20.까지 참가기관과 협의할 계획임', ref: `D-105#${para.id}` }, { kind: 'risk', severity: 'high', title: '가짜', detail: '', quote: '없는 문장입니다 정말로', ref: `D-105#${para.id}` }] }, seen);
     const r = await claudeCheck(cli, s, 'W-007', undefined, NOW);
     expect(r.engine).toBe('claude');
     expect(r.findings.length).toBe(1);

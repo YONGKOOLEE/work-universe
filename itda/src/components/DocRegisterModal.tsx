@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { unzipSync, strFromU8 } from 'fflate';
 import { Sparkles, Upload, Loader2, FileText, AlertTriangle, Bot, Square } from 'lucide-react';
 import { Modal, Button, Field, inputCls, ProvChip } from './ui';
@@ -103,6 +103,8 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
 
   const reset = () => {
     ctl.current?.abort();
+    ctl.current = null; // 닫은 뒤 늦게 도착한 분석 결과가 상태를 다시 채우지 못하게(run이 ctl.current와 비교)
+    setBusy(false);
     setTitle('');
     setText('');
     setWrittenAt('');
@@ -123,6 +125,10 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
     reset();
     onClose();
   };
+  // 엔진이 바뀌면(규칙·사내로) 진행 중인 Claude 호출을 끊는다 — run이 「취소됨」으로 마무리한다(M-4)
+  useEffect(() => {
+    ctl.current?.abort();
+  }, [ai.engine]);
   const invalidate = () => {
     setExt(null);
     setProps([]);
@@ -140,8 +146,17 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
       setBusy(false);
       return;
     }
-    ctl.current = new AbortController();
-    const { result, msg } = await runExtraction(ai, s, title, paras, def, writtenAt, ctl.current.signal, { review: careful, onStage: setStage });
+    const c = new AbortController();
+    ctl.current = c;
+    const out = await runExtraction(ai, s, title, paras, def, writtenAt, c.signal, { review: careful, onStage: setStage });
+    if (ctl.current !== c) return; // 창을 닫거나 다시 시작해 이 분석은 버려졌다 — 늦게 온 결과를 쓰지 않는다
+    if (out.cancelled) {
+      // 취소(분석 중지·엔진 변경)는 규칙 결과로 대체하지 않고 「취소됨」으로 끝낸다
+      setAiMsg(out.msg);
+      setBusy(false);
+      return;
+    }
+    const { result, msg } = out;
     if (msg) setAiMsg(msg);
     if (!result.keywords.length) result.keywords = md.keywords;
     if (!result.relatedWorks.length) result.relatedWorks = md.relatedWorks;
@@ -231,7 +246,9 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
     nav(`/docs/${id}`);
   };
 
-  const engineBadge = ai.engine === 'claude' ? (
+  // 결과가 있으면 그 결과를 만든 엔진으로, 없을 때만 이번에 쓸 엔진(지금 선택)으로 표시한다(M-6)
+  const shownEngine = ext?.engine ?? ai.engine;
+  const engineBadge = shownEngine === 'claude' ? (
     <span className="inline-flex items-center gap-1 rounded bg-brandsoft px-1.5 text-2xs font-semibold text-brand">
       <Bot size={11} />
       Claude 분석
@@ -341,7 +358,7 @@ export function DocRegisterModal({ open, onClose, presetWork }: { open: boolean;
           <div className="min-w-0 rounded-lg border border-line bg-sunken/60 p-4">
             <div className="mb-3 flex flex-wrap items-center gap-2 text-[13.5px] font-semibold">
               <Sparkles size={15} className="text-infer" />
-              AI 문서 분석 결과
+              {shownEngine === 'claude' ? 'AI 문서 분석 결과' : '문서 분석 결과(규칙 기반)'}
               <span className="ml-auto">{engineBadge}</span>
             </div>
             {aiMsg && <p className="mb-3 rounded-md bg-warnsoft px-3 py-2 text-xs text-warn">{aiMsg}</p>}

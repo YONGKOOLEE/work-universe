@@ -340,7 +340,7 @@ try {
     await must(await H(`clickId('engine-internal')`), '사내 엔진 단추 없음');
     await sleep(300);
     const inn = await ev(`(() => { const g = document.querySelector('[data-testid="engine-toggle"]'); const n = document.querySelector('[data-testid="engine-note"]'); return { v: g && g.dataset.value, c: document.querySelector('[data-testid="engine-claude"]').className, note: n ? n.innerText : '' }; })()`);
-    await must(inn.v === 'internal' && !/bg-brand/.test(inn.c) && inn.note.includes('사내 LLM'), `사내 엔진 선택 표시·안내 아님: ${JSON.stringify(inn)}`);
+    await must(inn.v === 'internal' && !/bg-brand/.test(inn.c) && inn.note.includes('사내 AI'), `사내 엔진 선택 표시·안내 아님: ${JSON.stringify(inn)}`);
     await must(await H(`clickId('engine-claude')`), 'Claude 엔진 단추 없음');
     await sleep(300);
     await must((await ev(`document.querySelector('[data-testid="engine-toggle"]').dataset.value`)) === 'claude', 'Claude로 되돌리지 못함');
@@ -559,8 +559,10 @@ try {
     };
     const a = await runOnce();
     await shot('17-다시분석-미리보기');
-    await must(await H(`clickId('reanalyze-apply')`), '반영 단추 없음');
-    await must(await wait(`!document.querySelector('[data-testid="reanalyze-run"]')`, 3000), '반영 뒤 창이 안 닫힘');
+    // 새 제안이 있으면 「반영」, 0건이면 「닫기」(reanalyze-done)가 기본 단추
+    if (a.fresh > 0) await must(await H(`clickId('reanalyze-apply')`), '반영 단추 없음');
+    else await must((await ev(`!document.querySelector('[data-testid="reanalyze-apply"]')`)) && (await H(`clickId('reanalyze-done')`)), '새 제안 0건인데 닫기 단추 없음(또는 반영 단추가 보임)');
+    await must(await wait(`!document.querySelector('[data-testid="reanalyze-run"]')`, 3000), '반영·닫기 뒤 창이 안 닫힘');
     const hash = await ev('location.hash');
     await ev(`location.hash = ${JSON.stringify('#/docs/')} + location.hash.split('/docs/')[1].split('?')[0] + '?reanalyze=1'; true`);
     await must(await wait(`!!document.querySelector('[data-testid="reanalyze-run"]')`, 4000), '두 번째 다시 분석 창이 안 열림');

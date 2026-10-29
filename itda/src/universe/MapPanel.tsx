@@ -12,7 +12,7 @@ import { MapLegend, MapView, useMapView } from './MapView';
 import { InsightPanel } from './InsightPanel';
 import { scopeClass, useEffectiveMapStyle } from './mapStyle';
 import type { Insight } from './insights';
-import { addMemo, addPrivateMemo, addTopic, assignOwner, linkWorks, LINK_NAMES, MEMO_NAMES, removeTopic, setMapHidden, unlinkWorks, type Change, type LinkKind, type MemoKind } from './commands';
+import { addMemo, addPrivateMemo, addTopic, assignOwner, linkWorks, pendingHandoverOf, LINK_NAMES, MEMO_NAMES, removeTopic, setMapHidden, unlinkWorks, type Change, type LinkKind, type MemoKind } from './commands';
 // @ts-expect-error 유니버스 순수 모듈(JS)
 import { soloWorks } from '../../../app/src/view/space-marks.js';
 // @ts-expect-error 유니버스 순수 모듈(JS)
@@ -168,11 +168,13 @@ function NodeCard({ origin, data, onClose, onPick, isCenter = false }: { origin:
   const { nav } = useRouter();
   const key = hideKey(origin);
   const hidden = (data.mapHidden || []).includes(key);
+  // 남의 업무(읽기 전용) 카드에서는 「지도에서 숨기기」를 감춘다. 숨김은 모든 사용자의 지도에 적용되기 때문(A-M6). 이미 숨긴 것을 다시 보이게 하는 것은 늘 허용
+  const roWork = !useCanEdit(origin.kind === 'work' ? origin.id : null) && origin.kind === 'work';
   const hide = () => {
     update((d) => {
       setMapHidden(d, key, !hidden);
     });
-    toast(hidden ? '지도에 다시 보입니다' : '지도에서 숨겼습니다 — 업무 화면의 데이터는 그대로입니다');
+    toast(hidden ? '지도에 다시 보입니다' : '지도에서 숨겼습니다 — 모든 사용자의 지도에서 숨겨집니다. 업무 화면의 데이터는 그대로입니다');
     if (!hidden) onClose();
   };
   const head = (kind: string, title: string, extra?: React.ReactNode) => (
@@ -189,11 +191,12 @@ function NodeCard({ origin, data, onClose, onPick, isCenter = false }: { origin:
       </button>
     </div>
   );
-  const foot = origin.kind !== 'root' && !isCenter && (
+  const foot = origin.kind !== 'root' && !isCenter && (hidden || !roWork) && (
     <div className="mt-3 border-t border-line pt-2">
-      <button className="flex items-center gap-1 text-2xs text-muted hover:text-ink" onClick={hide} data-testid="map-hide">
+      <button className="flex items-center gap-1 text-2xs text-muted hover:text-ink" onClick={hide} data-testid="map-hide" title={hidden ? undefined : '숨김은 이 PC의 모든 사용자 지도에 적용됩니다'}>
         {hidden ? <Eye size={13} /> : <EyeOff size={13} />} {hidden ? '지도에 다시 보이기' : '지도에서 숨기기'}
       </button>
+      {!hidden && <p className="mt-1 text-2xs text-faint">모든 사용자의 지도에서 숨겨집니다. 업무 화면의 데이터는 그대로입니다.</p>}
     </div>
   );
   const wrap = (body: React.ReactNode) => (
@@ -452,6 +455,8 @@ function OwnerForm({ w, data, onDone }: { w: AppState['works'][number]; data: Ap
   const { raw } = useStore();
   const { nav } = useRouter();
   const iOwn = w.owners.includes(raw.currentUserId);
+  // 확정 전 인계가 있으면 담당만 바로 바꾸기를 막는다(확정 때 담당과 인계 기록이 어긋남, A-M7)
+  const pending = pendingHandoverOf(raw, w.id);
   return (
     <FormBox>
       <select className={inputCls} value={who} onChange={(e) => (setWho(e.target.value), setSure(false))} aria-label="담당할 사람" data-testid="map-owner-who">
@@ -469,7 +474,16 @@ function OwnerForm({ w, data, onDone }: { w: AppState['works'][number]; data: Ap
           <input type="radio" checked={how === 'add'} onChange={() => setHow('add')} /> 공동 담당 추가
         </label>
       </div>
-      {how === 'add' ? (
+      {how === 'hand' && pending ? (
+        <div className="space-y-2 rounded border border-warn/40 bg-warnsoft p-2 text-[12px]" data-testid="map-owner-pending">
+          <p>
+            진행 중 인계(<Mono>{pending.id}</Mono>)가 있습니다 — 인계 화면에서 처리하세요. 담당만 바로 바꾸면 인계가 확정될 때 담당과 인계 기록이 어긋납니다.
+          </p>
+          <Button size="sm" variant="primary" onClick={() => nav(`/handover/${pending.id}`)} data-testid="map-owner-pending-link">
+            인계 화면으로
+          </Button>
+        </div>
+      ) : how === 'add' ? (
         <Button
           onClick={() => {
             apply((d) => assignOwner(d, w.id, who, how, today()));

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import type { Derived } from './derive';
 import { useEffectiveMapStyle, type MapStyle } from './mapStyle';
 import { isDarkNow, useTheme } from '../lib/theme';
+import { retireCy } from './retireCy';
 // @ts-expect-error 유니버스 순수 모듈(JS)
 import { buildView } from '../../../app/src/view/view.js';
 // @ts-expect-error 유니버스 순수 모듈(JS)
@@ -191,11 +192,8 @@ function MapViewInner({
     g.cy.style().selector('edge.past').style({ 'line-style': 'dashed', opacity: 0.6, label: '전 담당', 'target-arrow-shape': 'none', 'font-size': 10 }).update();
     if (typeof window !== 'undefined') (window as any).__itdaMap = { graph: g, derived };
     return () => {
-      try {
-        g.cy.destroy();
-      } catch {
-        /* 이미 정리됨 */
-      }
+      // 엔진의 늦은 타이머·rAF·창 크기 콜백이 파기된 인스턴스를 부르면 isHeadless 예외가 난다 — 파기와 함께 막아 둔다(처음 사용 점검 M-6)
+      retireCy(g.cy);
       graph.current = null;
     };
     // 그래프는 한 번 만들고, 데이터가 바뀌면 render로 다시 그린다

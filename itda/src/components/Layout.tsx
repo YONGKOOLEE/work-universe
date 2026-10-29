@@ -17,9 +17,11 @@ function EngineNote() {
       ? `문서 분석·AI 검색을 Claude(${ai.model})로 합니다 — 본인 API 키 사용. 결과는 원문 대조를 거쳐 표시합니다.`
       : ai.preferred === 'internal'
         ? INTERNAL_NOTICE
-        : ai.status === 'available'
-          ? '규칙 기반으로 동작 중입니다(키는 저장되어 있음 — 상단에서 Claude를 고르면 바로 사용).'
-          : '키가 없어 규칙 기반으로 동작합니다. 상단 「AI 설정」에 본인 Claude API 키를 넣으면 Claude가 분석합니다.';
+        : ai.status === 'denied'
+          ? '키가 거부되어 규칙 기반으로 동작합니다. 상단 「AI 설정」에서 키를 지우거나 새 키를 넣으세요.'
+          : ai.status === 'available'
+            ? '규칙 기반으로 동작 중입니다(키는 저장되어 있음 — 상단에서 Claude를 고르면 바로 사용).'
+            : '키가 없어 규칙 기반으로 동작합니다. 상단 「AI 설정」에 본인 Claude API 키를 넣으면 Claude가 분석합니다.';
   return (
     <div className="flex items-start gap-1.5 rounded-md border border-sidemuted/25 px-2 py-1.5" data-testid="engine-note">
       <Bot size={13} className="mt-0.5 shrink-0" />
@@ -47,7 +49,7 @@ function ThemeToggle() {
   );
 }
 
-/** AI 엔진: 규칙 / Claude / 사내 LLM(자리만). 고른 칸을 칠한다 — Claude는 키가 있을 때만 고를 수 있다 */
+/** AI 엔진: 규칙 / Claude / 사내(자리만). 고른 칸을 칠한다 — Claude는 키가 있을 때만 고를 수 있다 */
 function EngineToggle({ onSettings }: { onSettings: () => void }) {
   const ai = useAI();
   const { toast } = useStore();
@@ -56,11 +58,11 @@ function EngineToggle({ onSettings }: { onSettings: () => void }) {
   const seg = (e: EnginePref) => cx('flex items-center gap-1 px-2 py-1 font-semibold', on === e ? (e === 'claude' ? 'bg-brand text-onbrand' : 'bg-navy text-surface') : 'text-muted');
   return (
     <div className="flex items-center gap-1">
-      <div className="flex items-center rounded-md border border-line text-xs" title="AI 엔진 선택: 규칙(키 없이, 밖으로 보내지 않음) · Claude(본인 키로 실시간 분석) · 사내 LLM(연결할 자리만 — 지금은 규칙)" role="group" aria-label="AI 엔진" data-testid="engine-toggle" data-value={on}>
+      <div className="flex items-center rounded-md border border-line text-xs" title="AI 엔진 선택: 규칙(키 없이, 밖으로 보내지 않음) · Claude(본인 키로 실시간 분석) · 사내(아직 연결 전 — 지금은 규칙)" role="group" aria-label="AI 엔진" data-testid="engine-toggle" data-value={on}>
         <button className={cx(seg('mock'), 'rounded-l-md')} onClick={() => ai.setPreferred('mock')} aria-pressed={on === 'mock'} data-testid="engine-rule">
           규칙
         </button>
-        <button className={seg('claude')} onClick={() => (can ? ai.setPreferred('claude') : onSettings())} aria-pressed={on === 'claude'} title={can ? 'Claude(본인 키)로 분석' : '키가 없습니다 — 누르면 「AI 설정」이 열립니다'} data-testid="engine-claude">
+        <button className={seg('claude')} onClick={() => (can ? ai.setPreferred('claude') : onSettings())} aria-pressed={on === 'claude'} title={can ? 'Claude(본인 키)로 분석' : ai.status === 'denied' ? '키가 거부되었습니다 — 누르면 「AI 설정」이 열립니다' : '키가 없습니다 — 누르면 「AI 설정」이 열립니다'} data-testid="engine-claude">
           <span className={cx('h-1.5 w-1.5 rounded-full', can ? 'bg-ok' : 'bg-faint')} />
           Claude
         </button>
@@ -103,7 +105,7 @@ function AISettings({ open, onClose }: { open: boolean; onClose: () => void }) {
       title="AI 설정 — Claude API 키"
       footer={
         <>
-          {ai.status === 'available' && (
+          {ai.status !== 'none' && (
             <Button
               variant="ghost"
               onClick={() => {
@@ -121,10 +123,12 @@ function AISettings({ open, onClose }: { open: boolean; onClose: () => void }) {
           </Button>
           <Button
             onClick={() => {
-              if (key.trim()) ai.setKey(key, model);
+              // 새 키를 넣었을 때만 엔진을 Claude로 바꾼다. 모델만 바꾼 저장은 지금 엔진 선택(규칙·사내)을 그대로 둔다
+              const newKey = !!key.trim();
+              if (newKey) ai.setKey(key, model);
               else ai.setKey(null, model);
-              ai.setPreferred('claude');
-              toast(key.trim() ? '키를 저장했습니다 — Claude로 분석합니다' : '설정을 저장했습니다');
+              if (newKey) ai.setPreferred('claude');
+              toast(newKey ? '키를 저장했습니다 — 엔진을 Claude로 바꿨습니다' : '설정을 저장했습니다');
               onClose();
             }}
             disabled={!key.trim() && ai.status !== 'available'}
@@ -137,10 +141,11 @@ function AISettings({ open, onClose }: { open: boolean; onClose: () => void }) {
     >
       <div className="space-y-3 text-[13px]">
         <p>
-          상태: <b data-testid="ai-key-status">{ai.status === 'available' ? '키 있음' : '키 없음'}</b> · 키가 없으면 문서 분석·AI 검색은 규칙 기반으로 동작합니다.
+          상태: <b data-testid="ai-key-status">{ai.status === 'available' ? '키 있음' : ai.status === 'denied' ? '키가 거부됨' : '키 없음'}</b> ·{' '}
+          {ai.status === 'denied' ? '저장된 키를 Claude가 받아 주지 않아 규칙 기반으로 동작합니다. 「키 지우기」로 지우거나 새 키를 넣으세요.' : '키가 없으면 문서 분석·AI 검색은 규칙 기반으로 동작합니다.'}
         </p>
         <label className="block">
-          <span className="text-xs font-semibold text-muted">API 키 {ai.status === 'available' ? '(바꿀 때만 입력)' : ''}</span>
+          <span className="text-xs font-semibold text-muted">API 키 {ai.status !== 'none' ? '(바꿀 때만 입력)' : ''}</span>
           <input type="password" autoComplete="off" className="mt-1 w-full rounded-md border border-line2 bg-surface px-3 py-2 font-mono text-[13px]" value={key} onChange={(e) => setKey(e.target.value)} placeholder="sk-ant-…" data-testid="ai-key-input" />
         </label>
         <label className="block">
@@ -151,7 +156,7 @@ function AISettings({ open, onClose }: { open: boolean; onClose: () => void }) {
           <li>키는 이 브라우저 저장소에만 저장됩니다(암호화 없음). 데이터 옮기기·백업 파일에는 들어가지 않습니다.</li>
           <li>호출은 api.anthropic.com으로만 가고, 사용량은 본인 키로 과금됩니다. 키를 넣고 Claude 기능(문서 분석·점검·인사이트)을 쓰면 문서 본문과 업무 기록(담당자 이름 포함)이 전송됩니다(「나만 보기」 메모는 보내지 않음) — 실제 업무 문서는 회사의 외부 전송 기준을 확인한 뒤 쓰세요.</li>
           <li>브라우저에서 키를 직접 쓰는 방식은 시연·개인 도구용입니다. 조직 서비스로 쓰려면 서버 중계로 바꿔야 합니다.</li>
-          <li data-testid="ai-internal-note">사내 LLM: 상단 엔진의 「사내」 칸은 연결할 자리만 있습니다. 사용 방법이 정해지면 같은 자리에 연결하며, 지금 고르면 규칙 기반으로 동작합니다.</li>
+          <li data-testid="ai-internal-note">사내 AI: 상단 엔진의 「사내」 칸은 아직 연결되지 않았습니다. 지금 고르면 규칙으로 동작하며 밖으로 보내는 것이 없습니다.</li>
         </ul>
       </div>
     </Modal>
@@ -182,7 +187,7 @@ function Brand() {
       </svg>
       <div className="leading-tight">
         <div className="text-[15px] font-bold tracking-tight text-sideink">업무잇다</div>
-        <div className="text-2xs text-sidemuted">AI 업무 지식관리 · 상시 인수인계</div>
+        <div className="text-2xs text-sidemuted">AI 업무 지식관리 ·{' '}<span className="whitespace-nowrap">상시 인수인계</span></div>
       </div>
     </div>
   );
@@ -226,7 +231,7 @@ function Nav({ onPick }: { onPick?: () => void }) {
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { canBack, back, nav } = useRouter();
-  const { s, update, reset, toastMsg, toast, saveIssue, reloadFromStorage, dismissSaveIssue } = useStore();
+  const { s, update, reset, toastMsg, toast, saveIssue, reloadFromStorage, overwriteFromThisTab, dismissSaveIssue } = useStore();
   const [mobile, setMobile] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [dataOpen, setDataOpen] = useState(false);
@@ -329,16 +334,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <span className="flex-1">
               {saveIssue.kind === 'fail'
                 ? '이 브라우저 저장소에 저장하지 못했습니다(용량 초과 등). 지금 내용은 이 탭에만 있으니 「데이터 옮기기 → 내보내기」로 파일을 받아 두세요.'
-                : '다른 탭에서 데이터가 바뀌었습니다. 이 탭에서 계속 고치면 다른 탭의 변경을 덮어씁니다.'}
+                : '다른 탭에서 데이터가 바뀌었습니다. 다른 탭의 변경을 지키려고 이 탭은 저장을 멈췄습니다 — 둘 중 하나를 고르세요.'}
             </span>
-            {saveIssue.kind === 'other-tab' && (
-              <Button size="sm" variant="primary" onClick={reloadFromStorage} data-testid="save-issue-reload">
-                다른 탭 내용 불러오기
+            {saveIssue.kind === 'other-tab' ? (
+              <>
+                <Button size="sm" variant="primary" onClick={reloadFromStorage} data-testid="save-issue-reload">
+                  다른 탭 내용 불러오기
+                </Button>
+                <Button size="sm" variant="ghost" onClick={overwriteFromThisTab} data-testid="save-issue-overwrite">
+                  이 탭 내용으로 저장
+                </Button>
+              </>
+            ) : (
+              <Button size="sm" variant="ghost" onClick={dismissSaveIssue}>
+                닫기
               </Button>
             )}
-            <Button size="sm" variant="ghost" onClick={dismissSaveIssue}>
-              닫기
-            </Button>
           </div>
         )}
         <main id="main-scroll" className="flex-1 overflow-y-auto scroll-thin">

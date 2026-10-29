@@ -22,17 +22,31 @@ export interface PersonMatch {
   status: 'same' | 'candidate' | 'new';
   currentId?: string;
   currentName?: string;
+  /** candidate에서 같은 이름·부서인 지금 사람이 정확히 하나 — 기본을 같은 사람으로 */
+  unique?: boolean;
 }
 export interface WorkMatch {
   incomingId: string;
   name: string;
-  /** same: 이름이 같음(기본 합치기) / candidate: 비슷한 업무(점수·이유, 기본 따로 두기 — 사람이 정함) / new */
+  /** same: 지난번에 들인 업무(원본 ID) 또는 이름이 같은 업무가 하나(기본 합치기) / candidate: 비슷한 업무·이름이 같은 업무가 여럿(기본 따로 두기 — 사람이 정함) / new */
   status: 'same' | 'candidate' | 'new';
   currentId?: string;
   currentName?: string;
   score?: number;
   reason?: string;
+  /** 이름이 같은 지금 업무가 여럿일 때 고를 수 있는 업무들 */
+  options?: { id: string; name: string }[];
+  /** 앞선 들어온 업무가 이미 같은 지금 업무로 가는 중 — 이 업무는 기본 따로 두기(합치면 내용이 버려질 수 있음). 앞선 들어온 업무 ID */
+  dupOf?: string;
 }
+/** 들어온 업무의 원본 표시 — 파일마다 ID가 겹치므로 ID와 정규화한 이름을 함께 쓴다 */
+export const importKey = (w: Pick<Work, 'id' | 'name'>) => `${w.id}|${normalizeWorkName(w.name)}`;
+/** 소관 기관 자리표시 글(derive.ts·flowInsights.ts의 UNKNOWN_AGENCY와 같은 규칙 — 그 파일들은 내보내지 않아 같은 식을 둠) */
+const UNKNOWN_AGENCY = /별도\s*확인|미입력|^-$/;
+const isBlankScalar = (f: string, v: unknown) => {
+  const t = String(v ?? '').trim();
+  return !t || (f === 'agency' && UNKNOWN_AGENCY.test(t));
+};
 
 /** 비슷한 업무 후보 기준 점수(업무 유니버스 통합 후보와 같은 가중치: 주제 3, 문서 유형 2, 이름 낱말 1). 바꾸기 쉬운 곳 하나 */
 export const WORK_CANDIDATE_MIN = 3;
@@ -110,6 +124,8 @@ export const conflictKey = (incomingWorkId: string, field: string) => `${incomin
 export interface MergePlan {
   people: PersonMatch[];
   works: WorkMatch[];
+  /** 합쳐 불러오기가 가져오지 않는 것(들어온 나만 보기 메모, 지도 숨김) 건수 */
+  skipped: { privateMemos: number; mapHidden: number };
   /** 같은 업무(또는 후보)인데 내용이 다른 칸 */
   conflicts: MergeConflict[];
   /** 기본 선택 기준으로 추가될 건수 */
@@ -120,6 +136,8 @@ export interface MergeChoices {
   people?: Record<string, boolean>;
   /** 들어온 업무 ID → true: 합치기 / false: 따로 두기. 없으면 기본값(후보가 있으면 합치기) */
   works?: Record<string, boolean>;
+  /** 들어온 업무 ID → 합칠 지금 업무 ID(이름이 같은 업무가 여럿일 때 고름. 없으면 plan의 currentId) */
+  targets?: Record<string, string>;
   /** `${들어온 업무 ID}|${칸}` → 서술 목록: both(둘 다, 기본)/current/incoming · 한 값 칸: current(기본)/incoming */
   fields?: Record<string, ConflictChoice>;
 }
@@ -132,15 +150,24 @@ export function planMerge(current: AppState, incoming: AppState): MergePlan {
     const byEmp = e ? current.users.find((c) => empOf(c) === e) : undefined;
     if (byEmp) return { incomingId: u.id, name: u.name, dept: u.dept, status: 'same', currentId: byEmp.id, currentName: byEmp.name };
     // 사번이 서로 다르게 있으면 다른 사람. 한쪽이라도 사번이 없을 때만 이름+부서로 후보
-    const cand = current.users.find((c) => !(e && empOf(c)) && normText(c.name) === normText(u.name) && normText(c.dept) === normText(u.dept));
-    if (cand) return { incomingId: u.id, name: u.name, dept: u.dept, status: 'candidate', currentId: cand.id, currentName: cand.name };
+    const cands = current.users.filter((c) => !(e && empOf(c)) && normText(c.name) === normText(u.name) && normText(c.dept) === normText(u.dept));
+    if (cands.length) return { incomingId: u.id, name: u.name, dept: u.dept, status: 'candidate', currentId: cands[0].id, currentName: cands[0].name, unique: cands.length === 1 };
     return { incomingId: u.id, name: u.name, dept: u.dept, status: 'new' };
   });
   const profiles = new Map(current.works.map((x) => [x.id, workProfile(current, x)]));
   const works: WorkMatch[] = incoming.works.map((w) => {
+    // 1) 지난번에 들인 업무(원본 표시)가 우선 2) 이름이 같은 업무가 하나면 같은 업무 3) 여럿이면 사람이 고름(후보)
+    const key = importKey(w);
+    const from = current.works.find((x) => x.importedFrom?.includes(key));
+    if (from) return { incomingId: w.id, name: w.name, status: 'same', currentId: from.id, currentName: from.name };
     const k = normalizeWorkName(w.name);
-    const c = current.works.find((x) => normalizeWorkName(x.name) === k);
-    if (c) return { incomingId: w.id, name: w.name, status: 'same', currentId: c.id, currentName: c.name };
+    const named = current.works.filter((x) => normalizeWorkName(x.name) === k);
+    if (named.length === 1) return { incomingId: w.id, name: w.name, status: 'same', currentId: named[0].id, currentName: named[0].name };
+    if (named.length > 1)
+      return {
+        incomingId: w.id, name: w.name, status: 'candidate', currentId: named[0].id, currentName: named[0].name,
+        options: named.map((x) => ({ id: x.id, name: x.name })), reason: `이름이 같은 지금 업무가 ${named.length}건`,
+      };
     // 이름이 다르면 점수로 가장 비슷한 업무 하나를 후보로(자동으로 합치지 않음)
     const mine = workProfile(incoming, w);
     let best: { w: Work; score: number; reason: string } | null = null;
@@ -150,11 +177,22 @@ export function planMerge(current: AppState, incoming: AppState): MergePlan {
     }
     return best ? { incomingId: w.id, name: w.name, status: 'candidate', currentId: best.w.id, currentName: best.w.name, score: best.score, reason: best.reason } : { incomingId: w.id, name: w.name, status: 'new' };
   });
-  const conflicts = works.flatMap((m) => {
-    const c = m.currentId ? current.works.find((x) => x.id === m.currentId) : undefined;
-    return c ? workConflicts(c, incoming.works.find((x) => x.id === m.incomingId)!) : [];
-  });
-  const base: MergePlan = { people, works, conflicts, counts: undefined as unknown as MergeCounts };
+  // 같은 지금 업무로 가는 들어온 업무가 둘 이상이면 둘째부터 표시(기본 따로 두기)
+  const firstOf = new Map<string, string>();
+  for (const m of works) {
+    if (!m.currentId) continue;
+    const f = firstOf.get(m.currentId);
+    if (f) m.dupOf = f;
+    else firstOf.set(m.currentId, m.incomingId);
+  }
+  const conflicts = works.flatMap((m) =>
+    (m.options?.map((o) => o.id) ?? (m.currentId ? [m.currentId] : [])).flatMap((cid) => {
+      const c = current.works.find((x) => x.id === cid);
+      return c ? workConflicts(c, incoming.works.find((x) => x.id === m.incomingId)!) : [];
+    }),
+  );
+  const skipped = { privateMemos: (incoming.privateMemos ?? []).length, mapHidden: (incoming.mapHidden ?? []).length };
+  const base: MergePlan = { people, works, skipped, conflicts, counts: undefined as unknown as MergeCounts };
   base.counts = previewCounts(current, incoming, base, {});
   return base;
 }
@@ -176,7 +214,7 @@ function workConflicts(c: Work, w: Work): MergeConflict[] {
   for (const f of SCALAR_FIELDS) {
     const a = String(c[f] ?? '');
     const b = String(w[f] ?? '');
-    if (!a.trim() || !b.trim() || normText(a) === normText(b)) continue;
+    if (isBlankScalar(f, a) || isBlankScalar(f, b) || normText(a) === normText(b)) continue;
     out.push({ ...base, field: f, label: CONFLICT_LABELS[f], kind: 'scalar', current: a, incoming: b });
   }
   return out;
@@ -185,16 +223,31 @@ function workConflicts(c: Work, w: Work): MergeConflict[] {
 function resolvePeople(plan: MergePlan, choices: MergeChoices) {
   const m = new Map<string, string>(); // 들어온 사람 ID → 지금 사람 ID (같은 사람만)
   for (const p of plan.people) {
-    const same = choices.people?.[p.incomingId] ?? p.status === 'same';
+    const same = choices.people?.[p.incomingId] ?? defaultSamePerson(p);
     if (same && p.currentId) m.set(p.incomingId, p.currentId);
   }
   return m;
 }
-function resolveWorks(plan: MergePlan, choices: MergeChoices) {
-  const m = new Map<string, string>(); // 들어온 업무 ID → 지금 업무 ID (합칠 업무만)
+/** 사람 기본값: 사번 일치, 또는 사번 없이 이름·부서가 같은 지금 사람이 정확히 하나 */
+export const defaultSamePerson = (p: PersonMatch) => p.status === 'same' || (p.status === 'candidate' && !!p.unique);
+/** 업무 기본값: same이고 앞선 들어온 업무가 같은 지금 업무로 가지 않을 때만 합치기 */
+export const defaultMergeWork = (w: WorkMatch) => w.status === 'same' && !w.dupOf;
+/** 합칠 지금 업무 — 이름이 같은 업무가 여럿일 때는 사용자가 고른 업무 */
+export function targetOf(w: WorkMatch, choices: MergeChoices): string | undefined {
+  const t = choices.targets?.[w.incomingId];
+  return t && w.options?.some((o) => o.id === t) ? t : w.currentId;
+}
+/** 들어온 업무 ID → 지금 업무 ID (실제로 합칠 업무만). 한 지금 업무에는 들어온 업무 하나만 합친다(둘째는 내용이 버려질 수 있어 따로 둠) */
+export function resolveWorks(plan: MergePlan, choices: MergeChoices) {
+  const m = new Map<string, string>();
+  const taken = new Set<string>();
   for (const w of plan.works) {
-    const merge = choices.works?.[w.incomingId] ?? w.status === 'same';
-    if (merge && w.currentId) m.set(w.incomingId, w.currentId);
+    const merge = choices.works?.[w.incomingId] ?? defaultMergeWork(w);
+    const t = targetOf(w, choices);
+    if (merge && t && !taken.has(t)) {
+      m.set(w.incomingId, t);
+      taken.add(t);
+    }
   }
   return m;
 }
@@ -218,7 +271,9 @@ const newOrgs = (current: AppState, incoming: AppState): Org[] => {
 export function previewCounts(current: AppState, incoming: AppState, plan: MergePlan, choices: MergeChoices): MergeCounts {
   const pm = resolvePeople(plan, choices);
   const wm = resolveWorks(plan, choices);
-  const mw = (id: string) => wm.get(id) ?? id;
+  // 합치지 않은 업무·사람은 새 ID가 붙으므로 지금 데이터와 겹치지 않는 것으로 센다(applyMerge와 같게)
+  const mw = (id: string) => wm.get(id) ?? `new:${id}`;
+  const mu = (id: string) => pm.get(id) ?? `new:${id}`;
   const dec = new Set(current.decisions.map((d) => decKey(d, d.workId)));
   const act = new Set(current.actions.map((a) => actKey(a, a.workId)));
   const ev = new Set(current.events.map(evKey));
@@ -231,7 +286,7 @@ export function previewCounts(current: AppState, incoming: AppState, plan: Merge
     decisions: incoming.decisions.filter((d) => !dec.has(decKey(d, mw(d.workId)))).length,
     actions: incoming.actions.filter((a) => !act.has(actKey(a, mw(a.workId)))).length,
     events: incoming.events.filter((e) => !ev.has(evKey(e))).length,
-    handovers: incoming.handovers.filter((h) => !current.handovers.some((c) => hoKey(c) === hoKey({ ...h, workId: mw(h.workId), fromId: pm.get(h.fromId) ?? h.fromId, toId: pm.get(h.toId) ?? h.toId }))).length,
+    handovers: incoming.handovers.filter((h) => !current.handovers.some((c) => hoKey(c) === hoKey({ ...h, workId: mw(h.workId), fromId: mu(h.fromId), toId: mu(h.toId) }))).length,
     orgs: newOrgs(current, incoming).length,
   };
 }
@@ -404,15 +459,17 @@ export function applyMerge(current: AppState, incoming: AppState, choices: Merge
   }
 
   // ── 4) 업무 ──
-  const conflictFields = new Set(plan.conflicts.filter((c) => wm.has(c.incomingWorkId)).map((c) => conflictKey(c.incomingWorkId, c.field)));
+  const conflictFields = new Set(plan.conflicts.filter((c) => wm.get(c.incomingWorkId) === c.currentWorkId).map((c) => conflictKey(c.incomingWorkId, c.field)));
   let conflictedWorks = 0;
   for (const w of inc.works) {
     const r = rework(w);
     const target = wm.has(w.id) ? cur.works.find((c) => c.id === r.id) : undefined;
     if (!target) {
-      cur.works.push(r);
+      // 따로 두는(새) 업무: 원본 표시를 남겨 다음 불러오기에서 이 업무로 맞춘다
+      cur.works.push({ ...r, importedFrom: uniq([...(w.importedFrom ?? []), importKey(w)]) });
       continue;
     }
+    const before = JSON.stringify(target);
     // 합치기: 지금 업무 기준
     target.owners = uniq([...target.owners, ...r.owners]);
     const oh = new Set(target.ownerHistory.map((o) => `${o.userId}|${o.from}|${o.to}`));
@@ -448,7 +505,8 @@ export function applyMerge(current: AppState, incoming: AppState, choices: Merge
     }
     for (const f of SCALAR_FIELDS) {
       const t = target as unknown as Record<string, string>;
-      if (!t[f]) t[f] = (r as unknown as Record<string, string>)[f];
+      const rv = (r as unknown as Record<string, string>)[f];
+      if (!t[f] || (isBlankScalar(f, t[f]) && !isBlankScalar(f, rv))) t[f] = rv;
       else if (conflictFields.has(conflictKey(w.id, f))) {
         const inc = choices.fields?.[conflictKey(w.id, f)] === 'incoming';
         if (inc) t[f] = (r as unknown as Record<string, string>)[f];
@@ -464,8 +522,13 @@ export function applyMerge(current: AppState, incoming: AppState, choices: Merge
       cur.history.push({ id: hid, workId: target.id, at: now, actorId: cur.currentUserId, kind: '합쳐 불러오기', summary: `합쳐 불러오기: ${changed.join(', ')}` });
     }
     if (!target.parentId && r.parentId && r.parentId !== target.id && !wouldCycle(cur, target.id, r.parentId)) target.parentId = r.parentId;
-    target.version += 1;
-    target.updatedAt = now;
+    // 이름이 다른 업무와 합쳤으면 원본 표시를 남겨 다음 불러오기에서 기억한다
+    if (normalizeWorkName(target.name) !== normalizeWorkName(w.name)) target.importedFrom = uniq([...(target.importedFrom ?? []), importKey(w)]);
+    // 실제로 바뀐 칸이 있을 때만 버전·날짜를 올린다
+    if (JSON.stringify(target) !== before) {
+      target.version += 1;
+      target.updatedAt = now;
+    }
   }
 
   // ── 5) 문서·결정·조치·이벤트·이력 ──
@@ -544,19 +607,10 @@ export function applyMerge(current: AppState, incoming: AppState, choices: Merge
     cur.snapshots.push(r);
   }
 
-  // ── 7) 지도 숨김(합집합, 종류별 ID 바꿈) ──
-  const byKind: Record<string, (id: string) => string> = { work: mw, doc: md, user: mu, action: mact };
-  const hidden = new Set(cur.mapHidden ?? []);
-  for (const k of inc.mapHidden ?? []) {
-    const i = k.indexOf(':');
-    const kind = i > 0 ? k.slice(0, i) : '';
-    const f = byKind[kind];
-    hidden.add(f ? `${kind}:${f(k.slice(i + 1))}` : k);
-  }
-  cur.mapHidden = [...hidden];
+  // ── 7) 지도 숨김·나만 보기 메모는 가져오지 않는다(지금 데이터 그대로) ──
 
   // ── 8) 기록 ──
-  const summary = `사람 ${inc.users.length}명(같은 사람 ${pm.size}) · 업무 ${inc.works.length}건(합침 ${wm.size}) · 문서 ${counts.docs}건 · 결정 ${counts.decisions} · 조치 ${counts.actions} · 인계 ${counts.handovers}${counts.orgs ? ` · 조직 ${counts.orgs}` : ''}${conflictedWorks ? ` · 내용이 다른 업무 ${conflictedWorks}건(칸 ${conflictFields.size})` : ''}`;
+  const summary = `사람 ${inc.users.length}명(같은 사람 ${pm.size}) · 업무 ${inc.works.length}건(합침 ${wm.size}) · 문서 ${counts.docs}건 · 결정 ${counts.decisions} · 조치 ${counts.actions} · 인계 ${counts.handovers}${counts.orgs ? ` · 조직 ${counts.orgs}` : ''}${conflictedWorks ? ` · 내용이 다른 업무 ${conflictedWorks}건(칸 ${conflictFields.size})` : ''}${skippedNote(plan.skipped)}`;
   const logWork = [...wm.values()][0] ?? wMap.get(inc.works[0]?.id ?? '') ?? cur.works[0]?.id;
   if (logWork) {
     let id: string;
@@ -565,6 +619,27 @@ export function applyMerge(current: AppState, incoming: AppState, choices: Merge
     cur.history.push({ id, workId: logWork, at: now, actorId: cur.currentUserId, kind: '합쳐 불러오기', summary });
   }
   return { state: cur, summary };
+}
+
+/** 가져오지 않는 것을 밝히는 한 줄(요약·미리 보기 공용). 없으면 빈 글 */
+export function skippedLine(k: MergePlan['skipped']): string {
+  const parts = [k.privateMemos ? `나만 보기 메모 ${k.privateMemos}건` : '', k.mapHidden ? `지도 숨김 ${k.mapHidden}건` : ''].filter(Boolean);
+  return parts.length ? `${parts.join('과 ')}은 가져오지 않음` : '';
+}
+const skippedNote = (k: MergePlan['skipped']) => (skippedLine(k) ? ` · ${skippedLine(k)}` : '');
+
+/** 내보내기용 상태 — 「나만 보기」 메모는 지금 사용자의 것만 담는다(원본은 바꾸지 않음) */
+export function exportBackupState(s: AppState): AppState {
+  if (!s.privateMemos) return s;
+  return { ...s, privateMemos: s.privateMemos.filter((m) => m.userId === s.currentUserId) };
+}
+/** 바꿔 불러오기용 — 파일의 상태로 바꾸되, 지금 브라우저의 다른 사용자 「나만 보기」 메모는 남기고 지금 사용자(와 파일 주인)의 메모는 파일의 것으로 바꾼다 */
+export function replaceKeepingOtherMemos(current: AppState, file: AppState): AppState {
+  const mine = file.privateMemos ?? [];
+  const replaced = new Set([current.currentUserId, file.currentUserId, ...mine.map((m) => m.userId)]);
+  const kept = (current.privateMemos ?? []).filter((m) => !replaced.has(m.userId));
+  const all = [...kept, ...mine];
+  return all.length || file.privateMemos ? { ...file, privateMemos: all } : file;
 }
 
 /** 참조 무결성 점검 — 모든 참조가 실제로 존재하는지. 문제 목록(빈 배열이면 정상) */

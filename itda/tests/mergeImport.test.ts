@@ -63,7 +63,7 @@ describe('합쳐 불러오기', () => {
     expect(state.actions.length).toBe(a.actions.length);
     expect(state.events.length).toBe(a.events.length);
     expect(state.handovers.length).toBe(a.handovers.length); // 같은 인계(업무·인계자·인수자·기준일)는 다시 더하지 않음(검토 2026-10-29 높음 2)
-    expect(state.works[0].version).toBe(a.works[0].version + 1);
+    expect(state.works[0].version).toBe(a.works[0].version); // 바뀐 칸이 없으면 버전·날짜를 올리지 않음(검토 A L2, 2026-10-29)
     expect(state.history.at(-1)?.kind).toBe('합쳐 불러오기');
     expect(summary).toContain(`같은 사람 ${a.users.length}`);
     expect(summary).toContain(`합침 ${a.works.length}`);
@@ -126,7 +126,9 @@ describe('합쳐 불러오기', () => {
     const plan = planMerge(a, b);
     expect(plan.people[0].status).toBe('candidate');
     expect(plan.people[0].currentId).toBe(a.users[0].id);
-    expect(applyMerge(a, b).state.users.length).toBe(a.users.length + b.users.length); // 기본: 다른 사람
+    // 같은 이름·부서인 지금 사람이 정확히 하나면 기본이 같은 사람(검토 A L1, 2026-10-29). 다른 사람으로 고를 수 있음
+    expect(applyMerge(a, b).state.users.length).toBe(a.users.length + b.users.length - 1);
+    expect(applyMerge(a, b, { people: { [b.users[0].id]: false } }).state.users.length).toBe(a.users.length + b.users.length);
     const same = applyMerge(a, b, { people: { [b.users[0].id]: true } });
     expect(same.state.users.length).toBe(a.users.length + b.users.length - 1);
     expect(checkIntegrity(same.state)).toEqual([]);
@@ -209,7 +211,7 @@ describe('합쳐 불러오기', () => {
     expect(JSON.stringify(b)).toBe(jb);
   });
 
-  it('currentUserId·focus·searchLog 유지, mapHidden 합집합', () => {
+  it('currentUserId·focus·searchLog 유지, 들어온 mapHidden은 가져오지 않음(검토 A M6)', () => {
     const a = seed();
     const b = colleague();
     a.mapHidden = ['doc:X1'];
@@ -220,7 +222,7 @@ describe('합쳐 불러오기', () => {
     expect(state.currentUserId).toBe(a.currentUserId);
     expect(state.focus).toEqual(a.focus);
     expect(state.searchLog).toEqual(['지금검색']);
-    expect(state.mapHidden).toEqual(expect.arrayContaining(['doc:X1', 'doc:X2']));
+    expect(state.mapHidden).toEqual(['doc:X1']);
   });
 
   it('같은 동료 데이터를 두 번 합쳐도 무결하고 사람·업무·문서가 늘지 않는다', () => {

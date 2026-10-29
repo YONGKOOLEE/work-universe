@@ -27,6 +27,10 @@ export default function Works() {
     if (query.get('new') === '1') openNewWork();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 조직 명령(이름 바꾸기 등)으로 자동 팀 ID가 사라지면 고른 조직이 없는 ID가 되므로 「전체」로 되돌린다
+  useEffect(() => {
+    if (orgId !== 'all' && !orgs.some((o) => o.id === orgId)) setOrgId('all');
+  }, [orgs, orgId]);
   const orgNames = useMemo(() => (orgId === 'all' ? null : subtreeNames(orgs, orgId)), [orgs, orgId]);
   const filtered = useMemo(() => {
     const t = q.trim();

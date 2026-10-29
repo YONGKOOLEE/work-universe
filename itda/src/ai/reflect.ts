@@ -62,11 +62,32 @@ export interface Extraction {
 const norm = (s: string) =>
   s
     .replace(/[\s ]+/g, '')
-    .replace(/[ㆍ·•∙]/g, '·')
+    .replace(/[ㆍ·•∙・･]/g, '·')
     .replace(/[“”"]/g, '"')
     .replace(/[‘’']/g, "'")
     .replace(/[∼~〜]/g, '~')
     .toLowerCase();
+
+/** 인용 대조용 정규화(공백·따옴표·가운뎃점·물결표 차이 무시). Claude 결과 검증(aiInsight·aiCheck·claudeSearch)도 같은 기준을 쓴다 */
+export const normForMatch = norm;
+
+/** 원문(text)에서 quote와 일치한 구간을 원문 글자 그대로 잘라 낸다(공백 무시 대조 → 원문 구간 복원). 없으면 null */
+export function spanOf(text: string, quote: string): string | null {
+  const q = norm(quote);
+  if (!q) return null;
+  let flat = '';
+  const at: number[] = []; // 정규화 글자 → 원문 위치
+  for (let i = 0; i < text.length; i++) {
+    const c = norm(text[i]);
+    for (let j = 0; j < c.length; j++) {
+      flat += c[j];
+      at.push(i);
+    }
+  }
+  const k = flat.indexOf(q);
+  if (k < 0) return null;
+  return text.slice(at[k], at[k + q.length - 1] + 1);
+}
 
 export function locate(paras: DocParagraph[], quote: string, hint?: string): DocParagraph | null {
   const q = norm(quote);

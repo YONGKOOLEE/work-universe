@@ -2,11 +2,12 @@
 // 업무잇다 데이터에서 파생한 지도에 그대로 돌린다. 문장마다 근거 칩이 붙고, 칩을 누르면 근거가 된 기록 한 줄이 펼쳐진다.
 // 키가 있으면 업무 유니버스 연결부(refineDraftAsync)로 Claude가 문장을 다듬는다 — 근거 ID·인용이 확인된 문장만 쓰고, 실패하면 규칙 문장 그대로.
 // 인계 절차(사전 점검·체크리스트·확정)는 업무잇다 것이 기준이고, 이 카드는 참고 자료다.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Orbit, Sparkles, Loader2, ChevronDown } from 'lucide-react';
 import type { AppState } from '../lib/types';
 import { Card, CardHead, Button } from '../components/ui';
 import { useAI } from '../ai/claude';
+import { LlmError, createSeq, isAuthFallbackReason, isModelFallbackReason, refinedUsedCount } from '../ai/llm';
 import { cx, today } from '../lib/util';
 import { deriveMap } from './derive';
 // @ts-expect-error 유니버스 순수 모듈(JS)
@@ -34,9 +35,21 @@ export function HandoverPoints({ data, workId, fromId, toId }: { data: AppState;
     return { view, draft, error: res.ok ? null : res.error };
   }, [data, workId, fromId, toId]);
   const [refined, setRefined] = useState<any>(null);
-  // 데이터가 바뀌면(인계 진행·업무 수정) 예전에 다듬은 문장을 버린다
-  useEffect(() => setRefined(null), [built]);
   const [busy, setBusy] = useState(false);
+  // refineDraftAsync는 취소 신호를 받지 않는다(app/src는 건드리지 않음). 그래서 호출을 끊는 대신 요청 번호로 낡은 응답을 버린다(M-4·M-7)
+  const seq = useRef(createSeq());
+  // 데이터가 바뀌면(인계 진행·업무 수정) 예전에 다듬은 문장을 버리고, 날아가는 응답도 버린다
+  useEffect(() => {
+    seq.current.cancelAll();
+    setRefined(null);
+    setBusy(false);
+  }, [built]);
+  // 엔진이 바뀌면(규칙·사내로) 날아가는 응답을 버린다
+  useEffect(() => {
+    seq.current.cancelAll();
+    setBusy(false);
+  }, [ai.engine]);
+  useEffect(() => () => seq.current.cancelAll(), []);
   const [note, setNote] = useState('');
   const [open, setOpen] = useState<string | null>(null);
   const draft = refined ?? built.draft;
@@ -45,19 +58,32 @@ export function HandoverPoints({ data, workId, fromId, toId }: { data: AppState;
   const shown = items.filter((it: any) => !it.insufficient || it.empty_reason);
 
   const refine = async () => {
-    if (!ai.universeProvider) return;
+    if (ai.engine !== 'claude' || !ai.universeProvider) return;
+    const id = seq.current.next();
     setBusy(true);
     setNote('');
     try {
       const r = await refineDraftAsync(built.draft, { provider: ai.universeProvider, exists: built.view.exists, view: built.view });
+      if (!seq.current.isLatest(id)) return; // 그 사이 데이터·엔진이 바뀌었거나 다시 눌렀다 — 낡은 응답은 버린다
       if (r) {
+        const reason: string | undefined = r.fallback?.reason;
+        // 연결부는 키 거부·모델 문제를 예외로 던지지 않고 fallback 이유로 돌려준다 — 여기서 알려야 키 상태(거부됨)와 단추가 맞는다
+        if (isAuthFallbackReason(reason)) {
+          setNote(ai.onError(new LlmError('auth', reason!)));
+          return;
+        }
+        if (isModelFallbackReason(reason)) {
+          setNote(ai.onError(new LlmError('model', reason!)));
+          return;
+        }
         setRefined(r);
-        if (r.fallback) setNote(`일부 문장은 규칙 문장으로 남김: ${r.fallback.reason}`);
+        if (r.fallback) setNote(`${refinedUsedCount(r) > 0 ? '일부 문장은 ' : ''}규칙 문장으로 남김: ${r.fallback.reason}`);
       }
     } catch (e) {
+      if (!seq.current.isLatest(id)) return;
       setNote(ai.onError(e));
     } finally {
-      setBusy(false);
+      if (seq.current.isLatest(id)) setBusy(false);
     }
   };
 

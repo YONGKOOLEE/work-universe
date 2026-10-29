@@ -7,7 +7,7 @@
 import type { AppState } from '../lib/types';
 import { S, type LlmClient } from './llm';
 import type { MapScope } from '../universe/derive';
-import { buildInsightInput, verifyRef, type AiInsightRef, type InsightInput } from './aiInsight';
+import { buildInsightInput, norm, verifyRef, type AiInsightRef, type InsightInput } from './aiInsight';
 
 export const OVERALL_MIN = 3; // 프롬프트가 요구하는 개수(검증 뒤 더 적을 수 있음)
 export const OVERALL_MAX = 5;
@@ -41,7 +41,7 @@ export const OVERALL_SYSTEM = [
   '규칙:',
   '1. 자료에 없는 내용을 지어내지 않습니다. 일반 상식·업계 관행으로 빈칸을 채우지 않습니다. 근거가 약하면 적게 냅니다(아예 없으면 빈 목록).',
   `2. ${OVERALL_MIN}~${OVERALL_MAX}개, 중요한 것부터. 한 업무 안에서만 성립하는 것은 쓰지 않습니다.`,
-  `3. 항목마다 evidence에 근거를 ${OVERALL_MIN_LINES}~${OVERALL_EVIDENCE_MAX}개 쓰고, 서로 다른 업무에서 가져온 줄이 둘 이상 되게 합니다. line은 [W-001#3]의 「W-001#3」을 그대로, quote는 그 줄의 원문을 글자 그대로 복사합니다(12~120자).`,
+  `3. 항목마다 evidence에 근거를 ${OVERALL_MIN_LINES}~${OVERALL_EVIDENCE_MAX}개 쓰고, 서로 다른 업무에서 가져온 줄이 둘 이상 되게 합니다. line은 [W-001#3]의 「W-001#3」을 그대로, quote는 그 줄의 원문을 글자 그대로 복사합니다(12~120자). 업무마다 인용문이 서로 달라야 하고, 줄 끝에 「(참고용·인용 불가)」가 붙은 줄(앱이 조립한 업무명·담당·갱신일·연결 업무 등)은 근거로 쓸 수 없습니다.`,
   '4. title은 25자 안팎 한 줄. insight는 무엇이 팀 전체에 흐르고 있는지 두세 문장. why는 이것이 팀에 왜 중요한지(인계 사고·지연·중복 같은 결과) 한두 문장. suggestion은 지금 할 수 있는 구체적인 다음 한 걸음 한 문장. 모두 개조식(~함, ~필요)으로 씁니다.',
   '5. 원문에 없는 날짜·기한·담당을 만들지 않습니다. 원문이 막연하면(예: 「10월 중」) 그대로 씁니다. 사람의 평가·징계를 암시하는 말은 쓰지 않습니다.',
 ].join('\n');
@@ -71,7 +71,8 @@ export function verifyOverall(raw: Raw, input: InsightInput): { items: OverallFi
     const evidence: AiInsightRef[] = [];
     for (const e of (f.evidence ?? []).slice(0, OVERALL_EVIDENCE_MAX + 2)) {
       const v = verifyRef({ ref: e?.line, quote: e?.quote }, input);
-      if (v && !evidence.some((x) => x.workId === v.workId && x.lineNo === v.lineNo)) evidence.push(v);
+      // 같은 줄은 한 번만, 다른 업무의 근거와 같은 인용문(정규화 후)이면 서로 다른 근거로 세지 않는다(상투 문구 돌려쓰기 방지)
+      if (v && !evidence.some((x) => (x.workId === v.workId && x.lineNo === v.lineNo) || norm(x.quote) === norm(v.quote))) evidence.push(v);
       if (evidence.length >= OVERALL_EVIDENCE_MAX) break;
     }
     const workIds = [...new Set(evidence.map((e) => e.workId))];

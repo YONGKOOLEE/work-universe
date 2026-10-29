@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Plus, Pencil, UserMinus, UserCheck, Trash2, UserRound } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { Button, Card, CardHead, Field, Mono, inputCls } from '../components/ui';
-import { addPerson, editPerson, removePerson, setPersonStatus, isLeft, type PersonInput } from '../lib/people';
+import { addPerson, editPerson, personPrivateMemoCount, removePerson, setPersonStatus, isLeft, type PersonInput } from '../lib/people';
 import { clone, cx } from '../lib/util';
 import type { AppState } from '../lib/types';
 import { OrgSection } from '../components/OrgSection';
@@ -14,9 +14,10 @@ export default function People() {
   const { raw, update, toast, me } = useStore();
   const [form, setForm] = useState<Form | null>(null);
   const [formErr, setFormErr] = useState('');
-  const [notice, setNotice] = useState<{ id: string; lines: string[]; kind: 'blocked' | 'left' } | null>(null);
+  const [notice, setNotice] = useState<{ id: string; lines: string[]; kind: 'blocked' | 'left' | 'confirm-left' | 'confirm-remove' } | null>(null);
 
   const orgList = orgTree(effectiveOrgs(raw));
+  const userNameOf = (id: string) => raw.users.find((u) => u.id === id)?.name ?? id;
   const ownedCount = (id: string) => raw.works.filter((w) => w.owners.includes(id)).length;
   const open = (u?: AppState['users'][number]) => {
     setFormErr('');
@@ -42,6 +43,11 @@ export default function People() {
     setForm(null);
   };
 
+  // 「전출·퇴직」은 확인 창을 먼저 띄운다(복귀는 바로)
+  const askLeft = (id: string) => {
+    const lines = raw.works.filter((w) => w.owners.includes(id)).map((w) => `${w.name} (${w.id})`);
+    setNotice({ id, kind: 'confirm-left', lines });
+  };
   const toggleStatus = (id: string, to: 'active' | 'left') => {
     const r = setPersonStatus(clone(raw), id, to);
     if (!r) return;
@@ -53,6 +59,13 @@ export default function People() {
     setNotice(to === 'left' && r.ownedWorks.length ? { id, kind: 'left', lines: r.ownedWorks.map((w) => `${w.name} (${w.id})`) } : null);
   };
 
+  // 지우기: 쓰인 곳이 있으면 막고, 없으면 확인 창(나만 보기 메모 건수 포함)을 띄운다
+  const askRemove = (id: string) => {
+    const r = removePerson(clone(raw), id);
+    if ('error' in r) return toast(r.error);
+    if ('blocked' in r) return setNotice({ id, kind: 'blocked', lines: r.blocked });
+    setNotice({ id, kind: 'confirm-remove', lines: [] });
+  };
   const remove = (id: string) => {
     const r = removePerson(clone(raw), id);
     if ('error' in r) return toast(r.error);
@@ -146,6 +159,47 @@ export default function People() {
                 </Button>
               </div>
             </>
+          ) : notice.kind === 'confirm-left' ? (
+            <div data-testid="people-confirm-left">
+              <p className="font-semibold">{userNameOf(notice.id)}을(를) 전출·퇴직으로 표시할까요?</p>
+              {notice.lines.length > 0 ? (
+                <>
+                  <p className="mt-1 text-muted">이 사람이 담당한 업무 {notice.lines.length}건:</p>
+                  <ul className="mt-1 list-disc pl-5 text-muted">
+                    {notice.lines.map((l) => (
+                      <li key={l}>{l}</li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <p className="mt-1 text-muted">이 사람이 담당한 업무는 없습니다.</p>
+              )}
+              <p className="mt-2 text-muted">담당은 자동으로 바뀌지 않습니다 — 업무 인계 관리에서 넘기세요. 「복귀」로 되돌릴 수 있습니다.</p>
+              <div className="mt-2 flex gap-2">
+                <Button size="sm" variant="primary" onClick={() => toggleStatus(notice.id, 'left')} data-testid="people-confirm-left-ok">
+                  전출·퇴직으로 표시
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setNotice(null)}>
+                  취소
+                </Button>
+              </div>
+            </div>
+          ) : notice.kind === 'confirm-remove' ? (
+            <div data-testid="people-confirm-remove">
+              <p className="font-semibold">{userNameOf(notice.id)}을(를) 지울까요?</p>
+              <p className="mt-1 text-muted">
+                {personPrivateMemoCount(raw, notice.id) > 0 ? `이 사람이 쓴 「나만 보기」 메모 ${personPrivateMemoCount(raw, notice.id)}건도 함께 지워집니다. ` : '이 사람이 쓴 「나만 보기」 메모는 없습니다. '}
+                지운 사람은 되돌릴 수 없습니다.
+              </p>
+              <div className="mt-2 flex gap-2">
+                <Button size="sm" variant="danger" onClick={() => remove(notice.id)} data-testid="people-confirm-remove-ok">
+                  지우기
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setNotice(null)}>
+                  취소
+                </Button>
+              </div>
+            </div>
           ) : (
             <>
               <p className="font-semibold">담당을 먼저 넘기세요 — 이 사람이 아직 담당인 업무가 있습니다.</p>
@@ -220,12 +274,12 @@ export default function People() {
                           복귀
                         </Button>
                       ) : (
-                        <Button size="sm" disabled={isMe} title={isMe ? '지금 사용 중인 사람은 바꿀 수 없습니다' : undefined} onClick={() => toggleStatus(u.id, 'left')} data-testid="people-left">
+                        <Button size="sm" disabled={isMe} title={isMe ? '지금 사용 중인 사람은 바꿀 수 없습니다' : undefined} onClick={() => askLeft(u.id)} data-testid="people-left">
                           <UserMinus size={12} />
                           전출·퇴직
                         </Button>
                       )}
-                      <Button size="sm" variant="danger" disabled={isMe} title={isMe ? '지금 사용 중인 사람은 지울 수 없습니다' : undefined} onClick={() => remove(u.id)} data-testid="people-remove">
+                      <Button size="sm" variant="danger" disabled={isMe} title={isMe ? '지금 사용 중인 사람은 지울 수 없습니다' : undefined} onClick={() => askRemove(u.id)} data-testid="people-remove">
                         <Trash2 size={12} />
                         지우기
                       </Button>

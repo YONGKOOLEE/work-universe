@@ -26,6 +26,10 @@ export default function UniversePage() {
   const defaultScope = lead && chain.length ? `org:${(chain[1] ?? chain[0]).o.id}` : 'mine';
   const [scope, setScope] = useState<Scope>(defaultScope);
   useEffect(() => setScope(defaultScope), [me.id, lead]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 조직 명령으로 자동 팀(auto: ID)이 저장된 조직(O-###)으로 바뀌면 고른 범위가 없는 ID가 된다 — 「전체」로 되돌린다
+  useEffect(() => {
+    if (scope.startsWith('org:') && !effectiveOrgs(s).some((o) => o.id === scope.slice(4))) setScope(topAll ? `org:${chain[chain.length - 1].o.id}` : 'all');
+  }, [scope, s, topAll, chain]);
   const mapScope: MapScope = useMemo(() => {
     if (scope === 'mine') return { kind: 'mine', userId: me.id };
     if (scope.startsWith('org:') && effectiveOrgs(s).some((o) => o.id === scope.slice(4))) return { kind: 'org', orgId: scope.slice(4) };

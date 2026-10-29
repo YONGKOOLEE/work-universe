@@ -123,10 +123,13 @@ export default function WorkDetail({ id }: { id: string }) {
                 업무정보 수정
               </Button>
             )}
-            <Button variant="subtle" onClick={() => nav(`/handover?new=${w.id}`)}>
-              <ArrowRightLeft size={14} />
-              인계 시작
-            </Button>
+            {/* 남의 업무(읽기 전용)는 흐리게 하고 이유를 보인다(처음 사용 점검 M-10) */}
+            <span title={ro ? '지금 담당자(또는 팀장)만 인계를 시작할 수 있습니다. 담당자에게 요청하세요.' : undefined}>
+              <Button variant="subtle" disabled={ro} onClick={() => nav(`/handover?new=${w.id}`)} data-testid="work-handover-start">
+                <ArrowRightLeft size={14} />
+                인계 시작
+              </Button>
+            </span>
           </div>
         </div>
         {ro && (

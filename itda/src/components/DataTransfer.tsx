@@ -4,7 +4,7 @@ import { useStore, parseBackup } from '../lib/store';
 import { Button, Modal } from './ui';
 import { cx, localDay } from '../lib/util';
 import type { AppState } from '../lib/types';
-import { applyMerge, planMerge, previewCounts, conflictKey, type ConflictChoice, type MergeChoices } from '../lib/mergeImport';
+import { applyMerge, planMerge, previewCounts, conflictKey, defaultSamePerson, resolveWorks, skippedLine, exportBackupState, replaceKeepingOtherMemos, type ConflictChoice, type MergeChoices } from '../lib/mergeImport';
 
 /** 데이터 옮기기 — 다른 PC·브라우저·동료와는 저장소가 달라 데이터가 공유되지 않으므로 백업 파일로 이동(바꿔 불러오기·합쳐 불러오기) */
 export function DataTransfer({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -13,17 +13,19 @@ export function DataTransfer({ open, onClose }: { open: boolean; onClose: () => 
   const [text, setText] = useState('');
   const [err, setErr] = useState('');
   const [pending, setPending] = useState<AppState | null>(null);
-  const [mode, setMode] = useState<'replace' | 'merge'>('replace');
+  const [mode, setMode] = useState<'replace' | 'merge'>('merge');
+  const [confirmReplace, setConfirmReplace] = useState(false);
   const [choices, setChoices] = useState<MergeChoices>({});
   const fileRef = useRef<HTMLInputElement>(null);
   const outRef = useRef<HTMLTextAreaElement>(null);
-  const json = open && tab === 'export' ? JSON.stringify(raw) : '';
+  const json = open && tab === 'export' ? JSON.stringify(exportBackupState(raw)) : ''; // 「나만 보기」 메모는 지금 사용자의 것만
 
   const close = () => {
     setText('');
     setErr('');
     setPending(null);
     setChoices({});
+    setConfirmReplace(false);
     onClose();
   };
   const save = () => {
@@ -55,6 +57,7 @@ export function DataTransfer({ open, onClose }: { open: boolean; onClose: () => 
     setErr('');
     setPending(null);
     setChoices({});
+    setConfirmReplace(false);
     if (!t.trim()) return;
     try {
       setPending(parseBackup(t));
@@ -66,13 +69,15 @@ export function DataTransfer({ open, onClose }: { open: boolean; onClose: () => 
   const plan = useMemo(() => (pending && mode === 'merge' ? planMerge(raw, pending) : null), [pending, mode, raw]);
   const counts = plan && pending ? previewCounts(raw, pending, plan, choices) : null;
   const sameOf = (id: string, def: boolean) => choices.people?.[id] ?? def;
-  const mergeOf = (id: string, def: boolean) => choices.works?.[id] ?? def;
+  // 실제로 합쳐질 업무(들어온 ID → 지금 업무 ID). 한 지금 업무에는 하나만 합쳐지므로 화면 값도 이 표를 따른다
+  const wm = useMemo(() => (plan ? resolveWorks(plan, choices) : new Map<string, string>()), [plan, choices]);
+  const setTarget = (id: string, cid: string) => setChoices((c) => ({ ...c, targets: { ...c.targets, [id]: cid } }));
   const setPerson = (id: string, v: boolean) => setChoices((c) => ({ ...c, people: { ...c.people, [id]: v } }));
   const setWork = (id: string, v: boolean) => setChoices((c) => ({ ...c, works: { ...c.works, [id]: v } }));
 
   const setField = (key: string, v: ConflictChoice) => setChoices((c) => ({ ...c, fields: { ...c.fields, [key]: v } }));
   // 다른 칸: 합치기로 정해진 업무만(후보는 합치기를 골랐을 때만 보임)
-  const shown = plan ? plan.conflicts.filter((c) => mergeOf(c.incomingWorkId, plan.works.find((w) => w.incomingId === c.incomingWorkId)?.status === 'same')) : [];
+  const shown = plan ? plan.conflicts.filter((c) => wm.get(c.incomingWorkId) === c.currentWorkId) : [];
 
   return (
     <Modal open={open} onClose={close} title="데이터 옮기기 (백업 · 불러오기)">
@@ -91,6 +96,7 @@ export function DataTransfer({ open, onClose }: { open: boolean; onClose: () => 
           <p className="text-[13px]">
             업무 <b>{raw.works.length}</b>건 · 문서 <b>{raw.docs.length}</b>건 · 타임라인 이벤트 <b>{raw.events.length}</b>건 · 인계 <b>{raw.handovers.length}</b>건
           </p>
+          <p className="text-2xs text-faint" data-testid="export-memo-note">다른 사람의 나만 보기 메모는 파일에 넣지 않습니다</p>
           <div className="flex flex-wrap gap-2">
             <Button onClick={save}>
               <Download size={14} /> 백업 파일 저장
@@ -156,17 +162,29 @@ export function DataTransfer({ open, onClose }: { open: boolean; onClose: () => 
               </p>
               <p className="mt-1 truncate text-2xs text-muted">{pending.works.map((w) => w.name).join(', ')}</p>
               <p className="mt-2 text-xs text-warn">지금 이 화면의 데이터는 불러온 데이터로 바뀜 (필요하면 먼저 '내보내기'로 백업)</p>
+              {confirmReplace && (
+                <p className="mt-2 text-xs font-medium text-danger" data-testid="replace-confirm-note">
+                  정말 바꿀까요? 지금 데이터는 되돌릴 수 없습니다(다른 사용자의 나만 보기 메모는 이 브라우저에 남습니다).
+                </p>
+              )}
               <div className="mt-2 flex gap-2">
-                <Button
-                  onClick={() => {
-                    replace(pending);
-                    toast('데이터를 불러왔습니다');
-                    close();
-                  }}
-                >
-                  불러오기
-                </Button>
-                <Button variant="ghost" onClick={() => setPending(null)}>
+                {confirmReplace ? (
+                  <Button
+                    data-testid="replace-confirm"
+                    onClick={() => {
+                      replace(replaceKeepingOtherMemos(raw, pending));
+                      toast('데이터를 불러왔습니다');
+                      close();
+                    }}
+                  >
+                    바꿔서 불러오기
+                  </Button>
+                ) : (
+                  <Button data-testid="replace-start" onClick={() => setConfirmReplace(true)}>
+                    불러오기
+                  </Button>
+                )}
+                <Button variant="ghost" onClick={() => (confirmReplace ? setConfirmReplace(false) : setPending(null))}>
                   취소
                 </Button>
               </div>
@@ -189,7 +207,7 @@ export function DataTransfer({ open, onClose }: { open: boolean; onClose: () => 
                         <select
                           aria-label={`${p.name} 사람 맞춤`}
                           data-testid={`merge-person-${p.incomingId}`}
-                          value={sameOf(p.incomingId, p.status === 'same') ? 'same' : 'other'}
+                          value={sameOf(p.incomingId, defaultSamePerson(p)) ? 'same' : 'other'}
                           onChange={(e) => setPerson(p.incomingId, e.target.value === 'same')}
                           className="rounded border border-line2 bg-surface px-1.5 py-1"
                         >
@@ -210,18 +228,34 @@ export function DataTransfer({ open, onClose }: { open: boolean; onClose: () => 
                       <span className="min-w-0 flex-1 truncate">{w.name}</span>
                       {w.status === 'candidate' && (
                         <span className="w-full rounded bg-warnsoft px-1.5 py-0.5 text-2xs text-warn" data-testid={`merge-work-reason-${w.incomingId}`}>
-                          비슷한 업무 후보 · 점수 {w.score} — {w.reason}. 같은 업무인지 확인 후 고르세요
+                          {w.options ? `${w.reason}. 어느 업무와 같은지 확인 후 고르세요(기본은 따로 두기)` : `비슷한 업무 후보 · 점수 ${w.score} — ${w.reason}. 같은 업무인지 확인 후 고르세요`}
                         </span>
+                      )}
+                      {w.dupOf && (
+                        <span className="w-full rounded bg-warnsoft px-1.5 py-0.5 text-2xs text-warn" data-testid={`merge-work-dup-${w.incomingId}`}>
+                          주의 · 앞의 업무가 같은 지금 업무({w.currentName})로 합쳐질 수 있어 이 업무는 기본 따로 두기 — 합치면 내용 일부가 버려질 수 있음
+                        </span>
+                      )}
+                      {w.options && (
+                        <select aria-label={`${w.name} 합칠 업무`} data-testid={`merge-target-${w.incomingId}`} value={choices.targets?.[w.incomingId] ?? w.currentId} onChange={(e) => setTarget(w.incomingId, e.target.value)} className="rounded border border-line2 bg-surface px-1.5 py-1">
+                          {w.options.map((o) => (
+                            <option key={o.id} value={o.id}>
+                              {o.id} · {o.name}
+                            </option>
+                          ))}
+                        </select>
                       )}
                       {w.currentId ? (
                         <select
                           aria-label={`${w.name} 업무 맞춤`}
                           data-testid={`merge-work-${w.incomingId}`}
-                          value={mergeOf(w.incomingId, w.status === 'same') ? 'merge' : 'separate'}
+                          value={wm.has(w.incomingId) ? 'merge' : 'separate'}
                           onChange={(e) => setWork(w.incomingId, e.target.value === 'merge')}
                           className="rounded border border-line2 bg-surface px-1.5 py-1"
                         >
-                          <option value="merge">합치기 (지금 업무: {w.currentName})</option>
+                          <option value="merge" disabled={!wm.has(w.incomingId) && [...wm.values()].includes(choices.targets?.[w.incomingId] ?? w.currentId ?? '')}>
+                            합치기 (지금 업무: {w.options?.find((o) => o.id === (choices.targets?.[w.incomingId] ?? w.currentId))?.name ?? w.currentName})
+                          </option>
                           <option value="separate">따로 두기</option>
                         </select>
                       ) : (
@@ -289,6 +323,11 @@ export function DataTransfer({ open, onClose }: { open: boolean; onClose: () => 
               <p className="rounded bg-surface px-2 py-1.5 text-xs">
                 추가될 내용: 사람 <b>{counts.users}</b>명 · 업무 <b>{counts.works}</b>건 (합침 {counts.worksMerged}건) · 문서 <b>{counts.docs}</b>건 · 결정 <b>{counts.decisions}</b>건 · 조치 <b>{counts.actions}</b>건 · 인계 <b>{counts.handovers}</b>건{counts.orgs > 0 && <> · 조직 <b>{counts.orgs}</b>개 추가</>}
               </p>
+              {skippedLine(plan.skipped) && (
+                <p className="text-2xs text-warn" data-testid="merge-skipped">
+                  {skippedLine(plan.skipped)}
+                </p>
+              )}
               <p className="text-2xs text-faint">같은 업무로 합칠 때 지금 업무의 내용이 우선이고, 비어 있는 항목은 채움(다른 칸은 위에서 고른 대로). 같은 제목·작성일 문서와 같은 결정·조치는 한 번만 들어감 (필요하면 먼저 '내보내기'로 백업)</p>
               <div className="flex gap-2">
                 <Button

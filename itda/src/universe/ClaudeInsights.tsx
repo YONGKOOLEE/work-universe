@@ -5,6 +5,8 @@ import { Loader2, Quote, Sparkles } from 'lucide-react';
 import { cx } from '../lib/util';
 import type { AppState } from '../lib/types';
 import { useAI } from '../ai/claude';
+import { insightCacheKey } from '../ai/llm';
+import { useStore } from '../lib/store';
 import { AI_INSIGHT_NAMES, buildInsightInput, claudeInsights, type AiInsight, type AiInsightResult } from '../ai/aiInsight';
 import type { MapScope } from './derive';
 import { evidenceGids, type Insight } from './insights';
@@ -17,14 +19,22 @@ const cache = new Map<string, { fp: string; result: AiInsightResult }>();
 export function useClaudeInsights(s: AppState, scope: MapScope, asOf: string) {
   const ai = useAI();
   const available = ai.engine === 'claude' && !!ai.client;
-  const scopeKey = `${JSON.stringify(scope)}|${ai.model}`;
+  const { me } = useStore();
+  const scopeKey = insightCacheKey(scope, ai.model, me.id); // 사용자별로 나눈다 — 다른 사용자에게 남의 미확정 인계가 보이지 않게(M-2)
   const fp = useMemo(() => (available ? fingerprint(buildInsightInput(s, scope, asOf).user) : ''), [available, s, scope, asOf]);
   const [st, setSt] = useState<{ running: boolean; error: string; tick: number }>({ running: false, error: '', tick: 0 });
   const ctl = useRef<AbortController | null>(null);
+  // 범위·사용자·모델이 바뀌면 진행 중인 호출을 끊고 상태를 비운다
   useEffect(() => {
     ctl.current?.abort();
     setSt((x) => ({ running: false, error: '', tick: x.tick + 1 }));
   }, [scopeKey]);
+  // 엔진이 바뀌면(규칙·사내로, 또는 키 거부로 규칙으로 내려가면) 진행 중인 호출을 끊는다 — 끊긴 결과는 캐시·화면에 넣지 않는다(M-4).
+  // 오류 문구는 지우지 않는다(키 거부 직후 엔진이 바뀌어도 그 안내가 남아야 한다)
+  useEffect(() => {
+    ctl.current?.abort();
+    setSt((x) => (x.running ? { ...x, running: false } : x));
+  }, [ai.engine]);
   useEffect(() => () => ctl.current?.abort(), []);
   const run = useCallback(async () => {
     if (!ai.client || !available) return;
@@ -48,7 +58,7 @@ export function useClaudeInsights(s: AppState, scope: MapScope, asOf: string) {
     setSt((x) => ({ ...x, running: false }));
   };
   const hit = cache.get(scopeKey);
-  return { available, keyButRule: !available && ai.status === 'available', internal: ai.preferred === 'internal', running: st.running, error: st.error, result: hit?.result ?? null, stale: !!hit && hit.fp !== fp, run, cancel };
+  return { available, keyButRule: !available && ai.status === 'available', denied: ai.status === 'denied', internal: ai.preferred === 'internal', running: st.running, error: st.error, result: hit?.result ?? null, stale: !!hit && hit.fp !== fp, run, cancel };
 }
 
 export function ClaudeInsights({ data, scope, asOf, focusId, onFocus }: { data: AppState; scope: MapScope; asOf: string; focusId: string | null; onFocus: (x: Insight | null) => void }) {
@@ -57,9 +67,21 @@ export function ClaudeInsights({ data, scope, asOf, focusId, onFocus }: { data: 
   const [open, setOpen] = useState<number | null>(null);
   if (!c.available)
     return (
-      <p className="mt-3 border-t border-line pt-2 text-2xs text-faint" data-testid="insight-claude-hint">
-        {c.internal ? '사내 LLM은 연결할 자리만 있어 지금은 규칙 인사이트만 보입니다. 상단 AI 엔진에서 Claude를 고르면(본인 키 필요)' : c.keyButRule ? '상단 AI 엔진에서 Claude를 고르면' : '상단 「AI 설정」에 본인 Claude API 키를 넣으면'} AI가 업무 기록을 읽고 규칙이 못 보는 위험(숨은 의존·기한 몰림·한 사람만 아는 절차 등)을 더 찾고, 팀 전체를 관통하는 인사이트도 뽑습니다.
-      </p>
+      <div className="mt-3 border-t border-line pt-2" data-testid="insight-claude-fallback">
+        {/* 키 거부 직후에는 엔진이 규칙으로 내려가 이 안내만 남는다 — 방금 난 오류 문구가 힌트에 가려지지 않게 먼저 보인다 */}
+        {c.error && <p className="mb-1 text-[12.5px] text-warn" data-testid="claude-insight-error">AI 인사이트를 찾지 못했습니다: {c.error} 위의 규칙 인사이트는 그대로 쓸 수 있습니다.</p>}
+        {o.error && o.error !== c.error && <p className="mb-1 text-[12.5px] text-warn" data-testid="claude-overall-error">Claude 전체 인사이트를 찾지 못했습니다: {o.error}</p>}
+        <p className="text-2xs text-faint" data-testid="insight-claude-hint">
+          {c.denied
+            ? '키가 거부되어 지금은 규칙 인사이트만 보입니다. 상단 「AI 설정」에서 키를 지우거나 새 키를 넣으면'
+            : c.internal
+              ? '사내 AI는 아직 연결되지 않아 지금은 규칙 인사이트만 보입니다. 상단 AI 엔진에서 Claude를 고르면(본인 키 필요)'
+              : c.keyButRule
+                ? '상단 AI 엔진에서 Claude를 고르면'
+                : '상단 「AI 설정」에 본인 Claude API 키를 넣으면'}{' '}
+          AI가 업무 기록을 읽고 규칙이 못 보는 위험(숨은 의존·기한 몰림·한 사람만 아는 절차 등)을 더 찾고, 팀 전체를 관통하는 인사이트도 뽑습니다.
+        </p>
+      </div>
     );
   const r = c.result;
   const focusOf = (x: AiInsight, i: number): Insight => ({ id: `claude:${i}`, kind: 'claude', level: x.level, title: x.title, detail: x.detail, workIds: x.workIds, userIds: x.userIds, evidence: evidenceGids(data, scope, x.workIds, x.userIds) });

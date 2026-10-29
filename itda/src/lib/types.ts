@@ -81,6 +81,7 @@ export interface Work {
   partners: Partner[];
   nextIds: string[]; // 이 업무 다음에 오는 업무 ID들 (선후행)
   topics: string[]; // 주제 이름들
+  importedFrom?: string[]; // 합쳐 불러오기로 들어온 원본 표시(`원본ID|정규화 이름`) — 다음 불러오기에서 이 업무로 맞춘다
 }
 
 export interface OwnerPeriod {

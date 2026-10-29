@@ -70,7 +70,7 @@ export default function DocDetail({ id }: { id: string }) {
                     </button>
                   ))
                 ) : (
-                  <span className="text-muted">{d.analyzed ? '없음 (AI 판단)' : '미연결'}</span>
+                  <span className="text-muted">{d.analyzed ? (d.analyzedBy === 'claude' ? '없음 (AI 판단)' : '없음 (규칙 판단)') : '미연결'}</span>
                 )}
               </KV>
             </dl>
@@ -107,7 +107,7 @@ export default function DocDetail({ id }: { id: string }) {
                     <button onClick={() => nav(`/docs/${r.targetId}`)} className="w-full px-4 py-2.5 text-left hover:bg-sunken/60">
                       <div className="flex items-center gap-1.5">
                         <span className="rounded bg-navy px-1.5 text-2xs font-semibold text-surface">{r.type}</span>
-                        <ProvChip prov={r.basis === 'fact' ? 'fact' : 'inference'} />
+                        <ProvChip prov={r.basis === 'fact' ? 'fact' : 'inference'} label={r.basis !== 'fact' && d.analyzedBy !== 'claude' ? '규칙 추정' : undefined} />
                       </div>
                       <div className="mt-1 text-[13px] font-medium">{t?.title ?? r.targetId}</div>
                       <div className="text-2xs text-muted">{r.note}</div>
@@ -166,7 +166,7 @@ export default function DocDetail({ id }: { id: string }) {
           )}
         </Card>
       </div>
-      {canRe && <DocReanalyzeModal open={reOpen} onClose={() => { setReOpen(false); if (wantRe) nav(`/docs/${d.id}`); }} docId={d.id} />}
+      {canRe && <DocReanalyzeModal key={d.id} open={reOpen} onClose={() => { setReOpen(false); if (wantRe) nav(`/docs/${d.id}`); }} docId={d.id} />}
     </div>
   );
 }

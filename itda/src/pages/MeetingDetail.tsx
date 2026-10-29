@@ -84,7 +84,7 @@ function MeetingDoc({ docId }: { docId: string }) {
             </dl>
           </Card>
           <Card>
-            <CardHead icon={<Sparkles size={16} />} title="AI 요약" right={d.summary.length ? <ProvChip prov="inference" /> : undefined} />
+            <CardHead icon={<Sparkles size={16} />} title={d.analyzedBy === 'claude' ? 'AI 요약(Claude)' : '요약(규칙 기반)'} right={d.summary.length ? (d.analyzedBy === 'claude' ? <ProvChip prov="inference" /> : <span className="rounded bg-sunken px-1.5 text-2xs font-semibold text-muted">규칙 기반</span>) : undefined} />
             <div className="px-4 py-3 text-[13px]">
               {d.summary.length ? (
                 <ol className="list-decimal space-y-1 pl-4">
@@ -93,7 +93,7 @@ function MeetingDoc({ docId }: { docId: string }) {
                   ))}
                 </ol>
               ) : (
-                <p className="text-muted">AI 요약 없음</p>
+                <p className="text-muted">요약 없음</p>
               )}
             </div>
           </Card>

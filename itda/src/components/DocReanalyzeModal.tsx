@@ -28,6 +28,7 @@ export function DocReanalyzeModal({ open, onClose, docId }: { open: boolean; onC
 
   const reset = () => {
     ctl.current?.abort();
+    ctl.current = null; // 취소한 뒤 늦게 도착한 결과가 상태를 다시 채우지 못하게(run이 ctl.current와 비교)
     setBusy(false);
     setMsg('');
     setExt(null);
@@ -38,6 +39,10 @@ export function DocReanalyzeModal({ open, onClose, docId }: { open: boolean; onC
     if (!open) reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+  // 엔진이 바뀌면(규칙·사내로) 진행 중인 Claude 호출을 끊는다 — run이 「취소됨」으로 마무리한다(M-4)
+  useEffect(() => {
+    ctl.current?.abort();
+  }, [ai.engine]);
   const close = () => {
     reset();
     onClose();
@@ -52,9 +57,18 @@ export function DocReanalyzeModal({ open, onClose, docId }: { open: boolean; onC
     setMsg('');
     setExt(null);
     setProps([]);
-    ctl.current = new AbortController();
+    const c = new AbortController();
+    ctl.current = c;
     const md = analyzeDocument(s, doc.title, paras.map((p) => p.text).join('\n'), doc.writtenAt);
-    const { result, msg: m } = await runExtraction(ai, s, doc.title, paras, def, doc.writtenAt, ctl.current.signal, { review: careful, onStage: setStage });
+    const out = await runExtraction(ai, s, doc.title, paras, def, doc.writtenAt, c.signal, { review: careful, onStage: setStage });
+    if (ctl.current !== c) return; // 창을 닫거나 다시 시작해 이 분석은 버려졌다 — 늦게 온 결과를 쓰지 않는다
+    if (out.cancelled) {
+      // 취소(분석 중지·엔진 변경)는 규칙 결과로 대체하지 않고 「취소됨」으로 끝낸다
+      setMsg(out.msg);
+      setBusy(false);
+      return;
+    }
+    const { result, msg: m } = out;
     if (!result.keywords.length) result.keywords = md.keywords;
     // 이 문서에 연결된 내 업무로만 반영 — 그 밖의 업무가 지목되면 기본 업무로 돌린다
     const ids = new Set(myWorks.map((w) => w.id));
@@ -112,16 +126,23 @@ export function DocReanalyzeModal({ open, onClose, docId }: { open: boolean; onC
               </Button>
             </>
           )}
-          <Button variant="primary" onClick={apply} disabled={!ext || busy} data-testid="reanalyze-apply">
-            반영{approved.length ? ` · ${approved.length}건` : ''}
-          </Button>
+          {/* 새로 반영할 항목이 하나도 없으면 「반영」 대신 「닫기」를 기본 단추로 둔다 */}
+          {ext && !busy && props.length === 0 ? (
+            <Button variant="primary" onClick={close} data-testid="reanalyze-done">
+              닫기
+            </Button>
+          ) : (
+            <Button variant="primary" onClick={apply} disabled={!ext || busy} data-testid="reanalyze-apply">
+              반영{approved.length ? ` · ${approved.length}건` : ''}
+            </Button>
+          )}
         </>
       }
     >
       <div className="space-y-4">
         <p className="flex flex-wrap items-center gap-2 text-[13px]">
           분석 엔진:
-          {ai.engine === 'claude' ? (
+          {(ext?.engine ?? ai.engine) === 'claude' ? (
             <span className="inline-flex items-center gap-1 rounded bg-brandsoft px-1.5 text-2xs font-semibold text-brand">
               <Bot size={11} />
               Claude 분석

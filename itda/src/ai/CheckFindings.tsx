@@ -23,6 +23,11 @@ export function useClaudeCheck(s: AppState, workId: string) {
     ctl.current?.abort();
     setSt({ running: false, result: null, error: '' });
   }, [workId]);
+  // 엔진이 바뀌면(규칙·사내로) 진행 중인 호출을 끊는다. 끊긴 결과는 화면에도 이력에도 쓰이지 않는다(run이 null을 돌려줌) — 오류 문구는 그대로 둔다(M-4)
+  useEffect(() => {
+    ctl.current?.abort();
+    setSt((x) => (x.running ? { ...x, running: false } : x));
+  }, [ai.engine]);
   useEffect(() => () => ctl.current?.abort(), []);
   const run = useCallback(async (): Promise<CheckResult | null> => {
     if (!ai.client || ai.engine !== 'claude') return null;

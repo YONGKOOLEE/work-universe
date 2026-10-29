@@ -1,23 +1,22 @@
 // AI 엔진 선택(CR-24 D24-9): 본인 API 키가 있으면 Claude, 없으면 규칙 기반.
 // 이전의 claude.ai 게시 페이지 방식(window.claude.use('sample'))은 뺐다(사용자 결정 U-6).
 import React, { createContext, useContext, useMemo, useState } from 'react';
-import { createClient, DEFAULT_MODEL, errorText as llmErrorText, loadKey, saveKey, type LlmClient } from './llm';
+import { createClient, DEFAULT_MODEL, errorText as llmErrorText, keyStatusOf, loadKey, saveKey, type KeyStatus, type LlmClient } from './llm';
 // @ts-expect-error 업무 유니버스 공급자(JS) — 근거 칩 문장 다듬기(refineDraftAsync)에 쓴다
 import { createProvider } from '../../../app/src/llm/providers.js';
 
 export type Engine = 'claude' | 'mock';
-/** 고르는 엔진: 규칙 / Claude / 사내 LLM(업무 유니버스처럼 자리만 — 고르면 규칙으로 동작, 사용자 결정 2026-10-29) */
+/** 고르는 엔진: 규칙 / Claude / 사내 AI(업무 유니버스처럼 자리만 — 고르면 규칙으로 동작, 사용자 결정 2026-10-29) */
 export type EnginePref = Engine | 'internal';
-export const ENGINE_LABELS: Record<EnginePref, string> = { mock: '규칙', claude: 'Claude', internal: '사내 LLM' };
-export const INTERNAL_NOTICE = '사내 LLM은 연결할 자리만 있습니다(사용 방법이 정해지면 연결). 지금은 규칙 기반으로 동작하며 밖으로 보내는 것이 없습니다.';
-type Status = 'available' | 'unavailable';
+export const ENGINE_LABELS: Record<EnginePref, string> = { mock: '규칙', claude: 'Claude', internal: '사내 AI' };
+export const INTERNAL_NOTICE = '사내 AI는 아직 연결되지 않았습니다. 지금은 규칙으로 동작하며 밖으로 보내는 것이 없습니다.';
 
 interface AICtx {
   engine: Engine; // 실제로 쓸 엔진
   preferred: EnginePref;
-  status: Status; // 키가 있으면 available
-  client: LlmClient | null;
-  universeProvider: any; // 업무 유니버스 연결부용 Claude 공급자(키가 있을 때만)
+  status: KeyStatus; // 키 상태: available(키 있음) / denied(키가 거부됨 — 저장소에는 남아 있어 지울 수 있음) / none(키 없음)
+  client: LlmClient | null; // engine이 claude일 때만 값이 있다(L-3) — 키 유무는 status로 본다
+  universeProvider: any; // 업무 유니버스 연결부용 Claude 공급자(engine이 claude일 때만)
   model: string;
   setPreferred: (e: EnginePref) => void;
   /** 키 저장(빈 값이면 지움). 키는 이 브라우저 저장소에만 둔다 */
@@ -40,15 +39,17 @@ export function AIProvider({ children }: { children: React.ReactNode }) {
       return 'claude';
     }
   });
-  const client = useMemo(() => (key && !denied ? createClient(key, model || DEFAULT_MODEL) : null), [key, model, denied]);
-  const universeProvider = useMemo(() => (key && !denied ? createProvider('claude_api', { apiKey: key, model: model || DEFAULT_MODEL }) : null), [key, model, denied]);
+  const keyClient = useMemo(() => (key && !denied ? createClient(key, model || DEFAULT_MODEL) : null), [key, model, denied]);
+  const keyProvider = useMemo(() => (key && !denied ? createProvider('claude_api', { apiKey: key, model: model || DEFAULT_MODEL }) : null), [key, model, denied]);
+  const engine: Engine = preferred === 'claude' && keyClient ? 'claude' : 'mock';
   const value = useMemo<AICtx>(
     () => ({
-      engine: preferred === 'claude' && client ? 'claude' : 'mock',
+      engine,
       preferred,
-      status: client ? 'available' : 'unavailable',
-      client,
-      universeProvider,
+      status: keyStatusOf(key, denied),
+      // 규칙·사내를 고른 상태에서는 Claude 호출 수단을 내놓지 않는다(호출 지점이 engine 확인을 빠뜨려도 밖으로 나가지 않게)
+      client: engine === 'claude' ? keyClient : null,
+      universeProvider: engine === 'claude' ? keyProvider : null,
       model: model || DEFAULT_MODEL,
       setPreferred: (e) => {
         setPref(e);
@@ -69,7 +70,7 @@ export function AIProvider({ children }: { children: React.ReactNode }) {
         return llmErrorText(e);
       },
     }),
-    [preferred, client, universeProvider, model, key],
+    [engine, preferred, keyClient, keyProvider, model, key, denied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
