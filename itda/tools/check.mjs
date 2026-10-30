@@ -92,6 +92,8 @@ const mapReady = 'window.__h.nodes() > 0';
 const results = [];
 const detail = (...a) => a.join(' ');
 async function check(name, fn, { keepState = false } = {}) {
+  // CHECK_ONLY=20 처럼 번호를 주면 그 점검만 돌린다(개발 중 빠른 확인용). 비우면 전부
+  if (process.env.CHECK_ONLY && !process.env.CHECK_ONLY.split(',').some((x) => name.startsWith(x.trim()))) return;
   const start = logs.length;
   let ok = true, note = '';
   try {
@@ -761,6 +763,336 @@ try {
     await must(await ev(`!document.querySelector('[data-testid="doc-delete"]')`), '고칠 수 없는 사람에게 문서 삭제 단추가 보임(박지훈·D-105)');
     await must(await H(`user('김도윤')`), '김도윤 복귀 실패');
     return `저장 결과: ${saved.slice(0, 60)} · 매뉴얼 문서 찾기 ${docHit ? '이동' : '범위 밖'} · 김도윤 막힘: ${blocked.slice(0, 50)} · 박지훈 삭제 영향: ${impact.slice(0, 90)}`;
+  });
+
+  // 20
+  await check('20 AI 비서: 고객 18명·상세·수정·이력 복원·브리핑·미팅 후 질문·예시 분석·묻기·권한·유지·백업 왕복', async () => {
+    const notes = [];
+    const esc = () => ev(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true })); true`);
+    const q = (sel) => ev(`document.querySelectorAll(${JSON.stringify(sel)}).length`);
+    const txt = (sel) => ev(`(document.querySelector(${JSON.stringify(sel)})?.innerText || '').replace(/\\s+/g, ' ')`);
+    const tab = async (label) => { await must(await H(`click('[data-testid="asst-detail"] button[role="tab"]', ${JSON.stringify(label)})`), `탭 없음: ${label}`); await sleep(350); };
+    const reloadPage = async () => {
+      await cdp.send('Page.reload');
+      await sleep(300);
+      await wait('document.readyState === "complete" && !!document.getElementById("user-switch")', 15000);
+      await ev(HELPERS);
+    };
+
+    // 1) 메뉴·오늘 화면·고객 18명
+    await must(await H(`click('nav a', 'AI 비서')`), '왼쪽 메뉴에 AI 비서가 없음');
+    await must(await wait(`location.hash.startsWith('#/assistant') && !!document.querySelector('[data-testid="asst-today"]')`, 4000), '오늘 화면이 안 열림');
+    const unread = await txt('[data-testid="asst-nav-unread"]');
+    await must(Number(unread) > 0, `메뉴에 안 읽은 알림 수가 없음(${unread})`);
+    await must((await q('[data-testid="asst-today-recs"]')) === 1 && (await ev(`window.__h.has('규칙 기반')`)), '다음 할 일 추천·「규칙 기반」 표시 없음');
+    await must((await q('[data-testid="asst-notice"]')) > 0, '알림 목록이 비어 있음');
+    await shot('20-01-오늘');
+    await nav('#/assistant/customers', `!!document.querySelector('[data-testid="asst-cust-count"]')`);
+    await must((await txt('[data-testid="asst-cust-count"]')).startsWith('18명'), `고객 수 표시: ${await txt('[data-testid="asst-cust-count"]')}`);
+    await must((await q('[data-testid="asst-cust-row"]')) === 18, `표 행 수 ${await q('[data-testid="asst-cust-row"]')} (18이어야 함)`);
+    await H(`setId('asst-cust-search', '은행')`); await sleep(250);
+    const bank = await q('[data-testid="asst-cust-row"]');
+    await must(bank > 0 && bank < 18, `「은행」 찾기 결과 ${bank}명`);
+    await H(`setId('asst-cust-search', '')`); await sleep(250);
+    await H(`clickId('asst-layout-card')`); await sleep(300);
+    await must((await q('[data-testid="asst-cust-row"]')) === 18 && (await q('table')) === 0, '카드 보기에서 표가 같이 보이거나 18명이 아님(표/카드는 하나만)');
+    await shot('20-02-고객-카드');
+    await H(`clickId('asst-layout-table')`); await sleep(300);
+    notes.push(`고객 18명(은행 찾기 ${bank}명)`);
+    // 바로 찾기(Ctrl+K): 메뉴 「AI 비서」(초성 ㅂㅅ)와 기능 「고객 추가」(초성 ㄱㄱㅊㄱ) → 등록 창
+    await nav('#/dashboard', `!!document.querySelector('main')`);
+    const ctrlK = () => ev(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', ctrlKey: true, bubbles: true })); true`);
+    await ctrlK();
+    await must(await wait(`!!document.querySelector('[data-testid="quick-find-input"]')`, 2000), '바로 찾기가 안 열림');
+    await H(`setId('quick-find-input', 'ㅂㅅ')`); await sleep(200);
+    await must(await ev(`[...document.querySelectorAll('[data-testid="quick-find-item"][data-kind="menu"]')].some((e) => e.dataset.key === 'menu:/assistant')`), '초성 ㅂㅅ로 메뉴 AI 비서를 못 찾음');
+    await H(`setId('quick-find-input', 'ㄱㄱㅊㄱ')`); await sleep(200);
+    await must(await H(`click('[data-testid="quick-find-item"][data-kind="action"]', '고객 추가')`), '초성 ㄱㄱㅊㄱ로 「고객 추가」를 못 찾음');
+    await must(await wait(`!!document.querySelector('[data-testid="asst-cust-form"]')`, 4000), '「고객 추가」가 고객 등록 창을 안 엶');
+    await esc();
+    await must(await wait(`!document.querySelector('[data-testid="asst-cust-form"]')`, 2000), 'Esc로 고객 등록 창이 안 닫힘');
+    await must(!(await ev(`location.hash.includes('new=1')`)), '주소에 new=1이 남아 있음(새로 고침하면 다시 열림)');
+    notes.push('바로 찾기(AI 비서·고객 추가 초성)');
+
+    // 2) 고객 상세 → 값 수정 → 변경 이력 → 복원
+    await must(await H(`click('[data-testid="asst-cust-row"]', '김도현')`), '김도현 행 없음');
+    await must(await wait(`/#\\/assistant\\/customers\\/CU-\\d+/.test(location.hash) && !!document.querySelector('[data-testid="asst-detail"]')`, 4000), '고객 상세가 안 열림');
+    const cid = (await ev('location.hash')).split('/').pop().split('?')[0];
+    await must((await txt('[data-testid="asst-detail-name"]')).includes('김도현'), '상세 이름 표시');
+    await shot('20-03-상세');
+    await tab('선호·관심사');
+    const oldDislike = await txt('[data-testid="asst-v-foodDislikes"]');
+    await must(oldDislike.length > 0, '기피 음식 값이 비어 있음(가상 고객 김도현은 값이 있어야 함)');
+    await must((await txt('[data-testid="asst-meta-foodDislikes"]')).includes('수정 이력 없음'), `항목별 수정 정보: ${await txt('[data-testid="asst-meta-foodDislikes"]')}`);
+    await must(await H(`clickId('asst-edit-open')`), '수정 단추 없음');
+    await must(await wait(`!!document.querySelector('[data-testid="asst-f-foodDislikes"]')`, 3000), '수정 창이 안 열림');
+    await H(`setId('asst-f-foodDislikes', '점검용 기피 음식')`); await sleep(150);
+    await shot('20-04-수정창');
+    await must(await H(`clickId('asst-cust-save')`), '저장 단추 없음');
+    await must(await wait(`!document.querySelector('[data-testid="asst-cust-form"]')`, 3000), '저장 뒤 창이 안 닫힘');
+    await must((await txt('[data-testid="asst-v-foodDislikes"]')) === '점검용 기피 음식', `수정한 값이 화면에 안 보임: ${await txt('[data-testid="asst-v-foodDislikes"]')}`);
+    await must((await txt('[data-testid="asst-meta-foodDislikes"]')).includes('직접 입력'), `수정 뒤 출처: ${await txt('[data-testid="asst-meta-foodDislikes"]')}`);
+    await tab('변경 이력');
+    await must((await q('[data-testid="asst-change-row"][data-field="foodDislikes"]')) === 1, '변경 이력 1건이 없음');
+    await shot('20-05-변경이력');
+    await must(await H(`clickId('asst-restore')`), '복원 단추 없음');
+    await must(await wait(`document.querySelectorAll('[data-testid="asst-change-row"]').length === 2`, 3000), '복원도 새 이력으로 남아야 함(2건)');
+    const srcs = await ev(`[...document.querySelectorAll('[data-testid="asst-change-row"]')].map((e) => e.innerText.replace(/\\s+/g, ' ')).join(' || ')`);
+    await must(srcs.includes('이전 값 복원'), `복원 출처 표시 없음: ${srcs.slice(0, 160)}`);
+    await tab('선호·관심사');
+    await must((await txt('[data-testid="asst-v-foodDislikes"]')) === oldDislike, `복원 뒤 값 ${await txt('[data-testid="asst-v-foodDislikes"]')} ≠ 처음 값 ${oldDislike}`);
+    notes.push('수정→이력→복원 왕복');
+
+    // 3) 브리핑(인쇄 단추·규칙 기반) + 닫으면 초점 복귀
+    await ev(`document.querySelector('[data-testid="asst-brief-open"]')?.focus(); true`); // 키보드로 단추에 와서 누른 것과 같게(프로그램 클릭은 초점을 옮기지 않는다)
+    await must(await H(`clickId('asst-brief-open')`), '브리핑 단추 없음');
+    await must(await wait(`!!document.querySelector('[data-testid="asst-briefing-body"]')`, 3000), '브리핑이 안 열림');
+    const brief = await txt('[data-testid="asst-briefing"]');
+    await must(brief.includes('읽는 시간') && brief.includes('규칙 기반'), `브리핑에 읽는 시간·규칙 기반 표시가 없음: ${brief.slice(0, 120)}`);
+    await must((await q('[data-testid="asst-brief-print"]')) === 1, '인쇄 단추 없음');
+    await must(await ev(`document.activeElement && !!document.activeElement.closest('[role="dialog"]')`), '대화상자를 열었는데 초점이 안쪽으로 안 옴');
+    await shot('20-06-브리핑');
+    await esc();
+    await must(await wait(`!document.querySelector('[data-testid="asst-briefing"]')`, 2000), 'Esc로 브리핑이 안 닫힘');
+    await must(await ev(`document.activeElement?.dataset?.testid === 'asst-brief-open'`), '닫은 뒤 초점이 브리핑 단추로 돌아오지 않음');
+    notes.push('브리핑');
+
+    // 4) 미팅 후 질문 — 체크한 것만 저장
+    await nav('#/assistant', `document.querySelectorAll('[data-testid="asst-fu-wait"]').length > 0`);
+    await must(await ev(`(() => { const b = [...document.querySelectorAll('[data-testid="asst-fu-wait"] button')].find((x) => x.textContent.includes('질문 답하기')); if (!b) return false; b.click(); return true; })()`), '질문 답하기 단추 없음');
+    await must(await wait(`!!document.querySelector('[data-testid="asst-fu-q-request"]')`, 3000), '미팅 후 질문 화면이 안 열림');
+    const fuHash = await ev('location.hash');
+    await must(await H(`clickId('asst-fu-opt-request-자료 요청')`), '요청 선택지 없음');
+    await sleep(200);
+    await H(`setId('asst-fu-in-request-content', '점검용 자료 전달')`);
+    await must(await H(`clickId('asst-fu-opt-food_pref-like')`), '음식 선택지 없음(이 고객은 음식 질문이 없음?)');
+    await sleep(200);
+    await H(`setId('asst-fu-in-food_pref-like', '점검용국밥')`);
+    await must(await H(`clickId('asst-fu-opt-interest-취미·여가')`), '관심사 선택지 없음');
+    await sleep(200);
+    await H(`setId('asst-fu-in-interest-text', '점검용테니스')`);
+    await sleep(150);
+    await shot('20-07-미팅후질문');
+    await must(await H(`clickId('asst-fu-review-btn')`), '답변 확인 단추 없음');
+    await must(await wait(`!!document.querySelector('[data-testid="asst-fu-review"]')`, 3000), '반영안 화면이 안 열림');
+    const props = await ev(`[...document.querySelectorAll('[data-testid="asst-fu-prop"]')].map((e) => e.innerText.replace(/\\s+/g, ' ').slice(0, 60))`);
+    await must(props.length >= 3, `반영안 ${props.length}건: ${props.join(' / ')}`);
+    await shot('20-08-반영안');
+    // 「선호 음식」 반영안만 체크 해제
+    const unchecked = await ev(`(() => { const row = [...document.querySelectorAll('[data-testid="asst-fu-prop"]')].find((e) => e.innerText.includes('선호 음식')); if (!row) return false; row.querySelector('[data-testid="asst-fu-chk"]').click(); return true; })()`);
+    await must(unchecked, '선호 음식 반영안이 없음');
+    await must(await H(`clickId('asst-fu-apply')`), '저장 단추 없음');
+    await must(await wait(`location.hash.includes('?tab=history')`, 4000), `저장 뒤 고객 히스토리로 안 감: ${await ev('location.hash')}`);
+    const fcid = (await ev('location.hash')).split('/').pop().split('?')[0];
+    await tab('요청');
+    await must((await txt('[data-testid="asst-detail"]')).includes('점검용 자료 전달'), '체크한 요청이 저장되지 않음');
+    await tab('선호·관심사');
+    const prefs = await txt('[data-testid="asst-detail"]');
+    await must(prefs.includes('점검용테니스'), '체크한 취미 반영안이 저장되지 않음');
+    await must(!prefs.includes('점검용국밥'), '체크 해제한 선호 음식이 저장됨');
+    await tab('변경 이력');
+    const fuHist = await txt('[data-testid="asst-changes"]');
+    await must(fuHist.includes('미팅 후 질문') && !fuHist.includes('점검용국밥'), `변경 이력에 미팅 후 질문 출처만 있어야 함: ${fuHist.slice(0, 120)}`);
+    await nav('#/assistant', `!!document.querySelector('[data-testid="asst-today"]')`);
+    notes.push(`미팅 후 질문(${fuHash.split('/').pop()}) 체크한 것만 저장`);
+
+    // 5) 예시 분석(AI 미사용) 승인
+    await nav('#/assistant/analyze', `!!document.querySelector('[data-testid="asst-an-sample"]')`);
+    await must((await txt('[data-testid="asst-an-engine"]')).includes('예시 분석(AI 미사용)'), '키 없을 때 예시 분석 안내 문구 없음');
+    await must((await q('[data-testid="asst-an-preview-btn"]')) === 0, '키가 없는데 Claude 전송 단추가 보임');
+    await H(`setId('asst-an-customer', ${JSON.stringify(cid)})`); await sleep(200);
+    await must(await H(`clickId('asst-an-sample')`), '예시 분석 단추 없음');
+    await must(await wait(`!!document.querySelector('[data-testid="asst-an-review"]')`, 3000), '승인 화면이 안 열림');
+    await must((await txt('[data-testid="asst-an-label"]')).includes('예시 분석(AI 미사용)'), '예시 분석 라벨 없음');
+    const nItems = await q('[data-testid="asst-an-item"]');
+    await must(nItems === 9, `분석 항목 ${nItems}건(9건이어야 함)`);
+    const draftInStore = await ev(`Object.values(localStorage).some((v) => String(v).includes('저는 회는 별로고 고기가 좋아요'))`);
+    await must(!draftInStore, '승인 전 초안·원문이 저장소에 들어 있음(메모리에만 있어야 함)');
+    await shot('20-09-예시분석');
+    // 첫 항목(선호 음식)을 체크 해제하고 저장
+    await must(await ev(`(() => { const c = document.querySelector('[data-testid="asst-an-item"] [data-testid="asst-an-chk"]'); if (!c) return false; c.click(); return true; })()`), '항목 체크 상자 없음');
+    await sleep(150);
+    await must(await H(`clickId('asst-an-apply')`), '저장 단추 없음');
+    await must(await wait(`!!document.querySelector('[data-testid="asst-an-done"]')`, 4000), '저장 완료 표시 없음');
+    await nav(`#/assistant/customers/${cid}?tab=changes`, `!!document.querySelector('[data-testid="asst-detail"]')`);
+    const anHist = await txt('[data-testid="asst-detail"]');
+    await must(anHist.includes('예시 분석(AI 미사용)'), '변경 이력에 「예시 분석(AI 미사용)」 출처가 없음');
+    await must(!(await ev(`Object.values(localStorage).some((v) => String(v).includes('저는 회는 별로고 고기가 좋아요'))`)), '저장 뒤에도 대화 원문이 저장소에 있음(원문 보관을 안 골랐음)');
+    await tab('요청');
+    await must((await txt('[data-testid="asst-detail"]')).includes('출금 실패'), '승인한 요청이 저장되지 않음');
+    notes.push('예시 분석 승인(원문 저장 안 됨)');
+
+    // 6) 묻기
+    await nav('#/assistant/ask', `!!document.querySelector('[data-testid="asst-ask-input"]')`);
+    await must((await q('[data-testid="asst-ask-ex"]')) === 6, '예시 질문이 6개가 아님');
+    await must(await ev(`(() => { const b = [...document.querySelectorAll('[data-testid="asst-ask-ex"]')].find((x) => x.textContent.includes('골프')); b.click(); return true; })()`), '골프 예시 없음');
+    await must(await wait(`!!document.querySelector('[data-testid="asst-ask-result"]')`, 4000), '검색 결과가 안 나옴');
+    await must((await ev(`document.querySelector('[data-testid="asst-ask-mode"]').dataset.mode`)) === 'rule', '규칙 해석 표시가 아님');
+    await must((await txt('[data-testid="asst-ask-result"]')).includes('김도현'), '골프 예시에서 김도현이 안 나옴');
+    await must((await txt('[data-testid="asst-ask-explain"]')).length > 0, '해석된 조건 표시 없음');
+    await H(`setId('asst-ask-input', '해산물 못 드시는 분')`); await sleep(100);
+    await H(`clickId('asst-ask-submit')`);
+    await must(await wait(`document.querySelectorAll('[data-testid="asst-ask-cust"]').length > 0`, 4000), '「해산물 못 드시는 분」 결과 0명');
+    await must((await q('[data-testid="asst-ask-evidence"] mark')) > 0, '근거의 검색어가 강조되지 않음');
+    await shot('20-10-묻기-해산물');
+    await H(`setId('asst-ask-input', '이번 달에 내가 챙겨야 할 사람 누구야')`); await sleep(100);
+    await H(`clickId('asst-ask-submit')`);
+    await must(await wait(`document.querySelectorAll('[data-testid="asst-ask-cust"]').length > 0`, 4000), '「이번 달에 챙겨야 할 사람」 결과 0명');
+    notes.push('묻기 예시 6개·해산물·챙겨야 할 사람');
+
+    // 7) 권한: 이서연은 열람만, 자기 고객은 고칠 수 있고 김도윤은 그 고객을 못 고침
+    await must(await H(`user('이서연')`), '이서연 전환 실패');
+    await nav(`#/assistant/customers/${cid}`, `!!document.querySelector('[data-testid="asst-detail"]')`);
+    await must(await ev(`document.querySelector('[data-testid="asst-edit-open"]').disabled && document.querySelector('[data-testid="asst-cust-delete"]').disabled`), '담당이 아닌 사용자에게 수정·삭제 단추가 켜져 있음');
+    await must((await q('[data-testid="asst-readonly"]')) === 1, '읽기 전용 안내 없음');
+    await must(await ev(`document.querySelector('[data-testid="asst-edit-open"]').parentElement.title.length > 0`), '막힌 이유(툴팁)가 없음');
+    await tab('히스토리');
+    await must(await ev(`document.querySelector('[data-testid="asst-act-add"]').disabled`), '활동 추가가 막히지 않음');
+    await nav('#/assistant/activities', `document.querySelectorAll('[data-testid="asst-act-row"]').length > 0`);
+    await must(await ev(`[...document.querySelectorAll('[data-testid="asst-act-row"] button[aria-label$="수정"]')].every((b) => b.disabled)`), '활동·요청 화면의 수정 단추가 막히지 않음');
+    await nav('#/assistant/analyze', `window.__h.has('분석할 수 있는 고객이 없습니다')`);
+    await nav(fuHash, `!!document.querySelector('[data-testid="asst-followup"]')`);
+    await must((await q('[data-testid="asst-fu-q-request"]')) === 0 && (await q('[data-testid="asst-readonly"]')) === 1, '권한 없는 사용자에게 미팅 후 질문이 열려 있음');
+    await shot('20-11-권한-읽기전용');
+    // 이서연이 새 고객 등록(바로 찾기의 「고객 추가」 경로) → 담당은 이서연
+    await nav('#/assistant/customers?new=1', `!!document.querySelector('[data-testid="asst-cust-form"]')`);
+    await must((await ev(`document.getElementById('asst-f-owner').value`)).includes('이서연'), '새 고객의 담당이 현재 사용자가 아님');
+    await H(`setId('asst-f-name', '점검용고객')`);
+    await H(`setId('asst-f-company', '점검용상사(가상)')`);
+    await H(`setId('asst-f-mobile', '010-0000-9999')`);
+    await H(`clickId('asst-cust-save')`);
+    await must(await wait(`/#\\/assistant\\/customers\\/CU-\\d+/.test(location.hash) && (document.querySelector('[data-testid="asst-detail-name"]')?.innerText || '').includes('점검용고객')`, 4000), '등록 뒤 새 고객 상세로 안 감');
+    const newCid = (await ev('location.hash')).split('/').pop().split('?')[0];
+    await must(await ev(`!document.querySelector('[data-testid="asst-edit-open"]').disabled`), '자기 고객인데 수정이 막힘');
+    // 같은 이름·소속으로 다시 등록하면 중복 안내 → 「그래도 등록」
+    await nav('#/assistant/customers?new=1', `!!document.querySelector('[data-testid="asst-cust-form"]')`);
+    await H(`setId('asst-f-name', '점검용고객')`);
+    await H(`setId('asst-f-company', '점검용상사(가상)')`);
+    await H(`clickId('asst-cust-save')`);
+    await must(await wait(`!!document.querySelector('[data-testid="asst-dup"]')`, 3000), '중복 안내가 안 나옴');
+    await must(await H(`clickId('asst-dup-force')`), '그래도 등록 단추 없음');
+    await must(await wait(`/#\\/assistant\\/customers\\/CU-\\d+/.test(location.hash) && location.hash !== '#/assistant/customers/${newCid}'`, 4000), '그래도 등록 뒤 이동 안 함');
+    await must(await H(`user('김도윤')`), '김도윤 전환 실패');
+    await nav(`#/assistant/customers/${newCid}`, `!!document.querySelector('[data-testid="asst-detail"]')`);
+    await must(await ev(`document.querySelector('[data-testid="asst-edit-open"]').disabled`), '김도윤이 이서연 고객을 고칠 수 있음');
+    // 조직장(박지훈)은 담당 영업자를 바꿀 수 있다
+    await must(await H(`user('박지훈')`), '박지훈 전환 실패');
+    await nav(`#/assistant/customers/${cid}`, `!!document.querySelector('[data-testid="asst-detail"]')`);
+    await must(await ev(`!document.querySelector('[data-testid="asst-edit-open"]').disabled`), '조직장이 범위 안 고객을 못 고침');
+    await H(`clickId('asst-edit-open')`);
+    await must(await wait(`!!document.querySelector('[data-testid="asst-f-owner"]')`, 3000), '조직장에게 담당 영업자 선택 칸이 없음');
+    await H(`setId('asst-f-owner', 'U2')`); await sleep(150);
+    await H(`clickId('asst-cust-save')`);
+    await must(await wait(`(document.querySelector('[data-testid="asst-detail-owner"]')?.innerText || '').includes('이서연')`, 3000), '담당 영업자 변경이 반영되지 않음');
+    await must(await H(`user('김도윤')`), '김도윤 복귀 실패');
+    notes.push('권한(열람 전용·새 고객 담당·중복 안내·조직장 담당 변경)');
+
+    // 8) 새로 고침 뒤에도 유지
+    await reloadPage();
+    await nav('#/assistant/customers', `!!document.querySelector('[data-testid="asst-cust-count"]')`);
+    const cnt = await txt('[data-testid="asst-cust-count"]');
+    await must(cnt.startsWith('20명'), `새로 고침 뒤 고객 수 ${cnt}(20명이어야 함: 가상 18 + 점검용 2)`);
+    await nav(`#/assistant/customers/${fcid}?tab=prefs`, `!!document.querySelector('[data-testid="asst-detail"]')`);
+    await must((await txt('[data-testid="asst-detail"]')).includes('점검용테니스'), '새로 고침 뒤 미팅 후 질문 반영이 사라짐');
+    notes.push('새로 고침 뒤 유지');
+
+    // 9) 백업 내보내기에 assistant 포함·가져오기(바꿔 불러오기·합쳐 불러오기) 왕복
+    await must(await H(`click('button', '데이터 옮기기')`), '데이터 옮기기 단추 없음');
+    await wait(`!!document.querySelector('textarea[aria-label="백업 데이터"]')`, 3000);
+    const stats = await ev(`(() => { const d = JSON.parse(document.querySelector('textarea[aria-label="백업 데이터"]').value); const a = d.assistant; return a ? { c: a.customers.length, i: a.interactions.length, r: a.requests.length, h: a.changes.length, n: a.anniversaries.length, hasKey: JSON.stringify(d).includes('sk-ant') } : null; })()`);
+    await must(stats && stats.c === 20 && stats.h >= 4 && !stats.hasKey, `백업에 assistant가 빠졌거나 기대와 다름: ${JSON.stringify(stats)}`);
+    const renamed = await ev(`(() => { const d = JSON.parse(document.querySelector('textarea[aria-label="백업 데이터"]').value); d.assistant.customers[0].name = '왕복점검'; return JSON.stringify(d); })()`);
+    const original = await ev(`document.querySelector('textarea[aria-label="백업 데이터"]').value`);
+    await must(await H(`click('button', '불러오기', true)`), '불러오기 탭 없음');
+    await sleep(300);
+    await ev(`document.querySelector('input[name="dt-mode"][value="replace"]').click(); true`);
+    await sleep(200);
+    await ev(`window.__h.setVal(document.getElementById('dt-paste'), ${JSON.stringify(renamed)}); true`);
+    await must(await wait(`!!document.querySelector('[data-testid="replace-start"]')`, 4000), '바꿔 불러오기 확인이 안 나옴');
+    await H(`clickId('replace-start')`);
+    await must(await H(`clickId('replace-confirm')`), '바꿔서 불러오기 단추 없음');
+    await sleep(600);
+    await nav('#/assistant/customers', `!!document.querySelector('[data-testid="asst-cust-count"]')`);
+    await must((await txt('[data-testid="asst-cust-count"]')).startsWith('20명'), `바꿔 불러온 뒤 고객 수 ${await txt('[data-testid="asst-cust-count"]')}`);
+    await H(`setId('asst-cust-search', '왕복점검')`); await sleep(250);
+    await must((await q('[data-testid="asst-cust-row"]')) === 1, '바꿔 불러온 고객 이름이 화면에 안 보임');
+    await H(`setId('asst-cust-search', '')`); await sleep(200);
+    // 합쳐 불러오기: 이름만 다른 같은 고객(휴대전화 같음)은 새 고객으로 더하지 않는다
+    await must(await H(`click('button', '데이터 옮기기')`), '데이터 옮기기 단추 없음(2)');
+    await sleep(300);
+    await H(`click('button', '불러오기', true)`);
+    await sleep(300);
+    await H(`click('[data-testid="merge-mode"] label', '합쳐 불러오기')`);
+    await sleep(200);
+    await ev(`window.__h.setVal(document.getElementById('dt-paste'), ${JSON.stringify(original)}); true`);
+    await must(await wait(`!!document.querySelector('[data-testid="merge-preview"]')`, 4000), '합치기 미리 보기 안 나옴');
+    await must(await H(`clickId('merge-confirm')`), '합쳐 불러오기 확인 단추 없음');
+    await sleep(800);
+    await nav('#/assistant/customers', `!!document.querySelector('[data-testid="asst-cust-count"]')`);
+    await must((await txt('[data-testid="asst-cust-count"]')).startsWith('20명'), `합쳐 불러온 뒤 고객 수 ${await txt('[data-testid="asst-cust-count"]')}(같은 고객이 중복으로 늘면 안 됨)`);
+    notes.push(`백업 assistant ${stats.c}명·이력 ${stats.h}건 포함, 바꿔·합쳐 불러오기 왕복 20명 유지`);
+
+    // 10) 설정: 가상 데이터 삭제 → 다시 채우지 않음(새로 고침 뒤에도) → 다시 채우기. 지우기는 「내가 고칠 수 있는 고객」만 대상이라 두 팀원의 고객을 모두 고칠 수 있는 팀장으로 한다
+    await must(await H(`user('박지훈')`), '박지훈 전환 실패(2)');
+    await nav('#/assistant', `!!document.querySelector('[data-testid="asst-today"]')`);
+    await must(await H(`clickId('asst-settings-open')`), '설정 단추 없음');
+    await must(await wait(`!!document.querySelector('[data-testid="asst-settings"]')`, 3000), '설정 창이 안 열림');
+    await shot('20-12-설정');
+    await H(`clickId('asst-s-del-demo')`);
+    await must(await wait(`!!document.querySelector('[data-testid="asst-s-confirm-demo"]')`, 2000), '가상 데이터 삭제 확인이 안 나옴');
+    await H(`clickId('asst-s-confirm-demo-ok')`);
+    await sleep(500);
+    await esc();
+    await reloadPage();
+    await nav('#/assistant/customers', `!!document.querySelector('[data-testid="asst-cust-count"]')`);
+    const demoLeft = await ev(`(() => { const k = Object.keys(localStorage).find((x) => x.startsWith('worklink')); const o = JSON.parse(localStorage.getItem(k)); const st = o.state ?? o; return st.assistant.customers.filter((c) => c.isDemo).length; })()`);
+    await must(demoLeft === 0, `가상 고객이 다시 채워졌거나 안 지워짐(${demoLeft}명)`);
+    const afterDel = await txt('[data-testid="asst-cust-count"]');
+    await must(afterDel.startsWith('2명'), `가상 데이터 삭제 뒤 고객 수 ${afterDel}(직접 등록한 2명만 남아야 함)`);
+    await nav('#/assistant', `!!document.querySelector('[data-testid="asst-today"]')`);
+    await H(`clickId('asst-settings-open')`);
+    await wait(`!!document.querySelector('[data-testid="asst-s-restore"]')`, 3000);
+    await H(`clickId('asst-s-restore')`);
+    await sleep(500);
+    await esc();
+    await nav('#/assistant/customers', `!!document.querySelector('[data-testid="asst-cust-count"]')`);
+    await must((await txt('[data-testid="asst-cust-count"]')).startsWith('20명'), `가상 데이터 다시 채운 뒤 고객 수 ${await txt('[data-testid="asst-cust-count"]')}`);
+    await must(await H(`user('김도윤')`), '김도윤 복귀 실패(2)');
+    notes.push('가상 데이터 삭제·새로 고침 뒤 다시 안 채움·복원');
+    return notes.join(' · ');
+  });
+
+  // 20b: 키가 있는 Claude 엔진 화면(전송 내용 확인·동의·가림 끄기·질문 안내). 실제 호출은 하지 않는다(외부 통신 차단)
+  await check('20b AI 비서: Claude 엔진 화면(전송 내용 확인·동의·가림 끄기·질문 안내)', async () => {
+    const q = (sel) => ev(`document.querySelectorAll(${JSON.stringify(sel)}).length`);
+    const txt = (sel) => ev(`(document.querySelector(${JSON.stringify(sel)})?.innerText || '').replace(/\\s+/g, ' ')`);
+    await must(await H(`clickId('ai-settings-open')`), '열쇠 단추 없음');
+    await wait(`!!document.querySelector('[data-testid="ai-key-input"]')`, 3000);
+    await H(`setId('ai-key-input', 'sk-ant-test-0000')`);
+    await sleep(150);
+    await H(`clickId('ai-key-save')`);
+    await sleep(500);
+    await nav('#/assistant/ask', `!!document.querySelector('[data-testid="asst-ask-note"]')`);
+    const note = await txt('[data-testid="asst-ask-note"]');
+    await must(note.includes('질문 문장과 오늘 날짜뿐') && note.includes('고객 이름'), `묻기 안내에 전송 범위가 없음: ${note.slice(0, 120)}`);
+    await nav('#/assistant/analyze', `!!document.querySelector('[data-testid="asst-an-text"]')`);
+    await must((await q('[data-testid="asst-an-preview-btn"]')) === 1, 'Claude 엔진인데 「전송 내용 확인」 단추가 없음');
+    await H(`setId('asst-an-text', '고객: 제 번호는 010-1234-5678이고 메일은 abc@test.example 입니다.\\n나: 네 알겠습니다.')`);
+    await H(`setId('asst-an-myname', '김도윤')`);
+    await sleep(150);
+    await must(await H(`clickId('asst-an-preview-btn')`), '전송 내용 확인 단추 없음');
+    await must(await wait(`!!document.querySelector('[data-testid="asst-an-sent"]')`, 3000), '전송 내용 확인 화면이 안 나옴');
+    const sent = await txt('[data-testid="asst-an-sent"]');
+    await must(sent.includes('[휴대전화]') && sent.includes('[이메일]') && !sent.includes('010-1234-5678') && !sent.includes('abc@test.example'), `가린 결과가 기대와 다름: ${sent}`);
+    await must(await ev(`document.querySelector('[data-testid="asst-an-send"]').disabled`), '동의 전인데 분석 단추가 켜져 있음');
+    await H(`clickId('asst-an-consent')`); await sleep(150);
+    await must(await ev(`!document.querySelector('[data-testid="asst-an-send"]').disabled`), '동의했는데 분석 단추가 안 켜짐');
+    await H(`clickId('asst-an-nomask')`); await sleep(250);
+    const sent2 = await txt('[data-testid="asst-an-sent"]');
+    await must(sent2.includes('010-1234-5678'), '가림 끄기를 눌렀는데 원문이 그대로 안 보임');
+    await must(await ev(`document.querySelector('[data-testid="asst-an-send"]').disabled`), '가림을 바꿨는데 동의가 풀리지 않음');
+    await shot('20-13-전송내용확인');
+    return '전송 내용 확인·가림·동의 게이트 확인(실제 호출 없음)';
   });
 
   // 12

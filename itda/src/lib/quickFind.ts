@@ -24,7 +24,7 @@ export interface QFItem {
 
 export const KIND_LABEL: Record<QFKind, string> = { menu: '메뉴', action: '기능', work: '업무', doc: '문서', person: '사람' };
 export const KIND_ORDER: QFKind[] = ['menu', 'action', 'work', 'doc', 'person'];
-export const KIND_LIMIT: Record<QFKind, number> = { menu: 9, action: 8, work: 6, doc: 6, person: 6 };
+export const KIND_LIMIT: Record<QFKind, number> = { menu: 10, action: 9, work: 6, doc: 6, person: 6 };
 
 /** 메뉴: Layout 왼쪽 목록과 같은 화면 */
 const MENUS: { to: string; title: string; sub: string; keywords: string[] }[] = [
@@ -37,6 +37,7 @@ const MENUS: { to: string; title: string; sub: string; keywords: string[] }[] = 
   { to: '/handover', title: '업무 인계 관리', sub: '인수인계 진행과 확정', keywords: ['인수인계', '인계', '인수'] },
   { to: '/universe', title: '업무 유니버스', sub: '업무 관계 지도', keywords: ['지도', '유니버스', '관계도', '맵'] },
   { to: '/people', title: '사람', sub: '사람과 조직도', keywords: ['사람·조직', '조직', '조직도', '구성원', '팀원', '직원'] },
+  { to: '/assistant', title: 'AI 비서', sub: '고객 메모·오늘 할 일·미팅 브리핑', keywords: ['고객', '고객관리', '영업', '영업비서', '미팅 브리핑', '브리핑', '알림', '비서'] },
 ];
 
 /** 기능: 실제로 여는 방법이 있는 것만. 되돌릴 수 없는 동작(초기화 등)은 넣지 않는다 */
@@ -49,6 +50,7 @@ const ACTIONS: { action?: ActionId; to?: string; title: string; sub: string; key
   { action: 'ai-engine', title: 'AI 엔진 바꾸기', sub: '상단의 규칙 · Claude · 사내 칸에서 고름', keywords: ['엔진', '규칙', 'claude', '클로드', '사내', '사내 AI', '모드'] },
   { action: 'theme', title: '밝기 바꾸기', sub: '화면 자동 → 밝게 → 어둡게', keywords: ['테마', '다크', '다크모드', '어둡게', '밝게', '야간', '화면 모드', '배경'] },
   { to: '/handover', title: '인계 시작', sub: '업무 인계 관리에서 인계 시작', keywords: ['인수인계 시작', '인계하기', '인계 만들기', '인수인계'] },
+  { to: '/assistant/customers?new=1', title: '고객 추가', sub: 'AI 비서에서 고객 등록 창 열기', keywords: ['고객 등록', '고객 만들기', '신규 고객', '고객 입력'] },
 ];
 
 const CHO = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ';

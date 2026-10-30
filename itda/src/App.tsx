@@ -16,6 +16,7 @@ import HandoverDetail from './pages/HandoverDetail';
 import SnapshotView from './pages/SnapshotView';
 import People from './pages/People';
 import UniversePage from './universe/UniversePage';
+import AssistantPage from './assistant/ui/AssistantPage';
 
 function Routes() {
   const { path } = useRouter();
@@ -37,6 +38,8 @@ function Routes() {
       return <UniversePage />;
     case 'people':
       return <People />;
+    case 'assistant':
+      return <AssistantPage />;
     case 'snapshots':
       return <SnapshotView id={seg[1]} />;
     default:

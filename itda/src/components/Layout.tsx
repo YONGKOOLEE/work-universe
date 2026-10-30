@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutDashboard, FolderKanban, Files, GitCommitVertical, ScrollText, Search, ArrowRightLeft, ChevronLeft, Menu, RotateCcw, UserRound, Bot, X, ArrowDownUp, Orbit, KeyRound, Users, Sun, Moon, Monitor } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, Files, GitCommitVertical, ScrollText, Search, ArrowRightLeft, ChevronLeft, Menu, RotateCcw, UserRound, Bot, X, ArrowDownUp, Orbit, KeyRound, Users, Sun, Moon, Monitor, Contact } from 'lucide-react';
 import { THEME_LABELS, THEME_NEXT, useTheme } from '../lib/theme';
 import { DataTransfer } from './DataTransfer';
 import { QuickFind } from './QuickFind';
@@ -11,6 +11,7 @@ import { cx } from '../lib/util';
 import { Button, Modal } from './ui';
 import { useAI, INTERNAL_NOTICE, type EnginePref } from '../ai/claude';
 import { selectableUsers, displayName } from '../lib/people';
+import { useUnreadCount } from '../assistant/ui/hooks';
 
 function EngineNote() {
   const ai = useAI();
@@ -175,6 +176,7 @@ const NAV = [
   { to: '/handover', label: '업무 인계 관리', Icon: ArrowRightLeft },
   { to: '/universe', label: '업무 유니버스', Icon: Orbit },
   { to: '/people', label: '사람', Icon: Users },
+  { to: '/assistant', label: 'AI 비서', Icon: Contact },
 ];
 
 function Brand() {
@@ -200,11 +202,12 @@ function Nav({ onPick }: { onPick?: () => void }) {
   const { s } = useStore();
   const waiting = s.handovers.filter((h) => h.status === 'submitted' || h.status === 'revision' || h.status === 'accepted').length;
   const [focus] = useFocus();
+  const unread = useUnreadCount();
   return (
     <nav className="flex flex-col gap-0.5 px-2">
       {NAV.map(({ to, label, Icon }) => {
         const active = path === to || path.startsWith(to + '/') || (to === '/handover' && path.startsWith('/snapshots'));
-        const badge = to === '/handover' ? waiting : 0;
+        const badge = to === '/handover' ? waiting : to === '/assistant' ? unread : 0;
         return (
           <a
             key={to}
@@ -223,7 +226,7 @@ function Nav({ onPick }: { onPick?: () => void }) {
           >
             <Icon size={17} strokeWidth={active ? 2.3 : 1.9} />
             <span className="flex-1">{label}</span>
-            {badge > 0 && <span className="rounded-full bg-[rgb(255_196_92)] px-1.5 text-2xs font-bold text-[rgb(40_28_0)] tnum">{badge}</span>}
+            {badge > 0 && <span className="rounded-full bg-[rgb(255_196_92)] px-1.5 text-2xs font-bold text-[rgb(40_28_0)] tnum" data-testid={to === '/assistant' ? 'asst-nav-unread' : undefined} aria-label={to === '/assistant' ? `안 읽은 알림 ${badge}건` : undefined}>{badge}</span>}
           </a>
         );
       })}
