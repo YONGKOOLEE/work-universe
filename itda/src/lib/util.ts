@@ -47,8 +47,10 @@ export function uid(prefix: string) {
 /** 'HO-003'처럼 접두어+번호 형식의 다음 ID (삭제된 번호와 겹치지 않도록 최댓값 기준) */
 export function nextId(prefix: string, ids: string[]) {
   const max = ids.reduce((m, id) => {
-    const n = Number(id.replace(prefix + '-', ''));
-    return Number.isFinite(n) && n > m ? n : m;
+    // 무작위 ID(uid)가 '36E38'처럼 지수 표기로 읽혀 최댓값이 망가지면 같은 번호가 반복된다(합쳐 불러오기 ID 중복) — 숫자로만 된 ID만 센다
+    const rest = id.startsWith(prefix + '-') ? id.slice(prefix.length + 1) : '';
+    const n = /^\d+$/.test(rest) ? Number(rest) : NaN;
+    return Number.isSafeInteger(n) && n > m ? n : m;
   }, 0);
   return `${prefix}-${String(max + 1).padStart(3, '0')}`;
 }

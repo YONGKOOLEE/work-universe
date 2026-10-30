@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createSeed } from '../src/data/seed';
 import { applyMerge, checkIntegrity, planMerge } from '../src/lib/mergeImport';
-import { clone } from '../src/lib/util';
+import { clone, nextId } from '../src/lib/util';
 import type { AppState, Handover, Snapshot } from '../src/lib/types';
 
 /** 시드 + 인계·스냅샷 한 건(인계 쪽 참조 변환도 시험하려고 덧붙임) */
@@ -375,5 +375,13 @@ describe('합쳐 불러오기 — 같은 칸을 다르게 고친 경우(2026-10-
     expect(planMerge(a, b).conflicts).toEqual([]);
     const { state } = applyMerge(a, b);
     expect(state.history.length).toBe(a.history.length + 1);
+  });
+});
+
+describe('다음 ID 번호', () => {
+  it('무작위 ID가 지수 표기로 읽혀도 번호가 망가지지 않는다(합쳐 불러오기 무작위 실패의 원인)', () => {
+    expect(nextId('E', ['E-101', 'E-36E38', 'E-1E999', 'E-ABCDE'])).toBe('E-102');
+    expect(nextId('E', ['E-DOC-D-101', 'E-005'])).toBe('E-006');
+    expect(nextId('E', [])).toBe('E-001');
   });
 });
