@@ -1,0 +1,5900 @@
+{
+ "meta": {
+  "fakeNow": "2026-10-30 10:00",
+  "source": "ClientMemory v0.4.0 app/ (읽기 전용 실행)",
+  "python": "3.14.7",
+  "note": "ID는 이름으로 바꿔 저장한다. 날짜는 FAKE_NOW 기준 절대값."
+ },
+ "customers": [
+  "김도현",
+  "이서연",
+  "박준혁",
+  "최유진",
+  "정민수",
+  "강하은",
+  "조성훈",
+  "윤지아",
+  "장태우",
+  "한소희",
+  "오정석",
+  "서민재",
+  "임가영",
+  "배동욱",
+  "신예린",
+  "문승호",
+  "노은지",
+  "구본석"
+ ],
+ "briefings": {
+  "김도현": {
+   "meeting": {
+    "date": "2026-11-01",
+    "time": "",
+    "title": "정기 업무협의 (예정)",
+    "type": "미팅"
+   },
+   "lines": [
+    {
+     "label": "최근 만남",
+     "value": "10월 17일 (13일 전)",
+     "tone": ""
+    },
+    {
+     "label": "주요 관심사",
+     "value": "골프, 등산, CMS 운영시간 확대",
+     "tone": ""
+    },
+    {
+     "label": "선호 음식",
+     "value": "한식",
+     "tone": "good"
+    },
+    {
+     "label": "기피 음식",
+     "value": "해산물",
+     "tone": "bad"
+    },
+    {
+     "label": "대화 스타일",
+     "value": "꼼꼼하고 수치 근거를 중시, 결론부터 듣는 것을 선호",
+     "tone": ""
+    },
+    {
+     "label": "선호 연락",
+     "value": "오전 중 전화",
+     "tone": ""
+    },
+    {
+     "label": "최근 대화",
+     "value": "10월 24일 통화 · 거래실적 자료 요청 통화 — 최근 6개월 거래실적 자료를 다음 주까지 요청함",
+     "tone": ""
+    },
+    {
+     "label": "미처리 요청",
+     "value": "최근 6개월 CMS 거래실적 자료 제공 (오늘 기한)",
+     "tone": "warn"
+    },
+    {
+     "label": "다가오는 경조사",
+     "value": "생일 11월 4일",
+     "tone": ""
+    },
+    {
+     "label": "참고사항",
+     "value": "보고서는 1장 요약본을 먼저 전달할 것",
+     "tone": ""
+    }
+   ],
+   "checks": [
+    "미팅 목적: 운영시간 확대 관련 후속 의견 청취 예정",
+    "'최근 6개월 CMS 거래실적 자료 제공' 진행상황 공유 (오늘 기한)",
+    "최근 관심 주제 'CMS 운영시간 확대' 관련 의견 청취",
+    "생일(11월 4일) 축하 인사"
+   ],
+   "open_requests": [
+    {
+     "content": "최근 6개월 CMS 거래실적 자료 제공",
+     "status": "진행 중",
+     "due": "오늘 기한",
+     "overdue": false
+    }
+   ],
+   "read_seconds": 30
+  },
+  "이서연": {
+   "meeting": null,
+   "lines": [
+    {
+     "label": "최근 연락",
+     "value": "10월 10일 (20일 전, 대면 미팅 기록 없음)",
+     "tone": ""
+    },
+    {
+     "label": "주요 관심사",
+     "value": "요가, 독서, 오픈뱅킹 연계, 자녀 진학",
+     "tone": ""
+    },
+    {
+     "label": "대화 스타일",
+     "value": "온화하고 경청형, 메신저보다 이메일 선호",
+     "tone": ""
+    },
+    {
+     "label": "선호 연락",
+     "value": "이메일",
+     "tone": ""
+    },
+    {
+     "label": "최근 대화",
+     "value": "10월 10일 이메일 · 연계 테스트 일정 회신 — 11월 셋째 주 연계 테스트 가능하다는 회신",
+     "tone": ""
+    },
+    {
+     "label": "미처리 요청",
+     "value": "연계 테스트 시나리오 문서 송부 (D-6)",
+     "tone": "warn"
+    },
+    {
+     "label": "다가오는 경조사",
+     "value": "결혼기념일 11월 13일",
+     "tone": ""
+    }
+   ],
+   "checks": [
+    "'연계 테스트 시나리오 문서 송부' 진행상황 공유 (D-6)",
+    "최근 관심 주제 '오픈뱅킹 연계, 자녀 진학' 관련 의견 청취",
+    "결혼기념일(11월 13일) 축하 인사",
+    "식사 자리라면 선호·기피 음식 자연스럽게 확인"
+   ],
+   "open_requests": [
+    {
+     "content": "연계 테스트 시나리오 문서 송부",
+     "status": "미착수",
+     "due": "D-6",
+     "overdue": false
+    }
+   ],
+   "read_seconds": 26
+  },
+  "박준혁": {
+   "meeting": null,
+   "lines": [
+    {
+     "label": "최근 연락",
+     "value": "7월 27일 (95일 전, 대면 미팅 기록 없음)",
+     "tone": ""
+    },
+    {
+     "label": "최근 대화",
+     "value": "7월 27일 통화 · 민원 공동대응 협의 — 중복출금 민원 처리 절차 협의",
+     "tone": ""
+    }
+   ],
+   "checks": [
+    "식사 자리라면 선호·기피 음식 자연스럽게 확인"
+   ],
+   "open_requests": [],
+   "read_seconds": 10
+  },
+  "최유진": {
+   "meeting": null,
+   "lines": [
+    {
+     "label": "최근 만남",
+     "value": "9월 30일 (30일 전)",
+     "tone": ""
+    },
+    {
+     "label": "주요 관심사",
+     "value": "CMS 참가 절차, 수수료 체계",
+     "tone": ""
+    },
+    {
+     "label": "선호 음식",
+     "value": "양식, 파스타",
+     "tone": "good"
+    },
+    {
+     "label": "대화 스타일",
+     "value": "추진력 있고 빠른 의사결정",
+     "tone": ""
+    },
+    {
+     "label": "선호 연락",
+     "value": "휴대전화 문자",
+     "tone": ""
+    },
+    {
+     "label": "최근 대화",
+     "value": "10월 27일 이메일 · 참가 신청서 양식 문의 — 참가 신청서 최신 양식 요청",
+     "tone": ""
+    },
+    {
+     "label": "미처리 요청",
+     "value": "CMS 참가 신청서 최신 양식 및 작성 예시 전달 (D-2)",
+     "tone": "warn"
+    },
+    {
+     "label": "다가오는 경조사",
+     "value": "생일 11월 17일",
+     "tone": ""
+    }
+   ],
+   "checks": [
+    "'CMS 참가 신청서 최신 양식 및 작성 예시 전달' 진행상황 공유 (D-2)",
+    "최근 관심 주제 'CMS 참가 절차, 수수료 체계' 관련 의견 청취"
+   ],
+   "open_requests": [
+    {
+     "content": "CMS 참가 신청서 최신 양식 및 작성 예시 전달",
+     "status": "미착수",
+     "due": "D-2",
+     "overdue": false
+    }
+   ],
+   "read_seconds": 23
+  },
+  "정민수": {
+   "meeting": null,
+   "lines": [
+    {
+     "label": "최근 만남",
+     "value": "7월 12일 (110일 전)",
+     "tone": ""
+    },
+    {
+     "label": "주요 관심사",
+     "value": "바둑",
+     "tone": ""
+    },
+    {
+     "label": "선호 음식",
+     "value": "한식, 국밥",
+     "tone": "good"
+    },
+    {
+     "label": "기피 음식",
+     "value": "매운 음식",
+     "tone": "bad"
+    },
+    {
+     "label": "대화 스타일",
+     "value": "원칙 중시, 문서로 근거 남기는 것을 선호",
+     "tone": ""
+    },
+    {
+     "label": "선호 연락",
+     "value": "유선전화(사무실)",
+     "tone": ""
+    },
+    {
+     "label": "최근 대화",
+     "value": "7월 22일 통화 · 출금 실패 사유 자료 요청 — 실패 사유별 통계 요청",
+     "tone": ""
+    },
+    {
+     "label": "참고사항",
+     "value": "분기 말에는 업무가 몰려 연락 자제",
+     "tone": ""
+    }
+   ],
+   "checks": [],
+   "open_requests": [],
+   "read_seconds": 13
+  },
+  "강하은": {
+   "meeting": null,
+   "lines": [
+    {
+     "label": "최근 연락",
+     "value": "8월 16일 (75일 전, 대면 미팅 기록 없음)",
+     "tone": ""
+    },
+    {
+     "label": "주요 관심사",
+     "value": "모바일 출금동의 도입",
+     "tone": ""
+    },
+    {
+     "label": "최근 대화",
+     "value": "8월 16일 통화 · 모바일 출금동의 문의 — ARS·모바일 동의 방식 차이 문의",
+     "tone": ""
+    },
+    {
+     "label": "미처리 요청",
+     "value": "모바일 출금동의 도입 안내자료 송부 (기한 경과)",
+     "tone": "warn"
+    }
+   ],
+   "checks": [
+    "'모바일 출금동의 도입 안내자료 송부' 진행상황 공유 (기한 경과)",
+    "최근 관심 주제 '모바일 출금동의 도입' 관련 의견 청취",
+    "식사 자리라면 선호·기피 음식 자연스럽게 확인"
+   ],
+   "open_requests": [
+    {
+     "content": "모바일 출금동의 도입 안내자료 송부",
+     "status": "보류",
+     "due": "기한 경과",
+     "overdue": true
+    }
+   ],
+   "read_seconds": 19
+  },
+  "조성훈": {
+   "meeting": null,
+   "lines": [
+    {
+     "label": "최근 만남",
+     "value": "9월 20일 (40일 전)",
+     "tone": ""
+    },
+    {
+     "label": "주요 관심사",
+     "value": "골프, 낚시, 수납 수수료 절감",
+     "tone": ""
+    },
+    {
+     "label": "선호 음식",
+     "value": "일식, 초밥",
+     "tone": "good"
+    },
+    {
+     "label": "대화 스타일",
+     "value": "유머 있고 친근함",
+     "tone": ""
+    },
+    {
+     "label": "선호 연락",
+     "value": "휴대전화",
+     "tone": ""
+    },
+    {
+     "label": "최근 대화",
+     "value": "9월 22일 통화 · 후속 통화 — 내부 보고 후 회신 예정이라고 함",
+     "tone": ""
+    },
+    {
+     "label": "미처리 요청",
+     "value": "수수료 구간별 비교표 작성 전달 (기한 경과)",
+     "tone": "warn"
+    },
+    {
+     "label": "다가오는 경조사",
+     "value": "자녀 수능 (가상) 11월 21일, 생일 11월 24일",
+     "tone": ""
+    }
+   ],
+   "checks": [
+    "'수수료 구간별 비교표 작성 전달' 진행상황 공유 (기한 경과)",
+    "최근 관심 주제 '수납 수수료 절감' 관련 의견 청취"
+   ],
+   "open_requests": [
+    {
+     "content": "수수료 구간별 비교표 작성 전달",
+     "status": "진행 중",
+     "due": "기한 경과",
+     "overdue": true
+    }
+   ],
+   "read_seconds": 21
+  },
+  "윤지아": {
+   "meeting": null,
+   "lines": [
+    {
+     "label": "최근 만남",
+     "value": "10월 29일 (1일 전)",
+     "tone": ""
+    },
+    {
+     "label": "최근 대화",
+     "value": "10월 29일 미팅 · 관리비 CMS 신청 상담 — 신청 서류와 일정 안내 (미팅 후 질문 시험용)",
+     "tone": ""
+    }
+   ],
+   "checks": [
+    "식사 자리라면 선호·기피 음식 자연스럽게 확인"
+   ],
+   "open_requests": [],
+   "read_seconds": 10
+  },
+  "장태우": {
+   "meeting": {
+    "date": "2026-10-31",
+    "time": "",
+    "title": "클라우드 전환 사전 협의 (예정)",
+    "type": "미팅"
+   },
+   "lines": [
+    {
+     "label": "최근 만남",
+     "value": "10월 22일 (8일 전)",
+     "tone": ""
+    },
+    {
+     "label": "주요 관심사",
+     "value": "자전거, 클라우드 전환",
+     "tone": ""
+    },
+    {
+     "label": "선호 음식",
+     "value": "중식",
+     "tone": "good"
+    },
+    {
+     "label": "기피 음식",
+     "value": "날음식",
+     "tone": "bad"
+    },
+    {
+     "label": "대화 스타일",
+     "value": "기술적 디테일에 강함, 직설적",
+     "tone": ""
+    },
+    {
+     "label": "선호 연락",
+     "value": "메신저",
+     "tone": ""
+    },
+    {
+     "label": "최근 대화",
+     "value": "10월 22일 미팅 · 유지보수 월간 점검 — 장애 이력 0건, 성능 개선 과제 2건 공유",
+     "tone": ""
+    },
+    {
+     "label": "미처리 요청",
+     "value": "성능 개선 과제 우선순위 회신 (D-3)",
+     "tone": "warn"
+    }
+   ],
+   "checks": [
+    "'성능 개선 과제 우선순위 회신' 진행상황 공유 (D-3)",
+    "최근 관심 주제 '클라우드 전환' 관련 의견 청취"
+   ],
+   "open_requests": [
+    {
+     "content": "성능 개선 과제 우선순위 회신",
+     "status": "진행 중",
+     "due": "D-3",
+     "overdue": false
+    }
+   ],
+   "read_seconds": 19
+  },
+  "한소희": {
+   "meeting": null,
+   "lines": [
+    {
+     "label": "최근 만남",
+     "value": "9월 10일 (50일 전)",
+     "tone": ""
+    },
+    {
+     "label": "주요 관심사",
+     "value": "전시 관람, 접근성 개선",
+     "tone": ""
+    },
+    {
+     "label": "대화 스타일",
+     "value": "아이디어가 많고 시각자료로 설명하는 것을 선호",
+     "tone": ""
+    },
+    {
+     "label": "최근 대화",
+     "value": "9월 10일 미팅 · 포털 개선안 리뷰 — 화면 시안 1차 검토",
+     "tone": ""
+    }
+   ],
+   "checks": [
+    "최근 관심 주제 '접근성 개선' 관련 의견 청취",
+    "식사 자리라면 선호·기피 음식 자연스럽게 확인"
+   ],
+   "open_requests": [],
+   "read_seconds": 13
+  },
+  "오정석": {
+   "meeting": null,
+   "lines": [
+    {
+     "label": "최근 만남",
+     "value": "6월 22일 (130일 전)",
+     "tone": ""
+    },
+    {
+     "label": "주요 관심사",
+     "value": "등산",
+     "tone": ""
+    },
+    {
+     "label": "선호 음식",
+     "value": "한식, 막걸리",
+     "tone": "good"
+    },
+    {
+     "label": "선호 연락",
+     "value": "휴대전화",
+     "tone": ""
+    },
+    {
+     "label": "최근 대화",
+     "value": "6월 22일 미팅 · 협력과제 성과 공유 — CMS 거래 데이터 분석 시범과제 결과 공유",
+     "tone": ""
+    },
+    {
+     "label": "다가오는 경조사",
+     "value": "생일 10월 31일",
+     "tone": ""
+    },
+    {
+     "label": "참고사항",
+     "value": "연락 시 비서실 경유 필요",
+     "tone": ""
+    }
+   ],
+   "checks": [
+    "생일(10월 31일) 축하 인사"
+   ],
+   "open_requests": [],
+   "read_seconds": 13
+  },
+  "서민재": {
+   "meeting": null,
+   "lines": [
+    {
+     "label": "최근 만남",
+     "value": "10월 5일 (25일 전)",
+     "tone": ""
+    },
+    {
+     "label": "주요 관심사",
+     "value": "CMS 운영시간 확대, 이용자 보호",
+     "tone": ""
+    },
+    {
+     "label": "대화 스타일",
+     "value": "공식 절차와 문서 중시",
+     "tone": ""
+    },
+    {
+     "label": "선호 연락",
+     "value": "공문·이메일",
+     "tone": ""
+    },
+    {
+     "label": "최근 대화",
+     "value": "10월 20일 이메일 · 검토의견 제출 일정 확인",
+     "tone": ""
+    },
+    {
+     "label": "미처리 요청",
+     "value": "CMS 운영시간 확대 관련 이용자 보호 검토의견 제출 (D-7)",
+     "tone": "warn"
+    }
+   ],
+   "checks": [
+    "'CMS 운영시간 확대 관련 이용자 보호 검토의견 제출' 진행상황 공유 (D-7)",
+    "최근 관심 주제 'CMS 운영시간 확대, 이용자 보호' 관련 의견 청취",
+    "식사 자리라면 선호·기피 음식 자연스럽게 확인"
+   ],
+   "open_requests": [
+    {
+     "content": "CMS 운영시간 확대 관련 이용자 보호 검토의견 제출",
+     "status": "진행 중",
+     "due": "D-7",
+     "overdue": false
+    }
+   ],
+   "read_seconds": 21
+  },
+  "임가영": {
+   "meeting": null,
+   "lines": [
+    {
+     "label": "최근 연락",
+     "value": "10월 18일 (12일 전, 대면 미팅 기록 없음)",
+     "tone": ""
+    },
+    {
+     "label": "주요 관심사",
+     "value": "필라테스",
+     "tone": ""
+    },
+    {
+     "label": "선호 음식",
+     "value": "샐러드",
+     "tone": "good"
+    },
+    {
+     "label": "기피 음식",
+     "value": "고기류",
+     "tone": "bad"
+    },
+    {
+     "label": "최근 대화",
+     "value": "10월 18일 통화 · 자료 취합 일정 문의",
+     "tone": ""
+    },
+    {
+     "label": "다가오는 경조사",
+     "value": "생일 11월 2일",
+     "tone": ""
+    }
+   ],
+   "checks": [
+    "생일(11월 2일) 축하 인사"
+   ],
+   "open_requests": [],
+   "read_seconds": 10
+  },
+  "배동욱": {
+   "meeting": null,
+   "lines": [
+    {
+     "label": "최근 만남",
+     "value": "4월 13일 (200일 전)",
+     "tone": ""
+    },
+    {
+     "label": "주요 관심사",
+     "value": "지방세 납부 편의성",
+     "tone": ""
+    },
+    {
+     "label": "최근 대화",
+     "value": "4월 13일 미팅 · 지방세 자동이체 협의 — 자동이체 신청 경로 다양화 논의",
+     "tone": ""
+    }
+   ],
+   "checks": [
+    "최근 관심 주제 '지방세 납부 편의성' 관련 의견 청취",
+    "식사 자리라면 선호·기피 음식 자연스럽게 확인"
+   ],
+   "open_requests": [],
+   "read_seconds": 12
+  },
+  "신예린": {
+   "meeting": null,
+   "lines": [
+    {
+     "label": "최근 만남",
+     "value": "8월 21일 (70일 전)",
+     "tone": ""
+    },
+    {
+     "label": "주요 관심사",
+     "value": "와인",
+     "tone": ""
+    },
+    {
+     "label": "선호 음식",
+     "value": "일식",
+     "tone": "good"
+    },
+    {
+     "label": "대화 스타일",
+     "value": "논리적이고 질문이 많음",
+     "tone": ""
+    },
+    {
+     "label": "선호 연락",
+     "value": "이메일",
+     "tone": ""
+    },
+    {
+     "label": "최근 대화",
+     "value": "8월 21일 미팅 · IT 감사 사전 인터뷰 — 접근통제 관련 증빙 목록 수령",
+     "tone": ""
+    },
+    {
+     "label": "다가오는 경조사",
+     "value": "생일 11월 9일",
+     "tone": ""
+    }
+   ],
+   "checks": [
+    "생일(11월 9일) 축하 인사"
+   ],
+   "open_requests": [],
+   "read_seconds": 12
+  },
+  "문승호": {
+   "meeting": null,
+   "lines": [
+    {
+     "label": "최근 연락",
+     "value": "6월 2일 (150일 전, 대면 미팅 기록 없음)",
+     "tone": ""
+    },
+    {
+     "label": "주요 관심사",
+     "value": "야구 관람, 출금 재시도 기능",
+     "tone": ""
+    },
+    {
+     "label": "기피 음식",
+     "value": "오이",
+     "tone": "bad"
+    },
+    {
+     "label": "최근 대화",
+     "value": "6월 2일 통화 · 출금 재시도 기능 문의",
+     "tone": ""
+    },
+    {
+     "label": "미처리 요청",
+     "value": "출금 재시도 기능 개선 요청 내부 전달",
+     "tone": "warn"
+    }
+   ],
+   "checks": [
+    "'출금 재시도 기능 개선 요청 내부 전달' 진행상황 공유",
+    "최근 관심 주제 '출금 재시도 기능' 관련 의견 청취"
+   ],
+   "open_requests": [
+    {
+     "content": "출금 재시도 기능 개선 요청 내부 전달",
+     "status": "미착수",
+     "due": "",
+     "overdue": false
+    }
+   ],
+   "read_seconds": 15
+  },
+  "노은지": {
+   "meeting": null,
+   "lines": [
+    {
+     "label": "최근 만남",
+     "value": "9월 5일 (55일 전)",
+     "tone": ""
+    },
+    {
+     "label": "주요 관심사",
+     "value": "재테크, 자격증 공부",
+     "tone": ""
+    },
+    {
+     "label": "선호 음식",
+     "value": "베트남 음식",
+     "tone": "good"
+    },
+    {
+     "label": "대화 스타일",
+     "value": "밝고 적극적",
+     "tone": ""
+    },
+    {
+     "label": "선호 연락",
+     "value": "메신저",
+     "tone": ""
+    },
+    {
+     "label": "최근 대화",
+     "value": "9월 5일 미팅 · 증권계좌 CMS 연계 설명 — 연계 절차 설명, 추가 질의 이메일로 받기로 함",
+     "tone": ""
+    }
+   ],
+   "checks": [
+    "최근 관심 주제 '재테크, 자격증 공부' 관련 의견 청취"
+   ],
+   "open_requests": [],
+   "read_seconds": 13
+  },
+  "구본석": {
+   "meeting": null,
+   "lines": [
+    {
+     "label": "최근 만남",
+     "value": "기록 없음",
+     "tone": "muted"
+    }
+   ],
+   "checks": [
+    "식사 자리라면 선호·기피 음식 자연스럽게 확인"
+   ],
+   "open_requests": [],
+   "read_seconds": 10
+  }
+ },
+ "upcomingMeetings": [
+  {
+   "name": "장태우",
+   "date": "2026-10-31",
+   "time": "",
+   "title": "클라우드 전환 사전 협의 (예정)"
+  },
+  {
+   "name": "김도현",
+   "date": "2026-11-01",
+   "time": "",
+   "title": "정기 업무협의 (예정)"
+  }
+ ],
+ "followupQuestions": {
+  "김도현|2026-10-17|CMS 운영시간 확대 논의": [
+   {
+    "id": "held",
+    "reason": "미팅 진행 여부 확인",
+    "text": "'CMS 운영시간 확대 논의' 미팅은 예정대로 진행되었나요?",
+    "options": [
+     {
+      "value": "yes",
+      "label": "예정대로 진행됨",
+      "inputs": []
+     },
+     {
+      "value": "moved",
+      "label": "다른 날로 연기됨",
+      "inputs": [
+       "new_date"
+      ]
+     },
+     {
+      "value": "cancel",
+      "label": "취소됨",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "request",
+    "reason": "업무상 요청사항 확인",
+    "text": "오늘 김도현 부장님이 새롭게 요청한 업무가 있었나요?",
+    "options": [
+     {
+      "value": "자료 요청",
+      "label": "자료 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "서비스 개선 요청",
+      "label": "서비스 개선 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "추가 미팅 요청",
+      "label": "추가 미팅 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "문의사항 확인 요청",
+      "label": "문의사항 확인 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "요청사항 없음",
+      "inputs": []
+     }
+    ]
+   }
+  ],
+  "김도현|2026-11-01|정기 업무협의 (예정)": [
+   {
+    "id": "held",
+    "reason": "미팅 진행 여부 확인",
+    "text": "'정기 업무협의 (예정)' 미팅은 예정대로 진행되었나요?",
+    "options": [
+     {
+      "value": "yes",
+      "label": "예정대로 진행됨",
+      "inputs": []
+     },
+     {
+      "value": "moved",
+      "label": "다른 날로 연기됨",
+      "inputs": [
+       "new_date"
+      ]
+     },
+     {
+      "value": "cancel",
+      "label": "취소됨",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "request",
+    "reason": "업무상 요청사항 확인",
+    "text": "오늘 김도현 부장님이 새롭게 요청한 업무가 있었나요?",
+    "options": [
+     {
+      "value": "자료 요청",
+      "label": "자료 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "서비스 개선 요청",
+      "label": "서비스 개선 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "추가 미팅 요청",
+      "label": "추가 미팅 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "문의사항 확인 요청",
+      "label": "문의사항 확인 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "요청사항 없음",
+      "inputs": []
+     }
+    ]
+   }
+  ],
+  "최유진|2026-09-30|CMS 참가 절차 설명회": [
+   {
+    "id": "held",
+    "reason": "미팅 진행 여부 확인",
+    "text": "'CMS 참가 절차 설명회' 미팅은 예정대로 진행되었나요?",
+    "options": [
+     {
+      "value": "yes",
+      "label": "예정대로 진행됨",
+      "inputs": []
+     },
+     {
+      "value": "moved",
+      "label": "다른 날로 연기됨",
+      "inputs": [
+       "new_date"
+      ]
+     },
+     {
+      "value": "cancel",
+      "label": "취소됨",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "request",
+    "reason": "업무상 요청사항 확인",
+    "text": "오늘 최유진 팀장님이 새롭게 요청한 업무가 있었나요?",
+    "options": [
+     {
+      "value": "자료 요청",
+      "label": "자료 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "서비스 개선 요청",
+      "label": "서비스 개선 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "추가 미팅 요청",
+      "label": "추가 미팅 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "문의사항 확인 요청",
+      "label": "문의사항 확인 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "요청사항 없음",
+      "inputs": []
+     }
+    ]
+   }
+  ],
+  "정민수|2026-07-12|연간 이용현황 점검": [
+   {
+    "id": "held",
+    "reason": "미팅 진행 여부 확인",
+    "text": "'연간 이용현황 점검' 미팅은 예정대로 진행되었나요?",
+    "options": [
+     {
+      "value": "yes",
+      "label": "예정대로 진행됨",
+      "inputs": []
+     },
+     {
+      "value": "moved",
+      "label": "다른 날로 연기됨",
+      "inputs": [
+       "new_date"
+      ]
+     },
+     {
+      "value": "cancel",
+      "label": "취소됨",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "request",
+    "reason": "업무상 요청사항 확인",
+    "text": "오늘 정민수 실장님이 새롭게 요청한 업무가 있었나요?",
+    "options": [
+     {
+      "value": "자료 요청",
+      "label": "자료 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "서비스 개선 요청",
+      "label": "서비스 개선 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "추가 미팅 요청",
+      "label": "추가 미팅 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "문의사항 확인 요청",
+      "label": "문의사항 확인 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "요청사항 없음",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "interest",
+    "reason": "최근 관심사 정보 없음",
+    "text": "오늘 대화에서 고객이 관심을 보인 주제가 있었나요?",
+    "options": [
+     {
+      "value": "취미·여가",
+      "label": "취미·여가",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "가족·생활",
+      "label": "가족·생활",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "업무·사업",
+      "label": "업무·사업",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "경제·투자",
+      "label": "경제·투자",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "특별한 언급 없음",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "next_contact",
+    "reason": "다음 연락 일정 없음",
+    "text": "다음 연락이나 미팅 일정이 잡혔나요?",
+    "options": [
+     {
+      "value": "set",
+      "label": "날짜가 정해짐",
+      "inputs": [
+       "date"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "아직 미정",
+      "inputs": []
+     }
+    ]
+   }
+  ],
+  "조성훈|2026-09-20|수수료 체계 상담": [
+   {
+    "id": "held",
+    "reason": "미팅 진행 여부 확인",
+    "text": "'수수료 체계 상담' 미팅은 예정대로 진행되었나요?",
+    "options": [
+     {
+      "value": "yes",
+      "label": "예정대로 진행됨",
+      "inputs": []
+     },
+     {
+      "value": "moved",
+      "label": "다른 날로 연기됨",
+      "inputs": [
+       "new_date"
+      ]
+     },
+     {
+      "value": "cancel",
+      "label": "취소됨",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "request",
+    "reason": "업무상 요청사항 확인",
+    "text": "오늘 조성훈 팀장님이 새롭게 요청한 업무가 있었나요?",
+    "options": [
+     {
+      "value": "자료 요청",
+      "label": "자료 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "서비스 개선 요청",
+      "label": "서비스 개선 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "추가 미팅 요청",
+      "label": "추가 미팅 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "문의사항 확인 요청",
+      "label": "문의사항 확인 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "요청사항 없음",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "next_contact",
+    "reason": "예정 연락일 지남",
+    "text": "다음 연락이나 미팅 일정이 잡혔나요?",
+    "options": [
+     {
+      "value": "set",
+      "label": "날짜가 정해짐",
+      "inputs": [
+       "date"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "아직 미정",
+      "inputs": []
+     }
+    ]
+   }
+  ],
+  "윤지아|2026-09-30|첫 미팅 및 명함 교환": [
+   {
+    "id": "held",
+    "reason": "미팅 진행 여부 확인",
+    "text": "'첫 미팅 및 명함 교환' 미팅은 예정대로 진행되었나요?",
+    "options": [
+     {
+      "value": "yes",
+      "label": "예정대로 진행됨",
+      "inputs": []
+     },
+     {
+      "value": "moved",
+      "label": "다른 날로 연기됨",
+      "inputs": [
+       "new_date"
+      ]
+     },
+     {
+      "value": "cancel",
+      "label": "취소됨",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "request",
+    "reason": "업무상 요청사항 확인",
+    "text": "오늘 윤지아 대리님이 새롭게 요청한 업무가 있었나요?",
+    "options": [
+     {
+      "value": "자료 요청",
+      "label": "자료 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "서비스 개선 요청",
+      "label": "서비스 개선 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "추가 미팅 요청",
+      "label": "추가 미팅 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "문의사항 확인 요청",
+      "label": "문의사항 확인 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "요청사항 없음",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "food_ate",
+    "reason": "음식 선호 정보 없음",
+    "text": "오늘 윤지아 대리님과 어떤 음식을 드셨나요?",
+    "options": [
+     {
+      "value": "한식",
+      "label": "한식",
+      "inputs": []
+     },
+     {
+      "value": "중식",
+      "label": "중식",
+      "inputs": []
+     },
+     {
+      "value": "일식",
+      "label": "일식",
+      "inputs": []
+     },
+     {
+      "value": "양식",
+      "label": "양식",
+      "inputs": []
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": []
+     },
+     {
+      "value": "none",
+      "label": "식사하지 않음",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "food_pref",
+    "reason": "음식 선호 정보 없음",
+    "text": "고객이 특별히 선호하거나 기피하는 음식이 있었나요?",
+    "options": [
+     {
+      "value": "like",
+      "label": "선호 음식이 있었음",
+      "inputs": [
+       "like"
+      ]
+     },
+     {
+      "value": "dislike",
+      "label": "기피 음식이 있었음",
+      "inputs": [
+       "dislike"
+      ]
+     },
+     {
+      "value": "both",
+      "label": "둘 다 있었음",
+      "inputs": [
+       "like",
+       "dislike"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "특별한 언급 없음",
+      "inputs": []
+     },
+     {
+      "value": "unknown",
+      "label": "기억나지 않음",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "interest",
+    "reason": "최근 관심사 정보 없음",
+    "text": "오늘 대화에서 고객이 관심을 보인 주제가 있었나요?",
+    "options": [
+     {
+      "value": "취미·여가",
+      "label": "취미·여가",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "가족·생활",
+      "label": "가족·생활",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "업무·사업",
+      "label": "업무·사업",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "경제·투자",
+      "label": "경제·투자",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "특별한 언급 없음",
+      "inputs": []
+     }
+    ]
+   }
+  ],
+  "윤지아|2026-10-29|관리비 CMS 신청 상담": [
+   {
+    "id": "held",
+    "reason": "미팅 진행 여부 확인",
+    "text": "'관리비 CMS 신청 상담' 미팅은 예정대로 진행되었나요?",
+    "options": [
+     {
+      "value": "yes",
+      "label": "예정대로 진행됨",
+      "inputs": []
+     },
+     {
+      "value": "moved",
+      "label": "다른 날로 연기됨",
+      "inputs": [
+       "new_date"
+      ]
+     },
+     {
+      "value": "cancel",
+      "label": "취소됨",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "request",
+    "reason": "업무상 요청사항 확인",
+    "text": "오늘 윤지아 대리님이 새롭게 요청한 업무가 있었나요?",
+    "options": [
+     {
+      "value": "자료 요청",
+      "label": "자료 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "서비스 개선 요청",
+      "label": "서비스 개선 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "추가 미팅 요청",
+      "label": "추가 미팅 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "문의사항 확인 요청",
+      "label": "문의사항 확인 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "요청사항 없음",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "food_ate",
+    "reason": "음식 선호 정보 없음",
+    "text": "오늘 윤지아 대리님과 어떤 음식을 드셨나요?",
+    "options": [
+     {
+      "value": "한식",
+      "label": "한식",
+      "inputs": []
+     },
+     {
+      "value": "중식",
+      "label": "중식",
+      "inputs": []
+     },
+     {
+      "value": "일식",
+      "label": "일식",
+      "inputs": []
+     },
+     {
+      "value": "양식",
+      "label": "양식",
+      "inputs": []
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": []
+     },
+     {
+      "value": "none",
+      "label": "식사하지 않음",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "food_pref",
+    "reason": "음식 선호 정보 없음",
+    "text": "고객이 특별히 선호하거나 기피하는 음식이 있었나요?",
+    "options": [
+     {
+      "value": "like",
+      "label": "선호 음식이 있었음",
+      "inputs": [
+       "like"
+      ]
+     },
+     {
+      "value": "dislike",
+      "label": "기피 음식이 있었음",
+      "inputs": [
+       "dislike"
+      ]
+     },
+     {
+      "value": "both",
+      "label": "둘 다 있었음",
+      "inputs": [
+       "like",
+       "dislike"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "특별한 언급 없음",
+      "inputs": []
+     },
+     {
+      "value": "unknown",
+      "label": "기억나지 않음",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "interest",
+    "reason": "최근 관심사 정보 없음",
+    "text": "오늘 대화에서 고객이 관심을 보인 주제가 있었나요?",
+    "options": [
+     {
+      "value": "취미·여가",
+      "label": "취미·여가",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "가족·생활",
+      "label": "가족·생활",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "업무·사업",
+      "label": "업무·사업",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "경제·투자",
+      "label": "경제·투자",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "특별한 언급 없음",
+      "inputs": []
+     }
+    ]
+   }
+  ],
+  "장태우|2026-10-22|유지보수 월간 점검": [
+   {
+    "id": "held",
+    "reason": "미팅 진행 여부 확인",
+    "text": "'유지보수 월간 점검' 미팅은 예정대로 진행되었나요?",
+    "options": [
+     {
+      "value": "yes",
+      "label": "예정대로 진행됨",
+      "inputs": []
+     },
+     {
+      "value": "moved",
+      "label": "다른 날로 연기됨",
+      "inputs": [
+       "new_date"
+      ]
+     },
+     {
+      "value": "cancel",
+      "label": "취소됨",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "request",
+    "reason": "업무상 요청사항 확인",
+    "text": "오늘 장태우 이사님이 새롭게 요청한 업무가 있었나요?",
+    "options": [
+     {
+      "value": "자료 요청",
+      "label": "자료 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "서비스 개선 요청",
+      "label": "서비스 개선 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "추가 미팅 요청",
+      "label": "추가 미팅 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "문의사항 확인 요청",
+      "label": "문의사항 확인 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "요청사항 없음",
+      "inputs": []
+     }
+    ]
+   }
+  ],
+  "장태우|2026-10-31|클라우드 전환 사전 협의 (예정)": [
+   {
+    "id": "held",
+    "reason": "미팅 진행 여부 확인",
+    "text": "'클라우드 전환 사전 협의 (예정)' 미팅은 예정대로 진행되었나요?",
+    "options": [
+     {
+      "value": "yes",
+      "label": "예정대로 진행됨",
+      "inputs": []
+     },
+     {
+      "value": "moved",
+      "label": "다른 날로 연기됨",
+      "inputs": [
+       "new_date"
+      ]
+     },
+     {
+      "value": "cancel",
+      "label": "취소됨",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "request",
+    "reason": "업무상 요청사항 확인",
+    "text": "오늘 장태우 이사님이 새롭게 요청한 업무가 있었나요?",
+    "options": [
+     {
+      "value": "자료 요청",
+      "label": "자료 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "서비스 개선 요청",
+      "label": "서비스 개선 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "추가 미팅 요청",
+      "label": "추가 미팅 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "문의사항 확인 요청",
+      "label": "문의사항 확인 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "요청사항 없음",
+      "inputs": []
+     }
+    ]
+   }
+  ],
+  "한소희|2026-09-10|포털 개선안 리뷰": [
+   {
+    "id": "held",
+    "reason": "미팅 진행 여부 확인",
+    "text": "'포털 개선안 리뷰' 미팅은 예정대로 진행되었나요?",
+    "options": [
+     {
+      "value": "yes",
+      "label": "예정대로 진행됨",
+      "inputs": []
+     },
+     {
+      "value": "moved",
+      "label": "다른 날로 연기됨",
+      "inputs": [
+       "new_date"
+      ]
+     },
+     {
+      "value": "cancel",
+      "label": "취소됨",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "request",
+    "reason": "업무상 요청사항 확인",
+    "text": "오늘 한소희 책임님이 새롭게 요청한 업무가 있었나요?",
+    "options": [
+     {
+      "value": "자료 요청",
+      "label": "자료 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "서비스 개선 요청",
+      "label": "서비스 개선 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "추가 미팅 요청",
+      "label": "추가 미팅 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "문의사항 확인 요청",
+      "label": "문의사항 확인 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "요청사항 없음",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "food_ate",
+    "reason": "음식 선호 정보 없음",
+    "text": "오늘 한소희 책임님과 어떤 음식을 드셨나요?",
+    "options": [
+     {
+      "value": "한식",
+      "label": "한식",
+      "inputs": []
+     },
+     {
+      "value": "중식",
+      "label": "중식",
+      "inputs": []
+     },
+     {
+      "value": "일식",
+      "label": "일식",
+      "inputs": []
+     },
+     {
+      "value": "양식",
+      "label": "양식",
+      "inputs": []
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": []
+     },
+     {
+      "value": "none",
+      "label": "식사하지 않음",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "food_pref",
+    "reason": "음식 선호 정보 없음",
+    "text": "고객이 특별히 선호하거나 기피하는 음식이 있었나요?",
+    "options": [
+     {
+      "value": "like",
+      "label": "선호 음식이 있었음",
+      "inputs": [
+       "like"
+      ]
+     },
+     {
+      "value": "dislike",
+      "label": "기피 음식이 있었음",
+      "inputs": [
+       "dislike"
+      ]
+     },
+     {
+      "value": "both",
+      "label": "둘 다 있었음",
+      "inputs": [
+       "like",
+       "dislike"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "특별한 언급 없음",
+      "inputs": []
+     },
+     {
+      "value": "unknown",
+      "label": "기억나지 않음",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "next_contact",
+    "reason": "다음 연락 일정 없음",
+    "text": "다음 연락이나 미팅 일정이 잡혔나요?",
+    "options": [
+     {
+      "value": "set",
+      "label": "날짜가 정해짐",
+      "inputs": [
+       "date"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "아직 미정",
+      "inputs": []
+     }
+    ]
+   }
+  ],
+  "오정석|2026-06-22|협력과제 성과 공유": [
+   {
+    "id": "held",
+    "reason": "미팅 진행 여부 확인",
+    "text": "'협력과제 성과 공유' 미팅은 예정대로 진행되었나요?",
+    "options": [
+     {
+      "value": "yes",
+      "label": "예정대로 진행됨",
+      "inputs": []
+     },
+     {
+      "value": "moved",
+      "label": "다른 날로 연기됨",
+      "inputs": [
+       "new_date"
+      ]
+     },
+     {
+      "value": "cancel",
+      "label": "취소됨",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "request",
+    "reason": "업무상 요청사항 확인",
+    "text": "오늘 오정석 대표님이 새롭게 요청한 업무가 있었나요?",
+    "options": [
+     {
+      "value": "자료 요청",
+      "label": "자료 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "서비스 개선 요청",
+      "label": "서비스 개선 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "추가 미팅 요청",
+      "label": "추가 미팅 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "문의사항 확인 요청",
+      "label": "문의사항 확인 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "요청사항 없음",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "interest",
+    "reason": "최근 관심사 정보 없음",
+    "text": "오늘 대화에서 고객이 관심을 보인 주제가 있었나요?",
+    "options": [
+     {
+      "value": "취미·여가",
+      "label": "취미·여가",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "가족·생활",
+      "label": "가족·생활",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "업무·사업",
+      "label": "업무·사업",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "경제·투자",
+      "label": "경제·투자",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "특별한 언급 없음",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "next_contact",
+    "reason": "다음 연락 일정 없음",
+    "text": "다음 연락이나 미팅 일정이 잡혔나요?",
+    "options": [
+     {
+      "value": "set",
+      "label": "날짜가 정해짐",
+      "inputs": [
+       "date"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "아직 미정",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "personality",
+    "reason": "대화 스타일 정보 없음",
+    "text": "고객의 대화 스타일은 어땠나요?",
+    "options": [
+     {
+      "value": "결론부터 듣는 것을 선호",
+      "label": "결론부터 듣는 것을 선호",
+      "inputs": []
+     },
+     {
+      "value": "자세한 설명을 선호",
+      "label": "자세한 설명을 선호",
+      "inputs": []
+     },
+     {
+      "value": "친근한 대화를 선호",
+      "label": "친근한 대화를 선호",
+      "inputs": []
+     },
+     {
+      "value": "격식 있는 대화를 선호",
+      "label": "격식 있는 대화를 선호",
+      "inputs": []
+     },
+     {
+      "value": "etc",
+      "label": "기타",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "unknown",
+      "label": "잘 모르겠음",
+      "inputs": []
+     }
+    ]
+   }
+  ],
+  "서민재|2026-10-05|운영시간 확대 정책 협의": [
+   {
+    "id": "held",
+    "reason": "미팅 진행 여부 확인",
+    "text": "'운영시간 확대 정책 협의' 미팅은 예정대로 진행되었나요?",
+    "options": [
+     {
+      "value": "yes",
+      "label": "예정대로 진행됨",
+      "inputs": []
+     },
+     {
+      "value": "moved",
+      "label": "다른 날로 연기됨",
+      "inputs": [
+       "new_date"
+      ]
+     },
+     {
+      "value": "cancel",
+      "label": "취소됨",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "request",
+    "reason": "업무상 요청사항 확인",
+    "text": "오늘 서민재 사무관님이 새롭게 요청한 업무가 있었나요?",
+    "options": [
+     {
+      "value": "자료 요청",
+      "label": "자료 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "서비스 개선 요청",
+      "label": "서비스 개선 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "추가 미팅 요청",
+      "label": "추가 미팅 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "문의사항 확인 요청",
+      "label": "문의사항 확인 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "요청사항 없음",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "food_ate",
+    "reason": "음식 선호 정보 없음",
+    "text": "오늘 서민재 사무관님과 어떤 음식을 드셨나요?",
+    "options": [
+     {
+      "value": "한식",
+      "label": "한식",
+      "inputs": []
+     },
+     {
+      "value": "중식",
+      "label": "중식",
+      "inputs": []
+     },
+     {
+      "value": "일식",
+      "label": "일식",
+      "inputs": []
+     },
+     {
+      "value": "양식",
+      "label": "양식",
+      "inputs": []
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": []
+     },
+     {
+      "value": "none",
+      "label": "식사하지 않음",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "food_pref",
+    "reason": "음식 선호 정보 없음",
+    "text": "고객이 특별히 선호하거나 기피하는 음식이 있었나요?",
+    "options": [
+     {
+      "value": "like",
+      "label": "선호 음식이 있었음",
+      "inputs": [
+       "like"
+      ]
+     },
+     {
+      "value": "dislike",
+      "label": "기피 음식이 있었음",
+      "inputs": [
+       "dislike"
+      ]
+     },
+     {
+      "value": "both",
+      "label": "둘 다 있었음",
+      "inputs": [
+       "like",
+       "dislike"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "특별한 언급 없음",
+      "inputs": []
+     },
+     {
+      "value": "unknown",
+      "label": "기억나지 않음",
+      "inputs": []
+     }
+    ]
+   }
+  ],
+  "배동욱|2026-04-13|지방세 자동이체 협의": [
+   {
+    "id": "held",
+    "reason": "미팅 진행 여부 확인",
+    "text": "'지방세 자동이체 협의' 미팅은 예정대로 진행되었나요?",
+    "options": [
+     {
+      "value": "yes",
+      "label": "예정대로 진행됨",
+      "inputs": []
+     },
+     {
+      "value": "moved",
+      "label": "다른 날로 연기됨",
+      "inputs": [
+       "new_date"
+      ]
+     },
+     {
+      "value": "cancel",
+      "label": "취소됨",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "request",
+    "reason": "업무상 요청사항 확인",
+    "text": "오늘 배동욱 팀장님이 새롭게 요청한 업무가 있었나요?",
+    "options": [
+     {
+      "value": "자료 요청",
+      "label": "자료 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "서비스 개선 요청",
+      "label": "서비스 개선 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "추가 미팅 요청",
+      "label": "추가 미팅 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "문의사항 확인 요청",
+      "label": "문의사항 확인 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "요청사항 없음",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "food_ate",
+    "reason": "음식 선호 정보 없음",
+    "text": "오늘 배동욱 팀장님과 어떤 음식을 드셨나요?",
+    "options": [
+     {
+      "value": "한식",
+      "label": "한식",
+      "inputs": []
+     },
+     {
+      "value": "중식",
+      "label": "중식",
+      "inputs": []
+     },
+     {
+      "value": "일식",
+      "label": "일식",
+      "inputs": []
+     },
+     {
+      "value": "양식",
+      "label": "양식",
+      "inputs": []
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": []
+     },
+     {
+      "value": "none",
+      "label": "식사하지 않음",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "food_pref",
+    "reason": "음식 선호 정보 없음",
+    "text": "고객이 특별히 선호하거나 기피하는 음식이 있었나요?",
+    "options": [
+     {
+      "value": "like",
+      "label": "선호 음식이 있었음",
+      "inputs": [
+       "like"
+      ]
+     },
+     {
+      "value": "dislike",
+      "label": "기피 음식이 있었음",
+      "inputs": [
+       "dislike"
+      ]
+     },
+     {
+      "value": "both",
+      "label": "둘 다 있었음",
+      "inputs": [
+       "like",
+       "dislike"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "특별한 언급 없음",
+      "inputs": []
+     },
+     {
+      "value": "unknown",
+      "label": "기억나지 않음",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "next_contact",
+    "reason": "다음 연락 일정 없음",
+    "text": "다음 연락이나 미팅 일정이 잡혔나요?",
+    "options": [
+     {
+      "value": "set",
+      "label": "날짜가 정해짐",
+      "inputs": [
+       "date"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "아직 미정",
+      "inputs": []
+     }
+    ]
+   }
+  ],
+  "신예린|2026-08-21|IT 감사 사전 인터뷰": [
+   {
+    "id": "held",
+    "reason": "미팅 진행 여부 확인",
+    "text": "'IT 감사 사전 인터뷰' 미팅은 예정대로 진행되었나요?",
+    "options": [
+     {
+      "value": "yes",
+      "label": "예정대로 진행됨",
+      "inputs": []
+     },
+     {
+      "value": "moved",
+      "label": "다른 날로 연기됨",
+      "inputs": [
+       "new_date"
+      ]
+     },
+     {
+      "value": "cancel",
+      "label": "취소됨",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "request",
+    "reason": "업무상 요청사항 확인",
+    "text": "오늘 신예린 이사님이 새롭게 요청한 업무가 있었나요?",
+    "options": [
+     {
+      "value": "자료 요청",
+      "label": "자료 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "서비스 개선 요청",
+      "label": "서비스 개선 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "추가 미팅 요청",
+      "label": "추가 미팅 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "문의사항 확인 요청",
+      "label": "문의사항 확인 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "요청사항 없음",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "interest",
+    "reason": "최근 관심사 정보 없음",
+    "text": "오늘 대화에서 고객이 관심을 보인 주제가 있었나요?",
+    "options": [
+     {
+      "value": "취미·여가",
+      "label": "취미·여가",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "가족·생활",
+      "label": "가족·생활",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "업무·사업",
+      "label": "업무·사업",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "경제·투자",
+      "label": "경제·투자",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": [
+       "text"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "특별한 언급 없음",
+      "inputs": []
+     }
+    ]
+   }
+  ],
+  "노은지|2026-09-05|증권계좌 CMS 연계 설명": [
+   {
+    "id": "held",
+    "reason": "미팅 진행 여부 확인",
+    "text": "'증권계좌 CMS 연계 설명' 미팅은 예정대로 진행되었나요?",
+    "options": [
+     {
+      "value": "yes",
+      "label": "예정대로 진행됨",
+      "inputs": []
+     },
+     {
+      "value": "moved",
+      "label": "다른 날로 연기됨",
+      "inputs": [
+       "new_date"
+      ]
+     },
+     {
+      "value": "cancel",
+      "label": "취소됨",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "request",
+    "reason": "업무상 요청사항 확인",
+    "text": "오늘 노은지 대리님이 새롭게 요청한 업무가 있었나요?",
+    "options": [
+     {
+      "value": "자료 요청",
+      "label": "자료 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "서비스 개선 요청",
+      "label": "서비스 개선 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "추가 미팅 요청",
+      "label": "추가 미팅 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "문의사항 확인 요청",
+      "label": "문의사항 확인 요청",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "기타",
+      "label": "기타",
+      "inputs": [
+       "content",
+       "due_date",
+       "assignee"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "요청사항 없음",
+      "inputs": []
+     }
+    ]
+   },
+   {
+    "id": "next_contact",
+    "reason": "다음 연락 일정 없음",
+    "text": "다음 연락이나 미팅 일정이 잡혔나요?",
+    "options": [
+     {
+      "value": "set",
+      "label": "날짜가 정해짐",
+      "inputs": [
+       "date"
+      ]
+     },
+     {
+      "value": "none",
+      "label": "아직 미정",
+      "inputs": []
+     }
+    ]
+   }
+  ]
+ },
+ "followupPending": [
+  {
+   "name": "윤지아",
+   "date": "2026-10-29",
+   "time": "15:00",
+   "title": "관리비 CMS 신청 상담",
+   "fire_at": "2026-10-29 17:00:00"
+  }
+ ],
+ "searches": [
+  {
+   "q": "골프 좋아하는 은행 담당자 찾아줘",
+   "conditions": {
+    "target": "customers",
+    "keywords": [
+     {
+      "text": "골프",
+      "scope": "interest"
+     }
+    ],
+    "conversation_keywords": [],
+    "org_keywords": [
+     "은행"
+    ],
+    "customer_types": [],
+    "no_contact_days": null,
+    "contact_kind": "contact",
+    "birthday_from": "",
+    "birthday_to": "",
+    "request_status": "",
+    "request_keywords": [],
+    "due_within_days": null,
+    "overdue": false
+   },
+   "explain": [
+    "관심사에 '골프'",
+    "소속에 '은행'"
+   ],
+   "target": "customers",
+   "count": 1,
+   "customers": [
+    {
+     "name": "김도현",
+     "evidence": [
+      {
+       "label": "소속",
+       "text": "가온은행 자금결제부"
+      },
+      {
+       "label": "취미·관심사",
+       "text": "골프, 등산"
+      }
+     ]
+    }
+   ],
+   "requests": []
+  },
+  {
+   "q": "최근 3개월 동안 만나지 못한 고객은?",
+   "conditions": {
+    "target": "customers",
+    "keywords": [],
+    "conversation_keywords": [],
+    "org_keywords": [],
+    "customer_types": [],
+    "no_contact_days": 90,
+    "contact_kind": "meeting",
+    "birthday_from": "",
+    "birthday_to": "",
+    "request_status": "",
+    "request_keywords": [],
+    "due_within_days": null,
+    "overdue": false
+   },
+   "explain": [
+    "90일 이상 미팅 없음"
+   ],
+   "target": "customers",
+   "count": 9,
+   "customers": [
+    {
+     "name": "강하은",
+     "evidence": [
+      {
+       "label": "최근 미팅",
+       "text": "기록 없음"
+      }
+     ]
+    },
+    {
+     "name": "구본석",
+     "evidence": [
+      {
+       "label": "최근 미팅",
+       "text": "기록 없음"
+      }
+     ]
+    },
+    {
+     "name": "문승호",
+     "evidence": [
+      {
+       "label": "최근 미팅",
+       "text": "기록 없음"
+      }
+     ]
+    },
+    {
+     "name": "박준혁",
+     "evidence": [
+      {
+       "label": "최근 미팅",
+       "text": "기록 없음"
+      }
+     ]
+    },
+    {
+     "name": "이서연",
+     "evidence": [
+      {
+       "label": "최근 미팅",
+       "text": "기록 없음"
+      }
+     ]
+    },
+    {
+     "name": "임가영",
+     "evidence": [
+      {
+       "label": "최근 미팅",
+       "text": "기록 없음"
+      }
+     ]
+    },
+    {
+     "name": "배동욱",
+     "evidence": [
+      {
+       "label": "최근 미팅",
+       "text": "2026-04-13 (200일 전)"
+      }
+     ]
+    },
+    {
+     "name": "오정석",
+     "evidence": [
+      {
+       "label": "최근 미팅",
+       "text": "2026-06-22 (130일 전)"
+      }
+     ]
+    },
+    {
+     "name": "정민수",
+     "evidence": [
+      {
+       "label": "최근 미팅",
+       "text": "2026-07-12 (110일 전)"
+      }
+     ]
+    }
+   ],
+   "requests": []
+  },
+  {
+   "q": "다음 달 생일인 고객 알려줘",
+   "conditions": {
+    "target": "customers",
+    "keywords": [],
+    "conversation_keywords": [],
+    "org_keywords": [],
+    "customer_types": [],
+    "no_contact_days": null,
+    "contact_kind": "contact",
+    "birthday_from": "2026-11-01",
+    "birthday_to": "2026-11-30",
+    "request_status": "",
+    "request_keywords": [],
+    "due_within_days": null,
+    "overdue": false
+   },
+   "explain": [
+    "생일 11/01~11/30"
+   ],
+   "target": "customers",
+   "count": 5,
+   "customers": [
+    {
+     "name": "임가영",
+     "evidence": [
+      {
+       "label": "생일",
+       "text": "11월 2일 (D-3)"
+      }
+     ]
+    },
+    {
+     "name": "김도현",
+     "evidence": [
+      {
+       "label": "생일",
+       "text": "11월 4일 (D-5)"
+      }
+     ]
+    },
+    {
+     "name": "신예린",
+     "evidence": [
+      {
+       "label": "생일",
+       "text": "11월 9일 (D-10)"
+      }
+     ]
+    },
+    {
+     "name": "최유진",
+     "evidence": [
+      {
+       "label": "생일",
+       "text": "11월 17일 (D-18)"
+      }
+     ]
+    },
+    {
+     "name": "조성훈",
+     "evidence": [
+      {
+       "label": "생일",
+       "text": "11월 24일 (D-25)"
+      }
+     ]
+    }
+   ],
+   "requests": []
+  },
+  {
+   "q": "CMS 운영시간 확대에 관심을 보인 고객은?",
+   "conditions": {
+    "target": "customers",
+    "keywords": [
+     {
+      "text": "CMS 운영시간 확대",
+      "scope": "interest"
+     }
+    ],
+    "conversation_keywords": [
+     "CMS 운영시간 확대"
+    ],
+    "org_keywords": [],
+    "customer_types": [],
+    "no_contact_days": null,
+    "contact_kind": "contact",
+    "birthday_from": "",
+    "birthday_to": "",
+    "request_status": "",
+    "request_keywords": [],
+    "due_within_days": null,
+    "overdue": false
+   },
+   "explain": [
+    "관심사에 'CMS 운영시간 확대'",
+    "대화기록 포함: 'CMS 운영시간 확대'"
+   ],
+   "target": "customers",
+   "count": 2,
+   "customers": [
+    {
+     "name": "김도현",
+     "evidence": [
+      {
+       "label": "최근 관심 주제",
+       "text": "CMS 운영시간 확대"
+      }
+     ]
+    },
+    {
+     "name": "서민재",
+     "evidence": [
+      {
+       "label": "최근 관심 주제",
+       "text": "CMS 운영시간 확대, 이용자 보호"
+      }
+     ]
+    }
+   ],
+   "requests": []
+  },
+  {
+   "q": "지난번에 자료를 요청했던 고객은 누구야?",
+   "conditions": {
+    "target": "customers",
+    "keywords": [],
+    "conversation_keywords": [],
+    "org_keywords": [],
+    "customer_types": [],
+    "no_contact_days": null,
+    "contact_kind": "contact",
+    "birthday_from": "",
+    "birthday_to": "",
+    "request_status": "",
+    "request_keywords": [
+     "자료"
+    ],
+    "due_within_days": null,
+    "overdue": false
+   },
+   "explain": [
+    "요청 내용에 '자료'"
+   ],
+   "target": "customers",
+   "count": 4,
+   "customers": [
+    {
+     "name": "강하은",
+     "evidence": [
+      {
+       "label": "요청사항 (보류)",
+       "text": "모바일 출금동의 도입 안내자료 송부 · 기한 2026-08-31"
+      }
+     ]
+    },
+    {
+     "name": "김도현",
+     "evidence": [
+      {
+       "label": "요청사항 (진행 중)",
+       "text": "최근 6개월 CMS 거래실적 자료 제공 · 기한 2026-10-30"
+      }
+     ]
+    },
+    {
+     "name": "신예린",
+     "evidence": [
+      {
+       "label": "요청사항 (완료)",
+       "text": "접근통제 증빙자료 제출 · 기한 2026-09-20"
+      }
+     ]
+    },
+    {
+     "name": "정민수",
+     "evidence": [
+      {
+       "label": "요청사항 (완료)",
+       "text": "출금 실패 사유별 통계 자료 제공 · 기한 2026-08-06"
+      }
+     ]
+    }
+   ],
+   "requests": []
+  },
+  {
+   "q": "아직 처리하지 못한 요청사항을 모두 보여줘",
+   "conditions": {
+    "target": "requests",
+    "keywords": [],
+    "conversation_keywords": [],
+    "org_keywords": [],
+    "customer_types": [],
+    "no_contact_days": null,
+    "contact_kind": "contact",
+    "birthday_from": "",
+    "birthday_to": "",
+    "request_status": "open",
+    "request_keywords": [],
+    "due_within_days": null,
+    "overdue": false
+   },
+   "explain": [
+    "요청사항 목록",
+    "미처리 요청"
+   ],
+   "target": "requests",
+   "count": 8,
+   "customers": [],
+   "requests": [
+    {
+     "name": "강하은",
+     "content": "모바일 출금동의 도입 안내자료 송부",
+     "status": "보류",
+     "due_date": "2026-08-31",
+     "d_day": -60
+    },
+    {
+     "name": "조성훈",
+     "content": "수수료 구간별 비교표 작성 전달",
+     "status": "진행 중",
+     "due_date": "2026-10-28",
+     "d_day": -2
+    },
+    {
+     "name": "김도현",
+     "content": "최근 6개월 CMS 거래실적 자료 제공",
+     "status": "진행 중",
+     "due_date": "2026-10-30",
+     "d_day": 0
+    },
+    {
+     "name": "최유진",
+     "content": "CMS 참가 신청서 최신 양식 및 작성 예시 전달",
+     "status": "미착수",
+     "due_date": "2026-11-01",
+     "d_day": 2
+    },
+    {
+     "name": "장태우",
+     "content": "성능 개선 과제 우선순위 회신",
+     "status": "진행 중",
+     "due_date": "2026-11-02",
+     "d_day": 3
+    },
+    {
+     "name": "이서연",
+     "content": "연계 테스트 시나리오 문서 송부",
+     "status": "미착수",
+     "due_date": "2026-11-05",
+     "d_day": 6
+    },
+    {
+     "name": "서민재",
+     "content": "CMS 운영시간 확대 관련 이용자 보호 검토의견 제출",
+     "status": "진행 중",
+     "due_date": "2026-11-06",
+     "d_day": 7
+    },
+    {
+     "name": "문승호",
+     "content": "출금 재시도 기능 개선 요청 내부 전달",
+     "status": "미착수",
+     "due_date": "",
+     "d_day": null
+    }
+   ]
+  },
+  {
+   "q": "이번 달 생일인 고객",
+   "conditions": {
+    "target": "customers",
+    "keywords": [],
+    "conversation_keywords": [],
+    "org_keywords": [],
+    "customer_types": [],
+    "no_contact_days": null,
+    "contact_kind": "contact",
+    "birthday_from": "2026-10-01",
+    "birthday_to": "2026-10-31",
+    "request_status": "",
+    "request_keywords": [],
+    "due_within_days": null,
+    "overdue": false
+   },
+   "explain": [
+    "생일 10/01~10/31"
+   ],
+   "target": "customers",
+   "count": 1,
+   "customers": [
+    {
+     "name": "오정석",
+     "evidence": [
+      {
+       "label": "생일",
+       "text": "10월 31일 (D-1)"
+      }
+     ]
+    }
+   ],
+   "requests": []
+  },
+  {
+   "q": "이번 주 생일인 고객",
+   "conditions": {
+    "target": "customers",
+    "keywords": [],
+    "conversation_keywords": [],
+    "org_keywords": [],
+    "customer_types": [],
+    "no_contact_days": null,
+    "contact_kind": "contact",
+    "birthday_from": "2026-10-26",
+    "birthday_to": "2026-11-01",
+    "request_status": "",
+    "request_keywords": [],
+    "due_within_days": null,
+    "overdue": false
+   },
+   "explain": [
+    "생일 10/26~11/01"
+   ],
+   "target": "customers",
+   "count": 1,
+   "customers": [
+    {
+     "name": "오정석",
+     "evidence": [
+      {
+       "label": "생일",
+       "text": "10월 31일 (D-1)"
+      }
+     ]
+    }
+   ],
+   "requests": []
+  },
+  {
+   "q": "12월에 생일인 사람",
+   "conditions": {
+    "target": "customers",
+    "keywords": [],
+    "conversation_keywords": [],
+    "org_keywords": [],
+    "customer_types": [],
+    "no_contact_days": null,
+    "contact_kind": "contact",
+    "birthday_from": "2026-12-01",
+    "birthday_to": "2026-12-31",
+    "request_status": "",
+    "request_keywords": [],
+    "due_within_days": null,
+    "overdue": false
+   },
+   "explain": [
+    "생일 12/01~12/31"
+   ],
+   "target": "customers",
+   "count": 3,
+   "customers": [
+    {
+     "name": "노은지",
+     "evidence": [
+      {
+       "label": "생일",
+       "text": "12월 2일 (D-33)"
+      }
+     ]
+    },
+    {
+     "name": "이서연",
+     "evidence": [
+      {
+       "label": "생일",
+       "text": "12월 9일 (D-40)"
+      }
+     ]
+    },
+    {
+     "name": "장태우",
+     "evidence": [
+      {
+       "label": "생일",
+       "text": "12월 29일 (D-60)"
+      }
+     ]
+    }
+   ],
+   "requests": []
+  },
+  {
+   "q": "한 달 넘게 연락 못 한 분",
+   "conditions": {
+    "target": "customers",
+    "keywords": [],
+    "conversation_keywords": [],
+    "org_keywords": [],
+    "customer_types": [],
+    "no_contact_days": 30,
+    "contact_kind": "contact",
+    "birthday_from": "",
+    "birthday_to": "",
+    "request_status": "",
+    "request_keywords": [],
+    "due_within_days": null,
+    "overdue": false
+   },
+   "explain": [
+    "30일 이상 연락 없음"
+   ],
+   "target": "customers",
+   "count": 11,
+   "customers": [
+    {
+     "name": "구본석",
+     "evidence": [
+      {
+       "label": "최근 연락",
+       "text": "기록 없음"
+      }
+     ]
+    },
+    {
+     "name": "배동욱",
+     "evidence": [
+      {
+       "label": "최근 연락",
+       "text": "2026-04-13 (200일 전)"
+      }
+     ]
+    },
+    {
+     "name": "문승호",
+     "evidence": [
+      {
+       "label": "최근 연락",
+       "text": "2026-06-02 (150일 전)"
+      }
+     ]
+    },
+    {
+     "name": "오정석",
+     "evidence": [
+      {
+       "label": "최근 연락",
+       "text": "2026-06-22 (130일 전)"
+      }
+     ]
+    },
+    {
+     "name": "정민수",
+     "evidence": [
+      {
+       "label": "최근 연락",
+       "text": "2026-07-22 (100일 전)"
+      }
+     ]
+    },
+    {
+     "name": "박준혁",
+     "evidence": [
+      {
+       "label": "최근 연락",
+       "text": "2026-07-27 (95일 전)"
+      }
+     ]
+    },
+    {
+     "name": "강하은",
+     "evidence": [
+      {
+       "label": "최근 연락",
+       "text": "2026-08-16 (75일 전)"
+      }
+     ]
+    },
+    {
+     "name": "신예린",
+     "evidence": [
+      {
+       "label": "최근 연락",
+       "text": "2026-08-21 (70일 전)"
+      }
+     ]
+    },
+    {
+     "name": "노은지",
+     "evidence": [
+      {
+       "label": "최근 연락",
+       "text": "2026-09-05 (55일 전)"
+      }
+     ]
+    },
+    {
+     "name": "한소희",
+     "evidence": [
+      {
+       "label": "최근 연락",
+       "text": "2026-09-10 (50일 전)"
+      }
+     ]
+    },
+    {
+     "name": "조성훈",
+     "evidence": [
+      {
+       "label": "최근 연락",
+       "text": "2026-09-22 (38일 전)"
+      }
+     ]
+    }
+   ],
+   "requests": []
+  },
+  {
+   "q": "기한이 지난 요청사항 보여줘",
+   "conditions": {
+    "target": "requests",
+    "keywords": [],
+    "conversation_keywords": [],
+    "org_keywords": [],
+    "customer_types": [],
+    "no_contact_days": null,
+    "contact_kind": "contact",
+    "birthday_from": "",
+    "birthday_to": "",
+    "request_status": "open",
+    "request_keywords": [],
+    "due_within_days": null,
+    "overdue": true
+   },
+   "explain": [
+    "요청사항 목록",
+    "미처리 요청 (기한 경과)"
+   ],
+   "target": "requests",
+   "count": 2,
+   "customers": [],
+   "requests": [
+    {
+     "name": "강하은",
+     "content": "모바일 출금동의 도입 안내자료 송부",
+     "status": "보류",
+     "due_date": "2026-08-31",
+     "d_day": -60
+    },
+    {
+     "name": "조성훈",
+     "content": "수수료 구간별 비교표 작성 전달",
+     "status": "진행 중",
+     "due_date": "2026-10-28",
+     "d_day": -2
+    }
+   ]
+  },
+  {
+   "q": "기한 임박한 요청사항",
+   "conditions": {
+    "target": "requests",
+    "keywords": [],
+    "conversation_keywords": [],
+    "org_keywords": [],
+    "customer_types": [],
+    "no_contact_days": null,
+    "contact_kind": "contact",
+    "birthday_from": "",
+    "birthday_to": "",
+    "request_status": "open",
+    "request_keywords": [],
+    "due_within_days": 7,
+    "overdue": false
+   },
+   "explain": [
+    "요청사항 목록",
+    "미처리 요청 (기한 7일 이내)"
+   ],
+   "target": "requests",
+   "count": 7,
+   "customers": [],
+   "requests": [
+    {
+     "name": "강하은",
+     "content": "모바일 출금동의 도입 안내자료 송부",
+     "status": "보류",
+     "due_date": "2026-08-31",
+     "d_day": -60
+    },
+    {
+     "name": "조성훈",
+     "content": "수수료 구간별 비교표 작성 전달",
+     "status": "진행 중",
+     "due_date": "2026-10-28",
+     "d_day": -2
+    },
+    {
+     "name": "김도현",
+     "content": "최근 6개월 CMS 거래실적 자료 제공",
+     "status": "진행 중",
+     "due_date": "2026-10-30",
+     "d_day": 0
+    },
+    {
+     "name": "최유진",
+     "content": "CMS 참가 신청서 최신 양식 및 작성 예시 전달",
+     "status": "미착수",
+     "due_date": "2026-11-01",
+     "d_day": 2
+    },
+    {
+     "name": "장태우",
+     "content": "성능 개선 과제 우선순위 회신",
+     "status": "진행 중",
+     "due_date": "2026-11-02",
+     "d_day": 3
+    },
+    {
+     "name": "이서연",
+     "content": "연계 테스트 시나리오 문서 송부",
+     "status": "미착수",
+     "due_date": "2026-11-05",
+     "d_day": 6
+    },
+    {
+     "name": "서민재",
+     "content": "CMS 운영시간 확대 관련 이용자 보호 검토의견 제출",
+     "status": "진행 중",
+     "due_date": "2026-11-06",
+     "d_day": 7
+    }
+   ]
+  },
+  {
+   "q": "협력사 담당자 찾아줘",
+   "conditions": {
+    "target": "customers",
+    "keywords": [],
+    "conversation_keywords": [],
+    "org_keywords": [],
+    "customer_types": [
+     "협력사"
+    ],
+    "no_contact_days": null,
+    "contact_kind": "contact",
+    "birthday_from": "",
+    "birthday_to": "",
+    "request_status": "",
+    "request_keywords": [],
+    "due_within_days": null,
+    "overdue": false
+   },
+   "explain": [
+    "고객 유형: 협력사"
+   ],
+   "target": "customers",
+   "count": 3,
+   "customers": [
+    {
+     "name": "오정석",
+     "evidence": [
+      {
+       "label": "고객 유형",
+       "text": "협력사"
+      }
+     ]
+    },
+    {
+     "name": "장태우",
+     "evidence": [
+      {
+       "label": "고객 유형",
+       "text": "협력사"
+      }
+     ]
+    },
+    {
+     "name": "한소희",
+     "evidence": [
+      {
+       "label": "고객 유형",
+       "text": "협력사"
+      }
+     ]
+    }
+   ],
+   "requests": []
+  },
+  {
+   "q": "정부기관 고객",
+   "conditions": {
+    "target": "customers",
+    "keywords": [],
+    "conversation_keywords": [],
+    "org_keywords": [],
+    "customer_types": [
+     "정부기관"
+    ],
+    "no_contact_days": null,
+    "contact_kind": "contact",
+    "birthday_from": "",
+    "birthday_to": "",
+    "request_status": "",
+    "request_keywords": [],
+    "due_within_days": null,
+    "overdue": false
+   },
+   "explain": [
+    "고객 유형: 정부기관"
+   ],
+   "target": "customers",
+   "count": 3,
+   "customers": [
+    {
+     "name": "배동욱",
+     "evidence": [
+      {
+       "label": "고객 유형",
+       "text": "정부기관"
+      }
+     ]
+    },
+    {
+     "name": "서민재",
+     "evidence": [
+      {
+       "label": "고객 유형",
+       "text": "정부기관"
+      }
+     ]
+    },
+    {
+     "name": "임가영",
+     "evidence": [
+      {
+       "label": "고객 유형",
+       "text": "정부기관"
+      }
+     ]
+    }
+   ],
+   "requests": []
+  },
+  {
+   "q": "증권 담당자",
+   "conditions": {
+    "target": "customers",
+    "keywords": [],
+    "conversation_keywords": [],
+    "org_keywords": [
+     "증권"
+    ],
+    "customer_types": [],
+    "no_contact_days": null,
+    "contact_kind": "contact",
+    "birthday_from": "",
+    "birthday_to": "",
+    "request_status": "",
+    "request_keywords": [],
+    "due_within_days": null,
+    "overdue": false
+   },
+   "explain": [
+    "소속에 '증권'"
+   ],
+   "target": "customers",
+   "count": 1,
+   "customers": [
+    {
+     "name": "노은지",
+     "evidence": [
+      {
+       "label": "소속",
+       "text": "바른증권(가상) 고객자산부"
+      }
+     ]
+    }
+   ],
+   "requests": []
+  },
+  {
+   "q": "해산물을 싫어하는 고객",
+   "conditions": {
+    "target": "customers",
+    "keywords": [
+     {
+      "text": "해산물",
+      "scope": "food_dislike"
+     }
+    ],
+    "conversation_keywords": [],
+    "org_keywords": [],
+    "customer_types": [],
+    "no_contact_days": null,
+    "contact_kind": "contact",
+    "birthday_from": "",
+    "birthday_to": "",
+    "request_status": "",
+    "request_keywords": [],
+    "due_within_days": null,
+    "overdue": false
+   },
+   "explain": [
+    "기피 음식에 '해산물'"
+   ],
+   "target": "customers",
+   "count": 1,
+   "customers": [
+    {
+     "name": "김도현",
+     "evidence": [
+      {
+       "label": "기피 음식",
+       "text": "해산물"
+      }
+     ]
+    }
+   ],
+   "requests": []
+  },
+  {
+   "q": "테니스 관심 있는 고객",
+   "conditions": {
+    "target": "customers",
+    "keywords": [
+     {
+      "text": "테니스",
+      "scope": "interest"
+     }
+    ],
+    "conversation_keywords": [
+     "테니스"
+    ],
+    "org_keywords": [],
+    "customer_types": [],
+    "no_contact_days": null,
+    "contact_kind": "contact",
+    "birthday_from": "",
+    "birthday_to": "",
+    "request_status": "",
+    "request_keywords": [],
+    "due_within_days": null,
+    "overdue": false
+   },
+   "explain": [
+    "관심사에 '테니스'",
+    "대화기록 포함: '테니스'"
+   ],
+   "target": "customers",
+   "count": 0,
+   "customers": [],
+   "requests": []
+  },
+  {
+   "q": "한식 좋아하는 사람",
+   "conditions": {
+    "target": "customers",
+    "keywords": [
+     {
+      "text": "한식",
+      "scope": "food_like"
+     }
+    ],
+    "conversation_keywords": [],
+    "org_keywords": [],
+    "customer_types": [],
+    "no_contact_days": null,
+    "contact_kind": "contact",
+    "birthday_from": "",
+    "birthday_to": "",
+    "request_status": "",
+    "request_keywords": [],
+    "due_within_days": null,
+    "overdue": false
+   },
+   "explain": [
+    "선호 음식에 '한식'"
+   ],
+   "target": "customers",
+   "count": 3,
+   "customers": [
+    {
+     "name": "김도현",
+     "evidence": [
+      {
+       "label": "선호 음식",
+       "text": "한식"
+      }
+     ]
+    },
+    {
+     "name": "오정석",
+     "evidence": [
+      {
+       "label": "선호 음식",
+       "text": "한식, 막걸리"
+      }
+     ]
+    },
+    {
+     "name": "정민수",
+     "evidence": [
+      {
+       "label": "선호 음식",
+       "text": "한식, 국밥"
+      }
+     ]
+    }
+   ],
+   "requests": []
+  },
+  {
+   "q": "새빛학원",
+   "conditions": {
+    "target": "customers",
+    "keywords": [],
+    "conversation_keywords": [],
+    "org_keywords": [
+     "학원"
+    ],
+    "customer_types": [],
+    "no_contact_days": null,
+    "contact_kind": "contact",
+    "birthday_from": "",
+    "birthday_to": "",
+    "request_status": "",
+    "request_keywords": [],
+    "due_within_days": null,
+    "overdue": false
+   },
+   "explain": [
+    "소속에 '학원'"
+   ],
+   "target": "customers",
+   "count": 1,
+   "customers": [
+    {
+     "name": "조성훈",
+     "evidence": [
+      {
+       "label": "소속",
+       "text": "새빛학원 경영지원팀"
+      }
+     ]
+    }
+   ],
+   "requests": []
+  },
+  {
+   "q": "수수료",
+   "conditions": {
+    "target": "customers",
+    "keywords": [
+     {
+      "text": "수수료",
+      "scope": "any"
+     }
+    ],
+    "conversation_keywords": [
+     "수수료"
+    ],
+    "org_keywords": [],
+    "customer_types": [],
+    "no_contact_days": null,
+    "contact_kind": "contact",
+    "birthday_from": "",
+    "birthday_to": "",
+    "request_status": "",
+    "request_keywords": [],
+    "due_within_days": null,
+    "overdue": false
+   },
+   "explain": [
+    "전체에 '수수료'",
+    "대화기록 포함: '수수료'"
+   ],
+   "target": "customers",
+   "count": 2,
+   "customers": [
+    {
+     "name": "조성훈",
+     "evidence": [
+      {
+       "label": "최근 관심 주제",
+       "text": "수납 수수료 절감"
+      }
+     ]
+    },
+    {
+     "name": "최유진",
+     "evidence": [
+      {
+       "label": "최근 관심 주제",
+       "text": "CMS 참가 절차, 수수료 체계"
+      }
+     ]
+    }
+   ],
+   "requests": []
+  },
+  {
+   "q": "해산물 못 드시는 분",
+   "conditions": {
+    "target": "customers",
+    "keywords": [
+     {
+      "text": "해산물",
+      "scope": "any"
+     },
+     {
+      "text": "드시",
+      "scope": "any"
+     }
+    ],
+    "conversation_keywords": [
+     "해산물",
+     "드시"
+    ],
+    "org_keywords": [],
+    "customer_types": [],
+    "no_contact_days": null,
+    "contact_kind": "contact",
+    "birthday_from": "",
+    "birthday_to": "",
+    "request_status": "",
+    "request_keywords": [],
+    "due_within_days": null,
+    "overdue": false
+   },
+   "explain": [
+    "전체에 '해산물'",
+    "전체에 '드시'",
+    "대화기록 포함: '해산물', '드시'"
+   ],
+   "target": "customers",
+   "count": 0,
+   "customers": [],
+   "requests": []
+  },
+  {
+   "q": "이번 달에 내가 챙겨야 할 사람 누구야",
+   "conditions": {
+    "target": "customers",
+    "keywords": [
+     {
+      "text": "이번",
+      "scope": "any"
+     },
+     {
+      "text": "달에",
+      "scope": "any"
+     },
+     {
+      "text": "내가",
+      "scope": "any"
+     },
+     {
+      "text": "챙겨야",
+      "scope": "any"
+     }
+    ],
+    "conversation_keywords": [
+     "이번",
+     "달에",
+     "내가",
+     "챙겨야"
+    ],
+    "org_keywords": [],
+    "customer_types": [],
+    "no_contact_days": null,
+    "contact_kind": "contact",
+    "birthday_from": "",
+    "birthday_to": "",
+    "request_status": "",
+    "request_keywords": [],
+    "due_within_days": null,
+    "overdue": false
+   },
+   "explain": [
+    "전체에 '이번'",
+    "전체에 '달에'",
+    "전체에 '내가'",
+    "전체에 '챙겨야'",
+    "대화기록 포함: '이번', '달에', '내가', '챙겨야'"
+   ],
+   "target": "customers",
+   "count": 0,
+   "customers": [],
+   "requests": []
+  },
+  {
+   "q": "매운 음식 싫어하는 분",
+   "conditions": {
+    "target": "customers",
+    "keywords": [
+     {
+      "text": "음식",
+      "scope": "food_dislike"
+     }
+    ],
+    "conversation_keywords": [],
+    "org_keywords": [],
+    "customer_types": [],
+    "no_contact_days": null,
+    "contact_kind": "contact",
+    "birthday_from": "",
+    "birthday_to": "",
+    "request_status": "",
+    "request_keywords": [],
+    "due_within_days": null,
+    "overdue": false
+   },
+   "explain": [
+    "기피 음식에 '음식'"
+   ],
+   "target": "customers",
+   "count": 2,
+   "customers": [
+    {
+     "name": "장태우",
+     "evidence": [
+      {
+       "label": "기피 음식",
+       "text": "날음식"
+      }
+     ]
+    },
+    {
+     "name": "정민수",
+     "evidence": [
+      {
+       "label": "기피 음식",
+       "text": "매운 음식"
+      }
+     ]
+    }
+   ],
+   "requests": []
+  }
+ ],
+ "notices": {
+  "2026-10-30 08:00": [
+   {
+    "kind": "birthday",
+    "customer": "김도현",
+    "event_date": "2026-11-04",
+    "fire_at": "2026-10-28 09:00:00",
+    "title": "[생일 D-5] 김도현 부장 (가온은행)",
+    "body": "11월 4일 생일 · 축하 연락을 검토하세요"
+   },
+   {
+    "kind": "birthday",
+    "customer": "오정석",
+    "event_date": "2026-10-31",
+    "fire_at": "2026-10-29 09:00:00",
+    "title": "[생일 내일] 오정석 대표 (데이터온)",
+    "body": "10월 31일 생일 · 축하 연락을 검토하세요"
+   },
+   {
+    "kind": "birthday",
+    "customer": "임가영",
+    "event_date": "2026-11-02",
+    "fire_at": "2026-10-26 09:00:00",
+    "title": "[생일 D-3] 임가영 주무관 (디지털금융청(가상))",
+    "body": "11월 2일 생일 · 축하 연락을 검토하세요"
+   },
+   {
+    "kind": "followup",
+    "customer": "윤지아",
+    "event_date": "2026-10-29",
+    "fire_at": "2026-10-29 17:00:00",
+    "title": "[미팅 후 질문] 윤지아 대리 (도담관리)",
+    "body": "2026-10-29 관리비 CMS 신청 상담 · 짧은 질문 몇 개로 고객정보를 채워 보세요"
+   },
+   {
+    "kind": "request",
+    "customer": "김도현",
+    "event_date": "2026-10-30",
+    "fire_at": "2026-10-28 09:00:00",
+    "title": "[요청 기한 오늘] 김도현 부장 · 최근 6개월 CMS 거래실적 자료 제공",
+    "body": "처리기한 2026-10-30 · 현재 상태 '진행 중' · 가온은행"
+   },
+   {
+    "kind": "request",
+    "customer": "이서연",
+    "event_date": "2026-11-05",
+    "fire_at": "2026-10-29 09:00:00",
+    "title": "[요청 기한 D-6] 이서연 차장 · 연계 테스트 시나리오 문서 송부",
+    "body": "처리기한 2026-11-05 · 현재 상태 '미착수' · 누리은행"
+   },
+   {
+    "kind": "request",
+    "customer": "장태우",
+    "event_date": "2026-11-02",
+    "fire_at": "2026-10-26 09:00:00",
+    "title": "[요청 기한 D-3] 장태우 이사 · 성능 개선 과제 우선순위 회신",
+    "body": "처리기한 2026-11-02 · 현재 상태 '진행 중' · 에이원시스템"
+   },
+   {
+    "kind": "request",
+    "customer": "최유진",
+    "event_date": "2026-11-01",
+    "fire_at": "2026-10-25 09:00:00",
+    "title": "[요청 기한 D-2] 최유진 팀장 · CMS 참가 신청서 최신 양식 및 작성 예시 전달",
+    "body": "처리기한 2026-11-01 · 현재 상태 '미착수' · 라온저축은행"
+   }
+  ],
+  "2026-10-30 10:00": [
+   {
+    "kind": "birthday",
+    "customer": "김도현",
+    "event_date": "2026-11-04",
+    "fire_at": "2026-10-28 09:00:00",
+    "title": "[생일 D-5] 김도현 부장 (가온은행)",
+    "body": "11월 4일 생일 · 축하 연락을 검토하세요"
+   },
+   {
+    "kind": "birthday",
+    "customer": "오정석",
+    "event_date": "2026-10-31",
+    "fire_at": "2026-10-29 09:00:00",
+    "title": "[생일 내일] 오정석 대표 (데이터온)",
+    "body": "10월 31일 생일 · 축하 연락을 검토하세요"
+   },
+   {
+    "kind": "birthday",
+    "customer": "임가영",
+    "event_date": "2026-11-02",
+    "fire_at": "2026-10-26 09:00:00",
+    "title": "[생일 D-3] 임가영 주무관 (디지털금융청(가상))",
+    "body": "11월 2일 생일 · 축하 연락을 검토하세요"
+   },
+   {
+    "kind": "followup",
+    "customer": "윤지아",
+    "event_date": "2026-10-29",
+    "fire_at": "2026-10-29 17:00:00",
+    "title": "[미팅 후 질문] 윤지아 대리 (도담관리)",
+    "body": "2026-10-29 관리비 CMS 신청 상담 · 짧은 질문 몇 개로 고객정보를 채워 보세요"
+   },
+   {
+    "kind": "meeting",
+    "customer": "장태우",
+    "event_date": "2026-10-31",
+    "fire_at": "2026-10-30 09:00:00",
+    "title": "[내일 미팅] 장태우 이사 (에이원시스템)",
+    "body": "2026-10-31 (시간 미정) · 클라우드 전환 사전 협의 (예정) · 미팅 브리핑을 확인하세요"
+   },
+   {
+    "kind": "request",
+    "customer": "김도현",
+    "event_date": "2026-10-30",
+    "fire_at": "2026-10-30 09:00:00",
+    "title": "[요청 기한 오늘] 김도현 부장 · 최근 6개월 CMS 거래실적 자료 제공",
+    "body": "처리기한 2026-10-30 · 현재 상태 '진행 중' · 가온은행"
+   },
+   {
+    "kind": "request",
+    "customer": "서민재",
+    "event_date": "2026-11-06",
+    "fire_at": "2026-10-30 09:00:00",
+    "title": "[요청 기한 D-7] 서민재 사무관 · CMS 운영시간 확대 관련 이용자 보호 검토의견 제출",
+    "body": "처리기한 2026-11-06 · 현재 상태 '진행 중' · 디지털금융청(가상)"
+   },
+   {
+    "kind": "request",
+    "customer": "이서연",
+    "event_date": "2026-11-05",
+    "fire_at": "2026-10-29 09:00:00",
+    "title": "[요청 기한 D-6] 이서연 차장 · 연계 테스트 시나리오 문서 송부",
+    "body": "처리기한 2026-11-05 · 현재 상태 '미착수' · 누리은행"
+   },
+   {
+    "kind": "request",
+    "customer": "장태우",
+    "event_date": "2026-11-02",
+    "fire_at": "2026-10-26 09:00:00",
+    "title": "[요청 기한 D-3] 장태우 이사 · 성능 개선 과제 우선순위 회신",
+    "body": "처리기한 2026-11-02 · 현재 상태 '진행 중' · 에이원시스템"
+   },
+   {
+    "kind": "request",
+    "customer": "최유진",
+    "event_date": "2026-11-01",
+    "fire_at": "2026-10-30 09:00:00",
+    "title": "[요청 기한 D-2] 최유진 팀장 · CMS 참가 신청서 최신 양식 및 작성 예시 전달",
+    "body": "처리기한 2026-11-01 · 현재 상태 '미착수' · 라온저축은행"
+   }
+  ],
+  "2026-10-30 21:00": [
+   {
+    "kind": "birthday",
+    "customer": "김도현",
+    "event_date": "2026-11-04",
+    "fire_at": "2026-10-28 09:00:00",
+    "title": "[생일 D-5] 김도현 부장 (가온은행)",
+    "body": "11월 4일 생일 · 축하 연락을 검토하세요"
+   },
+   {
+    "kind": "birthday",
+    "customer": "오정석",
+    "event_date": "2026-10-31",
+    "fire_at": "2026-10-29 09:00:00",
+    "title": "[생일 내일] 오정석 대표 (데이터온)",
+    "body": "10월 31일 생일 · 축하 연락을 검토하세요"
+   },
+   {
+    "kind": "birthday",
+    "customer": "임가영",
+    "event_date": "2026-11-02",
+    "fire_at": "2026-10-26 09:00:00",
+    "title": "[생일 D-3] 임가영 주무관 (디지털금융청(가상))",
+    "body": "11월 2일 생일 · 축하 연락을 검토하세요"
+   },
+   {
+    "kind": "followup",
+    "customer": "윤지아",
+    "event_date": "2026-10-29",
+    "fire_at": "2026-10-29 17:00:00",
+    "title": "[미팅 후 질문] 윤지아 대리 (도담관리)",
+    "body": "2026-10-29 관리비 CMS 신청 상담 · 짧은 질문 몇 개로 고객정보를 채워 보세요"
+   },
+   {
+    "kind": "meeting",
+    "customer": "장태우",
+    "event_date": "2026-10-31",
+    "fire_at": "2026-10-30 09:00:00",
+    "title": "[내일 미팅] 장태우 이사 (에이원시스템)",
+    "body": "2026-10-31 (시간 미정) · 클라우드 전환 사전 협의 (예정) · 미팅 브리핑을 확인하세요"
+   },
+   {
+    "kind": "request",
+    "customer": "김도현",
+    "event_date": "2026-10-30",
+    "fire_at": "2026-10-30 09:00:00",
+    "title": "[요청 기한 오늘] 김도현 부장 · 최근 6개월 CMS 거래실적 자료 제공",
+    "body": "처리기한 2026-10-30 · 현재 상태 '진행 중' · 가온은행"
+   },
+   {
+    "kind": "request",
+    "customer": "서민재",
+    "event_date": "2026-11-06",
+    "fire_at": "2026-10-30 09:00:00",
+    "title": "[요청 기한 D-7] 서민재 사무관 · CMS 운영시간 확대 관련 이용자 보호 검토의견 제출",
+    "body": "처리기한 2026-11-06 · 현재 상태 '진행 중' · 디지털금융청(가상)"
+   },
+   {
+    "kind": "request",
+    "customer": "이서연",
+    "event_date": "2026-11-05",
+    "fire_at": "2026-10-29 09:00:00",
+    "title": "[요청 기한 D-6] 이서연 차장 · 연계 테스트 시나리오 문서 송부",
+    "body": "처리기한 2026-11-05 · 현재 상태 '미착수' · 누리은행"
+   },
+   {
+    "kind": "request",
+    "customer": "장태우",
+    "event_date": "2026-11-02",
+    "fire_at": "2026-10-26 09:00:00",
+    "title": "[요청 기한 D-3] 장태우 이사 · 성능 개선 과제 우선순위 회신",
+    "body": "처리기한 2026-11-02 · 현재 상태 '진행 중' · 에이원시스템"
+   },
+   {
+    "kind": "request",
+    "customer": "최유진",
+    "event_date": "2026-11-01",
+    "fire_at": "2026-10-30 09:00:00",
+    "title": "[요청 기한 D-2] 최유진 팀장 · CMS 참가 신청서 최신 양식 및 작성 예시 전달",
+    "body": "처리기한 2026-11-01 · 현재 상태 '미착수' · 라온저축은행"
+   }
+  ],
+  "2026-10-31 09:30": [
+   {
+    "kind": "birthday",
+    "customer": "김도현",
+    "event_date": "2026-11-04",
+    "fire_at": "2026-10-28 09:00:00",
+    "title": "[생일 D-4] 김도현 부장 (가온은행)",
+    "body": "11월 4일 생일 · 축하 연락을 검토하세요"
+   },
+   {
+    "kind": "birthday",
+    "customer": "오정석",
+    "event_date": "2026-10-31",
+    "fire_at": "2026-10-31 09:00:00",
+    "title": "[생일 오늘] 오정석 대표 (데이터온)",
+    "body": "10월 31일 생일 · 축하 연락을 검토하세요"
+   },
+   {
+    "kind": "birthday",
+    "customer": "임가영",
+    "event_date": "2026-11-02",
+    "fire_at": "2026-10-31 09:00:00",
+    "title": "[생일 D-2] 임가영 주무관 (디지털금융청(가상))",
+    "body": "11월 2일 생일 · 축하 연락을 검토하세요"
+   },
+   {
+    "kind": "followup",
+    "customer": "윤지아",
+    "event_date": "2026-10-29",
+    "fire_at": "2026-10-29 17:00:00",
+    "title": "[미팅 후 질문] 윤지아 대리 (도담관리)",
+    "body": "2026-10-29 관리비 CMS 신청 상담 · 짧은 질문 몇 개로 고객정보를 채워 보세요"
+   },
+   {
+    "kind": "meeting",
+    "customer": "김도현",
+    "event_date": "2026-11-01",
+    "fire_at": "2026-10-31 09:00:00",
+    "title": "[내일 미팅] 김도현 부장 (가온은행)",
+    "body": "2026-11-01 (시간 미정) · 정기 업무협의 (예정) · 미팅 브리핑을 확인하세요"
+   },
+   {
+    "kind": "meeting",
+    "customer": "장태우",
+    "event_date": "2026-10-31",
+    "fire_at": "2026-10-30 09:00:00",
+    "title": "[오늘 미팅] 장태우 이사 (에이원시스템)",
+    "body": "2026-10-31 (시간 미정) · 클라우드 전환 사전 협의 (예정) · 미팅 브리핑을 확인하세요"
+   },
+   {
+    "kind": "request",
+    "customer": "서민재",
+    "event_date": "2026-11-06",
+    "fire_at": "2026-10-30 09:00:00",
+    "title": "[요청 기한 D-6] 서민재 사무관 · CMS 운영시간 확대 관련 이용자 보호 검토의견 제출",
+    "body": "처리기한 2026-11-06 · 현재 상태 '진행 중' · 디지털금융청(가상)"
+   },
+   {
+    "kind": "request",
+    "customer": "이서연",
+    "event_date": "2026-11-05",
+    "fire_at": "2026-10-29 09:00:00",
+    "title": "[요청 기한 D-5] 이서연 차장 · 연계 테스트 시나리오 문서 송부",
+    "body": "처리기한 2026-11-05 · 현재 상태 '미착수' · 누리은행"
+   },
+   {
+    "kind": "request",
+    "customer": "장태우",
+    "event_date": "2026-11-02",
+    "fire_at": "2026-10-31 09:00:00",
+    "title": "[요청 기한 D-2] 장태우 이사 · 성능 개선 과제 우선순위 회신",
+    "body": "처리기한 2026-11-02 · 현재 상태 '진행 중' · 에이원시스템"
+   },
+   {
+    "kind": "request",
+    "customer": "최유진",
+    "event_date": "2026-11-01",
+    "fire_at": "2026-10-30 09:00:00",
+    "title": "[요청 기한 내일] 최유진 팀장 · CMS 참가 신청서 최신 양식 및 작성 예시 전달",
+    "body": "처리기한 2026-11-01 · 현재 상태 '미착수' · 라온저축은행"
+   }
+  ],
+  "2026-11-02 10:00": [
+   {
+    "kind": "birthday",
+    "customer": "김도현",
+    "event_date": "2026-11-04",
+    "fire_at": "2026-11-02 09:00:00",
+    "title": "[생일 D-2] 김도현 부장 (가온은행)",
+    "body": "11월 4일 생일 · 축하 연락을 검토하세요"
+   },
+   {
+    "kind": "birthday",
+    "customer": "신예린",
+    "event_date": "2026-11-09",
+    "fire_at": "2026-11-02 09:00:00",
+    "title": "[생일 D-7] 신예린 이사 (미래회계법인(가상))",
+    "body": "11월 9일 생일 · 축하 연락을 검토하세요"
+   },
+   {
+    "kind": "birthday",
+    "customer": "임가영",
+    "event_date": "2026-11-02",
+    "fire_at": "2026-11-02 09:00:00",
+    "title": "[생일 오늘] 임가영 주무관 (디지털금융청(가상))",
+    "body": "11월 2일 생일 · 축하 연락을 검토하세요"
+   },
+   {
+    "kind": "followup",
+    "customer": "김도현",
+    "event_date": "2026-11-01",
+    "fire_at": "2026-11-01 18:00:00",
+    "title": "[미팅 후 질문] 김도현 부장 (가온은행)",
+    "body": "2026-11-01 정기 업무협의 (예정) · 짧은 질문 몇 개로 고객정보를 채워 보세요"
+   },
+   {
+    "kind": "followup",
+    "customer": "장태우",
+    "event_date": "2026-10-31",
+    "fire_at": "2026-10-31 18:00:00",
+    "title": "[미팅 후 질문] 장태우 이사 (에이원시스템)",
+    "body": "2026-10-31 클라우드 전환 사전 협의 (예정) · 짧은 질문 몇 개로 고객정보를 채워 보세요"
+   },
+   {
+    "kind": "request",
+    "customer": "서민재",
+    "event_date": "2026-11-06",
+    "fire_at": "2026-10-30 09:00:00",
+    "title": "[요청 기한 D-4] 서민재 사무관 · CMS 운영시간 확대 관련 이용자 보호 검토의견 제출",
+    "body": "처리기한 2026-11-06 · 현재 상태 '진행 중' · 디지털금융청(가상)"
+   },
+   {
+    "kind": "request",
+    "customer": "이서연",
+    "event_date": "2026-11-05",
+    "fire_at": "2026-10-29 09:00:00",
+    "title": "[요청 기한 D-3] 이서연 차장 · 연계 테스트 시나리오 문서 송부",
+    "body": "처리기한 2026-11-05 · 현재 상태 '미착수' · 누리은행"
+   },
+   {
+    "kind": "request",
+    "customer": "장태우",
+    "event_date": "2026-11-02",
+    "fire_at": "2026-11-02 09:00:00",
+    "title": "[요청 기한 오늘] 장태우 이사 · 성능 개선 과제 우선순위 회신",
+    "body": "처리기한 2026-11-02 · 현재 상태 '진행 중' · 에이원시스템"
+   }
+  ],
+  "2026-11-10 10:00": [
+   {
+    "kind": "anniversary",
+    "customer": "이서연",
+    "event_date": "2026-11-13",
+    "fire_at": "2026-11-06 09:00:00",
+    "title": "[결혼기념일 D-3] 이서연 차장 (누리은행)",
+    "body": "11월 13일 결혼기념일"
+   },
+   {
+    "kind": "birthday",
+    "customer": "최유진",
+    "event_date": "2026-11-17",
+    "fire_at": "2026-11-10 09:00:00",
+    "title": "[생일 D-7] 최유진 팀장 (라온저축은행)",
+    "body": "11월 17일 생일 · 축하 연락을 검토하세요"
+   }
+  ]
+ },
+ "dashboard": {
+  "today": "2026-10-30",
+  "total": 18,
+  "by_type": {
+   "협력사": 3,
+   "참가기관": 5,
+   "이용기관·가맹점": 5,
+   "정부기관": 3,
+   "기타": 2
+  },
+  "no_contact_days": 60,
+  "meetings": [
+   {
+    "name": "장태우",
+    "date": "2026-10-31",
+    "time": "",
+    "title": "클라우드 전환 사전 협의 (예정)"
+   },
+   {
+    "name": "김도현",
+    "date": "2026-11-01",
+    "time": "",
+    "title": "정기 업무협의 (예정)"
+   }
+  ],
+  "today_requests": [
+   {
+    "name": "조성훈",
+    "content": "수수료 구간별 비교표 작성 전달",
+    "due_date": "2026-10-28",
+    "d_day": -2,
+    "status": "진행 중"
+   },
+   {
+    "name": "김도현",
+    "content": "최근 6개월 CMS 거래실적 자료 제공",
+    "due_date": "2026-10-30",
+    "d_day": 0,
+    "status": "진행 중"
+   }
+  ],
+  "soon_requests": [
+   {
+    "name": "최유진",
+    "content": "CMS 참가 신청서 최신 양식 및 작성 예시 전달",
+    "due_date": "2026-11-01",
+    "d_day": 2,
+    "status": "미착수"
+   },
+   {
+    "name": "장태우",
+    "content": "성능 개선 과제 우선순위 회신",
+    "due_date": "2026-11-02",
+    "d_day": 3,
+    "status": "진행 중"
+   },
+   {
+    "name": "이서연",
+    "content": "연계 테스트 시나리오 문서 송부",
+    "due_date": "2026-11-05",
+    "d_day": 6,
+    "status": "미착수"
+   },
+   {
+    "name": "서민재",
+    "content": "CMS 운영시간 확대 관련 이용자 보호 검토의견 제출",
+    "due_date": "2026-11-06",
+    "d_day": 7,
+    "status": "진행 중"
+   }
+  ],
+  "events": [
+   {
+    "name": "오정석",
+    "kind": "생일",
+    "label": "생일",
+    "date": "2026-10-31",
+    "d_day": 1
+   },
+   {
+    "name": "임가영",
+    "kind": "생일",
+    "label": "생일",
+    "date": "2026-11-02",
+    "d_day": 3
+   },
+   {
+    "name": "김도현",
+    "kind": "생일",
+    "label": "생일",
+    "date": "2026-11-04",
+    "d_day": 5
+   },
+   {
+    "name": "신예린",
+    "kind": "생일",
+    "label": "생일",
+    "date": "2026-11-09",
+    "d_day": 10
+   },
+   {
+    "name": "이서연",
+    "kind": "결혼기념일",
+    "label": "결혼기념일",
+    "date": "2026-11-13",
+    "d_day": 14
+   },
+   {
+    "name": "최유진",
+    "kind": "생일",
+    "label": "생일",
+    "date": "2026-11-17",
+    "d_day": 18
+   },
+   {
+    "name": "조성훈",
+    "kind": "자녀 수능일",
+    "label": "자녀 수능 (가상)",
+    "date": "2026-11-21",
+    "d_day": 22
+   },
+   {
+    "name": "조성훈",
+    "kind": "생일",
+    "label": "생일",
+    "date": "2026-11-24",
+    "d_day": 25
+   }
+  ],
+  "no_contact": [
+   {
+    "name": "구본석",
+    "days": null,
+    "last_contact_date": ""
+   },
+   {
+    "name": "배동욱",
+    "days": 200,
+    "last_contact_date": "2026-04-13"
+   },
+   {
+    "name": "문승호",
+    "days": 150,
+    "last_contact_date": "2026-06-02"
+   },
+   {
+    "name": "오정석",
+    "days": 130,
+    "last_contact_date": "2026-06-22"
+   },
+   {
+    "name": "정민수",
+    "days": 100,
+    "last_contact_date": "2026-07-22"
+   },
+   {
+    "name": "박준혁",
+    "days": 95,
+    "last_contact_date": "2026-07-27"
+   },
+   {
+    "name": "강하은",
+    "days": 75,
+    "last_contact_date": "2026-08-16"
+   },
+   {
+    "name": "신예린",
+    "days": 70,
+    "last_contact_date": "2026-08-21"
+   }
+  ],
+  "recent_changes": [],
+  "recent_customers": [
+   "구본석",
+   "노은지",
+   "문승호",
+   "신예린",
+   "배동욱"
+  ],
+  "recommendations": [
+   {
+    "priority": 1,
+    "name": "조성훈",
+    "text": "기한이 2일 지난 요청사항 처리: 수수료 구간별 비교표 작성 전달",
+    "reason": "처리기한 2026-10-28 경과, 상태 '진행 중'"
+   },
+   {
+    "priority": 1,
+    "name": "김도현",
+    "text": "오늘 기한인 요청사항 처리: 최근 6개월 CMS 거래실적 자료 제공",
+    "reason": "처리기한 2026-10-30"
+   },
+   {
+    "priority": 2,
+    "name": "장태우",
+    "text": "1일 후 미팅 준비 — 고객 프로필·미처리 요청 확인",
+    "reason": "미팅 예정: 2026-10-31 클라우드 전환 사전 협의 (예정)"
+   },
+   {
+    "priority": 2,
+    "name": "김도현",
+    "text": "2일 후 미팅 준비 — 고객 프로필·미처리 요청 확인",
+    "reason": "미팅 예정: 2026-11-01 정기 업무협의 (예정)"
+   },
+   {
+    "priority": 2,
+    "name": "조성훈",
+    "text": "예정했던 연락일이 지났습니다. 연락 여부 확인 또는 일정 재설정",
+    "reason": "다음 연락 예정일 2026-10-25"
+   },
+   {
+    "priority": 3,
+    "name": "오정석",
+    "text": "생일 D-1 — 축하·안부 연락 검토",
+    "reason": "생일 2026-10-31"
+   },
+   {
+    "priority": 3,
+    "name": "임가영",
+    "text": "생일 D-3 — 축하·안부 연락 검토",
+    "reason": "생일 2026-11-02"
+   },
+   {
+    "priority": 3,
+    "name": "김도현",
+    "text": "생일 D-5 — 축하·안부 연락 검토",
+    "reason": "생일 2026-11-04"
+   },
+   {
+    "priority": 4,
+    "name": "구본석",
+    "text": "장기간 연락이 없는 고객 — 안부 연락 검토",
+    "reason": "연락 기록 없음"
+   },
+   {
+    "priority": 4,
+    "name": "배동욱",
+    "text": "장기간 연락이 없는 고객 — 안부 연락 검토",
+    "reason": "마지막 연락 200일 전 (2026-04-13)"
+   }
+  ]
+ },
+ "customerView": {
+  "김도현": {
+   "missing": [],
+   "birthday": {
+    "date": "2026-11-04",
+    "d_day": 5
+   },
+   "anniversaries": [],
+   "requests": [
+    {
+     "content": "최근 6개월 CMS 거래실적 자료 제공",
+     "status": "진행 중",
+     "d_day": 0
+    }
+   ],
+   "interactions": [
+    {
+     "type": "미팅",
+     "date": "2026-11-01",
+     "time": "",
+     "title": "정기 업무협의 (예정)"
+    },
+    {
+     "type": "통화",
+     "date": "2026-10-24",
+     "time": "",
+     "title": "거래실적 자료 요청 통화"
+    },
+    {
+     "type": "미팅",
+     "date": "2026-10-17",
+     "time": "",
+     "title": "CMS 운영시간 확대 논의"
+    }
+   ]
+  },
+  "이서연": {
+   "missing": [
+    "음식 선호·기피"
+   ],
+   "birthday": {
+    "date": "2026-12-09",
+    "d_day": 40
+   },
+   "anniversaries": [
+    {
+     "kind": "결혼기념일",
+     "label": "",
+     "next_date": "2026-11-13",
+     "d_day": 14
+    }
+   ],
+   "requests": [
+    {
+     "content": "연계 테스트 시나리오 문서 송부",
+     "status": "미착수",
+     "d_day": 6
+    }
+   ],
+   "interactions": [
+    {
+     "type": "이메일",
+     "date": "2026-10-10",
+     "time": "",
+     "title": "연계 테스트 일정 회신"
+    },
+    {
+     "type": "통화",
+     "date": "2026-09-15",
+     "time": "",
+     "title": "시스템 변경 사전 공유"
+    }
+   ]
+  },
+  "박준혁": {
+   "missing": [
+    "성격·대화 스타일",
+    "음식 선호·기피",
+    "취미·관심사",
+    "최근 관심 주제",
+    "선호 연락 방식"
+   ],
+   "birthday": null,
+   "anniversaries": [],
+   "requests": [],
+   "interactions": [
+    {
+     "type": "통화",
+     "date": "2026-07-27",
+     "time": "",
+     "title": "민원 공동대응 협의"
+    }
+   ]
+  },
+  "최유진": {
+   "missing": [
+    "취미·관심사"
+   ],
+   "birthday": {
+    "date": "2026-11-17",
+    "d_day": 18
+   },
+   "anniversaries": [],
+   "requests": [
+    {
+     "content": "CMS 참가 신청서 최신 양식 및 작성 예시 전달",
+     "status": "미착수",
+     "d_day": 2
+    }
+   ],
+   "interactions": [
+    {
+     "type": "이메일",
+     "date": "2026-10-27",
+     "time": "",
+     "title": "참가 신청서 양식 문의"
+    },
+    {
+     "type": "미팅",
+     "date": "2026-09-30",
+     "time": "",
+     "title": "CMS 참가 절차 설명회"
+    }
+   ]
+  },
+  "정민수": {
+   "missing": [
+    "최근 관심 주제"
+   ],
+   "birthday": {
+    "date": "2027-10-27",
+    "d_day": 362
+   },
+   "anniversaries": [],
+   "requests": [
+    {
+     "content": "출금 실패 사유별 통계 자료 제공",
+     "status": "완료",
+     "d_day": -85
+    }
+   ],
+   "interactions": [
+    {
+     "type": "통화",
+     "date": "2026-07-22",
+     "time": "",
+     "title": "출금 실패 사유 자료 요청"
+    },
+    {
+     "type": "미팅",
+     "date": "2026-07-12",
+     "time": "",
+     "title": "연간 이용현황 점검"
+    }
+   ]
+  },
+  "강하은": {
+   "missing": [
+    "성격·대화 스타일",
+    "음식 선호·기피",
+    "취미·관심사",
+    "선호 연락 방식"
+   ],
+   "birthday": null,
+   "anniversaries": [],
+   "requests": [
+    {
+     "content": "모바일 출금동의 도입 안내자료 송부",
+     "status": "보류",
+     "d_day": -60
+    }
+   ],
+   "interactions": [
+    {
+     "type": "통화",
+     "date": "2026-08-16",
+     "time": "",
+     "title": "모바일 출금동의 문의"
+    }
+   ]
+  },
+  "조성훈": {
+   "missing": [],
+   "birthday": {
+    "date": "2026-11-24",
+    "d_day": 25
+   },
+   "anniversaries": [
+    {
+     "kind": "자녀 수능일",
+     "label": "자녀 수능 (가상)",
+     "next_date": "2026-11-21",
+     "d_day": 22
+    }
+   ],
+   "requests": [
+    {
+     "content": "수수료 구간별 비교표 작성 전달",
+     "status": "진행 중",
+     "d_day": -2
+    }
+   ],
+   "interactions": [
+    {
+     "type": "통화",
+     "date": "2026-09-22",
+     "time": "",
+     "title": "후속 통화"
+    },
+    {
+     "type": "미팅",
+     "date": "2026-09-20",
+     "time": "",
+     "title": "수수료 체계 상담"
+    }
+   ]
+  },
+  "윤지아": {
+   "missing": [
+    "성격·대화 스타일",
+    "음식 선호·기피",
+    "취미·관심사",
+    "최근 관심 주제",
+    "선호 연락 방식"
+   ],
+   "birthday": null,
+   "anniversaries": [],
+   "requests": [],
+   "interactions": [
+    {
+     "type": "미팅",
+     "date": "2026-10-29",
+     "time": "15:00",
+     "title": "관리비 CMS 신청 상담"
+    },
+    {
+     "type": "미팅",
+     "date": "2026-09-30",
+     "time": "",
+     "title": "첫 미팅 및 명함 교환"
+    }
+   ]
+  },
+  "장태우": {
+   "missing": [],
+   "birthday": {
+    "date": "2026-12-29",
+    "d_day": 60
+   },
+   "anniversaries": [],
+   "requests": [
+    {
+     "content": "성능 개선 과제 우선순위 회신",
+     "status": "진행 중",
+     "d_day": 3
+    }
+   ],
+   "interactions": [
+    {
+     "type": "미팅",
+     "date": "2026-10-31",
+     "time": "",
+     "title": "클라우드 전환 사전 협의 (예정)"
+    },
+    {
+     "type": "미팅",
+     "date": "2026-10-22",
+     "time": "",
+     "title": "유지보수 월간 점검"
+    }
+   ]
+  },
+  "한소희": {
+   "missing": [
+    "음식 선호·기피",
+    "선호 연락 방식"
+   ],
+   "birthday": null,
+   "anniversaries": [],
+   "requests": [],
+   "interactions": [
+    {
+     "type": "미팅",
+     "date": "2026-09-10",
+     "time": "",
+     "title": "포털 개선안 리뷰"
+    }
+   ]
+  },
+  "오정석": {
+   "missing": [
+    "성격·대화 스타일",
+    "최근 관심 주제"
+   ],
+   "birthday": {
+    "date": "2026-10-31",
+    "d_day": 1
+   },
+   "anniversaries": [],
+   "requests": [],
+   "interactions": [
+    {
+     "type": "미팅",
+     "date": "2026-06-22",
+     "time": "",
+     "title": "협력과제 성과 공유"
+    }
+   ]
+  },
+  "서민재": {
+   "missing": [
+    "음식 선호·기피",
+    "취미·관심사"
+   ],
+   "birthday": null,
+   "anniversaries": [],
+   "requests": [
+    {
+     "content": "CMS 운영시간 확대 관련 이용자 보호 검토의견 제출",
+     "status": "진행 중",
+     "d_day": 7
+    }
+   ],
+   "interactions": [
+    {
+     "type": "이메일",
+     "date": "2026-10-20",
+     "time": "",
+     "title": "검토의견 제출 일정 확인"
+    },
+    {
+     "type": "미팅",
+     "date": "2026-10-05",
+     "time": "",
+     "title": "운영시간 확대 정책 협의"
+    }
+   ]
+  },
+  "임가영": {
+   "missing": [
+    "성격·대화 스타일",
+    "최근 관심 주제",
+    "선호 연락 방식"
+   ],
+   "birthday": {
+    "date": "2026-11-02",
+    "d_day": 3
+   },
+   "anniversaries": [],
+   "requests": [],
+   "interactions": [
+    {
+     "type": "통화",
+     "date": "2026-10-18",
+     "time": "",
+     "title": "자료 취합 일정 문의"
+    }
+   ]
+  },
+  "배동욱": {
+   "missing": [
+    "성격·대화 스타일",
+    "음식 선호·기피",
+    "취미·관심사",
+    "선호 연락 방식"
+   ],
+   "birthday": null,
+   "anniversaries": [],
+   "requests": [],
+   "interactions": [
+    {
+     "type": "미팅",
+     "date": "2026-04-13",
+     "time": "",
+     "title": "지방세 자동이체 협의"
+    }
+   ]
+  },
+  "신예린": {
+   "missing": [
+    "최근 관심 주제"
+   ],
+   "birthday": {
+    "date": "2026-11-09",
+    "d_day": 10
+   },
+   "anniversaries": [],
+   "requests": [
+    {
+     "content": "접근통제 증빙자료 제출",
+     "status": "완료",
+     "d_day": -40
+    }
+   ],
+   "interactions": [
+    {
+     "type": "미팅",
+     "date": "2026-08-21",
+     "time": "",
+     "title": "IT 감사 사전 인터뷰"
+    }
+   ]
+  },
+  "문승호": {
+   "missing": [
+    "성격·대화 스타일",
+    "선호 연락 방식"
+   ],
+   "birthday": null,
+   "anniversaries": [],
+   "requests": [
+    {
+     "content": "출금 재시도 기능 개선 요청 내부 전달",
+     "status": "미착수",
+     "d_day": null
+    }
+   ],
+   "interactions": [
+    {
+     "type": "통화",
+     "date": "2026-06-02",
+     "time": "",
+     "title": "출금 재시도 기능 문의"
+    }
+   ]
+  },
+  "노은지": {
+   "missing": [
+    "취미·관심사"
+   ],
+   "birthday": {
+    "date": "2026-12-02",
+    "d_day": 33
+   },
+   "anniversaries": [],
+   "requests": [],
+   "interactions": [
+    {
+     "type": "미팅",
+     "date": "2026-09-05",
+     "time": "",
+     "title": "증권계좌 CMS 연계 설명"
+    }
+   ]
+  },
+  "구본석": {
+   "missing": [
+    "성격·대화 스타일",
+    "음식 선호·기피",
+    "취미·관심사",
+    "최근 관심 주제",
+    "선호 연락 방식"
+   ],
+   "birthday": null,
+   "anniversaries": [
+    {
+     "kind": "기타 기념일",
+     "label": "재단 창립기념일",
+     "next_date": "2026-12-14",
+     "d_day": 45
+    }
+   ],
+   "requests": [],
+   "interactions": []
+  }
+ },
+ "customerList": [
+  {
+   "name": "강하은",
+   "open_requests": 1,
+   "missing": 4
+  },
+  {
+   "name": "구본석",
+   "open_requests": 0,
+   "missing": 5
+  },
+  {
+   "name": "김도현",
+   "open_requests": 1,
+   "missing": 0
+  },
+  {
+   "name": "노은지",
+   "open_requests": 0,
+   "missing": 1
+  },
+  {
+   "name": "문승호",
+   "open_requests": 1,
+   "missing": 2
+  },
+  {
+   "name": "박준혁",
+   "open_requests": 0,
+   "missing": 5
+  },
+  {
+   "name": "배동욱",
+   "open_requests": 0,
+   "missing": 4
+  },
+  {
+   "name": "서민재",
+   "open_requests": 1,
+   "missing": 2
+  },
+  {
+   "name": "신예린",
+   "open_requests": 0,
+   "missing": 1
+  },
+  {
+   "name": "오정석",
+   "open_requests": 0,
+   "missing": 2
+  },
+  {
+   "name": "윤지아",
+   "open_requests": 0,
+   "missing": 5
+  },
+  {
+   "name": "이서연",
+   "open_requests": 1,
+   "missing": 1
+  },
+  {
+   "name": "임가영",
+   "open_requests": 0,
+   "missing": 3
+  },
+  {
+   "name": "장태우",
+   "open_requests": 1,
+   "missing": 0
+  },
+  {
+   "name": "정민수",
+   "open_requests": 0,
+   "missing": 1
+  },
+  {
+   "name": "조성훈",
+   "open_requests": 1,
+   "missing": 0
+  },
+  {
+   "name": "최유진",
+   "open_requests": 1,
+   "missing": 1
+  },
+  {
+   "name": "한소희",
+   "open_requests": 0,
+   "missing": 2
+  }
+ ],
+ "upcomingEvents366": [
+  {
+   "name": "오정석",
+   "kind": "생일",
+   "label": "생일",
+   "date": "2026-10-31",
+   "d_day": 1
+  },
+  {
+   "name": "임가영",
+   "kind": "생일",
+   "label": "생일",
+   "date": "2026-11-02",
+   "d_day": 3
+  },
+  {
+   "name": "김도현",
+   "kind": "생일",
+   "label": "생일",
+   "date": "2026-11-04",
+   "d_day": 5
+  },
+  {
+   "name": "신예린",
+   "kind": "생일",
+   "label": "생일",
+   "date": "2026-11-09",
+   "d_day": 10
+  },
+  {
+   "name": "이서연",
+   "kind": "결혼기념일",
+   "label": "결혼기념일",
+   "date": "2026-11-13",
+   "d_day": 14
+  },
+  {
+   "name": "최유진",
+   "kind": "생일",
+   "label": "생일",
+   "date": "2026-11-17",
+   "d_day": 18
+  },
+  {
+   "name": "조성훈",
+   "kind": "자녀 수능일",
+   "label": "자녀 수능 (가상)",
+   "date": "2026-11-21",
+   "d_day": 22
+  },
+  {
+   "name": "조성훈",
+   "kind": "생일",
+   "label": "생일",
+   "date": "2026-11-24",
+   "d_day": 25
+  },
+  {
+   "name": "노은지",
+   "kind": "생일",
+   "label": "생일",
+   "date": "2026-12-02",
+   "d_day": 33
+  },
+  {
+   "name": "이서연",
+   "kind": "생일",
+   "label": "생일",
+   "date": "2026-12-09",
+   "d_day": 40
+  },
+  {
+   "name": "구본석",
+   "kind": "기타 기념일",
+   "label": "재단 창립기념일",
+   "date": "2026-12-14",
+   "d_day": 45
+  },
+  {
+   "name": "장태우",
+   "kind": "생일",
+   "label": "생일",
+   "date": "2026-12-29",
+   "d_day": 60
+  },
+  {
+   "name": "정민수",
+   "kind": "생일",
+   "label": "생일",
+   "date": "2027-10-27",
+   "d_day": 362
+  }
+ ],
+ "sampleResult": {
+  "title": "거래실적 자료 및 재시도 기능 문의",
+  "interaction_type": "통화",
+  "interaction_date": "2026-10-30",
+  "summary": "거래실적 자료에 출금 실패 건수를 추가해 달라는 요청을 받음. 다음 주 수요일 내부 보고로 화요일까지 필요. 운영시간 확대보다 출금 재시도 기능에 관심이 높아 안내자료도 요청함.",
+  "speaker_note": "'회를 좋아한다'는 발언은 영업사원(나)의 발언이므로 고객 정보에서 제외함. 마지막 괄호 문장은 작성자의 추측으로 판단함."
+ },
+ "sampleEnriched": [
+  {
+   "kind": "profile",
+   "field": "food_likes",
+   "value": "고기",
+   "content": null,
+   "due_date": null,
+   "warnings": [],
+   "include": true,
+   "status": "conflict",
+   "existing": "한식",
+   "is_list": true,
+   "mode": "append",
+   "target_note": null
+  },
+  {
+   "kind": "profile",
+   "field": "food_dislikes",
+   "value": "회",
+   "content": null,
+   "due_date": null,
+   "warnings": [],
+   "include": true,
+   "status": "conflict",
+   "existing": "해산물",
+   "is_list": true,
+   "mode": "append",
+   "target_note": null
+  },
+  {
+   "kind": "profile",
+   "field": "hobbies",
+   "value": "테니스",
+   "content": null,
+   "due_date": null,
+   "warnings": [],
+   "include": true,
+   "status": "conflict",
+   "existing": "골프, 등산",
+   "is_list": true,
+   "mode": "append",
+   "target_note": null
+  },
+  {
+   "kind": "profile",
+   "field": "recent_interests",
+   "value": "출금 재시도 기능",
+   "content": null,
+   "due_date": null,
+   "warnings": [],
+   "include": true,
+   "status": "conflict",
+   "existing": "CMS 운영시간 확대",
+   "is_list": true,
+   "mode": "append",
+   "target_note": null
+  },
+  {
+   "kind": "profile",
+   "field": "contact_preference",
+   "value": "전화 (메일보다 선호)",
+   "content": null,
+   "due_date": null,
+   "warnings": [],
+   "include": false,
+   "status": "conflict",
+   "existing": "오전 중 전화",
+   "is_list": false,
+   "mode": "replace",
+   "target_note": null
+  },
+  {
+   "kind": "profile",
+   "field": "sales_notes",
+   "value": "연말 인사 이동 가능성",
+   "content": null,
+   "due_date": null,
+   "warnings": [
+    "화자 불확실",
+    "추측",
+    "신뢰도 낮음"
+   ],
+   "include": false,
+   "status": "conflict",
+   "existing": "보고서는 1장 요약본을 먼저 전달할 것",
+   "is_list": false,
+   "mode": "replace",
+   "target_note": "추측 정보는 확정 사실로 저장하지 않고 '영업 시 참고사항'에 '(추정)'으로만 기록"
+  },
+  {
+   "kind": "request",
+   "field": null,
+   "value": null,
+   "content": "거래실적 자료에 출금 실패 사유별 건수 추가 제공",
+   "due_date": "2026-11-03",
+   "warnings": [],
+   "include": true,
+   "status": null,
+   "existing": null,
+   "is_list": null,
+   "mode": null,
+   "target_note": null
+  },
+  {
+   "kind": "request",
+   "field": null,
+   "value": null,
+   "content": "출금 재시도 기능 설명 자료 제공",
+   "due_date": "",
+   "warnings": [],
+   "include": true,
+   "status": null,
+   "existing": null,
+   "is_list": null,
+   "mode": null,
+   "target_note": null
+  },
+  {
+   "kind": "followup",
+   "field": null,
+   "value": null,
+   "content": "다음 달 초 방문 미팅 및 점심 일정 잡기",
+   "due_date": null,
+   "warnings": [],
+   "include": true,
+   "status": null,
+   "existing": null,
+   "is_list": null,
+   "mode": null,
+   "target_note": null
+  }
+ ],
+ "sampleApply": {
+  "customer": "김도현",
+  "changed": {
+   "food_likes": [
+    "한식",
+    "한식, 고기"
+   ],
+   "food_dislikes": [
+    "해산물",
+    "해산물, 회"
+   ],
+   "hobbies": [
+    "골프, 등산",
+    "골프, 등산, 테니스"
+   ],
+   "recent_interests": [
+    "CMS 운영시간 확대",
+    "CMS 운영시간 확대, 출금 재시도 기능"
+   ],
+   "last_contact_date": [
+    "2026-10-24",
+    "2026-10-30"
+   ]
+  },
+  "history": [
+   {
+    "field": "food_likes",
+    "old": "한식",
+    "new": "한식, 고기",
+    "source": "sample",
+    "note": "예시 분석 승인 (sample_call_kimdohyun.txt)"
+   },
+   {
+    "field": "food_dislikes",
+    "old": "해산물",
+    "new": "해산물, 회",
+    "source": "sample",
+    "note": "예시 분석 승인 (sample_call_kimdohyun.txt)"
+   },
+   {
+    "field": "hobbies",
+    "old": "골프, 등산",
+    "new": "골프, 등산, 테니스",
+    "source": "sample",
+    "note": "예시 분석 승인 (sample_call_kimdohyun.txt)"
+   },
+   {
+    "field": "recent_interests",
+    "old": "CMS 운영시간 확대",
+    "new": "CMS 운영시간 확대, 출금 재시도 기능",
+    "source": "sample",
+    "note": "예시 분석 승인 (sample_call_kimdohyun.txt)"
+   }
+  ],
+  "interactions": [
+   {
+    "type": "미팅",
+    "date": "2026-10-17",
+    "time": "",
+    "title": "CMS 운영시간 확대 논의",
+    "summary": "운영시간 확대 시 은행 측 인력 운영 부담에 대해 의견 청취",
+    "details": "",
+    "source": "demo"
+   },
+   {
+    "type": "통화",
+    "date": "2026-10-24",
+    "time": "",
+    "title": "거래실적 자료 요청 통화",
+    "summary": "최근 6개월 거래실적 자료를 다음 주까지 요청함",
+    "details": "",
+    "source": "demo"
+   },
+   {
+    "type": "미팅",
+    "date": "2026-11-01",
+    "time": "",
+    "title": "정기 업무협의 (예정)",
+    "summary": "운영시간 확대 관련 후속 의견 청취 예정",
+    "details": "",
+    "source": "demo"
+   },
+   {
+    "type": "통화",
+    "date": "2026-10-30",
+    "time": "",
+    "title": "거래실적 자료 및 재시도 기능 문의",
+    "summary": "거래실적 자료에 출금 실패 건수를 추가해 달라는 요청을 받음. 다음 주 수요일 내부 보고로 화요일까지 필요. 운영시간 확대보다 출금 재시도 기능에 관심이 높아 안내자료도 요청함.",
+    "details": "[후속조치]\n- 다음 달 초 방문 미팅 및 점심 일정 잡기",
+    "source": "sample"
+   }
+  ],
+  "requests": [
+   {
+    "content": "최근 6개월 CMS 거래실적 자료 제공",
+    "received_date": "2026-10-24",
+    "due_date": "2026-10-30",
+    "status": "진행 중",
+    "assignee": "납기팀",
+    "source": "demo",
+    "has_interaction": true
+   },
+   {
+    "content": "거래실적 자료에 출금 실패 사유별 건수 추가 제공",
+    "received_date": "2026-10-30",
+    "due_date": "2026-11-03",
+    "status": "미착수",
+    "assignee": "",
+    "source": "sample",
+    "has_interaction": true
+   },
+   {
+    "content": "출금 재시도 기능 설명 자료 제공",
+    "received_date": "2026-10-30",
+    "due_date": "",
+    "status": "미착수",
+    "assignee": "",
+    "source": "sample",
+    "has_interaction": true
+   },
+   {
+    "content": "[후속조치] 다음 달 초 방문 미팅 및 점심 일정 잡기",
+    "received_date": "2026-10-30",
+    "due_date": "",
+    "status": "미착수",
+    "assignee": "",
+    "source": "sample",
+    "has_interaction": true
+   }
+  ]
+ },
+ "followupProposals": {
+  "questionIds": [
+   "held",
+   "request",
+   "food_ate",
+   "food_pref",
+   "interest"
+  ],
+  "answers": {
+   "held": {
+    "value": "yes"
+   },
+   "request": {
+    "value": "자료 요청",
+    "content": "관리비 CMS 이용 안내서 전달",
+    "due_date": "2026-11-06",
+    "assignee": "납기팀"
+   },
+   "food_ate": {
+    "value": "한식"
+   },
+   "food_pref": {
+    "value": "both",
+    "like": "냉면",
+    "dislike": "고수"
+   },
+   "interest": {
+    "value": "업무·사업",
+    "text": "관리비 수납 자동화"
+   },
+   "next_contact": {
+    "value": "set",
+    "date": "2026-11-12"
+   },
+   "personality": {
+    "value": "etc",
+    "text": "차분하고 질문이 구체적"
+   }
+  },
+  "proposals": [
+   {
+    "kind": "request",
+    "field": null,
+    "label": "요청사항 등록 (자료 요청)",
+    "old": "",
+    "new": "관리비 CMS 이용 안내서 전달",
+    "mode": null,
+    "due_date": "2026-11-06",
+    "assignee": "납기팀"
+   },
+   {
+    "kind": "field",
+    "field": "food_likes",
+    "label": "선호 음식",
+    "old": "",
+    "new": "냉면",
+    "mode": "replace",
+    "due_date": null,
+    "assignee": null
+   },
+   {
+    "kind": "field",
+    "field": "food_dislikes",
+    "label": "기피 음식",
+    "old": "",
+    "new": "고수",
+    "mode": "replace",
+    "due_date": null,
+    "assignee": null
+   },
+   {
+    "kind": "field",
+    "field": "recent_interests",
+    "label": "최근 관심 주제",
+    "old": "",
+    "new": "관리비 수납 자동화",
+    "mode": "replace",
+    "due_date": null,
+    "assignee": null
+   },
+   {
+    "kind": "meeting_note",
+    "field": null,
+    "label": "미팅 기록에 메모 추가",
+    "old": "",
+    "new": "[미팅 후 확인 2026-10-30] 식사: 한식 / 관심 주제(업무·사업): 관리비 수납 자동화",
+    "mode": null,
+    "due_date": null,
+    "assignee": null
+   }
+  ]
+ },
+ "followupApply": {
+  "customer": "윤지아",
+  "changed": {
+   "food_likes": [
+    "",
+    "냉면"
+   ],
+   "food_dislikes": [
+    "",
+    "고수"
+   ],
+   "recent_interests": [
+    "",
+    "관리비 수납 자동화"
+   ]
+  },
+  "history": [
+   {
+    "field": "food_likes",
+    "old": "",
+    "new": "냉면",
+    "source": "followup",
+    "note": "미팅 후 질문 (2026-10-29 관리비 CMS 신청 상담)"
+   },
+   {
+    "field": "food_dislikes",
+    "old": "",
+    "new": "고수",
+    "source": "followup",
+    "note": "미팅 후 질문 (2026-10-29 관리비 CMS 신청 상담)"
+   },
+   {
+    "field": "recent_interests",
+    "old": "",
+    "new": "관리비 수납 자동화",
+    "source": "followup",
+    "note": "미팅 후 질문 (2026-10-29 관리비 CMS 신청 상담)"
+   }
+  ],
+  "interactions": [
+   {
+    "type": "미팅",
+    "date": "2026-09-30",
+    "time": "",
+    "title": "첫 미팅 및 명함 교환",
+    "summary": "관리비 CMS 이용 신청 관련 기본 안내",
+    "details": "",
+    "source": "demo"
+   },
+   {
+    "type": "미팅",
+    "date": "2026-10-29",
+    "time": "15:00",
+    "title": "관리비 CMS 신청 상담",
+    "summary": "신청 서류와 일정 안내 (미팅 후 질문 시험용)",
+    "details": "[미팅 후 확인 2026-10-30] 식사: 한식 / 관심 주제(업무·사업): 관리비 수납 자동화",
+    "source": "demo"
+   }
+  ],
+  "requests": [
+   {
+    "content": "관리비 CMS 이용 안내서 전달",
+    "received_date": "2026-10-29",
+    "due_date": "2026-11-06",
+    "status": "미착수",
+    "assignee": "납기팀",
+    "source": "followup",
+    "has_interaction": true
+   }
+  ],
+  "state": {
+   "status": "done",
+   "answers": {
+    "held": {
+     "value": "yes"
+    },
+    "request": {
+     "value": "자료 요청",
+     "content": "관리비 CMS 이용 안내서 전달",
+     "due_date": "2026-11-06",
+     "assignee": "납기팀"
+    },
+    "food_ate": {
+     "value": "한식"
+    },
+    "food_pref": {
+     "value": "both",
+     "like": "냉면",
+     "dislike": "고수"
+    },
+    "interest": {
+     "value": "업무·사업",
+     "text": "관리비 수납 자동화"
+    },
+    "next_contact": {
+     "value": "set",
+     "date": "2026-11-12"
+    },
+    "personality": {
+     "value": "etc",
+     "text": "차분하고 질문이 구체적"
+    }
+   },
+   "asked": [
+    "held",
+    "request",
+    "food_ate",
+    "food_pref",
+    "interest"
+   ]
+  }
+ }
+}

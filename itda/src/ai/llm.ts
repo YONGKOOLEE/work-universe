@@ -13,7 +13,7 @@ export const LLM_EFFORT: LlmEffort = 'medium';
 
 /** 호출 종류별 상한(화면 대기 문구와 같은 값)과 생각 깊이.
  *  점검은 문서와 기록을 하나하나 대조해야 해서 'high'(가상 데이터 실측 2026-10-29: medium 15초 → high 17.5초). 전체 인사이트는 high로 35초 → 64초에 결과가 나아지지 않아 medium(한도 120초) */
-type LimitKind = 'extract' | 'review' | 'ask' | 'check' | 'insight' | 'overall' | 'explain';
+type LimitKind = 'extract' | 'review' | 'ask' | 'check' | 'insight' | 'overall' | 'explain' | 'convAnalyze' | 'queryParse';
 export const LIMITS: Record<LimitKind, { maxTokens: number; timeoutMs: number; effort?: LlmEffort }> = {
   extract: { maxTokens: 32000, timeoutMs: 120000 }, // 문서 분석(긴 문서)
   review: { maxTokens: 16000, timeoutMs: 90000 }, // 꼼꼼히 읽기(두 번째 대조 호출)
@@ -22,6 +22,8 @@ export const LIMITS: Record<LimitKind, { maxTokens: number; timeoutMs: number; e
   insight: { maxTokens: 16000, timeoutMs: 120000 }, // 지도 인사이트(Claude): 출력은 점검과 비슷(최대 8개), 입력이 팀 전체 업무라 점검보다 김 → 시간만 늘림
   overall: { maxTokens: 16000, timeoutMs: 120000 }, // 팀 전체 인사이트(Claude): 입력은 인사이트와 같고 출력은 3~5개 — 같은 한도
   explain: { maxTokens: 4000, timeoutMs: 45000 }, // 지도 요약 문장
+  convAnalyze: { maxTokens: 16000, timeoutMs: 120000 }, // AI 비서: 대화 기록 분석(긴 대화 + 항목별 근거 문장). 실제 호출 시간은 미측정
+  queryParse: { maxTokens: 2000, timeoutMs: 30000 }, // AI 비서: 검색 질문 해석(질문 한 줄 → 조건 JSON, 출력이 짧다)
 };
 
 export type LlmErrorCode = 'auth' | 'model' | 'rate' | 'timeout' | 'network' | 'refusal' | 'format' | 'too_large' | 'cancelled' | 'server';

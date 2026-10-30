@@ -120,6 +120,8 @@ export function personUsages(d: AppState, id: string): string[] {
   n('인계(인수자)', d.handovers.filter((h) => h.toId === id).length);
   n('인계 요청·진행 기록', d.handovers.reduce((a, h) => a + h.requests.filter((q) => q.byId === id).length + h.log.filter((l) => l.byId === id).length, 0));
   n('인계 스냅샷', d.snapshots.filter((sn) => sn.work.owners.includes(id) || sn.work.ownerHistory.some((o) => o.userId === id) || sn.actions.some((a) => a.ownerId === id)).length);
+  // AI 비서의 고객 담당 영업자(지우면 그 고객을 고칠 사람이 없어진다). aiChecks의 점검자와는 다르다 — 점검 기록은 사용처로 세지 않는다
+  n('AI 비서 고객 담당', (d.assistant?.customers ?? []).filter((c) => c.ownerId === id).length);
   return out;
 }
 

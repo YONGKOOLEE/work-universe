@@ -3,7 +3,7 @@ import type { AppState, Handover, HistoryEntry, Work } from './types';
 import { createSeed, SCHEMA } from '../data/seed';
 import { migrate } from './migrate';
 import { nextId, uid } from './util';
-import { orgScopeNames } from './orgs';
+import { isActiveLead, leadCoversDept } from './orgs';
 import { affectedWorkIds } from './docDelete';
 
 /**
@@ -59,17 +59,10 @@ export function canSee(s: AppState, workId: string, _userId: string) {
   return s.works.some((x) => x.id === workId);
 }
 
-/** 조직장 권한이 살아 있는가: role이 lead이고 전출·퇴직이 아님 */
-function isActiveLead(s: Pick<AppState, 'users'>, userId: string) {
-  const u = s.users.find((x) => x.id === userId);
-  return u?.role === 'lead' && u.status !== 'left';
-}
-
 /** 그 업무가 이 사람(조직장)의 소속 조직 또는 아래 조직 업무인가. 조직장이 아니면 false */
 export function inLeadScope(s: Pick<AppState, 'orgs' | 'users' | 'works'>, workId: string, userId: string) {
-  if (!isActiveLead(s, userId)) return false;
   const w = s.works.find((x) => x.id === workId);
-  return !!w && orgScopeNames(s, userId).has(String(w.dept || '').trim());
+  return !!w && leadCoversDept(s, w.dept, userId);
 }
 
 /** 고칠 수 있는가: 그 업무의 현재 담당자, 또는 소속 조직 범위 안 업무의 조직장(팀장·부장 등) */

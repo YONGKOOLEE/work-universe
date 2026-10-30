@@ -208,3 +208,14 @@ export function orgScopeNames(s: Pick<AppState, 'orgs' | 'users' | 'works'>, use
   const org = myOrgChain(s, userId)[0];
   return org ? subtreeNames(effectiveOrgs(s), org.id) : new Set<string>();
 }
+
+/** 조직장 권한이 살아 있는가: role이 lead이고 전출·퇴직이 아님(업무·고객 편집 권한의 공통 기준) */
+export function isActiveLead(s: Pick<AppState, 'users'>, userId: string): boolean {
+  const u = s.users.find((x) => x.id === userId);
+  return u?.role === 'lead' && u.status !== 'left';
+}
+
+/** 그 부서(조직 이름)가 이 사람(살아 있는 조직장)의 소속 조직 또는 아래 조직인가. 조직장이 아니면 false */
+export function leadCoversDept(s: Pick<AppState, 'orgs' | 'users' | 'works'>, dept: string, userId: string): boolean {
+  return isActiveLead(s, userId) && orgScopeNames(s, userId).has(String(dept || '').trim());
+}

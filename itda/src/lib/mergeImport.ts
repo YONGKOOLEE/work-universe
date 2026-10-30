@@ -1,5 +1,7 @@
 // 합쳐 불러오기 — 동료가 내보낸 백업을 지금 데이터에 더한다(팀 지도용). 순수 함수만(브라우저 기능 없음).
 import type { Action, AppState, DeletedDoc, Org, Cite, Decision, Doc, Handover, HistoryEntry, Snapshot, Stmt, TEvent, User, Work } from './types';
+import type { AssistantData, Customer } from '../assistant/types';
+import { emptyAssistant, trimChanges } from '../assistant/model';
 import { clone, nextId, uid } from './util';
 import { findTomb, stripDocRefs } from './docDelete';
 // @ts-expect-error 유니버스 순수 모듈(JS) — 비슷한 업무 점수(주제 3, 산출물 유형 2, 이름 낱말 1)
@@ -88,6 +90,8 @@ export interface MergeCounts {
   events: number;
   handovers: number;
   orgs: number;
+  /** AI 비서: 지금 데이터에 없는 새 고객 수(이름+소속·휴대전화·이메일로 같은 사람을 찾아 있으면 현재 값을 그대로 둔다) */
+  customers: number;
 }
 /** 같은 업무로 합칠 때 두 쪽 내용이 다른 칸(서술 목록 5칸 + 한 값 칸 4개). 후보 업무도 계획에는 담고, 화면은 합치기를 고른 것만 보임 */
 export interface MergeConflict {
@@ -269,6 +273,26 @@ const newOrgs = (current: AppState, incoming: AppState): Org[] => {
   return (incoming.orgs ?? []).filter((o) => !have.has(o.name));
 };
 
+/** 같은 고객인가: 이름+소속(소속이 있을 때), 휴대전화(숫자 8자리 이상), 이메일 중 하나가 같다 */
+export function sameCustomer(a: Customer, b: Customer): boolean {
+  if (a.name && normText(a.name) === normText(b.name) && a.company.trim() && normText(a.company) === normText(b.company)) return true;
+  const am = String(a.mobile || '').replace(/\D/g, '');
+  if (am.length >= 8 && am === String(b.mobile || '').replace(/\D/g, '')) return true;
+  const ae = String(a.email || '').trim().toLowerCase();
+  return !!ae && ae === String(b.email || '').trim().toLowerCase();
+}
+/** 들어온 고객 중 새로 더할 고객(앞서 더하기로 한 들어온 고객과 같은 사람도 한 번만) */
+export function newCustomers(cur: AssistantData | undefined, inc: AssistantData | undefined): Customer[] {
+  const have: Customer[] = [...(cur?.customers ?? [])];
+  const out: Customer[] = [];
+  for (const c of inc?.customers ?? []) {
+    if (have.some((x) => sameCustomer(x, c))) continue;
+    have.push(c);
+    out.push(c);
+  }
+  return out;
+}
+
 /** 선택을 반영한 추가 건수(미리 보기·요약용) */
 export function previewCounts(current: AppState, incoming: AppState, plan: MergePlan, choices: MergeChoices): MergeCounts {
   const pm = resolvePeople(plan, choices);
@@ -290,6 +314,7 @@ export function previewCounts(current: AppState, incoming: AppState, plan: Merge
     events: incoming.events.filter((e) => !ev.has(evKey(e))).length,
     handovers: incoming.handovers.filter((h) => !current.handovers.some((c) => hoKey(c) === hoKey({ ...h, workId: mw(h.workId), fromId: mu(h.fromId), toId: mu(h.toId) }))).length,
     orgs: newOrgs(current, incoming).length,
+    customers: newCustomers(current.assistant, incoming.assistant).length,
   };
 }
 
@@ -641,8 +666,11 @@ export function applyMerge(current: AppState, incoming: AppState, choices: Merge
 
   // ── 7) 지도 숨김·나만 보기 메모는 가져오지 않는다(지금 데이터 그대로) ──
 
+  // ── 7.5) AI 비서 고객: 새 고객만 하위 기록(활동·요청·기념일·변경 이력·미팅 후 질문)과 함께 새 ID로 더한다. 같은 고객은 지금 값 그대로 ──
+  const addedCustomers = mergeAssistant(cur, inc, mu);
+
   // ── 8) 기록 ──
-  const summary = `사람 ${inc.users.length}명(같은 사람 ${pm.size}) · 업무 ${inc.works.length}건(합침 ${wm.size}) · 문서 ${counts.docs}건 · 결정 ${counts.decisions} · 조치 ${counts.actions} · 인계 ${counts.handovers}${counts.orgs ? ` · 조직 ${counts.orgs}` : ''}${conflictedWorks ? ` · 내용이 다른 업무 ${conflictedWorks}건(칸 ${conflictFields.size})` : ''}${skippedNote(plan.skipped)}`;
+  const summary = `사람 ${inc.users.length}명(같은 사람 ${pm.size}) · 업무 ${inc.works.length}건(합침 ${wm.size}) · 문서 ${counts.docs}건 · 결정 ${counts.decisions} · 조치 ${counts.actions} · 인계 ${counts.handovers}${counts.orgs ? ` · 조직 ${counts.orgs}` : ''}${addedCustomers ? ` · 고객 ${addedCustomers}명` : ''}${conflictedWorks ? ` · 내용이 다른 업무 ${conflictedWorks}건(칸 ${conflictFields.size})` : ''}${skippedNote(plan.skipped)}`;
   const logWork = [...wm.values()][0] ?? wMap.get(inc.works[0]?.id ?? '') ?? cur.works[0]?.id;
   if (logWork) {
     let id: string;
@@ -651,6 +679,36 @@ export function applyMerge(current: AppState, incoming: AppState, choices: Merge
     cur.history.push({ id, workId: logWork, at: now, actorId: cur.currentUserId, kind: '합쳐 불러오기', summary });
   }
   return { state: cur, summary };
+}
+
+/** AI 비서 병합(applyMerge의 7.5단계). 더한 고객 수를 돌려준다. 담당 영업자(ownerId)는 사람 ID 표(mu)로 바꾼다 — 같은 사람이면 지금 사람, 새 사람이면 새로 매긴 ID */
+function mergeAssistant(cur: AppState, inc: AppState, mu: (id: string) => string): number {
+  const add = newCustomers(cur.assistant, inc.assistant);
+  if (!add.length) return 0;
+  const a = cur.assistant ?? (cur.assistant = emptyAssistant());
+  const src = inc.assistant!;
+  const idsOf = (xs: { id: string }[]) => allocator(new Set(xs.map((x) => x.id)));
+  const allocC = idsOf(a.customers);
+  const allocI = idsOf(a.interactions);
+  const allocR = idsOf(a.requests);
+  const allocA = idsOf(a.anniversaries);
+  const allocH = idsOf(a.changes);
+  const iMap = new Map<string, string>();
+  for (const c of add) {
+    const id = allocC(c.id);
+    a.customers.push({ ...c, id, ownerId: mu(c.ownerId) });
+    for (const i of src.interactions.filter((x) => x.customerId === c.id)) {
+      const nid = allocI(i.id);
+      iMap.set(i.id, nid);
+      a.interactions.push({ ...i, id: nid, customerId: id });
+    }
+    for (const r of src.requests.filter((x) => x.customerId === c.id)) a.requests.push({ ...r, id: allocR(r.id), customerId: id, interactionId: r.interactionId ? iMap.get(r.interactionId) ?? null : null });
+    for (const x of src.anniversaries.filter((y) => y.customerId === c.id)) a.anniversaries.push({ ...x, id: allocA(x.id), customerId: id });
+    for (const h of src.changes.filter((y) => y.customerId === c.id)) a.changes.push({ ...h, id: allocH(h.id), customerId: id });
+    trimChanges(a, id);
+    for (const f of src.followups.filter((y) => iMap.has(y.interactionId))) a.followups.push({ ...f, interactionId: iMap.get(f.interactionId)! });
+  }
+  return add.length;
 }
 
 /** 가져오지 않는 것을 밝히는 한 줄(요약·미리 보기 공용). 없으면 빈 글 */

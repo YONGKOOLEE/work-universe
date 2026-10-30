@@ -4,6 +4,7 @@
 // 아래 단일 저장소(AppState)를 서로 다른 관점에서 보여준다.
 // 추후 사내 DB / LLM API 연계 시 이 타입이 API 계약의 기준이 된다.
 // ─────────────────────────────────────────────────────────────
+import type { AssistantData } from '../assistant/types';
 
 /** 서술(문장) 단위 근거 구분 */
 export type Prov =
@@ -279,6 +280,7 @@ export interface AppState {
   orgs?: Org[]; // 조직 계층(팀 → 부 → 본부 → 회사, 2026-10-29 사용자 결정). 없으면 업무·사람의 dept 글자를 팀으로 본다(lib/orgs.ts)
   privateMemos?: PrivateMemo[]; // 「나만 보기」 메모 — 쓴 사람에게만 보인다(열람 범위에서 거름, 2026-10-29 사용자 결정)
   aiChecks?: Record<string, AiCheckRecord>; // 업무 ID → 마지막 AI 점검 결과(업무 내용이 아니라 버전·갱신일에 영향 없음, 2026-10-29 사용자 결정 「마지막 결과만 저장」)
+  assistant?: AssistantData; // AI 비서(고객 메모, CR-25 사용자 결정 2026-10-30 「업무 데이터에 포함」). 없으면 처음 열 때 가상 고객 18명으로 채운다(assistant/seed.ts). 지운 뒤에는 빈 객체라 다시 채우지 않는다. 선택 칸이라 스키마 번호는 그대로
   searchLog: string[];
   focus: Record<string, string>; // 사용자별로 마지막에 보던 업무 ('all' 또는 업무 ID)
 }
