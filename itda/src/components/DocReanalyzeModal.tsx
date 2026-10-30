@@ -145,7 +145,7 @@ export function DocReanalyzeModal({ open, onClose, docId }: { open: boolean; onC
           {(ext?.engine ?? ai.engine) === 'claude' ? (
             <span className="inline-flex items-center gap-1 rounded bg-brandsoft px-1.5 text-2xs font-semibold text-brand">
               <Bot size={11} />
-              Claude 분석
+              AI 분석
             </span>
           ) : (
             <span className="rounded bg-warnsoft px-1.5 text-2xs font-semibold text-warn">규칙 기반 분석</span>
@@ -160,12 +160,12 @@ export function DocReanalyzeModal({ open, onClose, docId }: { open: boolean; onC
         {busy && (
           <div className="flex items-start gap-2 py-4 text-[13px] text-muted">
             <Loader2 size={16} className="mt-0.5 animate-spin" />
-            <span>{ai.engine === 'claude' ? (stage === 'review' ? '2단계: 꼼꼼히 읽기 중입니다(최대 1분 30초).' : '1단계: AI(Claude)가 등록 원문을 읽는 중입니다(긴 문서는 최대 2분).') : '규칙으로 원문을 읽는 중입니다.'}</span>
+            <span>{ai.engine === 'claude' ? (stage === 'review' ? '2단계: 꼼꼼히 읽기 중입니다(최대 1분 30초).' : '1단계: AI가 등록 원문을 읽는 중입니다(긴 문서는 최대 2분).') : '규칙으로 원문을 읽는 중입니다.'}</span>
           </div>
         )}
         {ext && !busy && (
           <>
-            {doc.analyzedBy === 'claude' && ext.engine !== 'claude' && <p className="rounded-md bg-sunken px-3 py-2 text-xs text-muted">이 문서는 Claude로 분석된 기록이 있어, 규칙 기반 결과로 문서 요약·분석 표시를 바꾸지 않고 새 항목만 더합니다.</p>}
+            {doc.analyzedBy === 'claude' && ext.engine !== 'claude' && <p className="rounded-md bg-sunken px-3 py-2 text-xs text-muted">이 문서는 AI로 분석된 기록이 있어, 규칙 기반 결과로 문서 요약·분석 표시를 바꾸지 않고 새 항목만 더합니다.</p>}
             <ReflectionPreview props={props} setProps={setProps} paras={paras} works={myWorks} users={s.users} emptyText={skipped ? `새로 반영할 항목이 없습니다. 찾은 ${skipped}건은 모두 이미 업무에 기록되어 있습니다.` : '이 문서에서 업무에 반영할 항목을 찾지 못했습니다.'} />
           </>
         )}

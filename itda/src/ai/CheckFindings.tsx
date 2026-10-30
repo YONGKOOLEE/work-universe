@@ -84,7 +84,7 @@ export function CheckFindings({ state, className }: { state: ClaudeCheckState; c
   const saved = state.saved ?? null;
   const running = state.running ? (
     <p className="flex items-center gap-1.5 text-[13px] text-muted" data-testid="claude-check-running">
-      <Loader2 size={14} className="animate-spin" /> AI(Claude)가 업무 기록과 연결 문서를 대조하는 중입니다(최대 90초)
+      <Loader2 size={14} className="animate-spin" /> AI가 업무 기록과 연결 문서를 대조하는 중입니다(최대 90초)
     </p>
   ) : null;
   const err = !state.running && state.error ? (
@@ -115,7 +115,7 @@ function FindingList({ r, saved, fresh, workId, open, setOpen }: { r: { findings
     <div data-testid="claude-check">
       {saved && (
         <div className="mb-1.5 text-2xs text-muted" data-testid="ai-check-saved">
-          마지막 AI 점검 · <span className="tnum" data-testid="ai-check-at">{fmtDateTime(saved.at)}</span> · {byName} · Claude({saved.model}) · {saved.findings.length}건
+          마지막 AI 점검 · <span className="tnum" data-testid="ai-check-at">{fmtDateTime(saved.at)}</span> · {byName} · AI · {saved.findings.length}건
           {stale && (
             <span className="ml-2 rounded bg-warnsoft px-1.5 py-px font-medium text-warn" data-testid="ai-check-stale">
               점검 뒤 기록이 바뀜 — 다시 점검 권장

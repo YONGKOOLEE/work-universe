@@ -70,7 +70,7 @@ export function ClaudeInsights({ data, scope, asOf, focusId, onFocus }: { data: 
       <div className="mt-3 border-t border-line pt-2" data-testid="insight-claude-fallback">
         {/* 키 거부 직후에는 엔진이 규칙으로 내려가 이 안내만 남는다 — 방금 난 오류 문구가 힌트에 가려지지 않게 먼저 보인다 */}
         {c.error && <p className="mb-1 text-[12.5px] text-warn" data-testid="claude-insight-error">AI 인사이트를 찾지 못했습니다: {c.error} 위의 규칙 인사이트는 그대로 쓸 수 있습니다.</p>}
-        {o.error && o.error !== c.error && <p className="mb-1 text-[12.5px] text-warn" data-testid="claude-overall-error">Claude 전체 인사이트를 찾지 못했습니다: {o.error}</p>}
+        {o.error && o.error !== c.error && <p className="mb-1 text-[12.5px] text-warn" data-testid="claude-overall-error">AI 전체 인사이트를 찾지 못했습니다: {o.error}</p>}
         <p className="text-2xs text-faint" data-testid="insight-claude-hint">
           {c.denied
             ? '키가 거부되어 지금은 규칙 인사이트만 보입니다. 상단 「AI 설정」에서 키를 지우거나 새 키를 넣으면'
@@ -92,7 +92,7 @@ export function ClaudeInsights({ data, scope, asOf, focusId, onFocus }: { data: 
         <h4 className="flex items-center gap-1.5 text-[13px] font-bold">
           <Sparkles size={14} className="text-infer" /> AI가 찾은 인사이트
         </h4>
-        {r && <span className="rounded bg-infersoft px-1.5 text-2xs font-semibold text-infer">Claude API</span>}
+        {r && <span className="rounded bg-infersoft px-1.5 text-2xs font-semibold text-infer">AI</span>}
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         {c.running ? (
@@ -104,7 +104,7 @@ export function ClaudeInsights({ data, scope, asOf, focusId, onFocus }: { data: 
           <button
             className="inline-flex items-center gap-1 rounded border border-infer/30 bg-surface px-2 py-0.5 text-[12px] font-medium text-infer hover:bg-infersoft"
             onClick={() => void c.run()}
-            title="이 범위의 업무 기록·사람 목록을 AI(지금: Claude)에 보내, 규칙이 못 보는 위험을 찾습니다(「나만 보기」 메모는 보내지 않음)"
+            title="이 범위의 업무 기록·사람 목록을 AI에 보내, 규칙이 못 보는 위험을 찾습니다(「나만 보기」 메모는 보내지 않음)"
             data-testid="claude-insight-run"
           >
             <Sparkles size={12} /> {r ? (c.stale ? '바뀐 기록으로 다시 찾기' : '다시 찾기') : 'AI로 더 찾기'}

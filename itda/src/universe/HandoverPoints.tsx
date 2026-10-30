@@ -109,7 +109,7 @@ export function HandoverPoints({ data, workId, fromId, toId }: { data: AppState;
           <div key={it.key}>
             <p className="flex items-center gap-2 text-2xs font-semibold text-faint">
               {it.title}
-              <span className={cx('rounded px-1 font-normal', it.method === 'llm' ? 'bg-brandsoft text-brand' : 'bg-sunken text-muted')}>{it.method === 'llm' ? 'Claude API(근거 확인됨)' : '규칙 기반'}</span>
+              <span className={cx('rounded px-1 font-normal', it.method === 'llm' ? 'bg-brandsoft text-brand' : 'bg-sunken text-muted')}>{it.method === 'llm' ? 'AI(근거 확인됨)' : '규칙 기반'}</span>
             </p>
             {it.insufficient ? (
               <p className="mt-1 text-muted">{it.empty_reason}</p>

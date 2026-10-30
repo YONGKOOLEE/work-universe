@@ -52,7 +52,7 @@ export function splitDuplicates(s: AppState, props: Proposal[]): { fresh: Propos
 }
 
 const KIND_LABEL: Record<ProposalKind, string> = { decision: '결정', event: '타임라인', action: '조치', overview: '개요', topic: '주제' };
-export const engineLabel = (e: 'claude' | 'mock') => (e === 'claude' ? 'Claude' : '규칙 기반');
+export const engineLabel = (e: 'claude' | 'mock') => (e === 'claude' ? 'AI' : '규칙 기반');
 
 export interface ReanalysisResult {
   added: number;

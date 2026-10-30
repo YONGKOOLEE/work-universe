@@ -145,7 +145,7 @@ export default function AskView() {
             <>
               <Bot size={13} className="mt-0.5 shrink-0 text-brand" aria-hidden="true" />
               <span>
-                질문을 Claude({ai.model})가 검색 조건으로 해석합니다. <b className="text-ink">전송되는 것은 질문 문장과 오늘 날짜뿐</b>이며 고객 정보와 검색 결과는 보내지 않습니다. 질문에 고객 이름을 쓰면 그 이름도 함께 전송됩니다. 질문에 쓴 전화번호·이메일·주민등록번호·계좌번호는 가려서 보냅니다. 실제 검색은 이 브라우저에서만 합니다. 해석에 실패하면 규칙으로 대신합니다.
+                질문을 AI가 검색 조건으로 해석합니다. <b className="text-ink">전송되는 것은 질문 문장과 오늘 날짜뿐</b>이며 고객 정보와 검색 결과는 보내지 않습니다. 질문에 고객 이름을 쓰면 그 이름도 함께 전송됩니다. 질문에 쓴 전화번호·이메일·주민등록번호·계좌번호는 가려서 보냅니다. 실제 검색은 이 브라우저에서만 합니다. 해석에 실패하면 규칙으로 대신합니다.
               </span>
             </>
           ) : (
@@ -162,7 +162,7 @@ export default function AskView() {
       {busy && (
         <Card className="flex flex-wrap items-center gap-2 p-4 text-[13px] text-muted" role="status">
           <Loader2 size={16} className="animate-spin" />
-          <span className="flex-1">{claude ? 'Claude가 질문을 해석하는 중입니다(보통 몇 초).' : '고객 정보에서 찾는 중입니다.'}</span>
+          <span className="flex-1">{claude ? 'AI가 질문을 해석하는 중입니다(보통 몇 초).' : '고객 정보에서 찾는 중입니다.'}</span>
           {claude && (
             <Button
               size="sm"
@@ -193,7 +193,7 @@ export default function AskView() {
           )}
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface px-4 py-3">
             <Pill tone={out.mode === 'ai' ? 'infer' : 'muted'} data-testid="asst-ask-mode" data-mode={out.mode}>
-              {out.mode === 'ai' ? 'AI 해석 (Claude)' : '규칙 해석'}
+              {out.mode === 'ai' ? 'AI 해석' : '규칙 해석'}
             </Pill>
             <span className="text-[13px] text-muted">해석된 조건</span>
             <span className="flex flex-wrap gap-1.5" data-testid="asst-ask-explain">

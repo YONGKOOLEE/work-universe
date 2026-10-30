@@ -74,7 +74,7 @@ export function OverallButton({ o }: { o: OverallState }) {
     <button
       className="inline-flex items-center gap-1 rounded border border-infer/30 bg-surface px-2 py-0.5 text-[12px] font-medium text-infer hover:bg-infersoft"
       onClick={() => void o.run()}
-      title="이 범위의 업무 기록 전체를 AI(지금: Claude)에 보내, 팀 전체를 관통하는 것(공통 병목·같은 외부기관 의존·되풀이되는 결정 번복 등)을 찾습니다(「나만 보기」 메모는 보내지 않음)"
+      title="이 범위의 업무 기록 전체를 AI에 보내, 팀 전체를 관통하는 것(공통 병목·같은 외부기관 의존·되풀이되는 결정 번복 등)을 찾습니다(「나만 보기」 메모는 보내지 않음)"
       data-testid="claude-overall-run"
     >
       <Layers size={12} /> {o.result ? (o.stale ? '바뀐 기록으로 전체 인사이트 다시' : '전체 인사이트 다시') : 'AI로 전체 인사이트'}
@@ -94,12 +94,12 @@ export function OverallResults({ o, data, scope, focusId, onFocus }: { o: Overal
           <button className="ml-auto text-2xs text-brand" onClick={o.cancel}>취소</button>
         </p>
       )}
-      {o.error && <p className="mt-1.5 text-[12.5px] text-warn" data-testid="claude-overall-error">Claude 전체 인사이트를 찾지 못했습니다: {o.error}</p>}
+      {o.error && <p className="mt-1.5 text-[12.5px] text-warn" data-testid="claude-overall-error">AI 전체 인사이트를 찾지 못했습니다: {o.error}</p>}
       {r && (
         <div className="mt-2" data-testid="claude-overall">
           <div className="flex items-center justify-between gap-2">
             <h5 className="text-[12.5px] font-bold">팀 전체 인사이트 {r.items.length}가지</h5>
-            <span className="rounded bg-infersoft px-1.5 text-2xs font-semibold text-infer" data-testid="claude-overall-engine">Claude</span>
+            <span className="rounded bg-infersoft px-1.5 text-2xs font-semibold text-infer" data-testid="claude-overall-engine">AI</span>
           </div>
           {o.stale && <p className="mt-1 text-2xs text-warn">찾은 뒤 기록이 바뀌었습니다. 아래는 이전 기록 기준입니다.</p>}
           {r.items.length === 0 ? (
@@ -142,7 +142,7 @@ export function OverallResults({ o, data, scope, focusId, onFocus }: { o: Overal
           )}
           {r.dropped > 0 && <p className="mt-1 text-2xs text-faint" data-testid="claude-overall-dropped">근거가 업무 기록에서 확인되지 않거나 한 업무뿐이라 뺀 항목 {r.dropped}개</p>}
           {r.truncated > 0 && <p className="mt-1 text-2xs text-faint">업무가 많아 최근 갱신순으로 일부만 보냈습니다(빠진 업무 {r.truncated}개).</p>}
-          <p className="mt-1 text-2xs text-faint">AI(Claude)가 쓴 해석입니다. 근거 인용이 실제 업무 기록에 있는지, 서로 다른 업무 둘 이상에 걸치는지는 앱이 확인했습니다. 결과는 이 탭에만 있고 저장·내보내기에 들어가지 않습니다.</p>
+          <p className="mt-1 text-2xs text-faint">AI가 쓴 해석입니다. 근거 인용이 실제 업무 기록에 있는지, 서로 다른 업무 둘 이상에 걸치는지는 앱이 확인했습니다. 결과는 이 탭에만 있고 저장·내보내기에 들어가지 않습니다.</p>
         </div>
       )}
     </>

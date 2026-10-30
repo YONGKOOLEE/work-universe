@@ -22,7 +22,7 @@ export function saveAiCheck(d: AppState, workId: string, rec: AiCheckRecord, log
   if (!allowed) return false; // 고칠 권한이 없는 사람의 점검은 저장·이력 없이 화면에만 보인다
   if (!d.works.some((w) => w.id === workId)) return false;
   d.aiChecks = { ...(d.aiChecks ?? {}), [workId]: rec };
-  log(d, workId, 'AI 점검', `AI 점검 ${rec.findings.length}건 (Claude)`, rec.byId);
+  log(d, workId, 'AI 점검', `AI 점검 ${rec.findings.length}건`, rec.byId);
   return true;
 }
 

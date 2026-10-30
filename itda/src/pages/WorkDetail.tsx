@@ -46,7 +46,7 @@ export default function WorkDetail({ id }: { id: string }) {
   const nClaude = docs.filter((x) => x.analyzedBy === 'claude').length;
   const nRule = docs.filter((x) => x.analyzedBy === 'mock').length;
   const glanceSource = docs.length
-    ? `등록 문서에서 정리 · 분석: ${[nClaude && `Claude ${nClaude}`, nRule && `규칙 ${nRule}`, docs.length - nClaude - nRule > 0 && `기록 없음 ${docs.length - nClaude - nRule}`].filter(Boolean).join(' · ')} · 손으로 고친 기록 포함`
+    ? `등록 문서에서 정리 · 분석: ${[nClaude && `AI ${nClaude}`, nRule && `규칙 ${nRule}`, docs.length - nClaude - nRule > 0 && `기록 없음 ${docs.length - nClaude - nRule}`].filter(Boolean).join(' · ')} · 손으로 고친 기록 포함`
     : '등록된 문서 없음 · 손으로 쓴 기록만 있음';
   const reDocs = docs.filter((x) => x.paragraphs?.length);
   const parent = s.works.find((x) => x.id === w.parentId);
@@ -188,7 +188,7 @@ export default function WorkDetail({ id }: { id: string }) {
                       <li key={x.id}>
                         <button className="w-full px-3 py-2 text-left hover:bg-sunken/60" onClick={() => { setPickOpen(false); nav(`/docs/${x.id}?reanalyze=1`); }} data-testid={`glance-reanalyze-${x.id}`}>
                           <span className="block font-medium">{x.title}</span>
-                          <span className="text-2xs text-muted">{x.analyzedBy === 'claude' ? 'Claude' : x.analyzedBy === 'mock' ? '규칙 기반' : '분석 기록 없음'} 분석</span>
+                          <span className="text-2xs text-muted">{x.analyzedBy === 'claude' ? 'AI' : x.analyzedBy === 'mock' ? '규칙 기반' : '분석 기록 없음'} 분석</span>
                         </button>
                       </li>
                     ))}
@@ -303,7 +303,7 @@ export default function WorkDetail({ id }: { id: string }) {
                 </button>
               ))}
               {cc.available && !ro && !cc.running && (
-                <button className="ml-auto inline-flex items-center gap-1 rounded border border-infer/30 bg-surface px-2 py-0.5 font-medium text-infer hover:bg-infersoft" onClick={() => void cc.run()} title="업무 기록과 연결 문서를 AI(지금: Claude)가 대조해, 문서에는 있는데 기록에 빠진 것·서로 다른 것을 찾습니다" data-testid="work-claude-check">
+                <button className="ml-auto inline-flex items-center gap-1 rounded border border-infer/30 bg-surface px-2 py-0.5 font-medium text-infer hover:bg-infersoft" onClick={() => void cc.run()} title="업무 기록과 연결 문서를 AI가 대조해, 문서에는 있는데 기록에 빠진 것·서로 다른 것을 찾습니다" data-testid="work-claude-check">
                   <Sparkles size={12} />
                   {cc.result || cc.saved ? 'AI로 다시 점검' : 'AI로 점검'}
                 </button>

@@ -32,7 +32,7 @@ export default function AssistantPage() {
         <div className="min-w-0">
           <h1 className="text-[22px] font-bold tracking-tight">AI 비서</h1>
           <p className="max-w-3xl text-[13px] text-muted">
-            고객 메모를 모아 미팅 준비와 안부 연락을 돕습니다. 오늘 할 일·브리핑·검색은 규칙으로 계산하며 밖으로 보내지 않습니다. 대화 분석과 질문 해석에서만 Claude를 쓸 수 있고(선택), 저장은 승인한 항목만 합니다.
+            고객 메모를 모아 미팅 준비와 안부 연락을 돕습니다. 오늘 할 일·브리핑·검색은 규칙으로 계산하며 밖으로 보내지 않습니다. 대화 분석과 질문 해석에서만 AI를 쓸 수 있고(선택), 저장은 승인한 항목만 합니다.
           </p>
         </div>
         <Button onClick={() => setSettings(true)} data-testid="asst-settings-open">

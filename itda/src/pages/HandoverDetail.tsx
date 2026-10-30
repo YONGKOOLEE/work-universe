@@ -94,7 +94,7 @@ export default function HandoverDetail({ id }: { id: string }) {
     mut((x, d) => {
       x.precheckDone = true;
       x.step = 3;
-      x.log.push({ at: now(), byId: d.currentUserId, text: `사전 점검(${r ? '규칙 + Claude' : '규칙 기반'}) 완료 · 확인 필요 ${issues.length}건${r ? ` · Claude가 찾은 것 ${r.findings.length}건` : ''}` });
+      x.log.push({ at: now(), byId: d.currentUserId, text: `사전 점검(${r ? '규칙 + AI' : '규칙 기반'}) 완료 · 확인 필요 ${issues.length}건${r ? ` · AI가 찾은 것 ${r.findings.length}건` : ''}` });
     });
     setRunning(false);
   };

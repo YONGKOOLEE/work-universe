@@ -93,7 +93,7 @@ export default function DocDetail({ id }: { id: string }) {
               <KV k="등록일">{fmtDate(d.registeredAt)} · {userName(s, d.registeredBy)}</KV>
               <KV k="출처">{d.source}</KV>
               {d.fileName && <KV k="원본 파일">{d.fileName}</KV>}
-              {d.analyzedBy && <KV k="AI 분석">{d.analyzedBy === 'claude' ? 'Claude' : '규칙 기반'}{d.analyzedAt ? ` · ${fmtDate(d.analyzedAt)}` : ''}</KV>}
+              {d.analyzedBy && <KV k="AI 분석">{d.analyzedBy === 'claude' ? 'AI' : '규칙 기반'}{d.analyzedAt ? ` · ${fmtDate(d.analyzedAt)}` : ''}</KV>}
               {d.url && <KV k="원문 링크"><ExtLink href={d.url}>원문 링크</ExtLink></KV>}
               <KV k="관련 업무">
                 {d.workIds.length ? (

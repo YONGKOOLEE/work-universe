@@ -67,7 +67,7 @@ describe('AI 점검 저장 — 저장·이력', () => {
     expect(JSON.stringify(saved)).not.toMatch(/sk-ant|apiKey|<업무 기록>/);
     expect(s.history.length).toBe(before.n + 1);
     const h = s.history[s.history.length - 1];
-    expect(h).toMatchObject({ workId: w.id, kind: 'AI 점검', summary: `AI 점검 ${saved.findings.length}건 (Claude)` });
+    expect(h).toMatchObject({ workId: w.id, kind: 'AI 점검', summary: `AI 점검 ${saved.findings.length}건` });
     expect(w.version).toBe(before.v);
     expect(w.updatedAt).toBe(before.u);
   });

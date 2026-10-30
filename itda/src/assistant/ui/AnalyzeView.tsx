@@ -270,7 +270,7 @@ export default function AnalyzeView() {
                 <p className="flex items-start gap-2">
                   <Bot size={15} className="mt-0.5 shrink-0 text-brand" aria-hidden="true" />
                   <span>
-                    <b>Claude({ai.model})로 분석합니다.</b> 전송 전에 보낼 내용을 확인하는 화면이 나옵니다. 전화번호·이메일·주민번호·계좌번호 형태는 기본으로 가려서 보내고, 고객 프로필은 보내지 않습니다.
+                    <b>AI로 분석합니다.</b> 전송 전에 보낼 내용을 확인하는 화면이 나옵니다. 전화번호·이메일·주민번호·계좌번호 형태는 기본으로 가려서 보내고, 고객 프로필은 보내지 않습니다.
                   </span>
                 </p>
               ) : (
@@ -292,7 +292,7 @@ export default function AnalyzeView() {
                   ))}
                 </select>
               </Field>
-              <Field label="내 이름" htmlFor="asst-an-myname" hint="대화에서 영업사원(나)의 말을 가려내는 데 쓰입니다. Claude로 보낼 때 함께 전송됩니다.">
+              <Field label="내 이름" htmlFor="asst-an-myname" hint="대화에서 영업사원(나)의 말을 가려내는 데 쓰입니다. AI로 보낼 때 함께 전송됩니다.">
                 <input id="asst-an-myname" className={inputCls} value={myName} onChange={(e) => setMyName(e.target.value)} maxLength={30} data-testid="asst-an-myname" />
               </Field>
             </div>
@@ -384,7 +384,7 @@ export default function AnalyzeView() {
                 </Collapsible>
                 <label className="flex items-start gap-2 rounded-md bg-warnsoft/50 px-3 py-2">
                   <input type="checkbox" className="mt-0.5" checked={consent} disabled={stage === 'running'} onChange={(e) => setConsent(e.target.checked)} data-testid="asst-an-consent" />
-                  <span>위 내용이 Claude로 전송되는 것을 확인했고 동의합니다. 사용량은 본인 키로 과금됩니다.</span>
+                  <span>위 내용이 위 전송처로 전송되는 것을 확인했고 동의합니다. 사용량은 본인 키로 과금됩니다.</span>
                 </label>
               </>
             ) : (
@@ -393,7 +393,7 @@ export default function AnalyzeView() {
             {stage === 'running' && (
               <p className="flex flex-wrap items-center gap-2 rounded-md bg-brandsoft px-3 py-2" role="status" data-testid="asst-an-running">
                 <Loader2 size={15} className="animate-spin" />
-                <span className="flex-1">Claude가 대화를 분석하는 중입니다. 대화 길이에 따라 수십 초에서 2분까지 걸릴 수 있습니다.</span>
+                <span className="flex-1">AI가 대화를 분석하는 중입니다. 대화 길이에 따라 수십 초에서 2분까지 걸릴 수 있습니다.</span>
                 <Button size="sm" onClick={cancelRun} data-testid="asst-an-cancel">
                   <Square size={12} />
                   취소
@@ -410,7 +410,7 @@ export default function AnalyzeView() {
                 수정으로 돌아가기
               </Button>
               <Button variant="primary" onClick={runClaude} disabled={!consent || stage === 'running' || !preview || isErr(preview)} data-testid="asst-an-send">
-                동의하고 Claude로 분석
+                동의하고 AI로 분석
               </Button>
             </div>
           </div>
@@ -468,7 +468,7 @@ function ReviewPanel({
       <Card className={cx('p-4 text-[13px]', sample ? 'border-infer/40 bg-infersoft/40' : 'border-brand/30')}>
         <div className="flex flex-wrap items-center gap-2">
           <Pill tone={sample ? 'infer' : 'brand'} data-testid="asst-an-label">
-            {sample ? SAMPLE_LABEL : `AI 분석 · Claude ${model}`}
+            {sample ? SAMPLE_LABEL : 'AI 분석'}
           </Pill>
           <span className="font-semibold">{enriched.customer.name}</span>
           <span className="text-muted">{enriched.customer.company}</span>
@@ -482,7 +482,7 @@ function ReviewPanel({
         {sample ? (
           <p className="mt-1.5 text-muted">이 결과는 AI가 분석한 것이 아니라 미리 써 둔 예시입니다. 입력한 대화와 상관없이 같은 내용이 나오며, 승인 흐름을 체험하는 용도입니다. 저장하면 변경 이력에 「예시 분석(AI 미사용)」으로 남습니다.</p>
         ) : (
-          <p className="mt-1.5 text-muted">Claude가 뽑은 후보입니다. 근거 문장을 원문에서 찾지 못한 항목은 「원문 확인 안 됨」으로 표시하고 기본으로 해제했습니다. 체크한 항목만 저장됩니다. 다른 화면으로 이동하면 이 초안은 사라집니다.</p>
+          <p className="mt-1.5 text-muted">AI가 뽑은 후보입니다. 근거 문장을 원문에서 찾지 못한 항목은 「원문 확인 안 됨」으로 표시하고 기본으로 해제했습니다. 체크한 항목만 저장됩니다. 다른 화면으로 이동하면 이 초안은 사라집니다.</p>
         )}
         {draft.speakerNote && <p className={cx('mt-1.5', wrapCls)}>화자 판단: {draft.speakerNote}</p>}
         {enriched.hasText && (

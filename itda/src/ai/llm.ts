@@ -50,15 +50,15 @@ export function errorText(e: unknown): string {
     case 'network':
       return '인터넷 연결이 없거나 api.anthropic.com에 닿지 못했습니다. 규칙 기반으로 분석합니다.';
     case 'refusal':
-      return 'Claude가 이 요청에 답하지 않았습니다. 내용을 바꿔 다시 시도하세요.';
+      return 'AI가 이 요청에 답하지 않았습니다. 내용을 바꿔 다시 시도하세요.';
     case 'format':
-      return 'Claude 응답을 해석하지 못했습니다(형식 오류 또는 길이 초과). 다시 시도하세요.';
+      return 'AI 응답을 해석하지 못했습니다(형식 오류 또는 길이 초과). 다시 시도하세요.';
     case 'too_large':
       return '문서가 너무 깁니다. 일부만 넣어 다시 시도하세요.';
     case 'cancelled':
       return '요청을 취소했습니다.';
     default:
-      return 'Claude 호출 중 오류가 발생했습니다. 다시 시도하거나 규칙 기반으로 분석하세요.';
+      return 'AI 호출 중 오류가 발생했습니다. 다시 시도하거나 규칙 기반으로 분석하세요.';
   }
 }
 

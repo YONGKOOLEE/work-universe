@@ -17,14 +17,14 @@ function EngineNote() {
   const ai = useAI();
   const txt =
     ai.engine === 'claude'
-      ? `문서 분석·AI 검색을 Claude(${ai.model})로 합니다 — 본인 API 키 사용. 결과는 원문 대조를 거쳐 표시합니다.`
+      ? `문서 분석·AI 검색을 AI로 합니다 — 본인 API 키 사용. 결과는 원문 대조를 거쳐 표시합니다.`
       : ai.preferred === 'internal'
         ? INTERNAL_NOTICE
         : ai.status === 'denied'
           ? '키가 거부되어 규칙 기반으로 동작합니다. 상단 「AI 설정」에서 키를 지우거나 새 키를 넣으세요.'
           : ai.status === 'available'
             ? '규칙 기반으로 동작 중입니다(키는 저장되어 있음 — 상단에서 Claude를 고르면 바로 사용).'
-            : '키가 없어 규칙 기반으로 동작합니다. 상단 「AI 설정」에 본인 Claude API 키를 넣으면 Claude가 분석합니다.';
+            : '키가 없어 규칙 기반으로 동작합니다. 상단 「AI 설정」에 본인 Claude API 키를 넣으면 AI가 분석합니다.';
   return (
     <div className="flex items-start gap-1.5 rounded-md border border-sidemuted/25 px-2 py-1.5" data-testid="engine-note">
       <Bot size={13} className="mt-0.5 shrink-0" />
@@ -157,7 +157,7 @@ function AISettings({ open, onClose }: { open: boolean; onClose: () => void }) {
         </label>
         <ul className="list-disc space-y-1 pl-4 text-xs text-muted">
           <li>키는 이 브라우저 저장소에만 저장됩니다(암호화 없음). 데이터 옮기기·백업 파일에는 들어가지 않습니다.</li>
-          <li>호출은 api.anthropic.com으로만 가고, 사용량은 본인 키로 과금됩니다. 키를 넣고 Claude 기능(문서 분석·점검·인사이트)을 쓰면 문서 본문과 업무 기록(담당자 이름 포함)이 전송됩니다(「나만 보기」 메모는 보내지 않음) — 실제 업무 문서는 회사의 외부 전송 기준을 확인한 뒤 쓰세요.</li>
+          <li>호출은 api.anthropic.com으로만 가고, 사용량은 본인 키로 과금됩니다. 키를 넣고 AI 기능(문서 분석·점검·인사이트)을 쓰면 문서 본문과 업무 기록(담당자 이름 포함)이 전송됩니다(「나만 보기」 메모는 보내지 않음) — 실제 업무 문서는 회사의 외부 전송 기준을 확인한 뒤 쓰세요.</li>
           <li>브라우저에서 키를 직접 쓰는 방식은 시연·개인 도구용입니다. 조직 서비스로 쓰려면 서버 중계로 바꿔야 합니다.</li>
           <li data-testid="ai-internal-note">사내 AI: 상단 엔진의 「사내」 칸은 아직 연결되지 않았습니다. 지금 고르면 규칙으로 동작하며 밖으로 보내는 것이 없습니다.</li>
         </ul>
