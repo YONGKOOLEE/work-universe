@@ -106,7 +106,15 @@ export function buildBriefing(a: AssistantData, customerId: string, now: Date, i
   // 이번 미팅 확인사항(규칙 기반, 최대 5개)
   const checks: string[] = [];
   if (meeting?.summary) checks.push(`미팅 목적: ${cut(meeting.summary, 60)}`);
-  for (const x of reqLines.slice(0, 2)) checks.push(`'${cut(x.content, 40)}' 진행상황 공유` + (x.due ? ` (${x.due})` : ''));
+  // 같은 내용의 요청이 여럿이면(다시 응답해 중복 저장된 경우 등) 확인사항에는 한 번만 올린다
+  const seenReq = new Set<string>();
+  const checkReqs = reqLines.filter((x) => {
+    const k = x.content.replace(/\s+/g, ' ').trim();
+    if (seenReq.has(k)) return false;
+    seenReq.add(k);
+    return true;
+  });
+  for (const x of checkReqs.slice(0, 2)) checks.push(`'${cut(x.content, 40)}' 진행상황 공유` + (x.due ? ` (${x.due})` : ''));
   if (c.recentInterests) checks.push(`최근 관심 주제 '${cut(c.recentInterests, 30)}' 관련 의견 청취`);
   if (evs.length && diffDays(today, evs[0][1]) <= 14) checks.push(`${evs[0][0]}(${mdLabel(evs[0][1])}) 축하 인사`);
   if (!c.foodLikes && !c.foodDislikes) checks.push('식사 자리라면 선호·기피 음식 자연스럽게 확인');

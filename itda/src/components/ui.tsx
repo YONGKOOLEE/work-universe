@@ -240,12 +240,18 @@ export function Chips<T extends string>({ items, value, onChange }: { items: { i
   );
 }
 
-export function Field({ label, children, hint, htmlFor }: { label: string; children: React.ReactNode; hint?: string; htmlFor?: string }) {
+export function Field({ label, children, hint, htmlFor, error }: { label: string; children: React.ReactNode; hint?: string; htmlFor?: string; error?: string }) {
   return (
     <label className="block" htmlFor={htmlFor}>
       <span className="mb-1 block text-xs font-semibold text-muted">{label}</span>
       {children}
-      {hint && <span className="mt-1 block text-2xs text-faint">{hint}</span>}
+      {error ? (
+        <span role="alert" className="mt-1 block text-xs font-medium text-danger" data-testid={htmlFor ? `${htmlFor}-error` : undefined}>
+          {error}
+        </span>
+      ) : (
+        hint && <span className="mt-1 block text-2xs text-faint">{hint}</span>
+      )}
     </label>
   );
 }

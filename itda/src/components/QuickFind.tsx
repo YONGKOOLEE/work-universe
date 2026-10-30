@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, CornerDownLeft, LayoutDashboard, Zap, FolderKanban, FileText, UserRound, Sparkles } from 'lucide-react';
+import { Search, CornerDownLeft, LayoutDashboard, Zap, FolderKanban, FileText, UserRound, Sparkles, Contact } from 'lucide-react';
 import { useRouter } from '../lib/router';
 import { useStore } from '../lib/store';
 import { cx } from '../lib/util';
 import { KIND_LABEL, buildItems, flatten, looksLikeQuestion, quickFind, type ActionId, type QFItem, type QFKind } from '../lib/quickFind';
 
-const KIND_ICON: Record<QFKind, typeof Search> = { menu: LayoutDashboard, action: Zap, work: FolderKanban, doc: FileText, person: UserRound };
+const KIND_ICON: Record<QFKind, typeof Search> = { menu: LayoutDashboard, action: Zap, work: FolderKanban, doc: FileText, person: UserRound, customer: Contact };
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
 
 /** 상단 「바로 찾기」: 메뉴·기능·업무·문서·사람을 이름으로 바로 찾는다(업무 질문은 AI 업무 검색). Ctrl+K / Cmd+K */
@@ -121,14 +121,14 @@ export function QuickFind({ onAction }: { onAction: (a: ActionId) => void }) {
       <button
         className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1.5 text-xs text-muted hover:bg-sunken hover:text-ink"
         onClick={openIt}
-        title={`바로 찾기 — 메뉴·기능·업무·문서·사람 (${isMac ? '⌘ K' : 'Ctrl K'})`}
+        title={`바로 찾기 — 메뉴·기능·업무·문서·사람·고객 (${isMac ? '⌘ K' : 'Ctrl K'})`}
         aria-label="바로 찾기"
         aria-keyshortcuts={isMac ? 'Meta+K' : 'Control+K'}
         data-testid="quick-find-open"
       >
         <Search size={14} />
         <span className="hidden font-medium md:inline">바로 찾기</span>
-        <kbd className="hidden rounded border border-line2 px-1 text-2xs font-semibold text-faint xl:inline">{isMac ? '⌘ K' : 'Ctrl K'}</kbd>
+        <kbd className="hidden rounded border border-line2 px-1 text-2xs font-semibold text-faint 2xl:inline">{isMac ? '⌘ K' : 'Ctrl K'}</kbd>
       </button>
       {open &&
         createPortal(
@@ -147,7 +147,7 @@ export function QuickFind({ onAction }: { onAction: (a: ActionId) => void }) {
                   aria-activedescendant={total ? optId(active) : undefined}
                   aria-autocomplete="list"
                   aria-label="찾을 말"
-                  placeholder="메뉴·기능·업무·문서·사람 — 예: 백업, W-001, ㄷㅇㅌ"
+                  placeholder="메뉴·기능·업무·문서·사람·고객 — 예: 백업, W-001, 김도현"
                   className="h-12 w-full bg-transparent text-[14px] text-ink placeholder:text-faint focus:outline-none"
                   data-testid="quick-find-input"
                 />
@@ -192,7 +192,7 @@ export function QuickFind({ onAction }: { onAction: (a: ActionId) => void }) {
                 ))}
                 {q.trim() && flat.length === 0 && (
                   <p className="px-4 py-3 text-[13px] text-muted" data-testid="quick-find-empty">
-                    찾은 메뉴·기능·업무·문서·사람이 없음.
+                    찾은 메뉴·기능·업무·문서·사람·고객이 없음.
                   </p>
                 )}
                 {showAsk && (

@@ -13,6 +13,7 @@ import { analyzeConversation, applyDraft, buildSendPreview, enrichDraft, MAX_TEX
 import { isErr } from '../model';
 import { SAMPLE_LABEL, sampleDraft } from '../sample';
 import { INTERACTION_TYPES } from '../types';
+import { ConfirmDialog } from './forms';
 import { useAssistant } from './hooks';
 import { customerPath } from './logic';
 import { Pill, wrapCls } from './shared';
@@ -79,6 +80,8 @@ export default function AnalyzeView() {
     seq.current.cancelAll();
   };
   const claude = ai.engine === 'claude' && !!ai.client;
+  const stageRef = useRef(stage);
+  stageRef.current = stage;
   const cust = a.customers.find((c) => c.id === cid);
   // 선택한 고객이 목록에 없으면(권한이 바뀌었거나 지워짐) 첫 고객으로
   useEffect(() => {
@@ -86,12 +89,18 @@ export default function AnalyzeView() {
   }, [customers, cid]);
   // 화면을 떠나면 호출을 끊는다
   useEffect(() => stopAll, []); // eslint-disable-line react-hooks/exhaustive-deps
-  // 엔진이 바뀌면 진행 중인 호출을 끊고 늦은 결과를 버린다
+  // 엔진이 바뀌면 진행 중인 호출을 끊고 늦은 결과를 버린다. 전송 내용 확인 단계였다면 입력 단계로 돌아간다
+  // (보낼 곳이 바뀌었는데 이전 엔진 기준의 확인·동의가 남아 있으면 안 되므로 동의도 지운다)
   useEffect(() => {
     if (ctl.current) {
       stopAll();
       setStage('input');
+      setConsent(false);
       setNotice('AI 엔진이 바뀌어 진행 중이던 분석을 취소했습니다. 다시 시작하세요.');
+    } else if (stageRef.current === 'preview') {
+      setStage('input');
+      setConsent(false);
+      setNotice('AI 엔진이 바뀌어 입력 단계로 돌아왔습니다. 다시 「전송 내용 확인」을 눌러 주세요.');
     }
   }, [ai.engine]); // eslint-disable-line react-hooks/exhaustive-deps
   // 사용자를 바꾸면 호출을 끊고 원문·초안을 모두 버린다(다른 사람 화면에 남지 않게)
@@ -106,6 +115,7 @@ export default function AnalyzeView() {
     setDone(null);
     setError('');
     setConsent(false);
+    setMask(true); // 가림 끄기는 사용자 전환 때 해제한다(앞 사람이 끈 채로 이어 보내지 않게)
     setStage('input');
     setMyName(me?.name ?? '');
     setNotice('사용자를 바꿔 분석 내용(대화 원문·초안)을 지웠습니다.');
@@ -208,6 +218,7 @@ export default function AnalyzeView() {
     setText('');
     setFilename('');
     setConsent(false);
+    setMask(true); // 저장을 마치면 가림 끄기도 해제한다(다음 분석은 다시 가린 채로 시작)
     setStage('input');
   };
   const discard = () => {
@@ -221,7 +232,7 @@ export default function AnalyzeView() {
       <Card>
         <Empty
           title="분석할 수 있는 고객이 없습니다"
-          sub={a.customers.length ? '내가 고칠 수 있는 고객(담당 영업자 본인 또는 소속 조직의 조직장)이 있어야 분석 결과를 저장할 수 있습니다.' : '먼저 「고객」 탭에서 고객을 등록하거나 설정에서 가상 고객을 채우세요.'}
+          sub={a.customers.length ? '내가 고칠 수 있는 고객(담당 영업자 본인 또는 담당자의 조직장)이 있어야 분석 결과를 저장할 수 있습니다.' : '먼저 「고객」 탭에서 고객을 등록하거나 설정에서 가상 고객을 채우세요.'}
         />
       </Card>
     );
@@ -446,9 +457,14 @@ function ReviewPanel({
   const { draft, enriched, edits } = review;
   const sample = draft.kind === 'sample';
   const chosen = edits.filter((e) => e.include).length;
+  const [askDiscard, setAskDiscard] = useState(false);
   const setAct = (p: Partial<Review['act']>) => setReview((r) => (r ? { ...r, act: { ...r.act, ...p } } : r));
   return (
     <div className="space-y-4" data-testid="asst-an-review">
+      <p className="flex items-start gap-2 rounded-lg border border-warn/50 bg-warnsoft/60 px-4 py-2.5 text-[13px] font-medium text-warn" role="status" data-testid="asst-an-leave-warn">
+        <ShieldAlert size={15} className="mt-0.5 shrink-0" aria-hidden="true" />
+        <span>저장 전에 다른 곳으로 이동하면 결과가 사라집니다. 다시 분석해야 하니 필요한 항목은 아래에서 체크해 저장하세요.</span>
+      </p>
       <Card className={cx('p-4 text-[13px]', sample ? 'border-infer/40 bg-infersoft/40' : 'border-brand/30')}>
         <div className="flex flex-wrap items-center gap-2">
           <Pill tone={sample ? 'infer' : 'brand'} data-testid="asst-an-label">
@@ -457,6 +473,12 @@ function ReviewPanel({
           <span className="font-semibold">{enriched.customer.name}</span>
           <span className="text-muted">{enriched.customer.company}</span>
         </div>
+        {sample && (
+          <p className="mt-1.5 flex items-start gap-1.5 rounded-md bg-warnsoft px-3 py-1.5 font-semibold text-warn" data-testid="asst-an-sample-warn">
+            <FlaskConical size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
+            <span>시험용: 승인하면 이 고객 값이 실제로 바뀝니다. (최근 연락일은 바뀌지 않습니다)</span>
+          </p>
+        )}
         {sample ? (
           <p className="mt-1.5 text-muted">이 결과는 AI가 분석한 것이 아니라 미리 써 둔 예시입니다. 입력한 대화와 상관없이 같은 내용이 나오며, 승인 흐름을 체험하는 용도입니다. 저장하면 변경 이력에 「예시 분석(AI 미사용)」으로 남습니다.</p>
         ) : (
@@ -524,12 +546,26 @@ function ReviewPanel({
           {error}
         </p>
       )}
+      <ConfirmDialog
+        open={askDiscard}
+        onClose={() => setAskDiscard(false)}
+        title="분석 결과 버리기"
+        confirmLabel="버리기"
+        danger
+        onConfirm={() => {
+          setAskDiscard(false);
+          onDiscard();
+        }}
+        testId="asst-an-discard-confirm"
+      >
+        <p>이 분석 결과를 버릴까요? 저장된 것은 없고, 버리면 <b>되돌릴 수 없습니다.</b> 다시 보려면 처음부터 분석해야 합니다.</p>
+      </ConfirmDialog>
       <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-surface/95 px-4 py-3 shadow-card backdrop-blur">
         <span className="text-xs text-muted" data-testid="asst-an-summary-line">
           활동 기록 1건 + 체크한 항목 {chosen}건을 저장합니다.
         </span>
         <span className="flex gap-2">
-          <Button variant="ghost" onClick={onDiscard} data-testid="asst-an-discard">
+          <Button variant="ghost" onClick={() => setAskDiscard(true)} data-testid="asst-an-discard">
             버리기
           </Button>
           <Button variant="primary" onClick={onSave} data-testid="asst-an-apply">
@@ -606,6 +642,7 @@ function ItemRow({ it, ed, setEd }: { it: EnrichedItem; ed: ItemEdit; setEd: (p:
         <blockquote className={cx('rounded-md border-l-[3px] px-3 py-2 text-xs leading-relaxed', it.quoteVerified ? 'border-fact bg-factsoft/50' : 'border-danger bg-dangersoft/40', wrapCls)} data-testid="asst-an-quote">
           <span className="mb-0.5 block font-semibold text-muted">근거 문장 {it.quoteVerified ? '(원문에서 확인됨)' : ''}</span>
           {it.quoteVerified && it.quoteSpan ? it.quoteSpan : it.evidence || '(근거 없음)'}
+          {it.quoteVerified && it.quoteShort && <span className="mt-1 block font-semibold text-warn" data-testid="asst-an-short">근거가 짧음 — 8자 미만이라 우연히 일치했을 수 있습니다. 원문을 확인한 뒤에 체크하세요.</span>}
           {!it.quoteVerified && <span className="mt-1 block font-semibold text-danger">원문 확인 안 됨 — 이 문장을 원문에서 찾지 못했습니다. 원문을 직접 확인하기 전에는 저장하지 않는 것이 안전합니다.</span>}
         </blockquote>
         <p className="mt-1.5 flex flex-wrap gap-1.5">

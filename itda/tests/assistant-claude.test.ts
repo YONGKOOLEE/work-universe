@@ -200,7 +200,7 @@ describe('승인: 체크한 항목만 저장', () => {
     expect(c.foodLikes).toBe('한식'); // 체크 안 한 항목은 그대로
     const h = a.changes.filter((x) => x.source === 'sample');
     expect(h.map((x) => x.field)).toEqual(['hobbies']);
-    expect(h[0].note).toBe('예시 분석 승인 (sample_call_kimdohyun.txt)');
+    expect(h[0].note).toBe('예시 분석 승인 (예시 대화)'); // 파일명에 고객 이름이 들어가지 않는다(검토 14)
     expect(a.requests.filter((x) => x.customerId === c.id && x.source === 'sample').length).toBe(1);
     expect(SAMPLE_LABEL).toBe('예시 분석(AI 미사용)');
   });
@@ -230,12 +230,16 @@ describe('승인: 체크한 항목만 저장', () => {
     const r2 = applyDraft(a, d, [], {}, NOW) as { interactionId: string };
     expect(a.interactions.find((x) => x.id === r2.interactionId)!.details).toBe('');
   });
-  it('활동 기록은 승인 화면에서 고친 값으로 저장되고 최근 연락일이 올라간다', () => {
+  it('활동 기록은 승인 화면에서 고친 값으로 저장된다. 실제 AI 분석이면 최근 연락일이 올라가고, 시험용 예시 분석이면 올라가지 않는다(검토 14)', () => {
     const { a, id } = setup();
     const { d } = kimDraft(a, id);
+    const before = a.customers.find((c) => c.name === '김도현')!.lastMeetingDate;
     applyDraft(a, d, [], { interaction: { type: '미팅', date: '2026-10-29', title: '고친 제목', summary: '고친 요약' } }, NOW);
     const m = a.interactions.at(-1)!;
-    expect(m).toMatchObject({ type: '미팅', date: '2026-10-29', title: '고친 제목', summary: '고친 요약', source: 'sample', sourceFile: 'sample_call_kimdohyun.txt' });
+    expect(m).toMatchObject({ type: '미팅', date: '2026-10-29', title: '고친 제목', summary: '고친 요약', source: 'sample', sourceFile: '예시 대화' });
+    expect(a.customers.find((c) => c.name === '김도현')!.lastMeetingDate).toBe(before); // 예시는 실제 미팅이 아니다
+    // 실제 AI 분석(kind: ai)은 지금처럼 올린다
+    applyDraft(a, { ...d, kind: 'ai' }, [], { interaction: { type: '미팅', date: '2026-10-29', title: '실제', summary: '' } }, NOW);
     expect(a.customers.find((c) => c.name === '김도현')!).toMatchObject({ lastMeetingDate: '2026-10-29' });
   });
   it('값 검사에 걸리면 아무것도 저장하지 않는다(날짜·고객)', () => {

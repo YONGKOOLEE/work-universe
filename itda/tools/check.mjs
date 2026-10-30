@@ -1095,6 +1095,222 @@ try {
     return '전송 내용 확인·가림·동의 게이트 확인(실제 호출 없음)';
   });
 
+  // 20c: 검토(2026-10-30) 반영 — 보는 범위·고객 등록 오류 위치·상단 질문창·바로 찾기 고객·작은 선택 상자·대화 분석 안내·미팅 후 질문 안내·불러오기 확인
+  await check('20c AI 비서 검토 반영: 보는 범위·등록 오류 위치·상단 질문창·바로 찾기 고객·선택 상자·분석 안내·질문 안내·불러오기 확인', async () => {
+    const notes = [];
+    const q = (sel) => ev(`document.querySelectorAll(${JSON.stringify(sel)}).length`);
+    const txt = (sel) => ev(`(document.querySelector(${JSON.stringify(sel)})?.innerText || '').replace(/\\s+/g, ' ')`);
+    const esc = () => ev(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true })); true`);
+    const ctrlK = () => ev(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', ctrlKey: true, bubbles: true })); true`);
+    const submitTop = (text) => ev(`(() => { const i = document.getElementById('global-ask'); window.__h.setVal(i, ${JSON.stringify(text)}); i.form.requestSubmit(); return true; })()`);
+    const toastText = () => ev(`(document.querySelector('[role="status"].fixed')?.innerText || [...document.querySelectorAll('[role="status"]')].map((e) => e.innerText).join(' ') || '').replace(/\\s+/g, ' ')`);
+
+    // 1) 상단 질문창: AI 비서에서는 고객 질문(묻기), 다른 화면은 AI 업무 검색. 1280 폭에서도 안내 글이 잘리지 않는다
+    await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
+    await sleep(300);
+    await nav('#/dashboard', `!!document.getElementById('global-ask')`);
+    await must((await ev(`document.getElementById('global-ask').placeholder`)) === '업무에 대해 질문하세요', `대시보드 안내 글: ${await ev(`document.getElementById('global-ask').placeholder`)}`);
+    const fits = (id) => ev(`(() => { const i = document.getElementById(${JSON.stringify(id)}); const cs = getComputedStyle(i); const c = document.createElement('canvas').getContext('2d'); c.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily; const w = c.measureText(i.placeholder).width; const room = i.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight); return { w: Math.round(w), room: Math.round(room) }; })()`);
+    const f1 = await fits('global-ask');
+    await must(f1.w <= f1.room, `1280 폭에서 상단 검색창 안내 글이 잘림(글 ${f1.w}px > 칸 ${f1.room}px)`);
+    await nav('#/assistant', `!!document.querySelector('[data-testid="asst-today"]')`);
+    await must((await ev(`document.getElementById('global-ask').placeholder`)) === '고객에 대해 질문하세요', '비서 화면의 상단 질문창 안내가 「고객에 대해 질문하세요」가 아님');
+    const f2 = await fits('global-ask');
+    await must(f2.w <= f2.room, `비서 화면 안내 글이 잘림(${f2.w} > ${f2.room})`);
+    await submitTop('골프 좋아하는 사람');
+    await must(await wait(`location.hash.startsWith('#/assistant/ask') && !!document.querySelector('[data-testid="asst-ask-result"]')`, 5000), `상단 질문이 묻기 결과로 안 감: ${await ev('location.hash')}`);
+    await must((await txt('[data-testid="asst-ask-result"]')).includes('김도현'), '상단 질문 「골프 좋아하는 사람」 결과에 김도현이 없음');
+    await must(!(await ev('location.hash')).includes('q='), '주소에 q가 남아 있음(되풀이 검색 방지)');
+    await nav('#/dashboard', `!!document.getElementById('global-ask')`);
+    await submitTop('현재 추진 경과는?');
+    await must(await wait(`location.hash.startsWith('#/search')`, 3000), '다른 화면의 상단 질문이 AI 업무 검색으로 안 감');
+    await cdp.send('Emulation.clearDeviceMetricsOverride');
+    // AI 업무 검색에 답이 없으면 고객 질문은 비서로 가라는 링크
+    await nav('#/search?q=' + encodeURIComponent('우주선 고객 연락처'), `!!document.querySelector('[data-testid="search-to-assistant"]')`, 8000);
+    await must(await H(`click('[data-testid="search-to-assistant"] a', '묻기')`), '「AI 비서 → 묻기」 링크 없음');
+    await must(await wait(`location.hash.startsWith('#/assistant/ask') && !!document.querySelector('[data-testid="asst-ask-result"]')`, 5000), '링크가 묻기 결과로 안 감');
+    notes.push('상단 질문창·묻기 링크');
+
+    // 2) 바로 찾기(Ctrl+K)에 고객
+    await nav('#/dashboard', `!!document.querySelector('main')`);
+    await ctrlK();
+    await must(await wait(`!!document.querySelector('[data-testid="quick-find-input"]')`, 2000), '바로 찾기가 안 열림');
+    await H(`setId('quick-find-input', '김도현')`); await sleep(200);
+    await must(await H(`click('[data-testid="quick-find-item"][data-kind="customer"]', '김도현')`), '바로 찾기에 고객 김도현이 없음');
+    await must(await wait(`/#\\/assistant\\/customers\\/CU-\\d+/.test(location.hash) && !!document.querySelector('[data-testid="asst-detail"]')`, 4000), '고른 고객 상세로 안 감');
+    await ctrlK(); await wait(`!!document.querySelector('[data-testid="quick-find-input"]')`, 2000);
+    await H(`setId('quick-find-input', 'ㄱㅇㅇㅎ')`); await sleep(200);
+    await must((await q('[data-testid="quick-find-item"][data-kind="customer"]')) > 0, '소속 초성(ㄱㅇㅇㅎ=가온은행)으로 고객을 못 찾음');
+    await esc(); await sleep(200);
+    notes.push('바로 찾기 고객');
+
+    // 3) 고객 등록: 오류는 그 칸 옆에, 그 칸으로 초점·스크롤
+    await nav('#/assistant/customers?new=1', `!!document.querySelector('[data-testid="asst-cust-form"]')`);
+    await H(`setId('asst-f-companyAddress', '서울 가상구')`); await sleep(100);
+    await ev(`document.querySelector('.asst-dialog-body').scrollTo(0, 99999); true`); await sleep(150);
+    await must(await H(`clickId('asst-cust-save')`), '등록 단추 없음');
+    await sleep(300);
+    await must((await txt('[data-testid="asst-f-name-error"]')).includes('이름은 필수'), `이름 칸 옆 오류가 없음: ${await txt('[data-testid="asst-f-name-error"]')}`);
+    await must(await ev(`document.activeElement?.id === 'asst-f-name'`), '오류 칸(이름)으로 초점이 안 감');
+    await must(await ev(`(() => { const r = document.getElementById('asst-f-name').getBoundingClientRect(); return r.top >= 0 && r.bottom <= window.innerHeight; })()`), '이름 칸이 화면 밖에 있음(스크롤 안 됨)');
+    await H(`setId('asst-f-name', '오류시험')`); await H(`setId('asst-f-email', 'abc')`); await sleep(100);
+    await H(`clickId('asst-cust-save')`); await sleep(300);
+    await must((await txt('[data-testid="asst-f-email-error"]')).includes('이메일 형식'), `이메일 오류: ${await txt('[data-testid="asst-f-email-error"]')}`);
+    await must(await ev(`document.activeElement?.id === 'asst-f-email'`), '이메일 칸으로 초점이 안 감');
+    await H(`setId('asst-f-email', 'ok@test.example')`); await H(`setId('asst-f-mobile', '123')`); await H(`clickId('asst-cust-save')`); await sleep(300);
+    await must((await txt('[data-testid="asst-f-mobile-error"]')).includes('8자리'), `휴대전화 오류: ${await txt('[data-testid="asst-f-mobile-error"]')}`);
+    await H(`setId('asst-f-mobile', '010-0000-9999')`); await H(`setId('asst-f-birthDate', '2999-01-01')`); await H(`clickId('asst-cust-save')`); await sleep(300);
+    await must((await txt('[data-testid="asst-f-birthDate-error"]')).includes('오늘 이후'), `생년월일 오류: ${await txt('[data-testid="asst-f-birthDate-error"]')}`);
+    await shot('20-14-등록오류');
+    await esc(); await sleep(300);
+    notes.push('등록 오류가 칸 옆에');
+
+    // 4) 요청 목록 상태 선택 상자: 글자가 잘리지 않고, 저장한 담당자가 목록에 보인다
+    await nav('#/assistant/activities?sec=reqs', `document.querySelectorAll('[data-testid="asst-req-row"]').length > 0`);
+    const sel = await ev(`(() => { const s = document.querySelector('[data-testid="asst-req-row"] select'); const cs = getComputedStyle(s); return { h: s.clientHeight, pt: cs.paddingTop, pb: cs.paddingBottom, sw: s.scrollWidth, cw: s.clientWidth, fs: parseFloat(cs.fontSize) }; })()`);
+    await must(sel.h >= 28 && sel.pt === '0px' && sel.pb === '0px' && sel.sw <= sel.cw, `상태 선택 상자가 잘림: ${JSON.stringify(sel)}`);
+    await must((await q('[data-testid="asst-req-assignee"]')) > 0, '요청 목록에 저장한 담당자가 안 보임');
+    await shot('20-15-요청목록');
+    notes.push('선택 상자·담당자');
+
+    // 5) 대화 분석(예시): 이동 시 사라진다는 안내, 시험용 표시, 버리기 확인
+    await nav('#/assistant/analyze', `!!document.querySelector('[data-testid="asst-an-sample"]')`);
+    await H(`setId('asst-an-customer', ${JSON.stringify(await ev(`[...document.getElementById('asst-an-customer').options].find((o) => o.textContent.includes('김도현')).value`))})`); await sleep(150);
+    await H(`clickId('asst-an-sample')`);
+    await must(await wait(`!!document.querySelector('[data-testid="asst-an-review"]')`, 3000), '승인 화면이 안 열림');
+    await must((await txt('[data-testid="asst-an-leave-warn"]')).includes('저장 전에 다른 곳으로 이동하면 결과가 사라집니다'), '결과 화면 위에 「이동하면 결과가 사라집니다」 안내가 없음');
+    await must(await ev(`(() => { const r = document.querySelector('[data-testid="asst-an-leave-warn"]').getBoundingClientRect(); const c = document.querySelector('[data-testid="asst-an-label"]').getBoundingClientRect(); return r.bottom <= c.top + 4; })()`), '안내가 결과(라벨)보다 위에 있지 않음');
+    await must((await txt('[data-testid="asst-an-sample-warn"]')).includes('시험용: 승인하면 이 고객 값이 실제로 바뀝니다'), '예시 분석에 「시험용: 승인하면 이 고객 값이 실제로 바뀝니다」가 없음');
+    await shot('20-16-분석-안내');
+    await H(`clickId('asst-an-discard')`);
+    await must(await wait(`!!document.querySelector('[data-testid="asst-an-discard-confirm"]')`, 2000), '버리기가 확인 창 없이 처리됨');
+    await esc(); await sleep(300);
+    await must((await q('[data-testid="asst-an-review"]')) === 1, '확인 창에서 취소했는데 결과가 사라짐');
+    await H(`clickId('asst-an-discard')`); await wait(`!!document.querySelector('[data-testid="asst-an-discard-confirm"]')`, 2000);
+    await H(`clickId('asst-an-discard-confirm-ok')`);
+    await must(await wait(`!document.querySelector('[data-testid="asst-an-review"]') && (document.querySelector('[data-testid="asst-an-notice"]')?.innerText || '').includes('버렸습니다')`, 2000), '확인 뒤 버려지지 않음');
+    // 승인하면 최근 연락일은 그대로, 변경 이력 메모에 고객 이름이 든 파일명이 없다
+    await nav('#/assistant/customers', `document.querySelectorAll('[data-testid="asst-cust-row"]').length > 0`);
+    await must(await H(`click('[data-testid="asst-cust-row"]', '김도현')`), '김도현 행 없음');
+    await wait(`!!document.querySelector('[data-testid="asst-detail"]')`, 3000);
+    const kid = (await ev('location.hash')).split('/').pop().split('?')[0];
+    const lcBefore = await txt('[data-testid="asst-v-lastContactDate"]');
+    await nav('#/assistant/analyze', `!!document.querySelector('[data-testid="asst-an-sample"]')`);
+    await H(`setId('asst-an-customer', ${JSON.stringify(kid)})`); await sleep(150);
+    await H(`clickId('asst-an-sample')`); await wait(`!!document.querySelector('[data-testid="asst-an-review"]')`, 3000);
+    await H(`clickId('asst-an-apply')`);
+    await must(await wait(`!!document.querySelector('[data-testid="asst-an-done"]')`, 4000), '저장 완료 표시 없음');
+    await nav(`#/assistant/customers/${kid}`, `!!document.querySelector('[data-testid="asst-v-lastContactDate"]')`);
+    await must((await txt('[data-testid="asst-v-lastContactDate"]')) === lcBefore, `예시 분석 승인으로 최근 연락일이 바뀜(${lcBefore} → ${await txt('[data-testid="asst-v-lastContactDate"]')})`);
+    await nav(`#/assistant/customers/${kid}?tab=changes`, `!!document.querySelector('[data-testid="asst-changes"]')`);
+    const chg = await txt('[data-testid="asst-changes"]');
+    await must(chg.includes('예시 대화') && !/kimdohyun|sample_call/.test(chg), `변경 이력의 예시 분석 메모: ${chg.slice(0, 160)}`);
+    notes.push('분석 안내·버리기 확인·최근 연락일 유지');
+
+    // 6) 변경 이력 복원 토스트, 완료한 미팅의 「미팅 후 질문 완료」 표시
+    await must(await H(`clickId('asst-restore')`), '복원 단추 없음');
+    await sleep(300);
+    await must((await toastText()).includes('이전 값') && (await toastText()).includes('복원했습니다'), `복원 뒤 알림: ${await toastText()}`);
+    notes.push('복원 알림');
+
+    // 7) 보는 범위: 담당 고객이 없는 이서연은 안내와 「전체 보기」, 팀장은 「내 조직 전체」, 읽음은 사용자별
+    await nav('#/assistant', `!!document.querySelector('[data-testid="asst-today"]')`);
+    await must((await ev(`document.querySelector('[data-testid="asst-scope"]').dataset.value`)) === 'mine', '기본 범위가 「내 담당」이 아님');
+    const n1 = Number(await txt('[data-testid="asst-nav-unread"]'));
+    await must(n1 > 0, `김도윤 메뉴 숫자 ${n1}`);
+    await must(await H(`user('이서연')`), '이서연 전환 실패');
+    await sleep(500);
+    await must(await wait(`!!document.querySelector('[data-testid="asst-today-noowned"]')`, 3000), '담당 고객이 없는 사용자에게 안내가 없음');
+    await must((await txt('[data-testid="asst-today-noowned"]')).includes('담당하는 고객이 없습니다') && (await txt('[data-testid="asst-today-noowned"]')).includes('전체 보기'), `안내 글: ${await txt('[data-testid="asst-today-noowned"]')}`);
+    await must((await q('[data-testid="asst-nav-unread"]')) === 0, '담당 고객이 없는데 메뉴에 알림 숫자가 있음');
+    await shot('20-17-담당고객없음');
+    await H(`clickId('asst-scope-goall')`);
+    await must(await wait(`document.querySelectorAll('[data-testid="asst-notice"]').length > 0`, 3000), '전체 보기로 바꿨는데 알림이 안 보임');
+    const nAll = Number(await txt('[data-testid="asst-nav-unread"]'));
+    await must(nAll === n1, `전체 보기의 안 읽은 알림 ${nAll} ≠ 김도윤 ${n1}(읽음은 사용자별이라 같아야 함)`);
+    await ev(`document.querySelector('[data-testid="asst-notice-read"]')?.click(); true`); await sleep(300);
+    await must(Number(await txt('[data-testid="asst-nav-unread"]')) === nAll - 1, '읽음 표시가 메뉴 숫자에 반영되지 않음');
+    await must(await ev(`localStorage.getItem('itda-asst-scope:U2') === 'all'`), '고른 범위가 사용자별로 기억되지 않음');
+    await must(await H(`user('김도윤')`), '김도윤 복귀 실패');
+    await sleep(500);
+    await must((await ev(`document.querySelector('[data-testid="asst-scope"]').dataset.value`)) === 'mine', '다른 사용자의 범위 선택이 김도윤에게 넘어옴');
+    await must(Number(await txt('[data-testid="asst-nav-unread"]')) === n1, '이서연이 읽은 알림이 김도윤의 안 읽은 숫자를 줄임');
+    await must(await H(`user('박지훈')`), '박지훈 전환 실패');
+    await sleep(500);
+    await must(await wait(`!!document.querySelector('[data-testid="asst-scope-org"]')`, 3000), '조직장에게 「내 조직 전체」가 없음');
+    await H(`clickId('asst-scope-org')`); await sleep(400);
+    await must((await q('[data-testid="asst-notice"]')) > 0, '내 조직 전체로 바꿨는데 알림이 없음(같은 팀 김도윤의 고객)');
+    // 조직장이 남의 고객을 열면 「조직장이라 수정할 수 있습니다」
+    await nav('#/assistant/customers', `document.querySelectorAll('[data-testid="asst-cust-row"]').length > 0`);
+    await must(await H(`click('[data-testid="asst-cust-row"]', '김도현')`), '김도현 행 없음');
+    await wait(`!!document.querySelector('[data-testid="asst-detail"]')`, 3000);
+    await must((await txt('[data-testid="asst-lead-note"]')).includes('조직장이라 수정할 수 있습니다'), '조직장이 남의 고객을 볼 때 안내가 없음');
+    // 「내 담당만」 0명 문구
+    await nav('#/assistant/customers', `!!document.querySelector('[data-testid="asst-cust-mine"]')`);
+    await H(`clickId('asst-cust-mine')`); await sleep(300);
+    await must(await ev(`document.querySelector('[data-testid="asst-customers"]').innerText.includes('내가 담당하는 고객이 없습니다')`), '「내 담당만」 0명 문구가 없음');
+    await must(await H(`user('김도윤')`), '김도윤 복귀 실패(2)');
+    notes.push('보는 범위·사용자별 읽음·조직장 안내');
+
+    // 8) 미팅 후 질문: 날짜 없는 연기는 다음 단계로 못 가고, 비운 답은 그 질문에 안내
+    await nav('#/assistant', `document.querySelectorAll('[data-testid="asst-fu-wait"]').length > 0`);
+    await must(await ev(`(() => { const b = [...document.querySelectorAll('[data-testid="asst-fu-wait"] button')].find((x) => x.textContent.includes('질문 답하기')); if (!b) return false; b.click(); return true; })()`), '질문 답하기 단추 없음');
+    await must(await wait(`!!document.querySelector('[data-testid="asst-fu-q-request"]')`, 3000), '미팅 후 질문 화면이 안 열림');
+    const rq = await txt('[data-testid="asst-fu-q-request"]');
+    await must(/^Q2 (오늘|\d+월 \d+일) /.test(rq), `질문 문구의 날짜: ${rq.slice(0, 40)}`);
+    await must(await H(`clickId('asst-fu-opt-held-moved')`), '연기 선택지 없음');
+    await must(await H(`clickId('asst-fu-opt-request-자료 요청')`), '요청 선택지 없음');
+    await sleep(250);
+    await must((await txt('[data-testid="asst-fu-q-held"]')).includes('바뀐 날짜를 입력해 주세요'), '날짜 없는 연기에 날짜 입력 안내가 없음');
+    await must((await txt('[data-testid="asst-fu-q-request"]')).includes('내용을 적어야 저장됩니다'), '비운 요청 내용에 안내가 없음');
+    await must(await ev(`document.querySelector('[data-testid="asst-fu-review-btn"]').disabled`), '날짜 없는 연기인데 「답변 확인」이 켜져 있음');
+    await H(`setId('asst-fu-in-held-new_date', '2026-12-24')`); await sleep(200);
+    await must(await ev(`!document.querySelector('[data-testid="asst-fu-review-btn"]').disabled`), '날짜를 넣었는데 「답변 확인」이 안 켜짐');
+    // 연기 대신 「예정대로 진행됨」으로 바꿔 끝까지 저장 → 활동 목록에 「미팅 후 질문 완료」
+    await H(`clickId('asst-fu-opt-held-yes')`); await sleep(150);
+    await H(`clickId('asst-fu-opt-request-none')`); await sleep(150);
+    await H(`clickId('asst-fu-review-btn')`);
+    await must(await wait(`!!document.querySelector('[data-testid="asst-fu-review"]')`, 3000), '반영안 화면이 안 열림');
+    await H(`clickId('asst-fu-apply')`);
+    await must(await wait(`location.hash.includes('?tab=history')`, 4000), '저장 뒤 히스토리로 안 감');
+    await must((await q('[data-testid="asst-fu-done"]')) >= 1, '완료한 미팅에 「미팅 후 질문 완료」 표시가 없음');
+    notes.push('미팅 후 질문 안내·완료 표시');
+
+    // 9) 데이터 옮기기: 내보내기에 고객 수, 바꿔 불러오기 확인에 고객 수(지금 → 파일), 칸 없는 파일은 지금 고객 유지, 합쳐 불러오기는 가상 고객 제외
+    await must(await H(`click('button', '데이터 옮기기')`), '데이터 옮기기 단추 없음');
+    await must(await wait(`!!document.querySelector('[data-testid="export-customers"]')`, 3000), '내보내기에 고객 수 표시가 없음');
+    await must((await txt('[data-testid="export-customers"]')) === '18', `내보내기 고객 수 ${await txt('[data-testid="export-customers"]')}`);
+    await must(await H(`click('button', '불러오기')`), '불러오기 탭 없음');
+    const file = await ev(`(() => { const k = Object.keys(localStorage).find((x) => x.startsWith('worklink')); const o = JSON.parse(localStorage.getItem(k)); const st = o.state ?? o; delete st.assistant; return JSON.stringify(st); })()`);
+    await ev(`(() => { const r = document.querySelector('input[name="dt-mode"][value="replace"]'); r.click(); return true; })()`);
+    await H(`setId('dt-paste', '')`);
+    await ev(`window.__h.setVal(document.getElementById('dt-paste'), ${JSON.stringify(file)}); true`);
+    await must(await wait(`!!document.querySelector('[data-testid="replace-customers"]')`, 4000), '바꿔 불러오기 확인에 고객 수가 안 나옴');
+    const rc = await txt('[data-testid="replace-customers"]');
+    await must(rc.includes('지금 18명') && rc.includes('파일 칸 없음') && rc.includes('그대로 둡니다'), `확인 창 고객 수: ${rc}`);
+    await ev(`document.querySelector('input[name="dt-mode"][value="merge"]').click(); true`);
+    await must(await wait(`!!document.querySelector('[data-testid="merge-customers"]')`, 4000), '합쳐 불러오기 미리 보기에 고객 수가 없음');
+    await must((await txt('[data-testid="merge-customers"]')) === '0', `합쳐 불러오기 고객 수 ${await txt('[data-testid="merge-customers"]')}(칸이 없는 파일은 0)`);
+    await esc(); await sleep(300);
+    notes.push('불러오기 고객 수');
+
+    // 10) 설정 안내·초기화 문구
+    await nav('#/assistant', `!!document.querySelector('[data-testid="asst-today"]')`);
+    await H(`clickId('asst-settings-open')`);
+    await must(await wait(`!!document.querySelector('[data-testid="asst-s-req"]')`, 3000), '설정이 안 열림');
+    await must((await txt('[data-testid="asst-settings"]')).includes('며칠 전에 알릴지(쉼표로 구분)'), '설정의 「7,2,0」 설명이 없음');
+    await H(`clickId('asst-s-restore')`); await sleep(400);
+    await must((await toastText()).includes('건너뜀'), `다시 채우기 알림: ${await toastText()}`);
+    await esc(); await sleep(300);
+    await must(await H(`click('button', '초기화')`), '초기화 단추 없음');
+    await sleep(300);
+    await must(await ev(`document.body.innerText.includes('AI 비서의 고객·활동·요청사항')`), '초기화 확인 문구에 AI 비서 고객·활동·요청이 지워진다는 말이 없음');
+    await esc(); await sleep(200);
+    await ev(`[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === '취소')?.click(); true`);
+    notes.push('설정 안내·초기화 문구');
+    return notes.join(' · ');
+  });
+
   // 12
   const exc = logs.filter((l) => l.kind === 'exception');
   const err = logs.filter((l) => l.kind === 'error');

@@ -4,7 +4,7 @@ import { isActiveLead, leadCoversDept } from '../../lib/orgs';
 import { isLeft } from '../../lib/people';
 import { nextId } from '../../lib/util';
 import { stamp } from '../dates';
-import { canEditCustomer, deleteCustomer, isErr, type Err } from '../model';
+import { addChange, canEditCustomer, deleteCustomer, isErr, type Err } from '../model';
 import { createAssistantSeed } from '../seed';
 import type { Answers } from '../followup';
 import { CUSTOMER_FIELDS, FIELD_KEYS, type AssistantData, type Customer, type CustomerFieldKey } from '../types';
@@ -87,6 +87,9 @@ export function changedKeys(before: CustomerForm, after: CustomerForm): Customer
 
 // ───────────── 담당 영업자 ─────────────
 
+/** 변경 이력에 담당 영업자 바꿈을 남길 때의 항목 이름(고객 항목이 아니므로 복원 대상이 아니다) */
+export const OWNER_FIELD = 'ownerId';
+
 /** 담당 영업자를 바꿀 수 있는가: 살아 있는 조직장이고(고객이 있으면) 그 고객을 고칠 수 있을 때 */
 export function canChangeOwner(s: AppState, userId: string, customerId?: string | null): boolean {
   if (!isActiveLead(s, userId)) return false;
@@ -101,10 +104,14 @@ export function setCustomerOwner(s: AppState, a: AssistantData, customerId: stri
   const c = a.customers.find((x) => x.id === customerId);
   if (!c) return { error: '고객을 찾을 수 없습니다.' };
   if (c.ownerId === ownerId) return { changed: false };
-  if (!canChangeOwner(s, userId, customerId)) return { error: '담당 영업자는 소속 조직의 조직장만 바꿀 수 있습니다.' };
+  if (!canChangeOwner(s, userId, customerId)) return { error: '담당 영업자는 담당자의 조직장만 바꿀 수 있습니다.' };
   if (!ownerChoices(s, userId, c.ownerId).some((u) => u.id === ownerId)) return { error: '내 조직 범위 밖의 사람은 담당으로 지정할 수 없습니다.' };
+  const nameOf = (id: string) => s.users.find((u) => u.id === id)?.name ?? id;
+  const before = c.ownerId;
   c.ownerId = ownerId;
   c.updatedAt = stamp(now);
+  // 변경 이력에 남긴다(복원 대상은 아님 — 고객 항목이 아니라서 복원 단추가 나오지 않는다)
+  addChange(a, customerId, OWNER_FIELD, nameOf(before), nameOf(ownerId), 'manual', '담당 영업자 변경', stamp(now));
   return { changed: true };
 }
 
@@ -117,14 +124,34 @@ export function ownerLabel(s: Pick<AppState, 'users'>, ownerId: string): string 
 
 // ───────────── 가상 데이터 · 전체 삭제 ─────────────
 
-/** 가상 고객을 다시 채운다. 이름+소속이 같은 고객이 이미 있으면 건너뛴다. 새 고객은 새 ID로 하위 기록과 함께 더한다. 더한 고객 수 */
-export function restoreDemo(a: AssistantData, now: Date, ownerId: string): number {
+export interface RestoreReport {
+  added: number;
+  /** 이름+소속이 같은 고객이 이미 있어 건너뛴 가상 고객 */
+  skipped: { name: string; company: string }[];
+}
+/** 「1명 건너뜀: 김도현(같은 이름·소속 고객 있음)」 식 안내 글 */
+export function restoreDemoMessage(r: RestoreReport): string {
+  const head = r.added ? `가상 고객 ${r.added}명을 채웠습니다(담당: 지금 사용자)` : '더할 가상 고객이 없습니다';
+  if (!r.skipped.length) return head;
+  // 이름은 앞 5명까지 보이고 나머지는 「외 N명」으로 줄인다(전부 건너뛰면 18명이라 알림이 너무 길어진다)
+  const SHOW = 5;
+  const who = r.skipped.slice(0, SHOW).map((c) => `${c.name}(같은 이름·소속 고객 있음)`).join(', ');
+  const more = r.skipped.length > SHOW ? ` 외 ${r.skipped.length - SHOW}명` : '';
+  return `${head}. ${r.skipped.length}명 건너뜀: ${who}${more}`;
+}
+
+/** restoreDemo와 같지만 건너뛴 고객도 알려 준다 */
+export function restoreDemoReport(a: AssistantData, now: Date, ownerId: string): RestoreReport {
   const seed = createAssistantSeed(now, ownerId);
   const key = (c: Pick<Customer, 'name' | 'company'>) => `${c.name}|${c.company}`;
   const have = new Set(a.customers.map(key));
   let added = 0;
+  const skipped: RestoreReport['skipped'] = [];
   for (const c of seed.customers) {
-    if (have.has(key(c))) continue;
+    if (have.has(key(c))) {
+      skipped.push({ name: c.name, company: c.company });
+      continue;
+    }
     have.add(key(c));
     const id = nextId('CU', a.customers.map((x) => x.id));
     a.customers.push({ ...c, id });
@@ -142,8 +169,10 @@ export function restoreDemo(a: AssistantData, now: Date, ownerId: string): numbe
     }
     added += 1;
   }
-  return added;
+  return { added, skipped };
 }
+/** 가상 고객을 다시 채운다. 이름+소속이 같은 고객이 이미 있으면 건너뛴다. 새 고객은 새 ID로 하위 기록과 함께 더한다. 더한 고객 수 */
+export const restoreDemo = (a: AssistantData, now: Date, ownerId: string): number => restoreDemoReport(a, now, ownerId).added;
 
 /** 지우기 대상 고객 ID: 내가 고칠 수 있는 고객 중 가상(demo)만 또는 전부 */
 export function deletableIds(s: AppState, userId: string, scope: 'demo' | 'all'): string[] {

@@ -26,10 +26,16 @@ import {
   type Interaction,
 } from './types';
 
+/** 대화 원문 입력 상한(글자). claude.ts의 분석 입력 상한과 같은 값 — 「원문 보관」이 이보다 짧게 잘리지 않게 활동 상세도 이 값에 머리말 여유를 더해 쓴다 */
+export const MAX_TEXT_CHARS = 60000;
+/** 활동 상세(details) 상한: 원문 6만 자 + 「[대화 원문]」 머리말 + 미팅 후 질문 메모 여유 */
+export const MAX_DETAILS_CHARS = MAX_TEXT_CHARS + 500;
+
 /** 고객 한 명의 변경 이력 보관 상한(CR-25 2.3-8). 넘으면 오래된 것부터 지운다 */
 export const HISTORY_LIMIT_PER_CUSTOMER = 200;
 
-export type Err = { error: string };
+/** field가 있으면 화면이 그 칸 옆에 오류를 보이고 초점을 옮긴다(고객 항목 이름) */
+export type Err = { error: string; field?: string };
 export const isErr = (r: unknown): r is Err => !!r && typeof r === 'object' && 'error' in (r as object);
 
 export const emptyAssistant = (): AssistantData => ({
@@ -88,19 +94,46 @@ export function cleanFields(data: Partial<Record<CustomerFieldKey, unknown>>): P
   return out;
 }
 
-function firstDateError(fields: Partial<CustomerFields>): string {
-  for (const k of DATE_FIELDS) {
-    const e = k in fields ? dateError(fields[k] ?? '', FIELD_LABELS[k]) : '';
-    if (e) return e;
-  }
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_FIELDS: CustomerFieldKey[] = ['mobile', 'officePhone'];
+/** 오늘 이후 날짜를 받지 않는 항목(예정일인 nextContactDate는 제외) */
+const PAST_ONLY_FIELDS: CustomerFieldKey[] = ['birthDate', 'firstMetDate', 'lastContactDate', 'lastMeetingDate'];
+
+/**
+ * 고객 항목 하나의 내용 검사(날짜 형식은 dateError가 따로 본다). 문제가 없으면 ''.
+ * 이메일 형식, 전화 숫자 8자리 이상, 생년월일·최초 만남일·최근 연락일·최근 미팅일은 오늘까지(자동 갱신은 오늘까지만 올리므로 영향 없음).
+ * 등록·수정·AI 반영·미팅 후 질문이 같은 검사를 쓴다.
+ */
+export function fieldValueError(k: CustomerFieldKey, value: string, now: Date): string {
+  const v = str(value);
+  if (!v) return '';
+  const label = FIELD_LABELS[k];
+  if (k === 'email' && !EMAIL_RE.test(v)) return '이메일 형식이 올바르지 않습니다. (예: name@example.com)';
+  if (PHONE_FIELDS.includes(k) && (v.match(/\d/g) ?? []).length < 8) return `${label}은(는) 숫자 8자리 이상으로 입력해 주세요.`;
+  if (PAST_ONLY_FIELDS.includes(k) && DATE_RE.test(v) && v > ymd(now)) return `${label}은(는) 오늘 이후 날짜로 입력할 수 없습니다.`;
   return '';
+}
+
+/** 정리된 항목들 중 첫 오류. cur가 있으면 내용 검사는 바뀐 항목만 한다(예전에 저장된 값 때문에 수정이 막히지 않게) */
+function firstFieldError(fields: Partial<CustomerFields>, now: Date, cur?: Customer): Err | null {
+  for (const k of FIELD_KEYS) {
+    if (!(k in fields)) continue;
+    if (DATE_FIELDS.includes(k)) {
+      const e = dateError(fields[k] ?? '', FIELD_LABELS[k]);
+      if (e) return { error: e, field: k };
+    }
+    if (cur && (cur[k] || '') === (fields[k] ?? '')) continue;
+    const e = fieldValueError(k, fields[k] ?? '', now);
+    if (e) return { error: e, field: k };
+  }
+  return null;
 }
 
 const blankFields = (): CustomerFields => Object.fromEntries(FIELD_KEYS.map((k) => [k, ''])) as unknown as CustomerFields;
 
 // ───────────── 변경 이력 ─────────────
 
-function addChange(a: AssistantData, customerId: string, field: string, oldValue: string, newValue: string, source: string, note: string, when: string) {
+export function addChange(a: AssistantData, customerId: string, field: string, oldValue: string, newValue: string, source: string, note: string, when: string) {
   const e: ChangeEntry = { id: nextId('CH', a.changes.map((x) => x.id)), customerId, field, oldValue: oldValue || '', newValue: newValue || '', source, note, changedAt: when };
   a.changes.push(e);
   trimChanges(a, customerId);
@@ -154,9 +187,9 @@ export interface CreateOpts {
 /** 고객 등록. 이름 필수·날짜 형식 검사·중복 후보(force가 아니면 등록하지 않고 후보를 돌려줌). 데모 고객은 등록 이력을 저장하지 않는다 */
 export function createCustomer(a: AssistantData, data: Partial<Record<CustomerFieldKey, unknown>>, o: CreateOpts): { id: string } | Err | { duplicates: DuplicateHit[] } {
   const fields = cleanFields(data);
-  if (!fields.name) return { error: '이름은 필수 입력 항목입니다.' };
-  const de = firstDateError(fields);
-  if (de) return { error: de };
+  if (!fields.name) return { error: '이름은 필수 입력 항목입니다.', field: 'name' };
+  const fe = firstFieldError(fields, o.now);
+  if (fe) return fe;
   if (!o.force) {
     const dups = findDuplicates(a, fields);
     if (dups.length) return { duplicates: dups };
@@ -182,9 +215,10 @@ export function updateCustomer(a: AssistantData, id: string, patch: Partial<Reco
   const cur = a.customers.find((c) => c.id === id);
   if (!cur) return { error: '고객을 찾을 수 없습니다.' };
   const fields = cleanFields(patch);
-  if ('name' in fields && !fields.name) return { error: '이름은 비워둘 수 없습니다.' };
-  const de = firstDateError(fields);
-  if (de) return { error: de };
+  if ('name' in fields && !fields.name) return { error: '이름은 비워둘 수 없습니다.', field: 'name' };
+  // 이전 값으로 되돌리기는 예전에 저장된 값을 되살리는 것이라 내용 검사를 건너뛴다(날짜 형식 검사는 한다)
+  const fe = firstFieldError(fields, o.now, o.source === 'restore' ? ({ ...cur, ...fields } as Customer) : cur);
+  if (fe) return fe;
   const ts = stamp(o.now);
   const changed: CustomerFieldKey[] = [];
   for (const k of FIELD_KEYS) {
@@ -248,13 +282,24 @@ export function applyActivityDates(a: AssistantData, customerId: string, type: s
   if (Object.keys(upd).length) updateCustomer(a, customerId, upd, { now, source: 'activity', note: `${type} 기록 추가` });
 }
 
-/** 활동기록을 고치거나 지운 뒤 최근 연락일/최근 미팅일을 다시 계산한다(지금까지의 기록 중 가장 늦은 날짜) */
-export function recomputeActivityDates(a: AssistantData, customerId: string, now: Date) {
+/**
+ * 활동기록을 고치거나 지운 뒤 최근 연락일/최근 미팅일을 다시 계산한다(지금까지의 기록 중 가장 늦은 날짜).
+ * affected(고친·지운 활동의 옛 날짜와 새 날짜)를 주면, 지금 값이 그 날짜 중 하나일 때만 계산한 값으로 바꾸고
+ * 아니면 지금 값과 계산한 값 중 늦은 쪽을 둔다 → 사용자가 직접 입력한 최근 연락일이 활동 수정·삭제로 사라지지 않는다.
+ */
+export function recomputeActivityDates(a: AssistantData, customerId: string, now: Date, affected?: string[]) {
+  const cur = a.customers.find((c) => c.id === customerId);
+  if (!cur) return;
   const t = ymd(now);
   const mine = a.interactions.filter((i) => i.customerId === customerId && i.date <= t);
   const max = (xs: Interaction[]) => xs.reduce((m, i) => (i.date > m ? i.date : m), '');
-  const lc = max(mine.filter((i) => CONTACT_TYPES.includes(i.type)));
-  const lm = max(mine.filter((i) => i.type === '미팅'));
+  let lc = max(mine.filter((i) => CONTACT_TYPES.includes(i.type)));
+  let lm = max(mine.filter((i) => i.type === '미팅'));
+  if (affected) {
+    const keep = (v: string, computed: string) => (v && !affected.includes(v) && v > computed ? v : computed);
+    lc = keep(cur.lastContactDate || '', lc);
+    lm = keep(cur.lastMeetingDate || '', lm);
+  }
   updateCustomer(a, customerId, { lastContactDate: lc, lastMeetingDate: lm }, { now, source: 'activity', note: '활동기록 변경에 따른 재계산' });
 }
 
@@ -301,7 +346,7 @@ function cleanInteraction(data: InteractionPatch, partial: boolean, existingTime
     if (!title) return { error: '제목을 입력해 주세요.' };
     out.title = title.slice(0, 300);
   }
-  for (const k of ['summary', 'details'] as const) if (data[k] !== undefined) out[k] = str(data[k]).slice(0, 20000);
+  for (const k of ['summary', 'details'] as const) if (data[k] !== undefined) out[k] = str(data[k]).slice(0, k === 'details' ? MAX_DETAILS_CHARS : 20000);
   return out;
 }
 
@@ -310,6 +355,8 @@ export interface AddInteractionOpts {
   source?: string;
   sourceFile?: string;
   isDemo?: boolean;
+  /** true면 고객의 최근 연락일·미팅일을 올리지 않는다(시험용 예시 분석처럼 실제 연락이 아닌 기록) */
+  skipDates?: boolean;
 }
 
 /** 활동 추가. 오늘까지의 미팅·통화·이메일이면 고객의 최근 연락일(·미팅일)을 올린다 */
@@ -333,7 +380,7 @@ export function addInteraction(a: AssistantData, customerId: string, data: Inter
     createdAt: stamp(o.now),
   };
   a.interactions.push(i);
-  applyActivityDates(a, customerId, i.type, i.date, o.now);
+  if (!o.skipDates) applyActivityDates(a, customerId, i.type, i.date, o.now);
   return { id: i.id };
 }
 
@@ -342,8 +389,10 @@ export function updateInteraction(a: AssistantData, id: string, patch: Interacti
   if (!row) return { error: '기록을 찾을 수 없습니다.' };
   const f = cleanInteraction(patch, true, row.time);
   if (isErr(f)) return f;
+  const before = { date: row.date, type: row.type };
   Object.assign(row, f);
-  recomputeActivityDates(a, row.customerId, now);
+  // 날짜·유형이 바뀐 때만 다시 계산한다(제목·요약만 고쳤다면 직접 입력한 최근 연락일을 건드리지 않는다)
+  if (row.date !== before.date || row.type !== before.type) recomputeActivityDates(a, row.customerId, now, [before.date, row.date]);
   return { ok: true };
 }
 
@@ -353,7 +402,9 @@ export function deleteInteraction(a: AssistantData, id: string, now: Date): { ok
   a.interactions = a.interactions.filter((i) => i.id !== id);
   for (const r of a.requests) if (r.interactionId === id) r.interactionId = null; // 요청사항은 남기고 연결만 끊는다
   a.followups = a.followups.filter((f) => f.interactionId !== id);
-  recomputeActivityDates(a, row.customerId, now);
+  // 지운 활동의 날짜가 지금 최근 연락일·미팅일일 때만 다시 계산한다
+  const cu = a.customers.find((c) => c.id === row.customerId);
+  if (cu && (cu.lastContactDate === row.date || cu.lastMeetingDate === row.date)) recomputeActivityDates(a, row.customerId, now, [row.date]);
   return { ok: true };
 }
 
@@ -403,7 +454,12 @@ export interface AddRequestOpts {
   isDemo?: boolean;
 }
 
-export function addRequest(a: AssistantData, customerId: string, data: RequestPatch, o: AddRequestOpts): { id: string } | Err {
+/** 처리기한이 접수일보다 앞서면 경고 글(저장은 한다). 아니면 '' */
+export function dueBeforeReceivedWarning(received: string, due: string): string {
+  return received && due && DATE_RE.test(received) && DATE_RE.test(due) && due < received ? '처리기한이 접수일보다 앞서 있습니다. 날짜를 다시 확인해 보세요.' : '';
+}
+
+export function addRequest(a: AssistantData, customerId: string, data: RequestPatch, o: AddRequestOpts): { id: string; warning?: string } | Err {
   if (!a.customers.some((c) => c.id === customerId)) return { error: '고객을 찾을 수 없습니다.' };
   const f = cleanRequest(data, false, o.now);
   if (isErr(f)) return f;
@@ -424,17 +480,19 @@ export function addRequest(a: AssistantData, customerId: string, data: RequestPa
     updatedAt: ts,
   };
   a.requests.push(r);
-  return { id: r.id };
+  const warning = dueBeforeReceivedWarning(r.receivedDate, r.dueDate);
+  return warning ? { id: r.id, warning } : { id: r.id };
 }
 
-export function updateRequest(a: AssistantData, id: string, patch: RequestPatch, now: Date): { ok: true } | Err {
+export function updateRequest(a: AssistantData, id: string, patch: RequestPatch, now: Date): { ok: true; warning?: string } | Err {
   const row = a.requests.find((r) => r.id === id);
   if (!row) return { error: '요청사항을 찾을 수 없습니다.' };
   const f = cleanRequest(patch, true, now);
   if (isErr(f)) return f;
   Object.assign(row, f);
   row.updatedAt = stamp(now);
-  return { ok: true };
+  const warning = dueBeforeReceivedWarning(row.receivedDate, row.dueDate);
+  return warning ? { ok: true, warning } : { ok: true };
 }
 
 export function deleteRequest(a: AssistantData, id: string): { ok: true } | Err {

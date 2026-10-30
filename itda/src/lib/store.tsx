@@ -23,7 +23,7 @@ function bundled(): AppState | null {
 }
 
 /** 백업 파일(JSON 문자열)을 현재 버전 데이터로 변환. 형식이 맞지 않으면 오류 */
-export function parseBackup(text: string): AppState {
+export function parseBackup(text: string, opts: { seedAssistant?: boolean } = {}): AppState {
   let s: any;
   try {
     s = JSON.parse(text);
@@ -31,7 +31,7 @@ export function parseBackup(text: string): AppState {
     throw new Error('JSON 형식이 아닙니다');
   }
   if (!s || typeof s !== 'object' || !Array.isArray(s.works) || !Array.isArray(s.docs) || !Array.isArray(s.users)) throw new Error('업무잇다 데이터 형식이 아닙니다');
-  if (s.schema === SCHEMA || s.schema === 6) return migrate(s);
+  if (s.schema === SCHEMA || s.schema === 6) return migrate(s, new Date(), opts);
   throw new Error(`지원하지 않는 데이터 버전입니다 (schema ${s.schema})`);
 }
 

@@ -84,6 +84,13 @@ for (const theme of themes) {
       // 읽기 전용(이서연)
       await ev(`(() => { const s = document.getElementById('user-switch'); const o = [...s.options].find((x) => x.textContent.includes('이서연')); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, o.value); s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
       await go('#/assistant/customers/CU-001'); await sleep(300); await shot('23-읽기전용');
+      // 검토 반영(2026-10-30): 담당 고객이 없는 사용자의 오늘 화면, 고객 등록 오류 위치
+      await go('#/assistant'); await sleep(300); await shot('24-담당고객없음');
+      await ev(`window.__h.id('asst-scope-goall')`); await sleep(500); await shot('25-전체보기');
+      await go('#/assistant/customers?new=1', 900);
+      await ev(`window.__h.setId('asst-f-email', 'abc'); window.__h.setId('asst-f-name', '오류시험')`); await sleep(100);
+      await ev(`window.__h.id('asst-cust-save')`); await sleep(500); await shot('26-고객-등록오류');
+      await esc();
     } catch (e) {
       console.log('실패', tag, String(e.message || e).slice(0, 200));
     } finally {

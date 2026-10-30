@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button, Field, inputCls } from '../../components/ui';
 import { cx } from '../../lib/util';
 import { ymd } from '../dates';
-import { addAnniversary, addInteraction, addRequest, createCustomer, findDuplicates, isErr, updateAnniversary, updateCustomer, updateInteraction, updateRequest, type DuplicateHit } from '../model';
+import { addAnniversary, addInteraction, addRequest, createCustomer, dueBeforeReceivedWarning, findDuplicates, isErr, updateAnniversary, updateCustomer, updateInteraction, updateRequest, type DuplicateHit } from '../model';
 import { ANNIVERSARY_KINDS, CUSTOMER_FIELDS, CUSTOMER_TYPES, INTERACTION_TYPES, REQUEST_STATUSES, type Anniversary, type Customer, type CustomerFieldKey, type CustRequest, type Interaction } from '../types';
 import { useAssistant } from './hooks';
 import { canChangeOwner, changedKeys, emptyForm, formOf, ownerChoices, ownerLabel, setCustomerOwner, type CustomerForm } from './logic';
@@ -52,6 +52,9 @@ export function ConfirmDialog({
   );
 }
 
+/** 오늘 이후 날짜를 받지 않는 칸(model.ts의 검사와 같다) — 달력 입력의 최대값으로 알려 준다 */
+const PAST_ONLY: CustomerFieldKey[] = ['birthDate', 'firstMetDate', 'lastContactDate', 'lastMeetingDate'];
+
 const GROUPS: { id: 'basic' | 'personal' | 'relation'; label: string }[] = [
   { id: 'basic', label: '기본 인적사항' },
   { id: 'personal', label: '개인적 특성' },
@@ -67,12 +70,15 @@ export function CustomerFormDialog({ open, onClose, customer, focusKey, onSaved 
   const [form, setForm] = useState<CustomerForm>(base);
   const [ownerId, setOwnerId] = useState(customer?.ownerId ?? userId);
   const [error, setError] = useState('');
+  // 칸 하나 때문에 생긴 오류는 그 칸 옆에 보이고, 그 칸으로 스크롤·초점이 간다(긴 양식에서 아래쪽 오류를 못 보는 문제)
+  const [fieldErr, setFieldErr] = useState<{ key: string; text: string; n: number } | null>(null);
   const [dups, setDups] = useState<DuplicateHit[] | null>(null);
   useEffect(() => {
     if (open) {
       setForm(base);
       setOwnerId(customer?.ownerId ?? userId);
       setError('');
+      setFieldErr(null);
       setDups(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -83,14 +89,32 @@ export function CustomerFormDialog({ open, onClose, customer, focusKey, onSaved 
   const set = (k: CustomerFieldKey, v: string) => {
     setForm((f) => ({ ...f, [k]: v }));
     setDups(null);
+    setFieldErr((e) => (e && e.key === k ? null : e));
   };
+  const fail = (text: string, key?: string) => {
+    if (key && CUSTOMER_FIELDS.some((f) => f.key === key)) {
+      setError('');
+      setFieldErr((e) => ({ key, text, n: (e?.n ?? 0) + 1 }));
+    } else {
+      setFieldErr(null);
+      setError(text);
+    }
+  };
+  useEffect(() => {
+    if (!fieldErr) return;
+    const el = document.getElementById(`asst-f-${fieldErr.key}`);
+    if (!el) return;
+    el.scrollIntoView({ block: 'center', behavior: 'auto' });
+    (el as HTMLElement).focus();
+  }, [fieldErr?.n]); // eslint-disable-line react-hooks/exhaustive-deps
   // 수정 중에도 같은 사람이 이미 있는지 알려 준다(막지는 않음)
   const editDup = editing && form.name.trim() ? findDuplicates(a, form, customer!.id).filter((d) => d.reasons.some((r) => r !== '이름 일치')) : [];
 
   const submit = (force = false) => {
     setError('');
+    setFieldErr(null);
     if (!form.name.trim()) {
-      setError('이름은 필수 입력 항목입니다.');
+      fail('이름은 필수 입력 항목입니다.', 'name');
       return;
     }
     if (editing) {
@@ -105,7 +129,7 @@ export function CustomerFormDialog({ open, onClose, customer, focusKey, onSaved 
         }
         return { changed: u.changed, ownerChanged };
       });
-      if (isErr(r)) return setError(r.error);
+      if (isErr(r)) return fail(r.error, r.field);
       const n = (r as { changed: string[] }).changed.length;
       toast(n || (r as { ownerChanged: boolean }).ownerChanged ? `저장했습니다${n ? ` · ${n}개 항목 변경` : ''}${(r as { ownerChanged: boolean }).ownerChanged ? ' · 담당 영업자 변경' : ''}` : '바뀐 내용이 없습니다');
       onClose();
@@ -115,7 +139,7 @@ export function CustomerFormDialog({ open, onClose, customer, focusKey, onSaved 
       const c = createCustomer(d, form, { now, ownerId: leadMode ? ownerId : s.currentUserId, source: 'manual', force });
       return c;
     });
-    if (isErr(r)) return setError(r.error);
+    if (isErr(r)) return fail(r.error, r.field);
     if ('duplicates' in r) return setDups(r.duplicates);
     toast(`${form.name.trim()} 고객을 등록했습니다`);
     onSaved?.(r.id);
@@ -149,11 +173,17 @@ export function CustomerFormDialog({ open, onClose, customer, focusKey, onSaved 
     >
       <form
         className="space-y-5"
+        noValidate
         onSubmit={(e) => {
           e.preventDefault();
           submit(!!dups);
         }}
       >
+        {error && (
+          <p className="rounded-lg border border-danger/40 bg-dangersoft px-3 py-2 text-xs text-danger" role="alert" data-testid="asst-form-error">
+            {error}
+          </p>
+        )}
         {dups && (
           <div className="rounded-lg border border-warn/50 bg-warnsoft/60 p-3 text-[13px]" role="alert" data-testid="asst-dup">
             <p className="font-semibold text-warn">비슷한 고객이 이미 있습니다. 같은 사람이면 등록하지 말고 기존 고객을 확인하세요.</p>
@@ -173,7 +203,7 @@ export function CustomerFormDialog({ open, onClose, customer, focusKey, onSaved 
           </p>
         )}
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="담당 영업자" htmlFor="asst-f-owner" hint={leadMode ? '조직장은 내 조직 범위 안에서 담당을 바꿀 수 있습니다.' : editing ? '담당 영업자는 소속 조직의 조직장이 바꿉니다.' : '새 고객의 담당은 지금 사용자입니다.'}>
+          <Field label="담당 영업자" htmlFor="asst-f-owner" hint={leadMode ? '조직장은 내 조직 범위 안에서 담당을 바꿀 수 있습니다.' : editing ? '담당 영업자는 담당자의 조직장이 바꿉니다.' : '새 고객의 담당은 지금 사용자입니다.'}>
             {leadMode ? (
               <select id="asst-f-owner" data-testid="asst-f-owner" className={inputCls} value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
                 {owners.map((u) => (
@@ -192,15 +222,17 @@ export function CustomerFormDialog({ open, onClose, customer, focusKey, onSaved 
             <legend className="mb-1 text-[13px] font-semibold text-ink">{g.label}</legend>
             <div className="grid gap-3 sm:grid-cols-2">
               {CUSTOMER_FIELDS.filter((f) => f.group === g.id).map((f) => {
+                const bad = fieldErr?.key === f.key;
                 const common = {
                   id: `asst-f-${f.key}`,
                   'data-testid': `asst-f-${f.key}`,
                   value: form[f.key],
-                  className: inputCls,
+                  className: cx(inputCls, bad && '!border-danger'),
+                  'aria-invalid': bad || undefined,
                   ...(f.key === (focusKey ?? 'name') ? { 'data-autofocus': true } : {}),
                 };
                 return (
-                  <Field key={f.key} label={f.label + (f.key === 'name' ? ' (필수)' : '')} htmlFor={`asst-f-${f.key}`}>
+                  <Field key={f.key} label={f.label + (f.key === 'name' ? ' (필수)' : '')} htmlFor={`asst-f-${f.key}`} error={bad ? fieldErr!.text : undefined}>
                     {f.input === 'select' ? (
                       <select {...common} onChange={(e) => set(f.key, e.target.value)}>
                         <option value="">선택 안 함</option>
@@ -211,9 +243,14 @@ export function CustomerFormDialog({ open, onClose, customer, focusKey, onSaved 
                         ))}
                       </select>
                     ) : f.input === 'textarea' ? (
-                      <textarea {...common} rows={2} className={cx(inputCls, 'resize-y')} onChange={(e) => set(f.key, e.target.value)} />
+                      <textarea {...common} rows={2} className={cx(common.className, 'resize-y')} onChange={(e) => set(f.key, e.target.value)} />
                     ) : (
-                      <input {...common} type={f.input === 'date' ? 'date' : f.input === 'tel' ? 'tel' : f.input === 'email' ? 'email' : 'text'} onChange={(e) => set(f.key, e.target.value)} />
+                      <input
+                        {...common}
+                        type={f.input === 'date' ? 'date' : f.input === 'tel' ? 'tel' : f.input === 'email' ? 'email' : 'text'}
+                        max={PAST_ONLY.includes(f.key) ? ymd(now) : undefined}
+                        onChange={(e) => set(f.key, e.target.value)}
+                      />
                     )}
                   </Field>
                 );
@@ -221,11 +258,6 @@ export function CustomerFormDialog({ open, onClose, customer, focusKey, onSaved 
             </div>
           </fieldset>
         ))}
-        {error && (
-          <p className="text-xs text-danger" role="alert" data-testid="asst-form-error">
-            {error}
-          </p>
-        )}
         {editing && changed.length > 0 && (
           <p className="text-xs text-muted">
             바뀐 칸 <Pill tone="brand">{changed.length}</Pill> — 저장하면 항목마다 변경 이력(이전 값)이 남고 복원할 수 있습니다.
@@ -387,7 +419,9 @@ export function RequestFormDialog({ open, onClose, customerId, request }: { open
     const data = { content: f.content, receivedDate: f.receivedDate, dueDate: f.dueDate, status: f.status, assignee: f.assignee, result: f.result };
     const r = exec(f.cid, (_s, d) => (editing ? updateRequest(d, request!.id, data, now) : addRequest(d, f.cid, data, { now })));
     if (isErr(r)) return setError(r.error);
-    toast(editing ? '요청사항을 고쳤습니다' : '요청사항을 추가했습니다');
+    // 처리기한이 접수일보다 앞서도 저장은 하되 알린다
+    const warning = (r as { warning?: string }).warning;
+    toast(`${editing ? '요청사항을 고쳤습니다' : '요청사항을 추가했습니다'}${warning ? ` — ${warning}` : ''}`);
     onClose();
   };
   return (
@@ -430,6 +464,11 @@ export function RequestFormDialog({ open, onClose, customerId, request }: { open
         <Field label="처리기한 (선택)" htmlFor="asst-r-due">
           <input id="asst-r-due" data-testid="asst-r-due" type="date" className={inputCls} value={f.dueDate} onChange={(e) => up('dueDate', e.target.value)} />
         </Field>
+        {dueBeforeReceivedWarning(f.receivedDate, f.dueDate) && (
+          <p className="rounded-md border border-warn/40 bg-warnsoft/50 px-3 py-1.5 text-xs text-warn sm:col-span-2" role="status" data-testid="asst-r-duewarn">
+            처리기한이 접수일보다 앞서 있습니다. 저장은 되지만 날짜를 다시 확인해 보세요.
+          </p>
+        )}
         <Field label="진행상태" htmlFor="asst-r-status">
           <select id="asst-r-status" className={inputCls} value={f.status} onChange={(e) => up('status', e.target.value)}>
             {REQUEST_STATUSES.map((t) => (
@@ -529,7 +568,7 @@ export function AnniversaryFormDialog({ open, onClose, customerId, anniversary }
         <Field label="날짜" htmlFor="asst-n-date">
           <input id="asst-n-date" type="date" className={inputCls} value={f.date} onChange={(e) => setF((x) => ({ ...x, date: e.target.value }))} />
         </Field>
-        <Field label="알림 시점 (며칠 전)" htmlFor="asst-n-remind" hint="쉼표로 구분, 예: 7,2,0">
+        <Field label="알림 시점 (며칠 전)" htmlFor="asst-n-remind" hint="며칠 전에 알릴지(쉼표로 구분). 예: 7,2,0 = 7일 전·2일 전·당일">
           <input id="asst-n-remind" className={inputCls} value={f.remindDays} onChange={(e) => setF((x) => ({ ...x, remindDays: e.target.value }))} />
         </Field>
         <label className="flex items-center gap-2 text-[13px] sm:col-span-2">

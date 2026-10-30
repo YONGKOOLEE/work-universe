@@ -4,7 +4,7 @@ import { ArrowLeft, Check, SkipForward } from 'lucide-react';
 import { Button, Card, CardHead, Empty, inputCls } from '../../components/ui';
 import { useRouter } from '../../lib/router';
 import { cx } from '../../lib/util';
-import { applyFollowup, buildQuestions, meetingError, proposals, skipFollowup, type Answers, type FollowupChoice, type FollowupProposal, type Question } from '../followup';
+import { applyFollowup, buildQuestions, meetingError, proposals, skipFollowup, type Answers, type FollowupChoice, type FollowupProblem, type FollowupProposal, type Question } from '../followup';
 import { isErr } from '../model';
 import { useAssistant } from './hooks';
 import { clearAnswer, customerPath, ownerLabel, pickOption, setAnswerInput } from './logic';
@@ -40,11 +40,16 @@ export default function FollowupView({ interactionId }: { interactionId: string 
   const editable = canEdit(cid);
   const meErr = meetingError(a, interactionId, now);
   const answered = Object.values(answers).filter((x) => x.value).length;
+  // 답은 했는데 이대로는 저장되지 않는 곳(내용을 비운 요청·관심 주제, 날짜 없는 연기)을 그 질문에 안내한다
+  const problems = proposals(a, interactionId, answers, now, me?.name ?? '')?.problems ?? [];
+  const blocking = problems.find((p) => p.blocking);
 
   const toReview = () => {
     setError('');
     const r = proposals(a, interactionId, answers, now, me?.name ?? '');
     if (!r) return;
+    const stop = r.problems.find((p) => p.blocking);
+    if (stop) return setError(stop.text);
     setProps(r.proposals);
     setChoices(r.proposals.map((p, idx) => ({ idx, include: true, new: p.new, dueDate: p.dueDate, assignee: p.assignee })));
     setStep('review');
@@ -53,7 +58,8 @@ export default function FollowupView({ interactionId }: { interactionId: string 
 
   const apply = () => {
     setError('');
-    const r = exec(cid, (_s, d) => applyFollowup(d, interactionId, answers, choices, now, me?.name ?? ''));
+    // 확인 화면에서 보여 준 반영안(props)을 그대로 넘긴다 — 저장할 때 다시 계산하면 그 사이에 고객 정보가 바뀌어 선택 번호가 어긋날 수 있다
+    const r = exec(cid, (_s, d) => applyFollowup(d, interactionId, answers, choices, now, me?.name ?? '', props));
     if (isErr(r)) return setError(r.error);
     const x = r as { applied: number; moved: boolean };
     toast(x.moved ? '미팅 날짜를 바꿨습니다 — 새 날짜에 다시 묻습니다' : `${x.applied}건을 저장했습니다`);
@@ -95,7 +101,7 @@ export default function FollowupView({ interactionId }: { interactionId: string 
       {editable && !meErr && step === 'ask' && (
         <>
           {info.questions.map((q, n) => (
-            <QuestionCard key={q.id} q={q} n={n + 1} answers={answers} setAnswers={setAnswers} />
+            <QuestionCard key={q.id} q={q} n={n + 1} answers={answers} setAnswers={setAnswers} problems={problems.filter((p) => p.qid === q.id)} />
           ))}
           {error && (
             <p className="text-xs text-danger" role="alert">
@@ -109,7 +115,7 @@ export default function FollowupView({ interactionId }: { interactionId: string 
                 <SkipForward size={14} />
                 전체 건너뛰기
               </Button>
-              <Button variant="primary" onClick={toReview} disabled={!answered} data-testid="asst-fu-review-btn">
+              <Button variant="primary" onClick={toReview} disabled={!answered || !!blocking} title={blocking?.text} data-testid="asst-fu-review-btn">
                 답변 확인
               </Button>
             </span>
@@ -196,7 +202,7 @@ export default function FollowupView({ interactionId }: { interactionId: string 
   );
 }
 
-function QuestionCard({ q, n, answers, setAnswers }: { q: Question; n: number; answers: Answers; setAnswers: (f: (a: Answers) => Answers) => void }) {
+function QuestionCard({ q, n, answers, setAnswers, problems }: { q: Question; n: number; answers: Answers; setAnswers: (f: (a: Answers) => Answers) => void; problems: FollowupProblem[] }) {
   const cur = answers[q.id];
   const opt = q.options.find((o) => o.value === cur?.value);
   return (
@@ -247,6 +253,11 @@ function QuestionCard({ q, n, answers, setAnswers }: { q: Question; n: number; a
           ))}
         </div>
       )}
+      {problems.map((p, i) => (
+        <p key={i} className={cx('mt-2 text-xs font-medium', p.blocking ? 'text-danger' : 'text-warn')} role="status" data-testid={`asst-fu-hint-${q.id}`}>
+          {p.text}
+        </p>
+      ))}
       {cur?.value && (
         <button className="mt-2 text-xs font-medium text-muted underline hover:text-ink" onClick={() => setAnswers((x) => clearAnswer(x, q.id))}>
           이 질문 건너뛰기(답 지우기)

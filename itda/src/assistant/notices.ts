@@ -5,6 +5,7 @@
 import { addDays, diffDays, isValidDate, nextOccurrence, stamp, ymd } from './dates';
 import { pending } from './followup';
 import { sortStable } from './queries';
+import { filterAssistant } from './scope';
 import type { AssistantConf, AssistantData } from './types';
 
 export type NoticeKind = 'request' | 'birthday' | 'anniversary' | 'meeting' | 'followup';
@@ -61,8 +62,9 @@ function latestOffset(eventDay: string, offsets: number[], nowS: string, hm: str
 
 type Cand = Omit<Notice, 'read'>;
 
-/** 지금 시점의 알림 후보 전부(읽음 표시 전). 생성 순서: 요청 → 생일 → 기념일 → 미팅 → 미팅 후 질문 */
-export function candidates(a: AssistantData, now: Date): Cand[] {
+/** 지금 시점의 알림 후보 전부(읽음 표시 전). 생성 순서: 요청 → 생일 → 기념일 → 미팅 → 미팅 후 질문. ids를 주면 그 고객들의 알림만 */
+export function candidates(a0: AssistantData, now: Date, ids?: ReadonlySet<string> | null): Cand[] {
+  const a = filterAssistant(a0, ids);
   const conf = a.conf;
   const nowS = stamp(now);
   const today = ymd(now);
@@ -182,33 +184,50 @@ function hourEarlier(stampStr: string): string {
   return `${addDays(d, -1)} ${String(Math.floor(total2 / 60)).padStart(2, '0')}:${String(total2 % 60).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+/**
+ * 알림을 누가 어느 범위까지 보는가. userId가 있으면 읽음 표시를 그 사람 몫으로 따로 센다(같은 브라우저를 여러 사람이 써도 서로의 읽음에 영향을 주지 않는다).
+ * ids는 볼 고객 ID(없으면 전체). 범위는 scope.ts의 customerIdsInScope로 만든다.
+ */
+export interface NoticeView {
+  userId?: string;
+  ids?: ReadonlySet<string> | null;
+}
+/** 읽음 키: 사용자별로 「U1:req:RQ-001:…」. userId가 없으면 키 그대로(옛 방식) */
+export const readKeyOf = (key: string, userId?: string) => (userId ? `${userId}:${key}` : key);
+
 /** 알림 목록(제목 300자·본문 500자까지, 읽음 표시 반영). 가까운 일정 순 */
-export function computeNotices(a: AssistantData, now: Date): Notice[] {
+export function computeNotices(a: AssistantData, now: Date, v: NoticeView = {}): Notice[] {
   const read = new Set(a.noticeRead);
-  const list = candidates(a, now).map((c) => ({ ...c, title: c.title.trim().slice(0, 300), body: c.body.slice(0, 500), read: read.has(c.key) }));
+  const list = candidates(a, now, v.ids).map((c) => ({ ...c, title: c.title.trim().slice(0, 300), body: c.body.slice(0, 500), read: read.has(readKeyOf(c.key, v.userId)) }));
   return sortStable(list, (x, y) => (x.eventDate < y.eventDate ? -1 : x.eventDate > y.eventDate ? 1 : 0));
 }
 
-export const unreadNotices = (a: AssistantData, now: Date) => computeNotices(a, now).filter((n) => !n.read);
+export const unreadNotices = (a: AssistantData, now: Date, v: NoticeView = {}) => computeNotices(a, now, v).filter((n) => !n.read);
 /** 메뉴에 붙일 숫자 */
-export const unreadCount = (a: AssistantData, now: Date) => unreadNotices(a, now).length;
+export const unreadCount = (a: AssistantData, now: Date, v: NoticeView = {}) => unreadNotices(a, now, v).length;
 
 /** 읽음 표시에 남기는 키의 상한(후보에서 빠진 키는 정리하지만 안전장치로 한 번 더) */
 export const NOTICE_READ_LIMIT = 500;
 
 function prune(a: AssistantData, now: Date) {
   const live = new Set(candidates(a, now).map((c) => c.key));
-  a.noticeRead = a.noticeRead.filter((k) => live.has(k)).slice(-NOTICE_READ_LIMIT);
+  // 사용자별 키(「U1:…」)는 앞 사용자 표시를 뗀 키가, 옛 키는 그대로가 아직 알림 후보일 때만 남긴다
+  const keep = (e: string) => live.has(e) || (e.includes(':') && live.has(e.slice(e.indexOf(':') + 1)));
+  a.noticeRead = a.noticeRead.filter(keep).slice(-NOTICE_READ_LIMIT);
 }
 
-/** 알림 하나를 읽음으로. 더 이상 후보가 아닌 옛 키는 함께 정리한다 */
-export function markNoticeRead(a: AssistantData, key: string, now: Date): void {
-  if (!a.noticeRead.includes(key)) a.noticeRead.push(key);
+/** 알림 하나를 읽음으로(userId가 있으면 그 사람 몫). 더 이상 후보가 아닌 옛 키는 함께 정리한다 */
+export function markNoticeRead(a: AssistantData, key: string, now: Date, userId?: string): void {
+  const k = readKeyOf(key, userId);
+  if (!a.noticeRead.includes(k)) a.noticeRead.push(k);
   prune(a, now);
 }
-/** 지금 보이는 알림을 모두 읽음으로 */
-export function markAllNoticesRead(a: AssistantData, now: Date): void {
-  for (const c of candidates(a, now)) if (!a.noticeRead.includes(c.key)) a.noticeRead.push(c.key);
+/** 지금 보이는(범위 안) 알림을 모두 읽음으로 */
+export function markAllNoticesRead(a: AssistantData, now: Date, v: NoticeView = {}): void {
+  for (const c of candidates(a, now, v.ids)) {
+    const k = readKeyOf(c.key, v.userId);
+    if (!a.noticeRead.includes(k)) a.noticeRead.push(k);
+  }
   prune(a, now);
 }
 

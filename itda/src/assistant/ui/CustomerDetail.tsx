@@ -1,6 +1,6 @@
 // 고객 상세 — 헤더(아바타·소속·연락처), 개요/선호·관심사/히스토리/요청/경조사/변경 이력, 미팅 브리핑, 수정·삭제.
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Cake, ChevronDown, ChevronRight, FileText, Mail, MessageCircleQuestion, Pencil, Phone, Plus, RotateCcw, Smartphone, Trash2 } from 'lucide-react';
+import { ArrowLeft, Cake, ChevronDown, ChevronRight, FileText, Mail, Pencil, Phone, Plus, RotateCcw, Smartphone, Trash2 } from 'lucide-react';
 import { Button, Card, CardHead, Empty, inputCls } from '../../components/ui';
 import { useRouter } from '../../lib/router';
 import { cx } from '../../lib/util';
@@ -13,12 +13,13 @@ import { AnniversaryFormDialog, ActivityFormDialog, ConfirmDialog, CustomerFormD
 import { BriefingDialog } from './BriefingDialog';
 import { useAssistant } from './hooks';
 import { customerPath, followupPath, isCustomerTab, ownerLabel, type CustomerTab } from './logic';
-import { Avatar, Blank, DDay, Pill, ReadOnlyNote, TabsBar, wrapCls } from './shared';
+import { Avatar, Blank, FollowupButton, DDay, Pill, ReadOnlyNote, SMALL_SELECT, TabsBar, wrapCls } from './shared';
 
 const TAB_LABEL: Record<CustomerTab, string> = { overview: '개요', prefs: '선호·관심사', history: '히스토리', requests: '요청', events: '경조사', changes: '변경 이력' };
 const CHANGE_PAGE = 60;
 
-type Del = { kind: 'interaction' | 'request' | 'anniversary' | 'customer'; id: string; label: string } | null;
+/** 지울 대상. customerId는 지우기를 누른 시점의 고객이다(대화상자가 열린 채 다른 고객으로 옮겨 가도 엉뚱한 고객을 지우지 않게 상태에 담는다) */
+type Del = { kind: 'interaction' | 'request' | 'anniversary' | 'customer'; id: string; customerId: string; label: string } | null;
 
 export default function CustomerDetail({ id }: { id: string }) {
   const { a, raw, now, canEdit, exec, toast } = useAssistant();
@@ -32,6 +33,8 @@ export default function CustomerDetail({ id }: { id: string }) {
   const [req, setReq] = useState<{ request?: CustRequest | null } | null>(null);
   const [ann, setAnn] = useState<{ anniversary?: Anniversary | null } | null>(null);
   const [del, setDel] = useState<Del>(null);
+  // 다른 고객으로 옮겨 가면 열려 있던 삭제 확인은 닫는다
+  useEffect(() => setDel(null), [id]);
 
   // 알림에서 온 「브리핑」 링크(?briefing=…): 창을 열고 주소의 값은 지운다
   const wantBrief = query.get('briefing');
@@ -51,21 +54,21 @@ export default function CustomerDetail({ id }: { id: string }) {
   const c = d.customer;
   const editable = canEdit(id);
   const owner = ownerLabel(raw, c.ownerId);
-  const why = editable ? undefined : `담당 영업자(${owner}) 또는 소속 조직의 조직장만 고칠 수 있습니다.`;
+  const why = editable ? undefined : `담당 영업자(${owner}) 또는 담당자의 조직장만 고칠 수 있습니다.`;
   const setTab = (t: CustomerTab) => replace(customerPath(id, t));
 
   const runDelete = () => {
     if (!del) return;
     const x = del;
     setDel(null);
-    const r = exec(id, (_s, dd) => {
+    const r = exec(x.customerId, (_s, dd) => {
       if (x.kind === 'interaction') return deleteInteraction(dd, x.id, now);
       if (x.kind === 'request') return deleteRequest(dd, x.id);
       if (x.kind === 'anniversary') return deleteAnniversary(dd, x.id);
-      return deleteCustomer(dd, id);
+      return deleteCustomer(dd, x.customerId);
     });
     if (isErr(r)) return toast(r.error);
-    toast(x.kind === 'customer' ? `${c.name} 고객을 지웠습니다` : `${x.label}을(를) 지웠습니다`);
+    toast(x.kind === 'customer' ? `${x.label} 고객을 지웠습니다` : `${x.label}을(를) 지웠습니다`);
     if (x.kind === 'customer') nav('/assistant/customers');
   };
 
@@ -133,7 +136,7 @@ export default function CustomerDetail({ id }: { id: string }) {
               </Button>
             </span>
             <span title={why}>
-              <Button variant="danger" onClick={() => setDel({ kind: 'customer', id, label: c.name })} disabled={!editable} data-testid="asst-cust-delete">
+              <Button variant="danger" onClick={() => setDel({ kind: 'customer', id, customerId: id, label: c.name })} disabled={!editable} data-testid="asst-cust-delete">
                 <Trash2 size={14} />
                 삭제
               </Button>
@@ -143,6 +146,14 @@ export default function CustomerDetail({ id }: { id: string }) {
       </Card>
 
       {!editable && <ReadOnlyNote owner={owner} />}
+      {editable && c.ownerId !== raw.currentUserId && (
+        <p className="flex items-start gap-2 rounded-lg border border-brand/30 bg-brandsoft/40 px-4 py-2.5 text-[13px] text-ink" data-testid="asst-lead-note">
+          <Pencil size={14} className="mt-0.5 shrink-0 text-brand" aria-hidden="true" />
+          <span>
+            이 고객은 <b>{owner}</b>님이 담당합니다. 조직장이라 수정할 수 있습니다.
+          </span>
+        </p>
+      )}
 
       <TabsBar tabs={(Object.keys(TAB_LABEL) as CustomerTab[]).map((t) => ({ id: t, label: TAB_LABEL[t], count: counts[t] }))} value={tab} onChange={setTab} />
 
@@ -155,7 +166,7 @@ export default function CustomerDetail({ id }: { id: string }) {
           why={why}
           onAdd={() => setAct({})}
           onEdit={(i) => setAct({ interaction: i })}
-          onDelete={(i) => setDel({ kind: 'interaction', id: i.id, label: `활동 기록 「${i.title}」` })}
+          onDelete={(i) => setDel({ kind: 'interaction', id: i.id, customerId: id, label: `활동 기록 「${i.title}」` })}
           onBrief={(i) => setBrief({ interactionId: i.id })}
         />
       )}
@@ -166,11 +177,11 @@ export default function CustomerDetail({ id }: { id: string }) {
           why={why}
           onAdd={() => setReq({})}
           onEdit={(r) => setReq({ request: r })}
-          onDelete={(r) => setDel({ kind: 'request', id: r.id, label: '요청사항' })}
+          onDelete={(r) => setDel({ kind: 'request', id: r.id, customerId: id, label: '요청사항' })}
         />
       )}
       {tab === 'events' && (
-        <Events d={d} editable={editable} why={why} onAdd={() => setAnn({})} onEdit={(x) => setAnn({ anniversary: x })} onDelete={(x) => setDel({ kind: 'anniversary', id: x.id, label: `경조사 「${x.label || x.kind}」` })} />
+        <Events d={d} editable={editable} why={why} onAdd={() => setAnn({})} onEdit={(x) => setAnn({ anniversary: x })} onDelete={(x) => setDel({ kind: 'anniversary', id: x.id, customerId: id, label: `경조사 「${x.label || x.kind}」` })} />
       )}
       {tab === 'changes' && <Changes d={d} editable={editable} why={why} />}
 
@@ -350,7 +361,7 @@ function History({
                     {i.time ? ` ${i.time}` : ''}
                   </span>
                   {i.date > today && <Pill tone="warn">예정</Pill>}
-                  {st && st.status !== 'pending' && <Pill tone="ok">미팅 후 질문 {st.status === 'done' ? '완료' : '건너뜀'}</Pill>}
+                  {st && st.status === 'skipped' && <Pill tone="muted">미팅 후 질문 건너뜀</Pill>}
                   <span className="ml-auto flex flex-wrap gap-1">
                     {i.type === '미팅' && (
                       <Button size="sm" onClick={() => onBrief(i)}>
@@ -359,10 +370,7 @@ function History({
                     )}
                     {canAsk && (
                       <span title={editable ? undefined : why}>
-                        <Button size="sm" variant="subtle" onClick={() => nav(followupPath(i.id))} data-testid="asst-fu-open">
-                          <MessageCircleQuestion size={13} />
-                          미팅 후 질문
-                        </Button>
+                        <FollowupButton done={st?.status === 'done'} onClick={() => nav(followupPath(i.id))} />
                       </span>
                     )}
                     <span title={why}>
@@ -433,7 +441,7 @@ function Requests({ d, editable, why, onAdd, onEdit, onDelete }: { d: Detail; ed
                 {r.assignee && <span className="text-xs text-muted">담당 {r.assignee}</span>}
                 <span className="ml-auto flex items-center gap-1">
                   <select
-                    className={cx(inputCls, 'h-7 !w-auto py-0 text-xs')}
+                    className={cx(inputCls, SMALL_SELECT)}
                     value={r.status}
                     disabled={!editable}
                     title={why}
@@ -530,7 +538,9 @@ function Changes({ d, editable, why }: { d: Detail; editable: boolean; why?: str
   const restore = (hid: string, label: string) => {
     const r = exec(c.id, (_s, dd) => restoreChange(dd, hid, now));
     if (isErr(r)) return toast(r.error);
-    toast(`${label}을(를) 이전 값으로 복원했습니다 (복원도 변경 이력에 남습니다)`);
+    const v = (r as { value: string }).value;
+    const shown = v ? (v.length > 24 ? `${v.slice(0, 24)}…` : v) : '(비어 있음)';
+    toast(`「${label}」을(를) 이전 값 ${v ? `'${shown}'` : shown}(으)로 복원했습니다 — 복원도 변경 이력에 남습니다`);
   };
   return (
     <Card>
@@ -551,12 +561,18 @@ function Changes({ d, editable, why }: { d: Detail; editable: boolean; why?: str
                     <b>{h.fieldLabel}</b>
                     <span className="tnum text-xs text-muted">{h.changedAt}</span>
                     <Pill>{h.sourceLabel}</Pill>
-                    <span className="ml-auto" title={!editable ? why : same ? '현재 값이 이미 이전 값과 같습니다.' : blockName ? '이름을 빈 값으로 복원할 수 없습니다.' : undefined}>
-                      <Button size="sm" onClick={() => restore(h.id, h.fieldLabel)} disabled={!editable || same || blockName || !isField} data-testid="asst-restore">
-                        <RotateCcw size={13} />
-                        이전 값으로 복원
-                      </Button>
-                    </span>
+                    {isField ? (
+                      <span className="ml-auto" title={!editable ? why : same ? '현재 값이 이미 이전 값과 같습니다.' : blockName ? '이름을 빈 값으로 복원할 수 없습니다.' : undefined}>
+                        <Button size="sm" onClick={() => restore(h.id, h.fieldLabel)} disabled={!editable || same || blockName} data-testid="asst-restore">
+                          <RotateCcw size={13} />
+                          이전 값으로 복원
+                        </Button>
+                      </span>
+                    ) : (
+                      <Pill className="ml-auto" title="고객 항목이 아니라서 되돌릴 수 없습니다. 담당 영업자는 「수정」에서 다시 바꿉니다." data-testid="asst-change-norestore">
+                        복원 대상 아님
+                      </Pill>
+                    )}
                   </div>
                   <div className="mt-1.5 grid gap-1 sm:grid-cols-2">
                     <p className={cx('rounded-md bg-sunken px-2.5 py-1.5 text-xs', wrapCls)}>

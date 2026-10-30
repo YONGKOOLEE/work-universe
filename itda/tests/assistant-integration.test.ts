@@ -125,10 +125,11 @@ describe('저장 데이터 열기(migrate): 처음 열기·지운 뒤·깨진 �
     expect(cleanAssistant(JSON.parse(JSON.stringify(a)))).toEqual(a);
     expect(cleanAssistant(cleanAssistant(a))).toEqual(a);
   });
-  it('새 시드: createSeed(fresh)에도 가상 고객이 있고, 시드가 데이터 크기를 크게 키우지 않는다', () => {
+  it('새 시드: createSeed(fresh)는 고객을 채우지 않고(검토 16), 가상 고객 시드는 데이터 크기를 크게 키우지 않는다', () => {
     const f = createSeed('fresh', NOW);
-    expect(f.assistant!.customers.length).toBe(18);
-    const size = JSON.stringify(f.assistant).length;
+    expect(f.assistant!.customers.length).toBe(0);
+    expect(f.assistant!.interactions.length + f.assistant!.requests.length + f.assistant!.anniversaries.length).toBe(0);
+    const size = JSON.stringify(createAssistantSeed(NOW, 'U1')).length;
     expect(size).toBeLessThan(25000); // 실측 21,880자(이력을 저장하지 않아서. 원본은 이력 273행까지 합쳐 약 7만 자)
     expect(size / (5 * 1024 * 1024)).toBeLessThan(0.01); // 저장소 5MB의 1% 미만
   });
@@ -222,9 +223,12 @@ describe('합쳐 불러오기: 고객', () => {
     expect(state.users.some((u) => u.id === 'U77')).toBe(true);
     expect(state.assistant!.customers.find((x) => x.name === '현재고객')!.id).toBe('CU-019');
   });
-  it('sameCustomer: 소속이 비어 있으면 이름만으로는 같은 사람으로 보지 않는다(없애는 쪽이 더 위험하므로)', () => {
+  it('sameCustomer: 소속·휴대전화·이메일이 양쪽 다 비어 있으면 이름이 같은 고객은 같은 고객(검토 4 — 반복해서 합쳐도 중복이 안 생김). 한쪽이라도 있으면 이름만으로는 같게 보지 않는다', () => {
     const [a, b] = createAssistantSeed(NOW, 'U1').customers;
-    expect(sameCustomer({ ...a, company: '', mobile: '', email: '' }, { ...a, company: '', mobile: '', email: '' })).toBe(false);
+    expect(sameCustomer({ ...a, company: '', mobile: '', email: '' }, { ...a, company: '', mobile: '', email: '' })).toBe(true);
+    expect(sameCustomer({ ...a, company: '', mobile: '', email: '' }, { ...a, company: '', mobile: '', email: 'x@y.example' })).toBe(false);
+    expect(sameCustomer({ ...a, company: '', mobile: '', email: '' }, { ...a, company: '다른회사', mobile: '', email: '' })).toBe(false);
+    expect(sameCustomer({ ...a, company: '', mobile: '', email: '' }, { ...b, company: '', mobile: '', email: '' })).toBe(false);
     expect(sameCustomer({ ...a, company: '가나 상사', mobile: '', email: '' }, { ...a, company: '가나상사', mobile: '', email: '' })).toBe(true);
     expect(sameCustomer(a, b)).toBe(false);
   });

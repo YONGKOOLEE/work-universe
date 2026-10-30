@@ -23,9 +23,9 @@ function one(a: AssistantData, name = '시험고객', extra: Record<string, stri
 describe('고객 등록', () => {
   it('이름은 필수, 날짜는 달력에 있어야 한다', () => {
     const a = emptyAssistant();
-    expect(createCustomer(a, { name: '  ' }, { now: NOW, ownerId: 'U1' })).toEqual({ error: '이름은 필수 입력 항목입니다.' });
-    expect(createCustomer(a, { name: '가나다', birthDate: '2026-13-01' }, { now: NOW, ownerId: 'U1' })).toEqual({ error: '생년월일이(가) 존재하지 않는 날짜입니다.' });
-    expect(createCustomer(a, { name: '가나다', birthDate: '2026/01/01' }, { now: NOW, ownerId: 'U1' })).toEqual({ error: '생년월일 형식이 올바르지 않습니다. (예: 2026-11-05)' });
+    expect(createCustomer(a, { name: '  ' }, { now: NOW, ownerId: 'U1' })).toEqual({ error: '이름은 필수 입력 항목입니다.', field: 'name' });
+    expect(createCustomer(a, { name: '가나다', birthDate: '2026-13-01' }, { now: NOW, ownerId: 'U1' })).toEqual({ error: '생년월일이(가) 존재하지 않는 날짜입니다.', field: 'birthDate' });
+    expect(createCustomer(a, { name: '가나다', birthDate: '2026/01/01' }, { now: NOW, ownerId: 'U1' })).toEqual({ error: '생년월일 형식이 올바르지 않습니다. (예: 2026-11-05)', field: 'birthDate' });
     expect(a.customers).toEqual([]);
   });
   it('값은 공백을 다듬고 4000자까지, 유형이 목록에 없으면 「기타」', () => {
@@ -82,9 +82,9 @@ describe('고객 수정·변경 이력·복원', () => {
     const a = emptyAssistant();
     const id = one(a);
     const snap = JSON.stringify(a);
-    expect(updateCustomer(a, id, { name: ' ' }, { now: NOW })).toEqual({ error: '이름은 비워둘 수 없습니다.' });
+    expect(updateCustomer(a, id, { name: ' ' }, { now: NOW })).toEqual({ error: '이름은 비워둘 수 없습니다.', field: 'name' });
     expect(updateCustomer(a, 'CU-999', { name: 'x' }, { now: NOW })).toEqual({ error: '고객을 찾을 수 없습니다.' });
-    expect(updateCustomer(a, id, { nextContactDate: '2026-02-30', hobbies: '바둑' }, { now: NOW })).toEqual({ error: '다음 연락·미팅 예정일이(가) 존재하지 않는 날짜입니다.' });
+    expect(updateCustomer(a, id, { nextContactDate: '2026-02-30', hobbies: '바둑' }, { now: NOW })).toEqual({ error: '다음 연락·미팅 예정일이(가) 존재하지 않는 날짜입니다.', field: 'nextContactDate' });
     expect(JSON.stringify(a)).toBe(snap);
   });
   it('복원: 이전 값으로 되돌리고 복원도 이력으로 남는다. 이름을 빈 값으로는 못 되돌린다', () => {

@@ -143,11 +143,14 @@ export function removePerson(d: AppState, id: string): { id: string; summary: st
   return { id, summary: `사람 지움: ${u.name}${memos ? ` (나만 보기 메모 ${memos}건도 지움)` : ''}` };
 }
 
+/** AI 비서에서 이 사람이 담당 영업자인 고객 수(전출·퇴직 처리 때 넘겨야 할 수) */
+export const ownedCustomerCount = (d: Pick<AppState, 'assistant'>, id: string): number => (d.assistant?.customers ?? []).filter((c) => c.ownerId === id).length;
+
 export function setPersonStatus(
   d: AppState,
   id: string,
   status: 'active' | 'left',
-): { id: string; summary: string; ownedWorks: { id: string; name: string }[] } | { error: string } | null {
+): { id: string; summary: string; ownedWorks: { id: string; name: string }[]; ownedCustomers: number } | { error: string } | null {
   const u = d.users.find((x) => x.id === id);
   if (!u) return { error: '사람을 찾을 수 없습니다' };
   if (status === 'left' && d.currentUserId === id) return { error: '지금 사용 중인 사람은 전출·퇴직으로 바꿀 수 없습니다' };
@@ -155,5 +158,5 @@ export function setPersonStatus(
   if (status === 'left') u.status = 'left';
   else delete u.status;
   const ownedWorks = status === 'left' ? d.works.filter((w) => w.owners.includes(id)).map((w) => ({ id: w.id, name: w.name })) : [];
-  return { id, summary: status === 'left' ? `전출·퇴직 표시: ${u.name}` : `복귀: ${u.name}`, ownedWorks };
+  return { id, summary: status === 'left' ? `전출·퇴직 표시: ${u.name}` : `복귀: ${u.name}`, ownedWorks, ownedCustomers: status === 'left' ? ownedCustomerCount(d, id) : 0 };
 }

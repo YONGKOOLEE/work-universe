@@ -85,7 +85,7 @@ export default function CustomersView() {
             data-testid="asst-cust-search"
           />
         </div>
-        <select className={cx(inputCls, 'h-9 !w-auto py-0')} value={sort} onChange={(e) => setSort(e.target.value as CustomerSort)} aria-label="정렬" data-testid="asst-cust-sort">
+        <select className={cx(inputCls, '!h-9 !w-auto !py-0')} value={sort} onChange={(e) => setSort(e.target.value as CustomerSort)} aria-label="정렬" data-testid="asst-cust-sort">
           {SORTS.map((s) => (
             <option key={s.id} value={s.id}>
               {s.label}
@@ -135,8 +135,16 @@ export default function CustomersView() {
         <Card>
           <Empty
             icon={<Users size={28} />}
-            title={a.customers.length ? '찾은 고객이 없습니다' : '아직 고객이 없습니다'}
-            sub={a.customers.length ? '찾는 말이나 거르기를 바꿔 보세요.' : '「고객 등록」으로 첫 고객을 추가하세요. 설정에서 가상 고객 18명을 다시 채울 수도 있습니다.'}
+            title={!a.customers.length ? '아직 고객이 없습니다' : mine && !a.customers.some((c) => c.ownerId === userId) ? '내가 담당하는 고객이 없습니다' : '찾은 고객이 없습니다'}
+            sub={
+              !a.customers.length
+                ? '「고객 등록」으로 첫 고객을 추가하세요. 설정에서 가상 고객 18명을 다시 채울 수도 있습니다.'
+                : mine && !a.customers.some((c) => c.ownerId === userId)
+                  ? `지금 사용자가 담당 영업자인 고객이 없습니다. 「내 담당만」을 끄면 등록된 고객 ${a.customers.length}명이 모두 보입니다.`
+                  : mine
+                    ? '찾는 말이나 거르기를 바꾸거나, 「내 담당만」을 꺼 보세요.'
+                    : '찾는 말이나 거르기를 바꿔 보세요.'
+            }
           />
         </Card>
       ) : layout === 'table' ? (

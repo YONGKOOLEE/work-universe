@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { createAssistantSeed } from '../src/assistant/seed';
 import { addInteraction, createCustomer, isErr } from '../src/assistant/model';
-import { applyFollowup, buildQuestions, fireTime, meetingError, MAX_QUESTIONS, pending, proposals, setState, skipFollowup } from '../src/assistant/followup';
+import { applyFollowup, buildQuestions, fireTime, meetingError, MAX_QUESTIONS, NEED_NEW_DATE, pending, proposals, setState, skipFollowup } from '../src/assistant/followup';
 import type { AssistantData } from '../src/assistant/types';
 
 const NOW = new Date(2026, 9, 30, 10, 0, 0);
@@ -142,9 +142,17 @@ describe('연기·취소·건너뛰기·질문 시각', () => {
     expect(a.followups.find((f) => f.interactionId === mid)).toBeUndefined();
     expect(cust(a, cid).lastMeetingDate).toBe('');
   });
-  it('연기인데 날짜가 없으면 「취소」 반영안이 나오고, 취소는 활동 유형을 메모로 바꾼다', () => {
+  it('연기인데 날짜가 없으면 취소로 바꾸지 않고 날짜 입력을 안내한다(검토 7). 취소는 활동 유형을 메모로 바꾼다', () => {
     const { a, mid } = bare();
-    const p = proposals(a, mid, { held: { value: 'moved' } }, NOW)!.proposals;
+    const r0 = proposals(a, mid, { held: { value: 'moved' } }, NOW)!;
+    expect(r0.proposals).toEqual([]); // 예전에는 여기서 「취소」 반영안이 나와 미팅이 취소로 처리됐다
+    expect(r0.problems).toEqual([{ qid: 'held', text: NEED_NEW_DATE, blocking: true }]);
+    const before = JSON.stringify(a);
+    expect(applyFollowup(a, mid, { held: { value: 'moved' } }, [{ idx: 0, include: true }], NOW)).toEqual({ error: NEED_NEW_DATE });
+    expect(JSON.stringify(a)).toBe(before); // 아무것도 저장하지 않는다
+    // 공백뿐인 날짜도 같다
+    expect(proposals(a, mid, { held: { value: 'moved', new_date: '  ' } }, NOW)!.problems.map((p) => p.blocking)).toEqual([true]);
+    const p = proposals(a, mid, { held: { value: 'cancel' } }, NOW)!.proposals;
     expect(p.map((x) => x.kind)).toEqual(['meeting_cancel']);
     applyFollowup(a, mid, { held: { value: 'cancel' } }, [{ idx: 0, include: true }], NOW);
     const m = a.interactions.find((i) => i.id === mid)!;

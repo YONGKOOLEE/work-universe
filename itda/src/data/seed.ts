@@ -7,6 +7,7 @@
 import type { AppState, User } from '../lib/types';
 import { clone } from '../lib/util';
 import { migrate } from '../lib/migrate';
+import { emptyAssistant } from '../assistant/model';
 import demoLinked from './demo-linked.json';
 import { extendLinked } from './demo-org';
 
@@ -40,6 +41,8 @@ export function createSeed(mode: 'linked' | 'fresh', now = new Date()): AppState
       snapshots: [],
       searchLog: [],
       focus: {},
+      // 빈 상태에는 가상 고객도 채우지 않는다(AI 비서 칸을 비어 있는 채로 둔다 — migrate가 「칸 없음」을 처음 열기로 보고 채우지 않게)
+      assistant: emptyAssistant(),
     },
     now,
   );

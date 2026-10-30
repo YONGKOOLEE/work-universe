@@ -7,7 +7,8 @@ import type { AssistantData } from './types';
 import type { Err } from './model';
 
 export const SAMPLE_LABEL = '예시 분석(AI 미사용)';
-export const SAMPLE_FILE = 'sample_call_kimdohyun.txt';
+/** 파일 이름에 고객 이름이 들어가지 않게 한다(활동 기록·변경 이력에 남는 글) */
+export const SAMPLE_FILE = '예시 대화';
 
 export const SAMPLE_TEXT = `[통화기록] 가온은행 김도현 부장 (가상 데모 고객)
 일시: 최근 통화

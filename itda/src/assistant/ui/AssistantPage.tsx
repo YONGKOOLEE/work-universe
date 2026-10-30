@@ -19,7 +19,7 @@ const TO: Record<TabId, string> = { today: '/assistant', customers: '/assistant/
 
 export default function AssistantPage() {
   const { path, nav } = useRouter();
-  const { a } = useAssistant();
+  const { a, userId } = useAssistant();
   const unread = useUnreadCount();
   const [settings, setSettings] = useState(false);
   const seg = path.split('/').filter(Boolean); // ['assistant', sub?, id?]
@@ -55,7 +55,8 @@ export default function AssistantPage() {
 
       {sub === '' && <TodayView />}
       {sub === 'customers' && (seg[2] ? <CustomerDetail id={seg[2]} /> : <CustomersView />)}
-      {sub === 'followup' && seg[2] && <FollowupView interactionId={seg[2]} />}
+      {/* 사용자를 바꾸거나 다른 미팅으로 옮기면 쓰던 답을 지우고 새로 시작한다 */}
+      {sub === 'followup' && seg[2] && <FollowupView key={`${seg[2]}:${userId}`} interactionId={seg[2]} />}
       {sub === 'activities' && <ActivitiesView />}
       {sub === 'analyze' && <AnalyzeView />}
       {sub === 'ask' && <AskView />}

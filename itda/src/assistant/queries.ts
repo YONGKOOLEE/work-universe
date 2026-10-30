@@ -144,9 +144,11 @@ export interface ChangeRow extends ChangeEntry {
   fieldLabel: string;
   sourceLabel: string;
 }
+/** 고객 항목이 아닌데 변경 이력에 남는 것(복원 대상 아님) */
+export const NON_FIELD_LABELS: Record<string, string> = { ownerId: '담당 영업자' };
 export const labelChange = (h: ChangeEntry): ChangeRow => ({
   ...h,
-  fieldLabel: (FIELD_LABELS as Record<string, string>)[h.field] ?? h.field,
+  fieldLabel: (FIELD_LABELS as Record<string, string>)[h.field] ?? NON_FIELD_LABELS[h.field] ?? h.field,
   sourceLabel: (SOURCE_LABELS as Record<string, string>)[h.source] ?? h.source,
 });
 

@@ -23,7 +23,7 @@ export const ASK_EXAMPLES = [
 
 export default function AskView() {
   const { a, ai, userId } = useAssistant();
-  const { nav, query } = useRouter();
+  const { nav, query, replace } = useRouter();
   const [q, setQ] = useState(query.get('q') ?? '');
   const [busy, setBusy] = useState(false);
   const [out, setOut] = useState<SearchOutcome | null>(null);
@@ -72,6 +72,14 @@ export default function AskView() {
     }
   };
 
+  // 상단 질문창(AI 비서 화면에서는 고객 질문)이나 AI 업무 검색의 안내 링크로 들어온 질문(?q=…)은 바로 검색한다. 주소의 q는 지워 다시 열어도 되풀이하지 않는다
+  const urlQ = query.get('q');
+  useEffect(() => {
+    if (!urlQ) return;
+    run(urlQ);
+    replace('/assistant/ask');
+  }, [urlQ]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const kws = useMemo(() => {
     if (!out) return [];
     const c = out.conditions;
@@ -117,7 +125,7 @@ export default function AskView() {
             <>
               <Bot size={13} className="mt-0.5 shrink-0 text-brand" aria-hidden="true" />
               <span>
-                질문을 Claude({ai.model})가 검색 조건으로 해석합니다. <b className="text-ink">전송되는 것은 질문 문장과 오늘 날짜뿐</b>이며 고객 정보와 검색 결과는 보내지 않습니다. 질문에 고객 이름을 쓰면 그 이름도 함께 전송됩니다. 실제 검색은 이 브라우저에서만 합니다. 해석에 실패하면 규칙으로 대신합니다.
+                질문을 Claude({ai.model})가 검색 조건으로 해석합니다. <b className="text-ink">전송되는 것은 질문 문장과 오늘 날짜뿐</b>이며 고객 정보와 검색 결과는 보내지 않습니다. 질문에 고객 이름을 쓰면 그 이름도 함께 전송됩니다. 질문에 쓴 전화번호·이메일·주민등록번호·계좌번호는 가려서 보냅니다. 실제 검색은 이 브라우저에서만 합니다. 해석에 실패하면 규칙으로 대신합니다.
               </span>
             </>
           ) : (
@@ -210,7 +218,11 @@ export default function AskView() {
             )
           ) : out.customers.length === 0 ? (
             <Card>
-              <Empty title="조건에 맞는 고객이 없습니다" sub="해석된 조건이 질문과 다르면 표현을 바꿔 다시 검색해 보세요. 핵심 낱말만 넣어도 됩니다." />
+              {out.note ? (
+                <Empty title={out.note} sub="「고객」 탭에서 고객을 등록하면 질문으로 찾을 수 있습니다. 설정에서 가상 고객 18명을 채울 수도 있습니다." />
+              ) : (
+                <Empty title="조건에 맞는 고객이 없습니다" sub="해석된 조건이 질문과 다르면 표현을 바꿔 다시 검색해 보세요. 핵심 낱말만 넣어도 됩니다." />
+              )}
             </Card>
           ) : (
             <ul className="grid gap-3 lg:grid-cols-2">

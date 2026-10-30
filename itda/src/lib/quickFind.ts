@@ -4,7 +4,7 @@ import type { AppState } from './types';
 import { displayName, roleLabel } from './people';
 import { effectiveOrgs, orgPathText } from './orgs';
 
-export type QFKind = 'menu' | 'action' | 'work' | 'doc' | 'person';
+export type QFKind = 'menu' | 'action' | 'work' | 'doc' | 'person' | 'customer';
 export type ActionId = 'data' | 'merge' | 'new-work' | 'ai-settings' | 'ai-engine' | 'theme';
 
 export interface QFItem {
@@ -22,9 +22,9 @@ export interface QFItem {
   id?: string;
 }
 
-export const KIND_LABEL: Record<QFKind, string> = { menu: '메뉴', action: '기능', work: '업무', doc: '문서', person: '사람' };
-export const KIND_ORDER: QFKind[] = ['menu', 'action', 'work', 'doc', 'person'];
-export const KIND_LIMIT: Record<QFKind, number> = { menu: 10, action: 9, work: 6, doc: 6, person: 6 };
+export const KIND_LABEL: Record<QFKind, string> = { menu: '메뉴', action: '기능', work: '업무', doc: '문서', person: '사람', customer: '고객' };
+export const KIND_ORDER: QFKind[] = ['menu', 'action', 'work', 'doc', 'person', 'customer'];
+export const KIND_LIMIT: Record<QFKind, number> = { menu: 10, action: 9, work: 6, doc: 6, person: 6, customer: 6 };
 
 /** 메뉴: Layout 왼쪽 목록과 같은 화면 */
 const MENUS: { to: string; title: string; sub: string; keywords: string[] }[] = [
@@ -81,7 +81,7 @@ export function looksLikeQuestion(q: string): boolean {
   return t.split(/\s+/).length >= 4;
 }
 
-/** 낮을수록 먼저. 0 ID 일치, 1 제목 앞부분, 2 제목 포함, 3 별칭, 4 초성. 못 찾으면 null */
+/** 낮을수록 먼저. 0 ID 일치, 1 제목 앞부분, 2 제목 포함, 3 별칭, 4 초성, 5 고객 소속 초성. 못 찾으면 null */
 export function scoreItem(it: QFItem, query: string): number | null {
   const q = norm(query);
   if (!q) return null;
@@ -91,6 +91,8 @@ export function scoreItem(it: QFItem, query: string): number | null {
   if (title.includes(q)) return 2;
   if (it.keywords.some((k) => norm(k).includes(q))) return 3;
   if (isJamoOnly(q) && choseong(it.title).includes(q)) return 4;
+  // 고객은 소속·부서·직책의 초성으로도 찾는다(예: ㄱㅇㅇㅎ → 가온은행)
+  if (it.kind === 'customer' && isJamoOnly(q) && it.keywords.some((k) => choseong(k).includes(q))) return 5;
   return null;
 }
 
@@ -122,6 +124,17 @@ export function buildItems(s: AppState): QFItem[] {
       sub: [d.type, d.writtenAt ? d.writtenAt.slice(0, 10) : '', linked.length ? `연결 업무: ${linked.slice(0, 2).join(', ')}${linked.length > 2 ? ` 외 ${linked.length - 2}` : ''}` : '연결 업무 없음'].filter(Boolean).join(' · '),
       to: d.type === '회의록' ? `/meetings/${d.id}` : `/docs/${d.id}`,
       keywords: [...d.keywords, d.fileName ?? '', d.source],
+    });
+  }
+  // AI 비서 고객(열람은 모두 가능하므로 보기 범위와 상관없이 모두). 이름·초성·소속으로 찾아 고객 상세로 간다
+  for (const c of s.assistant?.customers ?? []) {
+    items.push({
+      kind: 'customer',
+      key: 'customer:' + c.id,
+      title: c.name,
+      sub: [c.position, c.company, c.department].filter(Boolean).join(' · ') || '소속 정보 없음',
+      to: `/assistant/customers/${c.id}`,
+      keywords: [c.company, c.department, c.position].filter(Boolean),
     });
   }
   const orgs = effectiveOrgs(s);

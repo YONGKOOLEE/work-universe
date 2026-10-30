@@ -84,7 +84,7 @@ function EngineToggle({ onSettings }: { onSettings: () => void }) {
       </div>
       <button className="flex items-center rounded-md p-1.5 text-muted hover:bg-sunken hover:text-ink" onClick={onSettings} title="AI 설정(API 키)" aria-label="AI 설정" data-testid="ai-settings-open">
         <KeyRound size={15} />
-        <span className="ml-1 hidden text-xs font-medium xl:inline">AI 설정</span>
+        <span className="ml-1 hidden text-xs font-medium 2xl:inline">AI 설정</span>
       </button>
     </div>
   );
@@ -235,7 +235,9 @@ function Nav({ onPick }: { onPick?: () => void }) {
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { canBack, back, nav } = useRouter();
+  const { canBack, back, nav, path } = useRouter();
+  // AI 비서 화면에서는 상단 질문창이 고객 질문(묻기)으로 간다. 다른 화면은 그대로 AI 업무 검색
+  const inAssistant = path === '/assistant' || path.startsWith('/assistant/');
   const { s, update, reset, toastMsg, toast, saveIssue, reloadFromStorage, overwriteFromThisTab, dismissSaveIssue } = useStore();
   const [mobile, setMobile] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
@@ -304,7 +306,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             className="relative hidden max-w-md flex-1 sm:block"
             onSubmit={(e) => {
               e.preventDefault();
-              if (q.trim()) nav(`/search?q=${encodeURIComponent(q.trim())}`);
+              if (q.trim()) nav(`${inAssistant ? '/assistant/ask' : '/search'}?q=${encodeURIComponent(q.trim())}`);
               setQ('');
             }}
           >
@@ -313,14 +315,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
               id="global-ask"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="업무에 대해 질문하세요 — 예: 현재 추진 경과는?"
+              placeholder={inAssistant ? '고객에 대해 질문하세요' : '업무에 대해 질문하세요'}
+              aria-label={inAssistant ? '고객에 대해 질문하기 (AI 비서 묻기)' : '업무에 대해 질문하기 (AI 업무 검색)'}
+              data-testid="global-ask-input"
               className="h-9 w-full rounded-md border border-line bg-sunken pl-9 pr-3 text-[13px] placeholder:text-faint focus:border-brand focus:bg-surface focus:outline-none"
             />
           </form>
           <div className="ml-auto flex items-center gap-2">
             <label className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs text-muted" title="시연용 사용자 전환 (가상 인물)">
               <UserRound size={14} className="hidden sm:block" />
-              <span className="hidden md:inline">사용자</span>
+              <span className="hidden 2xl:inline">사용자</span>
               <select
                 id="user-switch"
                 className="max-w-[92px] truncate bg-transparent text-[13px] font-semibold text-ink focus:outline-none sm:max-w-none"
@@ -392,7 +396,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       <Modal open={resetOpen} onClose={() => setResetOpen(false)} title={BUNDLED ? '처음 상태로 되돌리기' : '모든 데이터 지우기'}>
         <p className="mb-2 text-[13px] text-muted">
-          {BUNDLED ? '이 화면에서 바꾼 내용이 지워지고, 제출본에 담긴 처음 데이터로 돌아감.' : '등록한 업무·문서·타임라인·인계 내용이 모두 지워지고 빈 상태로 돌아감. 되돌릴 수 없음.'}
+          {BUNDLED ? '이 화면에서 바꾼 내용이 지워지고, 제출본에 담긴 처음 데이터로 돌아감. AI 비서에서 등록하거나 고친 고객·활동·요청사항도 함께 처음 상태로 돌아감.' : '등록한 업무·문서·타임라인·인계 내용과 AI 비서의 고객·활동·요청사항·기념일·변경 이력이 모두 지워지고 처음 시연 상태로 돌아감. 되돌릴 수 없음.'}
         </p>
         <p className="mb-4 text-[13px] text-muted">필요하면 먼저 상단 '데이터 옮기기' → '내보내기'로 백업.</p>
         <div className="flex justify-end gap-2">

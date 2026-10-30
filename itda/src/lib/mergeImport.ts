@@ -273,19 +273,25 @@ const newOrgs = (current: AppState, incoming: AppState): Org[] => {
   return (incoming.orgs ?? []).filter((o) => !have.has(o.name));
 };
 
-/** 같은 고객인가: 이름+소속(소속이 있을 때), 휴대전화(숫자 8자리 이상), 이메일 중 하나가 같다 */
+/** 같은 고객인가: 이름+소속(소속이 있을 때), 휴대전화(숫자 8자리 이상), 이메일 중 하나가 같다. 소속·휴대전화·이메일이 양쪽 다 비어 있으면 이름만 같아도 같은 고객(반복해서 합쳐도 중복이 생기지 않게) */
 export function sameCustomer(a: Customer, b: Customer): boolean {
   if (a.name && normText(a.name) === normText(b.name) && a.company.trim() && normText(a.company) === normText(b.company)) return true;
+  const bare = (c: Customer) => !c.company.trim() && !String(c.mobile || '').replace(/D/g, '') && !String(c.email || '').trim();
+  if (a.name && normText(a.name) === normText(b.name) && bare(a) && bare(b)) return true;
   const am = String(a.mobile || '').replace(/\D/g, '');
   if (am.length >= 8 && am === String(b.mobile || '').replace(/\D/g, '')) return true;
   const ae = String(a.email || '').trim().toLowerCase();
   return !!ae && ae === String(b.email || '').trim().toLowerCase();
 }
-/** 들어온 고객 중 새로 더할 고객(앞서 더하기로 한 들어온 고객과 같은 사람도 한 번만) */
+/**
+ * 들어온 고객 중 새로 더할 고객(앞서 더하기로 한 들어온 고객과 같은 사람도 한 번만).
+ * 가상(isDemo) 고객은 더하지 않는다 — 지운 가상 고객이 다시 살아나지 않게. 파일에 AI 비서 칸이 없으면 더할 고객이 없다.
+ */
 export function newCustomers(cur: AssistantData | undefined, inc: AssistantData | undefined): Customer[] {
   const have: Customer[] = [...(cur?.customers ?? [])];
   const out: Customer[] = [];
   for (const c of inc?.customers ?? []) {
+    if (c.isDemo) continue;
     if (have.some((x) => sameCustomer(x, c))) continue;
     have.push(c);
     out.push(c);
@@ -693,8 +699,9 @@ function mergeAssistant(cur: AppState, inc: AppState, mu: (id: string) => string
   const allocR = idsOf(a.requests);
   const allocA = idsOf(a.anniversaries);
   const allocH = idsOf(a.changes);
-  const iMap = new Map<string, string>();
   for (const c of add) {
+    // 활동 ID 바꿈 표는 고객마다 새로 만든다(앞 고객의 표가 쌓이면 미팅 후 질문 상태가 중복된다)
+    const iMap = new Map<string, string>();
     const id = allocC(c.id);
     a.customers.push({ ...c, id, ownerId: mu(c.ownerId) });
     for (const i of src.interactions.filter((x) => x.customerId === c.id)) {
@@ -729,7 +736,28 @@ export function replaceKeepingOtherMemos(current: AppState, file: AppState): App
   const replaced = new Set([current.currentUserId, file.currentUserId, ...mine.map((m) => m.userId)]);
   const kept = (current.privateMemos ?? []).filter((m) => !replaced.has(m.userId));
   const all = [...kept, ...mine];
-  return all.length || file.privateMemos ? { ...file, privateMemos: all } : file;
+  const base = all.length || file.privateMemos ? { ...file, privateMemos: all } : file;
+  return withKeptAssistant(current, base);
+}
+
+/**
+ * 바꿔 불러올 때 파일에 AI 비서 칸이 없으면(옛 백업) 지금 고객을 그대로 둔다 — 가상 고객으로 바꾸지 않는다.
+ * 지금 고객의 담당 영업자가 파일의 사람 목록에 없으면 담당자 없는 고객이 되므로 파일의 사용자(지금 사용자)로 옮긴다.
+ */
+function withKeptAssistant(current: AppState, file: AppState): AppState {
+  if (file.assistant !== undefined || !current.assistant) return file;
+  const ids = new Set(file.users.map((u) => u.id));
+  const a = JSON.parse(JSON.stringify(current.assistant)) as AssistantData;
+  for (const c of a.customers) if (!ids.has(c.ownerId)) c.ownerId = file.currentUserId;
+  return { ...file, assistant: a };
+}
+
+/** 바꿔 불러오기 확인 창에 보일 고객 수: 지금 → 파일(파일에 칸이 없으면 file=null, 지금 고객 유지) */
+export function replaceCustomerInfo(current: AppState, file: AppState): { now: number; file: number | null; moved: number } {
+  const now = current.assistant?.customers.length ?? 0;
+  if (file.assistant !== undefined) return { now, file: file.assistant.customers.length, moved: 0 };
+  const ids = new Set(file.users.map((u) => u.id));
+  return { now, file: null, moved: (current.assistant?.customers ?? []).filter((c) => !ids.has(c.ownerId)).length };
 }
 
 /** 참조 무결성 점검 — 모든 참조가 실제로 존재하는지. 문제 목록(빈 배열이면 정상) */

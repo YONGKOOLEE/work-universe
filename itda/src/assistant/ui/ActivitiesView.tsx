@@ -1,21 +1,21 @@
 // 「활동·요청」 — 미팅·통화 기록, 요청사항, 경조사를 고객 전체에서 모아 본다. 안쪽 구역 3개.
 import { useMemo, useState } from 'react';
-import { MessageCircleQuestion, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { Button, Card, CardHead, Chips, Empty, inputCls } from '../../components/ui';
 import { Link, useRouter } from '../../lib/router';
 import { cx } from '../../lib/util';
-import { meetingError } from '../followup';
-import { deleteAnniversary, deleteInteraction, deleteRequest, isErr, updateRequest } from '../model';
+import { getState, meetingError } from '../followup';
+import { deleteAnniversary, deleteInteraction, deleteRequest, dueBeforeReceivedWarning, isErr, updateRequest } from '../model';
 import { listAnniversaries, listInteractions, listRequests } from '../queries';
 import { REQUEST_STATUSES, type Anniversary, type CustRequest, type Interaction } from '../types';
 import { ActivityFormDialog, AnniversaryFormDialog, ConfirmDialog, RequestFormDialog } from './forms';
 import { useAssistant } from './hooks';
 import { customerPath, followupPath } from './logic';
-import { DDay, Pill, wrapCls } from './shared';
+import { DDay, FollowupButton, Pill, SMALL_SELECT, wrapCls } from './shared';
 
 type Sec = 'acts' | 'reqs' | 'anns';
 const PAGE = 50;
-const NO_RIGHT = '담당 영업자 또는 소속 조직의 조직장만 고칠 수 있습니다.';
+const NO_RIGHT = '담당 영업자 또는 담당자의 조직장만 고칠 수 있습니다.';
 
 export default function ActivitiesView() {
   const { query, replace } = useRouter();
@@ -117,10 +117,7 @@ function Acts() {
                   <span className="ml-auto flex gap-1">
                     {canAsk && (
                       <span title={ok ? undefined : NO_RIGHT}>
-                        <Button size="sm" variant="subtle" onClick={() => nav(followupPath(i.id))}>
-                          <MessageCircleQuestion size={13} />
-                          미팅 후 질문
-                        </Button>
+                        <FollowupButton done={getState(a, i.id)?.status === 'done'} onClick={() => nav(followupPath(i.id))} />
                       </span>
                     )}
                     <span title={ok ? undefined : NO_RIGHT}>
@@ -199,8 +196,10 @@ function Reqs() {
                   </Link>
                   <span className="text-muted">{r.company}</span>
                   <span className="tnum text-xs text-muted">{r.dueDate ? `기한 ${r.dueDate}` : '기한 없음'}</span>
+                  {r.assignee && <span className="text-xs text-muted" data-testid="asst-req-assignee">담당 {r.assignee}</span>}
+                  {dueBeforeReceivedWarning(r.receivedDate, r.dueDate) && <Pill tone="warn" title="처리기한이 접수일보다 앞서 있습니다">기한이 접수일보다 앞섬</Pill>}
                   <span className="ml-auto flex items-center gap-1">
-                    <select className={cx(inputCls, 'h-7 !w-auto py-0 text-xs')} value={r.status} disabled={!ok} title={ok ? undefined : NO_RIGHT} onChange={(e) => change(r.id, r.customerId, e.target.value)} aria-label="진행 상태">
+                    <select className={cx(inputCls, SMALL_SELECT)} value={r.status} disabled={!ok} title={ok ? undefined : NO_RIGHT} onChange={(e) => change(r.id, r.customerId, e.target.value)} aria-label="진행 상태">
                       {REQUEST_STATUSES.map((s) => (
                         <option key={s}>{s}</option>
                       ))}

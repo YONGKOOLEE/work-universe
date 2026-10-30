@@ -6,19 +6,21 @@
 // CR-25 2.3-3으로 낱말을 보강했다: 「못 드시는·안 드시는·꺼리는·먹지 않는」 같은 피하는 음식 표현, 「이번 달에 챙겨야 할 사람」(기한 임박 요청·경조사·예정 연락).
 import { S, type LlmClient } from '../ai/llm';
 import { addDays, diffDays, isValidDate, monthRange, nextOccurrence, weekday, WEEKDAY_KO, ymd } from './dates';
+import { maskText } from './claude';
 import { sortStable } from './queries';
 import { CUSTOMER_TYPES, FIELD_LABELS, type AssistantData, type CustRequest, type Customer, type CustomerFieldKey } from './types';
 
-export type Scope = 'interest' | 'food_like' | 'food_dislike' | 'personality' | 'org' | 'any';
+export type Scope = 'interest' | 'food_like' | 'food_dislike' | 'personality' | 'contact_pref' | 'org' | 'any';
 export const KW_SCOPES: Record<Scope, CustomerFieldKey[]> = {
   interest: ['hobbies', 'recentInterests', 'salesNotes'],
   food_like: ['foodLikes'],
   food_dislike: ['foodDislikes'],
   personality: ['personality', 'contactPreference'],
+  contact_pref: ['contactPreference'],
   org: ['company', 'department', 'position', 'duties', 'orgRelationship'],
   any: ['name', 'company', 'department', 'position', 'duties', 'hobbies', 'recentInterests', 'foodLikes', 'foodDislikes', 'personality', 'contactPreference', 'salesNotes', 'orgRelationship', 'relationshipOrigin'],
 };
-export const SCOPE_LABEL: Record<Scope, string> = { interest: '관심사', food_like: '선호 음식', food_dislike: '기피 음식', personality: '성향·연락 방식', org: '소속·업무', any: '전체' };
+export const SCOPE_LABEL: Record<Scope, string> = { interest: '관심사', food_like: '선호 음식', food_dislike: '기피 음식', personality: '성향·연락 방식', contact_pref: '선호 연락 방식', org: '소속·업무', any: '전체' };
 
 export interface Cond {
   target: 'customers' | 'requests';
@@ -37,11 +39,19 @@ export interface Cond {
   /** 「이번 달에 챙겨야 할 사람」: 이 기간(포함) 안에 기한이 닥친 요청·생일·기념일·예정 연락·예정 미팅이 있는 고객. 둘 다 있거나 둘 다 빈 글 */
   agendaFrom: string;
   agendaTo: string;
+  /** 「이번 주에 만나는 사람」: 이 기간(포함) 안에 예정된 미팅이 있는 고객. 둘 다 있거나 둘 다 빈 글 */
+  meetingFrom: string;
+  meetingTo: string;
+  /** 질문에 들어 있는 고객 이름(「오정석 생일 언제야」) — 이 이름의 고객만 */
+  nameKeywords: string[];
+  /** 이름으로 찾을 때 근거로 함께 보여 줄 정보: birthday(생일) · contact(연락처) */
+  show: ('birthday' | 'contact')[];
 }
 
 export const emptyCond = (): Cond => ({
   target: 'customers', keywords: [], conversationKeywords: [], orgKeywords: [], customerTypes: [], noContactDays: null, contactKind: 'contact',
   birthdayFrom: '', birthdayTo: '', requestStatus: '', requestKeywords: [], dueWithinDays: null, overdue: false, agendaFrom: '', agendaTo: '',
+  meetingFrom: '', meetingTo: '', nameKeywords: [], show: [],
 });
 
 // ───────────── 규칙 해석 ─────────────
@@ -89,11 +99,67 @@ function periodOf(text: string, today: string): [string, string] {
   return [today, addDays(today, 30)];
 }
 
-export function ruleParse(q: string, now: Date): Cond {
+/** 미팅 예정 기간: 이번 주 = 오늘부터 7일(오늘 화면의 「이번 주 미팅」과 같다), 다음 주 = 다음 월~일, 내일·오늘·이번 달·다음 달, 없으면 오늘부터 30일 */
+function meetingPeriodOf(text: string, today: string): [string, string] {
+  const y = Number(today.slice(0, 4));
+  const mth = Number(today.slice(5, 7));
+  if (/다음\s*달/.test(text)) return monthRange(mth === 12 ? y + 1 : y, mth === 12 ? 1 : mth + 1);
+  if (/이번\s*달/.test(text)) return [today, monthRange(y, mth)[1]];
+  if (/다음\s*주/.test(text)) {
+    const a = addDays(today, 7 - weekday(today));
+    return [a, addDays(a, 6)];
+  }
+  if (/이번\s*주/.test(text)) return [today, addDays(today, 7)];
+  if (/내일/.test(text)) return [addDays(today, 1), addDays(today, 1)];
+  if (/오늘/.test(text)) return [today, today];
+  return [today, addDays(today, 30)];
+}
+
+/** 만나는 일정을 묻는 표현(「만나지 못한」「안 만난」 같은 미연락 표현은 아니다) */
+const MEET_PLAN_RE = /(만나는|만날|만나기로|만나게|미팅\s*(?:이\s*)?(?:예정|있|잡혀|일정|약속)|예정(?:된|인)?\s*미팅|약속)/;
+const NOT_MEET_PLAN_RE = /(만나지|못\s*만|안\s*만|만난\s*적|만나본)/;
+/** 날짜·질문 군더더기 — 「이번 주에 만나는 사람 누구야」에서 이 낱말들을 조건으로 AND하면 늘 0건이 된다 */
+const NOISE = new Set(['이번', '다음', '지난', '올해', '내년', '이달', '다음달', '이번달', '이번주', '다음주', '주에', '달에', '해에', '날에', '주', '달', '오늘', '내일', '언제', '며칠', '몇', '만나', '만나는', '만날', '만난', '만나서', '만나고', '미팅', '예정', '예정인', '약속', '일정', '내가', '우리', '나', '저', '제가', '어떻게', '어느', '누구', '누구야', '누구지', '누군지', '어디', '무엇', '뭐야', '뭔지', '알고', '싶어', '싶어요', '궁금해', '궁금해요', '확인', '확인해줘']);
+/** 낱말 끝의 질문 어미(야·지·까·요 …)를 뗀 뿌리가 군더더기인가 */
+function isNoise(w: string): boolean {
+  if (NOISE.has(w) || STOP.has(w)) return true;
+  const stem = w.replace(/(인가요|인가|이에요|예요|이야|나요|까요|일까|일까요|이죠|이지|야|지|까|죠|요)$/, '');
+  return stem !== w && stem.length > 0 && (NOISE.has(stem) || STOP.has(stem));
+}
+/** 선호 연락 방식으로 볼 낱말 */
+const CONTACT_WORDS = ['메신저', '이메일', '메일', '전화', '문자', '카톡', '카카오톡', '공문', '대면', '휴대전화', '유선'];
+/** 이름 뒤에 올 수 있는 정보 낱말(「오정석 생일」「김도현 연락처」) */
+const INFO_WORDS = '생일|생신|연락처|전화번호|전화|휴대폰|핸드폰|휴대전화|이메일|메일|주소|직책|부서|소속|회사|담당|업무';
+const INFO_RE = new RegExp(`(?:^|\\s)([가-힣]{2,4}?)(?:이|가|의|은|는|씨|님|한테|에게)?\\s*(?:${INFO_WORDS})`);
+/** 이름처럼 보이지만 이름이 아닌 낱말 */
+const NOT_A_NAME = /^(이번|다음|지난|올해|내년|이달|오늘|내일|고객|담당|사람|그분|이분|우리|내|가장|최근|언제|어느|누구|회사|기관|협력|참가|정부|이용|가맹)/;
+
+export function ruleParse(q: string, now: Date, names: readonly string[] = []): Cond {
   const today = ymd(now);
   const c = emptyCond();
   const text = q.replace(/？/g, '?').replace(/\s+/g, ' ').trim();
   const used: string[] = []; // 해석에 쓴 구절(일반 낱말 검색에서 제외)
+
+  // 고객 이름: 등록된 이름이 질문에 그대로 있으면 이름 조건. 이름 목록이 없을 때만 「이름 + 생일·연락처 …」 꼴로 짐작한다
+  const known = [...new Set(names.map((n) => n.trim()).filter((n) => n.length >= 2))].sort((x, y) => y.length - x.length);
+  for (const n of known) {
+    if (text.includes(n) && !c.nameKeywords.some((k) => k.includes(n) || n.includes(k))) {
+      c.nameKeywords.push(n);
+      used.push(n);
+    }
+  }
+  if (!known.length) {
+    const im0 = INFO_RE.exec(text);
+    if (im0 && !NOT_A_NAME.test(im0[1]) && !ORG_WORDS.some((w) => im0[1].includes(w)) && !TYPE_WORDS.some(([w]) => im0[1].includes(w))) {
+      c.nameKeywords.push(im0[1]);
+      used.push(im0[1]);
+    }
+  }
+  if (c.nameKeywords.length) {
+    if (/(연락처|전화번호|휴대폰|핸드폰|휴대전화|이메일 주소|메일 주소|번호)/.test(text)) c.show.push('contact');
+    if (/(생일|생신)/.test(text) && !/(이번|다음)\s*(달|주)|\d{1,2}\s*월|다가오는|곧/.test(text)) c.show.push('birthday');
+    used.push('연락처', '전화번호');
+  }
 
   // 요청사항
   if (text.includes('요청')) {
@@ -114,7 +180,10 @@ export function ruleParse(q: string, now: Date): Cond {
         used.push(m[0]);
       }
     }
+    const personWanted = /(고객|분|사람|담당자|담당|누구|회사|기관)/.test(text);
     if (/요청\s*사항|요청\s*건|요청\s*목록|요청들/.test(text) && !/요청(했던|한|하신)\s*(고객|분|사람|담당)/.test(text)) c.target = 'requests';
+    // 「기한 지난 요청」처럼 사람을 묻지 않는 요청 질문은 「기한이 지난 요청사항」과 같은 요청 목록으로 본다
+    else if ((c.overdue || c.dueWithinDays) && !personWanted) c.target = 'requests';
     else if (!c.requestStatus && !c.requestKeywords.length) c.requestStatus = 'any';
     used.push('요청');
   }
@@ -132,8 +201,8 @@ export function ruleParse(q: string, now: Date): Cond {
     used.push('만나지', '연락', '오래');
   }
 
-  // 생일
-  if (text.includes('생일')) {
+  // 생일 (이름이 있고 기간 말이 없으면 「그 사람의 생일」을 근거로 보여 주는 것이므로 기간 조건을 만들지 않는다)
+  if (text.includes('생일') && !(c.nameKeywords.length && c.show.includes('birthday'))) {
     const y = Number(today.slice(0, 4));
     const mth = Number(today.slice(5, 7));
     let a: string;
@@ -167,6 +236,9 @@ export function ruleParse(q: string, now: Date): Cond {
     if (new RegExp(`${w}(?![가-힣]*요청)`).test(text) && !c.orgKeywords.some((u) => u.includes(w))) {
       if (w === '은행' && c.orgKeywords.includes('저축은행')) continue;
       if (w.length === 1 && !new RegExp(`[가-힣]+${w}(\\s|$|의|에|은|는)`).test(text)) continue;
+      // 「요청」「신청」「초청」의 끝 글자 「청」을 기관(○○청)으로 읽지 않는다
+      if (w === '청' && !(text.match(/[가-힣]+청(?=\s|$|의|에|은|는)/g) ?? []).some((t) => t.length >= 3 && !/(요청|신청|초청|호청)$/.test(t))) continue;
+      if (c.nameKeywords.some((n) => n.includes(w))) continue; // 이름 속 글자는 기관 이름이 아니다
       c.orgKeywords.push(w);
       used.push(w);
     }
@@ -208,6 +280,22 @@ export function ruleParse(q: string, now: Date): Cond {
     }
   }
 
+  // 선호 연락 방식: 「메신저 선호하는 사람」「이메일 연락 선호」「선호 연락 방식이 전화인 사람」
+  if (/선호/.test(text) && !/(음식|메뉴)/.test(text)) {
+    const cm = /([가-힣A-Za-z]+?)(?:을|를|으로|로)?\s*(?:연락(?:\s*방식)?\s*)?(?:을|를)?\s*선호/.exec(text) ?? /선호\s*(?:하는)?\s*연락\s*방식(?:이|은|으로)?\s*([가-힣A-Za-z]+)/.exec(text);
+    const w = cm ? cleanPhrase(cm[1]) : '';
+    if (w && CONTACT_WORDS.some((k) => w.includes(k))) {
+      c.keywords.push({ text: w === '이메일' ? '메일' : w, scope: 'contact_pref' });
+      used.push(cm![0]);
+    }
+  }
+
+  // 만날 사람(예정된 미팅): 「이번 주에 만나는 사람」「다음 주에 만날 사람」「이번 주 미팅 예정 고객」
+  if (MEET_PLAN_RE.test(text) && !NOT_MEET_PLAN_RE.test(text) && !c.noContactDays) {
+    [c.meetingFrom, c.meetingTo] = meetingPeriodOf(text, today);
+    used.push('만나는', '만날', '만나게', '미팅', '예정');
+  }
+
   // 챙겨야 할 사람(기한 임박 요청·경조사·예정 연락)
   if (AGENDA_RE.test(text)) {
     [c.agendaFrom, c.agendaTo] = periodOf(text, today);
@@ -215,13 +303,14 @@ export function ruleParse(q: string, now: Date): Cond {
   }
 
   // 해석된 조건이 없으면: 낱말 검색(모든 고객정보 + 대화기록)
-  const has = c.keywords.length || c.orgKeywords.length || c.customerTypes.length || c.noContactDays || c.birthdayFrom || c.requestStatus || c.requestKeywords.length || c.agendaFrom;
+  const has = c.keywords.length || c.orgKeywords.length || c.customerTypes.length || c.noContactDays || c.birthdayFrom || c.requestStatus || c.requestKeywords.length || c.agendaFrom || c.meetingFrom || c.nameKeywords.length;
   if (!has) {
     let rest = text;
     for (const u of used) rest = rest.split(u).join(' ');
     for (const w0 of rest.split(/\s+/).filter(Boolean)) {
       const w = stripParticle(w0);
-      if (w.length >= 2 && !STOP.has(w) && !/^(찾|알려|보여|있|하|했|되)/.test(w)) {
+      // 군더더기 낱말(이번·주에·언제야 …)을 조건으로 AND하면 늘 0건이 되므로 건너뛴다
+      if (w.length >= 2 && !isNoise(w) && !/^(찾|알려|보여|있|하|했|되)/.test(w)) {
         c.keywords.push({ text: w, scope: 'any' });
         c.conversationKeywords.push(w);
       }
@@ -240,6 +329,8 @@ export const SEARCH_SYSTEM = `당신은 영업사원용 고객관리 프로그�
 - 날짜 표현은 기준일을 이용해 YYYY-MM-DD로 바꿉니다.
 - '요청사항을 보여줘'처럼 요청 목록을 원하면 target='requests', '요청했던 고객'처럼 사람을 원하면 target='customers'
 - '이번 달에 챙겨야 할 사람'처럼 기한 임박 요청·경조사·예정 연락을 묻는 질문은 agendaFrom/agendaTo에 그 기간(YYYY-MM-DD)을 넣습니다.
+- '이번 주에 만나는 사람'처럼 예정된 미팅을 묻는 질문은 meetingFrom/meetingTo에 그 기간(YYYY-MM-DD)을 넣습니다.
+- 질문에 고객 이름이 있으면 nameKeywords에 이름만 넣습니다. 이름이 없으면 비웁니다.
 - 값이 없는 칸은 빈 글('')·빈 목록·null·false로 둡니다.`;
 
 const intOrNull = { anyOf: [{ type: 'integer' }, { type: 'null' }] };
@@ -259,12 +350,18 @@ export const SEARCH_SCHEMA = S.obj({
   overdue: S.bool,
   agendaFrom: S.str,
   agendaTo: S.str,
+  meetingFrom: S.str,
+  meetingTo: S.str,
+  nameKeywords: S.arr(S.str),
 });
 
-/** Claude에 보내는 사용자 글 — 기준일과 질문 문장뿐이다(고객 정보는 한 글자도 넣지 않는다) */
+/**
+ * Claude에 보내는 사용자 글 — 기준일과 질문 문장뿐이다(고객 정보는 한 글자도 넣지 않는다).
+ * 질문에 사용자가 전화번호·이메일·주민등록번호·계좌번호를 적었어도 대화 분석과 같은 규칙(maskText)으로 가려서 보낸다.
+ */
 export function aiQuestionPrompt(q: string, now: Date): string {
   const t = ymd(now);
-  return `기준일(오늘): ${t} (${WEEKDAY_KO[weekday(t)]}요일)\n질문: ${q}`;
+  return `기준일(오늘): ${t} (${WEEKDAY_KO[weekday(t)]}요일)\n질문: ${maskText(q)[0]}`;
 }
 
 export async function aiParse(client: LlmClient, q: string, now: Date, signal?: AbortSignal): Promise<Cond> {
@@ -293,7 +390,7 @@ export function normalizeCond(c: Partial<Cond>, now: Date): Cond {
     out.noContactDays = n && n >= 1 && n <= 3650 ? n : null;
   }
   out.contactKind = c.contactKind === 'meeting' ? 'meeting' : 'contact';
-  for (const k of ['birthdayFrom', 'birthdayTo', 'agendaFrom', 'agendaTo'] as const) {
+  for (const k of ['birthdayFrom', 'birthdayTo', 'agendaFrom', 'agendaTo', 'meetingFrom', 'meetingTo'] as const) {
     const v = clip(c[k], 10);
     out[k] = isValidDate(v) ? v : '';
   }
@@ -306,6 +403,13 @@ export function normalizeCond(c: Partial<Cond>, now: Date): Cond {
     out.agendaFrom = out.agendaFrom || today;
   }
   if (out.agendaFrom > out.agendaTo) [out.agendaFrom, out.agendaTo] = [out.agendaTo, out.agendaFrom];
+  if (!!out.meetingFrom !== !!out.meetingTo) {
+    out.meetingTo = out.meetingTo || addDays(out.meetingFrom, 30);
+    out.meetingFrom = out.meetingFrom || today;
+  }
+  if (out.meetingFrom > out.meetingTo) [out.meetingFrom, out.meetingTo] = [out.meetingTo, out.meetingFrom];
+  out.nameKeywords = (Array.isArray(c.nameKeywords) ? c.nameKeywords : []).map((x) => clip(x, 20)).filter(Boolean).slice(0, 3);
+  out.show = (Array.isArray(c.show) ? c.show : []).filter((x, i, arr): x is 'birthday' | 'contact' => (x === 'birthday' || x === 'contact') && arr.indexOf(x) === i);
   out.requestStatus = c.requestStatus === 'open' || c.requestStatus === 'any' ? c.requestStatus : '';
   if (c.dueWithinDays !== null && c.dueWithinDays !== undefined && (c.dueWithinDays as unknown) !== '') {
     const n = Math.trunc(Number(c.dueWithinDays));
@@ -321,12 +425,14 @@ const md = (iso: string) => iso.slice(5).replace('-', '/');
 export function describeCond(c: Cond): string[] {
   const out: string[] = [];
   if (c.target === 'requests') out.push('요청사항 목록');
+  if (c.nameKeywords.length) out.push('이름이 ' + c.nameKeywords.map((x) => `'${x}'`).join(' 또는 ') + '인 고객');
   for (const k of c.keywords) out.push(`${SCOPE_LABEL[k.scope]}에 '${k.text}'`);
   if (c.conversationKeywords.length) out.push('대화기록 포함: ' + c.conversationKeywords.map((x) => `'${x}'`).join(', '));
   if (c.orgKeywords.length) out.push('소속에 ' + c.orgKeywords.map((x) => `'${x}'`).join(' 또는 '));
   if (c.customerTypes.length) out.push('고객 유형: ' + c.customerTypes.join(', '));
   if (c.noContactDays) out.push(`${c.noContactDays}일 이상 ${c.contactKind === 'meeting' ? '미팅' : '연락'} 없음`);
   if (c.birthdayFrom) out.push(`생일 ${md(c.birthdayFrom)}~${md(c.birthdayTo)}`);
+  if (c.meetingFrom) out.push(`${md(c.meetingFrom)}~${md(c.meetingTo)} 예정 미팅`);
   if (c.agendaFrom) out.push(`${md(c.agendaFrom)}~${md(c.agendaTo)} 챙길 일: 기한 임박 요청·경조사·예정 연락`);
   if (c.requestStatus === 'open') out.push('미처리 요청' + (c.overdue ? ' (기한 경과)' : c.dueWithinDays ? ` (기한 ${c.dueWithinDays}일 이내)` : ''));
   else if (c.requestStatus === 'any' && c.target === 'customers') out.push('요청 이력 있음');
@@ -420,6 +526,19 @@ export function executeSearch(a: AssistantData, c: Cond, now: Date): SearchResul
 
   for (const cu of customers) {
     const ev: Evidence[] = [];
+    if (c.nameKeywords.length) {
+      if (!c.nameKeywords.some((n) => match(cu.name, n))) continue;
+      ev.push({ label: '이름', text: cu.name });
+      if (c.show.includes('birthday')) {
+        const nb = cu.birthDate ? nextOccurrence(cu.birthDate, today) : null;
+        ev.push({ label: '생일', text: nb ? `${Number(nb.slice(5, 7))}월 ${Number(nb.slice(8, 10))}일${nb === today ? ' (오늘)' : ` (${dday(diffDays(today, nb))})`}` : '생일 정보 없음', link: { to: 'customer-events', customerId: cu.id } });
+      }
+      if (c.show.includes('contact')) {
+        ev.push({ label: '휴대전화', text: cu.mobile || '미입력' });
+        ev.push({ label: '이메일', text: cu.email || '미입력' });
+        if (cu.officePhone) ev.push({ label: '사무실 전화', text: cu.officePhone });
+      }
+    }
     if (c.customerTypes.length && !c.customerTypes.includes(cu.customerType || '기타')) continue;
     if (c.customerTypes.length) ev.push({ label: '고객 유형', text: cu.customerType });
     if (c.orgKeywords.length) {
@@ -475,6 +594,14 @@ export function executeSearch(a: AssistantData, c: Cond, now: Date): SearchResul
       if (!nb || !(c.birthdayFrom <= nb && nb <= c.birthdayTo)) continue;
       ev.push({ label: '생일', text: nb !== today ? `${Number(nb.slice(5, 7))}월 ${Number(nb.slice(8, 10))}일 (D-${diffDays(today, nb)})` : '오늘' });
       sortKey = nb;
+    }
+    if (c.meetingFrom) {
+      // 예정된 미팅(오늘 이후)이 기간 안에 있는 고객
+      const ms = (inters.get(cu.id) ?? []).filter((m) => m.type === '미팅' && m.date >= today && m.date >= c.meetingFrom && m.date <= c.meetingTo);
+      if (!ms.length) continue;
+      const sorted = sortStable(ms, (x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : x.time < y.time ? -1 : x.time > y.time ? 1 : 0));
+      for (const m of sorted.slice(0, 2)) ev.push({ label: '예정 미팅', text: `${m.date} ${m.time || ''} ${m.title}`.replace(/ {2}/g, ' '), link: { to: 'customer-history', customerId: cu.id } });
+      sortKey = sorted[0].date;
     }
     if (c.agendaFrom) {
       const found: { when: string; e: Evidence }[] = [];
@@ -533,7 +660,11 @@ export interface SearchOutcome extends SearchResult {
   aiError: string;
   conditions: Cond;
   explain: string[];
+  /** 결과가 비는 까닭을 알리는 글(예: 고객이 한 명도 없을 때). 없으면 '' */
+  note: string;
 }
+
+export const NO_CUSTOMERS_NOTE = '등록된 고객이 없습니다';
 
 /** 질문 하나를 검색한다. client가 있으면 AI 해석을 먼저 시도하고, 실패하면 규칙 해석으로 대체한다 */
 export async function searchQuestion(a: AssistantData, q0: string, now: Date, opts: { client?: LlmClient | null; errorText?: (e: unknown) => string; signal?: AbortSignal } = {}): Promise<SearchOutcome | { error: string }> {
@@ -551,6 +682,7 @@ export async function searchQuestion(a: AssistantData, q0: string, now: Date, op
       aiError = opts.errorText ? opts.errorText(e) : 'AI 해석에 실패했습니다.';
     }
   }
-  if (!cond) cond = ruleParse(q, now);
-  return { q, mode, aiError, conditions: cond, explain: describeCond(cond), ...executeSearch(a, cond, now) };
+  if (!cond) cond = ruleParse(q, now, a.customers.map((x) => x.name));
+  const res = executeSearch(a, cond, now);
+  return { q, mode, aiError, conditions: cond, explain: describeCond(cond), note: a.customers.length === 0 ? NO_CUSTOMERS_NOTE : '', ...res };
 }

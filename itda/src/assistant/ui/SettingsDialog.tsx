@@ -7,7 +7,7 @@ import { isErr } from '../model';
 import { validateConf } from '../notices';
 import type { AssistantConf } from '../types';
 import { useAssistant } from './hooks';
-import { deletableIds, deleteCustomers, restoreDemo } from './logic';
+import { deletableIds, deleteCustomers, restoreDemoMessage, restoreDemoReport } from './logic';
 import { AsstDialog } from './shared';
 
 type Form = { notifyTime: string; reqRemind: string; bdayRemind: string; meetDaybefore: boolean; meetHourbefore: boolean; fuEnable: boolean; fuDuration: string; fuNotime: string };
@@ -39,7 +39,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     setError('');
     const r = exec(null, (_s, d) => {
       const v = validateConf(d.conf, f);
-      if (isErr(v)) return v;
+      if ('error' in v) return v;
       d.conf = v.conf;
       return { ok: true };
     });
@@ -54,9 +54,10 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     toast(scope === 'demo' ? `가상 고객 ${r.n}명을 지웠습니다 — 다시 채우지 않습니다` : `고객 ${r.n}명과 하위 기록을 모두 지웠습니다`);
   };
   const doRestore = () => {
-    const r = exec(null, (s, d) => ({ n: restoreDemo(d, now, s.currentUserId) }));
+    const r = exec(null, (s, d) => restoreDemoReport(d, now, s.currentUserId));
     if (isErr(r)) return setError(r.error);
-    toast(r.n ? `가상 고객 ${r.n}명을 채웠습니다(담당: 지금 사용자)` : '이미 모두 있어 더할 가상 고객이 없습니다');
+    // 이름+소속이 같은 고객이 이미 있어 건너뛴 가상 고객은 이름과 함께 알린다
+    toast(restoreDemoMessage(r));
   };
 
   return (
@@ -71,10 +72,10 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
             <Field label="날짜 기준 알림 시각" htmlFor="asst-s-time">
               <input id="asst-s-time" type="time" className={inputCls} value={f.notifyTime} onChange={(e) => up('notifyTime', e.target.value)} data-testid="asst-s-time" />
             </Field>
-            <Field label="요청 기한 알림 (며칠 전)" htmlFor="asst-s-req" hint="쉼표로 구분, 예: 7,2,0">
+            <Field label="요청 기한 알림 (며칠 전)" htmlFor="asst-s-req" hint="며칠 전에 알릴지(쉼표로 구분). 예: 7,2,0 = 7일 전·2일 전·당일">
               <input id="asst-s-req" className={inputCls} value={f.reqRemind} onChange={(e) => up('reqRemind', e.target.value)} data-testid="asst-s-req" />
             </Field>
-            <Field label="생일 알림 (며칠 전)" htmlFor="asst-s-bday" hint="쉼표로 구분, 예: 7,2,0">
+            <Field label="생일 알림 (며칠 전)" htmlFor="asst-s-bday" hint="며칠 전에 알릴지(쉼표로 구분). 예: 7,2,0 = 7일 전·2일 전·당일">
               <input id="asst-s-bday" className={inputCls} value={f.bdayRemind} onChange={(e) => up('bdayRemind', e.target.value)} />
             </Field>
             <div className="space-y-1.5 self-end pb-1">

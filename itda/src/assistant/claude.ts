@@ -4,10 +4,11 @@
 //   ⑤ 후속조치는 요청사항 한 곳에만 저장(원본은 활동 상세에도 중복 저장).
 // 보내는 것: 기준일 + 「이름 직책 (소속)」 한 줄 + 가린 대화 원문뿐이다. 고객 프로필(전화·이메일·성격 등)은 보내지 않는다.
 // 화면 메모리에만 두는 것: 대화 원문·분석 초안(Draft). 사용자가 「원문 보관」을 고른 경우에만 활동 상세에 들어간다.
-import { locate, spanOf } from '../ai/reflect';
+import { normForMatch, spanOf } from '../ai/reflect';
 import { S, type LlmClient } from '../ai/llm';
 import { DATE_RE, isValidDate, ymd } from './dates';
-import { addInteraction, addRequest, dateError, isErr, updateCustomer, type Err } from './model';
+import { appendToList, listHas } from './lists';
+import { MAX_TEXT_CHARS, addInteraction, addRequest, dateError, fieldValueError, isErr, updateCustomer, type Err } from './model';
 import { INTERACTION_TYPES, type AssistantData, type Customer, type CustomerFieldKey } from './types';
 
 // ───────────── 개인정보 가림 ─────────────
@@ -15,11 +16,27 @@ import { INTERACTION_TYPES, type AssistantData, type Customer, type CustomerFiel
 // 한국어는 조사(로, 은 등)가 숫자에 바로 붙으므로 \b 대신 「앞뒤가 숫자가 아님」 조건을 쓴다
 const NB = '(?<!\\d)';
 const NA = '(?!\\d)';
+// 구분자: 하이픈·점(앞뒤 공백 허용) 또는 공백 한두 칸. 「010 - 1234 - 5678」「010 1234 5678」 모두 잡는다
+const SEP = '(?:\\s*[-.]\\s*|\\s{1,2})';
 const MASK_RULES: [RegExp, string][] = [
+  // 주민등록번호: 하이픈형, 공백형(앞 6자리가 실제 생년월일 꼴일 때만 — 일반 숫자를 가리지 않게)
   [new RegExp(`${NB}\\d{6}\\s?-\\s?[1-4]\\d{6}${NA}`, 'g'), '[주민등록번호]'],
+  [new RegExp(`${NB}\\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\\d|3[01])\\s[1-4]\\d{6}${NA}`, 'g'), '[주민등록번호]'],
   [/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+/g, '[이메일]'],
-  [new RegExp(`${NB}01[016789][-.\\s]?\\d{3,4}[-.\\s]?\\d{4}${NA}`, 'g'), '[휴대전화]'],
-  [new RegExp(`${NB}0\\d{1,2}[-.\\s)]\\d{3,4}[-.\\s]\\d{4}${NA}`, 'g'), '[전화번호]'],
+  // 국제번호 +82 / 0082
+  [new RegExp(`${NB}(?:\\+|00)82[\\s-]*\\(?0?\\)?[\\s-]*1[016789]${SEP}?\\d{3,4}${SEP}?\\d{4}${NA}`, 'g'), '[휴대전화]'],
+  [new RegExp(`${NB}(?:\\+|00)82[\\s-]*\\(?0?\\)?[\\s-]*\\d{1,2}${SEP}\\d{3,4}${SEP}\\d{4}${NA}`, 'g'), '[전화번호]'],
+  [new RegExp(`${NB}01[016789]${SEP}?\\d{3,4}${SEP}?\\d{4}${NA}`, 'g'), '[휴대전화]'],
+  // (02) 123-4567 · 02) 123-4567 · 031-123-4567 · 02 123 4567
+  [new RegExp(`${NB}\\(0\\d{1,2}\\)\\s*\\d{3,4}${SEP}\\d{4}${NA}`, 'g'), '[전화번호]'],
+  [new RegExp(`${NB}0\\d{1,2}(?:\\s*[-.)]\\s*|\\s)\\d{3,4}${SEP}\\d{4}${NA}`, 'g'), '[전화번호]'],
+  // 대표번호 1588-1234 · 1566 - 1234 (하이픈이 있을 때만 — 금액·건수와 헷갈리지 않게)
+  [new RegExp(`${NB}1[5-8]\\d{2}\\s*-\\s*\\d{4}${NA}`, 'g'), '[전화번호]'],
+  // 카드번호 1234 5678 9012 3456 · 1234-5678-9012-3456 (4-4-4-4), 4-6-5
+  [new RegExp(`${NB}\\d{4}([\\s-])\\d{4}\\1\\d{4}\\1\\d{4}${NA}`, 'g'), '[번호]'],
+  [new RegExp(`${NB}\\d{4}([\\s-])\\d{6}\\1\\d{5}${NA}`, 'g'), '[번호]'],
+  // 공백으로 끊은 계좌번호 110 123 456789 (3~4자리 + 2~4자리 + 5~8자리)
+  [new RegExp(`${NB}\\d{3,4}\\s\\d{2,4}\\s\\d{5,8}${NA}`, 'g'), '[번호]'],
 ];
 // 계좌·카드번호 형태: 숫자(하이픈 포함) 10자리 이상. 날짜(2026-11-05)는 제외
 const ACCOUNT_RE = new RegExp(`${NB}\\d[\\d-]{8,24}\\d${NA}`, 'g');
@@ -44,7 +61,7 @@ export function maskText(text: string): [string, number] {
   return [out, count];
 }
 
-export const MAX_TEXT_CHARS = 60000;
+export { MAX_TEXT_CHARS };
 
 /** 분석할 글 정리: 줄바꿈 통일·앞뒤 공백 제거·길이 검사·가림. mask=false면 가리지 않는다(화면에서 사용자가 끈 경우) */
 export function prepareText(raw: string, mask = true): { original: string; sent: string; maskedCount: number } | Err {
@@ -153,6 +170,8 @@ export interface DraftItem {
   quoteVerified: boolean;
   /** 원문에서 일치한 구간(화면에 보일 인용 — 모델이 쓴 글이 아니라 원문 그대로) */
   quoteSpan?: string;
+  /** 근거가 QUOTE_WARN_MIN자 미만으로 짧다 → 「근거가 짧음」 경고·기본 해제 */
+  quoteShort?: boolean;
 }
 export interface AnalysisResult {
   title: string;
@@ -168,23 +187,85 @@ const pick = <T extends string>(v: unknown, allowed: readonly T[], dflt: T): T =
 
 /** 근거 문장 대조에 쓰는 최소 글자 수(공백 제외 — reflect.locate와 같은 기준) */
 export const QUOTE_MIN = 6;
+/** 이보다 짧은 근거는 원문에 있어도 「근거가 짧음」 경고를 붙이고 기본 해제한다(짧은 말은 우연히 일치하기 쉽다) */
+export const QUOTE_WARN_MIN = 8;
+
+const LABEL_RE = /^([^\s:：]{1,12})\s*[:：]\s*([\s\S]*)$/;
+const ELLIPSIS_RE = /\s*(?:\.{3,}|…|⋯)\s*/;
+
+interface SrcLine {
+  label: string;
+  /** 정규화한 줄 전체의 원문 전체(정규화) 안 시작 위치 */
+  at: number;
+  /** 정규화한 말머리 뒤 내용 */
+  flatBody: string;
+  /** 말머리 뒤 내용이 원문 전체(정규화) 안에서 시작하는 위치 */
+  bodyAt: number;
+}
+/** 원문을 줄로 나눠 말머리(「이름:」)와 정규화 위치를 만든다. 정규화 원문(flat)도 함께 */
+function indexSource(text: string): { flat: string; lines: SrcLine[] } {
+  let flat = '';
+  const lines: SrcLine[] = [];
+  for (const raw of text.split('\n')) {
+    const at = flat.length;
+    const t = raw.trim();
+    const m = LABEL_RE.exec(t);
+    if (m) {
+      const prefix = t.slice(0, t.length - m[2].length);
+      lines.push({ label: normForMatch(m[1]), at, flatBody: normForMatch(m[2]), bodyAt: at + normForMatch(prefix).length });
+    }
+    flat += normForMatch(raw);
+  }
+  return { flat, lines };
+}
 
 /**
  * 근거 문장이 원문에 실제로 있는가. reflect.ts의 정규화(공백·따옴표·가운뎃점·물결표 차이 무시)로 대조한다.
- * 「A ... B」처럼 말줄임으로 이은 근거는 조각마다 찾는다(모든 조각이 있어야 통과). 「이름: 」 말머리는 떼고 한 번 더 찾는다.
+ *  · 「A ... B」처럼 말줄임으로 이은 근거는 조각마다 찾고, 조각이 원문에서 나온 순서대로여야 한다.
+ *  · 「이름: 」 말머리가 붙은 근거는 먼저 그대로 찾고, 못 찾으면 말머리를 떼어 찾되 원문에 같은 말머리 줄(예: 「김도현: …」)이 있고
+ *    그 줄 안에 내용이 있을 때만 통과한다 → 영업사원(「나:」)의 말을 고객 말로 인용하면 실패한다.
+ *  · 통과해도 근거 글자(공백 제외)가 QUOTE_WARN_MIN 미만이면 short=true.
  */
-export function verifyQuote(evidence: string, sourceText: string): { ok: boolean; span?: string } {
-  const segs = s(evidence).split(/\s*(?:\.{3,}|…|⋯)\s*/).map((x) => x.trim()).filter(Boolean);
+export function verifyQuote(evidence: string, sourceText: string): { ok: boolean; span?: string; short?: boolean } {
+  const segs = s(evidence).split(ELLIPSIS_RE).map((x) => x.trim()).filter(Boolean);
   if (!segs.length || !s(sourceText)) return { ok: false };
-  const para = [{ id: 't', text: sourceText }];
+  const { flat, lines } = indexSource(sourceText);
+  let cursor = 0;
   let first: string | undefined;
+  let total = 0;
   for (const seg0 of segs) {
-    const cand = [seg0, seg0.replace(/^[^\s:：]{1,12}\s*[:：]\s*/, '')];
-    const hit = cand.find((c, i) => (i === 0 || c !== seg0) && !!locate(para, c));
+    // 1) 말머리까지 그대로
+    const q0 = normForMatch(seg0);
+    let hit: { text: string; pos: number; len: number } | null = null;
+    if (q0.length >= QUOTE_MIN) {
+      const i = flat.indexOf(q0, cursor);
+      if (i >= 0) hit = { text: seg0, pos: i, len: q0.length };
+    }
+    // 2) 말머리를 떼고, 같은 말머리 줄 안에서만
+    if (!hit) {
+      const m = LABEL_RE.exec(seg0);
+      if (m) {
+        const body = m[2].trim();
+        const qb = normForMatch(body);
+        const lab = normForMatch(m[1]);
+        if (qb.length >= QUOTE_MIN) {
+          for (const ln of lines) {
+            if (ln.label !== lab) continue;
+            const j = ln.flatBody.indexOf(qb, Math.max(0, cursor - ln.bodyAt));
+            if (j >= 0) {
+              hit = { text: body, pos: ln.bodyAt + j, len: qb.length };
+              break;
+            }
+          }
+        }
+      }
+    }
     if (!hit) return { ok: false };
-    if (first === undefined) first = spanOf(sourceText, hit) ?? undefined;
+    cursor = hit.pos + hit.len;
+    total += hit.len;
+    if (first === undefined) first = spanOf(sourceText, hit.text) ?? undefined;
   }
-  return { ok: true, span: first };
+  return { ok: true, span: first, short: total < QUOTE_WARN_MIN };
 }
 
 /** 항목마다 근거 문장을 원문과 대조해 quoteVerified·quoteSpan을 채운다 */
@@ -193,7 +274,9 @@ export function verifyItems(items: DraftItem[], sourceText: string): DraftItem[]
     const v = verifyQuote(it.evidence, sourceText);
     const copy: DraftItem = { ...it, quoteVerified: v.ok };
     delete copy.quoteSpan;
+    delete copy.quoteShort;
     if (v.span) copy.quoteSpan = v.span;
+    if (v.ok && v.short) copy.quoteShort = true;
     return copy;
   });
 }
@@ -298,14 +381,15 @@ export function enrichDraft(a: AssistantData, draft: Draft): EnrichedDraft | Err
     if (it.isSpeculation) warn.push('추측');
     if (it.confidence === 'low') warn.push('신뢰도 낮음');
     if (!it.quoteVerified) warn.push('원문 확인 안 됨');
+    else if (it.quoteShort) warn.push('근거가 짧음');
     const e: EnrichedItem = { ...it, idx: i, warnings: warn, include: !warn.length };
     if (it.kind === 'profile' && it.field) {
       const existing = c[it.field] || '';
       e.existing = existing;
       e.isList = LIST_FIELDS.includes(it.field);
       if (it.isSpeculation) e.targetNote = "추측 정보는 확정 사실로 저장하지 않고 '영업 시 참고사항'에 '(추정)'으로만 기록";
-      const parts = existing.split(/[,/·]/).map((x) => x.trim()).filter(Boolean);
-      if (existing && (it.value === existing || parts.includes(it.value ?? ''))) {
+      // 「A, B」의 조각 단위로 이미 있는지 본다(미팅 후 질문과 같은 규칙: lists.ts)
+      if (existing && (it.value === existing || listHas(existing, it.value))) {
         e.status = 'same';
         e.include = false;
       } else if (existing) {
@@ -365,6 +449,11 @@ export function applyDraft(a: AssistantData, draft: Draft, choices: ApplyChoice[
         const e = dateError(val, item.fieldLabel ?? '날짜');
         if (e) return { error: e };
       }
+      // 등록·수정과 같은 내용 검사(생년월일이 미래인 경우 등) — 저장 도중에 걸려 일부만 저장되지 않게 먼저 본다
+      if (val && !item.isSpeculation && item.field) {
+        const e = fieldValueError(item.field, val, now);
+        if (e) return { error: e, field: item.field };
+      }
     } else {
       const e = dateError(ch.dueDate !== undefined ? ch.dueDate : item.dueDate ?? '', '처리기한');
       if (e) return { error: e };
@@ -373,7 +462,8 @@ export function applyDraft(a: AssistantData, draft: Draft, choices: ApplyChoice[
 
   // 2) 활동 기록
   const details = input.keepText && draft.original ? `[대화 원문]\n${draft.original}` : '';
-  const ir = addInteraction(a, c.id, { type, date, title, summary, details }, { now, source, sourceFile: draft.filename });
+  // 시험용 예시 분석은 실제 연락이 아니므로 고객의 최근 연락일·미팅일을 올리지 않는다
+  const ir = addInteraction(a, c.id, { type, date, title, summary, details }, { now, source, sourceFile: draft.filename, skipDates: draft.kind === 'sample' });
   if (isErr(ir)) return ir;
   const iid = ir.id;
 
@@ -392,9 +482,14 @@ export function applyDraft(a: AssistantData, draft: Draft, choices: ApplyChoice[
         continue;
       }
       const cur = a.customers.find((x) => x.id === c.id)![item.field] || '';
-      if (ch.mode === 'append' && cur && !cur.includes(val)) val = `${cur}, ${val}`;
-      updateCustomer(a, c.id, { [item.field]: val }, { now, source, note });
-      applied.profile += 1;
+      if (ch.mode === 'append' && cur) {
+        // 기존 값에 덮어쓰지 않고 이어 붙인다. 조각 단위로 이미 있으면 저장하지 않는다
+        const merged = appendToList(cur, val);
+        if (merged === null) continue;
+        val = merged;
+      }
+      const u = updateCustomer(a, c.id, { [item.field]: val }, { now, source, note });
+      if (!isErr(u) && u.changed.length) applied.profile += 1;
     } else if (item.kind === 'request' || item.kind === 'followup') {
       let content = s(ch.content) || s(item.content);
       if (!content) continue;

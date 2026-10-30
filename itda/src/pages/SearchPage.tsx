@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Search, Sparkles, FileText, GitCommitVertical, FolderKanban, MessageCircleQuestion, Loader2, CornerDownRight, Quote, Bot, Square, ShieldCheck } from 'lucide-react';
 import { useStore } from '../lib/store';
-import { useRouter } from '../lib/router';
+import { Link, useRouter } from '../lib/router';
 import { Card, ProvChip, CiteLink, SourceChip, ProvLegend, StatusBadge, Button } from '../components/ui';
 import { askAI, SAMPLE_QUESTIONS, type Answer } from '../ai/engine';
 import { fmtDate } from '../lib/util';
@@ -217,6 +217,14 @@ export default function SearchPage() {
             </div>
           </Card>
 
+          {!ans.evidence.length && !ans.events.length && !ans.works.length && (
+            <p className="flex flex-wrap items-center gap-x-2 rounded-lg border border-line bg-sunken/60 px-4 py-2.5 text-[13px] text-muted" data-testid="search-to-assistant">
+              <span>고객에 대한 질문이라면 업무 기록이 아니라 고객 메모에서 찾아야 합니다.</span>
+              <Link to={`/assistant/ask?q=${encodeURIComponent(ans.query)}`} className="font-semibold text-brand hover:underline">
+                고객 질문은 AI 비서 → 묻기
+              </Link>
+            </p>
+          )}
           <div className="grid gap-4 md:grid-cols-2">
             <Card>
               <Head icon={<FileText size={15} />} title="핵심 근거 문서" n={ans.evidence.length} />

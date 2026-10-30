@@ -8,7 +8,8 @@ import { markAllNoticesRead, markNoticeRead, computeNotices, NOTICE_KIND_LABEL }
 import { pending } from '../followup';
 import { buildToday } from '../today';
 import { BriefingDialog } from './BriefingDialog';
-import { useAssistant } from './hooks';
+import { useAssistant, useViewScope } from './hooks';
+import { SCOPE_NAMES, type ViewScope } from '../scope';
 import { customerPath, followupPath, noticePath } from './logic';
 import { DDay, Pill, RuleBadge, wrapCls } from './shared';
 
@@ -24,20 +25,52 @@ function Who({ id, name, sub }: { id: string; name: string; sub?: string }) {
   );
 }
 
+const SCOPE_HINT: Record<ViewScope, string> = {
+  mine: '내가 담당 영업자인 고객만 보입니다.',
+  org: '내 조직(아래 조직 포함) 담당자의 고객이 보입니다.',
+  all: '모든 담당자의 고객이 보입니다.',
+};
+
+/** 오늘·알림·메뉴 숫자가 볼 고객 범위를 고른다(기본 내 담당. 조직장은 내 조직 전체, 누구나 전체 보기) */
+function ScopeBar({ sc }: { sc: ReturnType<typeof useViewScope> }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-[13px]" data-testid="asst-scope" data-value={sc.scope}>
+      <span className="text-muted">보는 범위</span>
+      <div className="flex rounded-md border border-line2" role="group" aria-label="보는 범위">
+        {sc.choices.map((id, i) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => sc.setScope(id)}
+            aria-pressed={sc.scope === id}
+            data-testid={`asst-scope-${id}`}
+            className={cx('h-8 px-3 text-xs font-medium', i === 0 && 'rounded-l-md', i === sc.choices.length - 1 && 'rounded-r-md', sc.scope === id ? 'bg-navy text-surface' : 'text-muted hover:bg-sunken')}
+          >
+            {SCOPE_NAMES[id]}
+          </button>
+        ))}
+      </div>
+      <span className="text-xs text-muted">{SCOPE_HINT[sc.scope]}</span>
+    </div>
+  );
+}
+
 export default function TodayView() {
-  const { a, now, exec } = useAssistant();
+  const { a, now, exec, userId, raw } = useAssistant();
+  const sc = useViewScope();
   const { nav } = useRouter();
   const [brief, setBrief] = useState<{ customerId: string; interactionId?: string } | null>(null);
   const [moreNo, setMoreNo] = useState(false);
-  const t = useMemo(() => buildToday(a, now), [a, now]);
-  const notices = useMemo(() => computeNotices(a, now), [a, now]);
-  const waiting = useMemo(() => pending(a, now), [a, now]);
+  const t = useMemo(() => buildToday(sc.view, now), [sc.view, now]);
+  const notices = useMemo(() => computeNotices(a, now, { userId, ids: sc.ids }), [a, now, userId, sc.ids]);
+  const waiting = useMemo(() => pending(sc.view, now), [sc.view, now]);
   const unread = notices.filter((n) => !n.read).length;
   const todayMeetings = t.meetings.filter((m) => m.date === t.today);
   const todoCount = t.todayRequests.length + todayMeetings.length;
 
-  const readOne = (key: string) => exec(null, (_s, d) => (markNoticeRead(d, key, now), { ok: true }));
-  const readAll = () => exec(null, (_s, d) => (markAllNoticesRead(d, now), { ok: true }));
+  // 읽음 표시는 사용자별로 저장한다(같은 브라우저를 여러 사람이 써도 서로의 읽음에 영향이 없다)
+  const readOne = (key: string) => exec(null, (s, d) => (markNoticeRead(d, key, now, s.currentUserId), { ok: true }));
+  const readAll = () => exec(null, (s, d) => (markAllNoticesRead(d, now, { userId: s.currentUserId, ids: sc.ids }), { ok: true }));
 
   if (!a.customers.length)
     return (
@@ -55,11 +88,32 @@ export default function TodayView() {
       </Card>
     );
 
+  // 고른 범위에 고객이 없으면(예: 담당 고객이 없는 사람) 그 사실과 전체 보기 안내
+  if (!sc.view.customers.length)
+    return (
+      <div className="space-y-4" data-testid="asst-today">
+        <ScopeBar sc={sc} />
+        <Card data-testid="asst-today-noowned">
+          <Empty
+            icon={<Users size={28} />}
+            title={sc.scope === 'mine' ? `${raw.users.find((u) => u.id === userId)?.name ?? '지금 사용자'}님이 담당하는 고객이 없습니다` : '이 범위에는 고객이 없습니다'}
+            sub={`오늘 할 일·알림은 고른 범위의 고객만 보여 줍니다. 「전체 보기」로 바꾸면 등록된 고객 ${sc.total}명의 일정을 모두 볼 수 있습니다.`}
+            action={
+              <Button variant="primary" onClick={() => sc.setScope('all')} data-testid="asst-scope-goall">
+                전체 보기
+              </Button>
+            }
+          />
+        </Card>
+      </div>
+    );
+
   return (
     <div className="space-y-5" data-testid="asst-today">
+      <ScopeBar sc={sc} />
       <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted">
         <span>
-          {t.today} 기준 · 고객 <b className="text-ink tnum">{t.total}</b>명
+          {t.today} 기준 · 고객 <b className="text-ink tnum">{t.total}</b>명{sc.scope !== 'all' && sc.total !== t.total ? ` (전체 ${sc.total}명 중)` : ''}
         </span>
         {Object.entries(t.byType)
           .filter(([, n]) => n > 0)

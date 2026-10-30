@@ -3,7 +3,7 @@ import { Plus, Pencil, UserMinus, UserCheck, Trash2, UserRound, ArrowRightLeft }
 import { canStartHandoverFor, useCanEditPeople, useStore } from '../lib/store';
 import { useRouter } from '../lib/router';
 import { Button, Card, CardHead, Field, Mono, inputCls } from '../components/ui';
-import { addPerson, editPerson, personPrivateMemoCount, removePerson, roleLabel, setPersonStatus, isLeft, type PersonInput } from '../lib/people';
+import { addPerson, editPerson, personPrivateMemoCount, removePerson, roleLabel, setPersonStatus, ownedCustomerCount, isLeft, type PersonInput } from '../lib/people';
 import { clone, cx } from '../lib/util';
 import type { AppState } from '../lib/types';
 import { OrgSection } from '../components/OrgSection';
@@ -17,7 +17,7 @@ export default function People() {
   const canEditAll = useCanEditPeople(); // 사람·조직 편집은 조직장만(사용자 결정 2026-10-29)
   const [form, setForm] = useState<Form | null>(null);
   const [formErr, setFormErr] = useState('');
-  const [notice, setNotice] = useState<{ id: string; lines: string[]; kind: 'blocked' | 'left' | 'confirm-left' | 'confirm-remove' } | null>(null);
+  const [notice, setNotice] = useState<{ id: string; lines: string[]; customers?: number; kind: 'blocked' | 'left' | 'confirm-left' | 'confirm-remove' } | null>(null);
 
   const orgList = orgTree(effectiveOrgs(raw));
   const userNameOf = (id: string) => raw.users.find((u) => u.id === id)?.name ?? id;
@@ -49,7 +49,7 @@ export default function People() {
   // 「전출·퇴직」은 확인 창을 먼저 띄운다(복귀는 바로)
   const askLeft = (id: string) => {
     const lines = raw.works.filter((w) => w.owners.includes(id)).map((w) => `${w.name} (${w.id})`);
-    setNotice({ id, kind: 'confirm-left', lines });
+    setNotice({ id, kind: 'confirm-left', lines, customers: ownedCustomerCount(raw, id) });
   };
   const toggleStatus = (id: string, to: 'active' | 'left') => {
     const r = setPersonStatus(clone(raw), id, to);
@@ -59,7 +59,7 @@ export default function People() {
       setPersonStatus(d, id, to);
     });
     toast(r.summary);
-    setNotice(to === 'left' && r.ownedWorks.length ? { id, kind: 'left', lines: r.ownedWorks.map((w) => `${w.name} (${w.id})`) } : null);
+    setNotice(to === 'left' && (r.ownedWorks.length || r.ownedCustomers) ? { id, kind: 'left', lines: r.ownedWorks.map((w) => `${w.name} (${w.id})`), customers: r.ownedCustomers } : null);
   };
 
   // 지우기: 쓰인 곳이 있으면 막고, 없으면 확인 창(나만 보기 메모 건수 포함)을 띄운다
@@ -187,6 +187,9 @@ export default function People() {
               ) : (
                 <p className="mt-1 text-muted">이 사람이 담당한 업무는 없습니다.</p>
               )}
+              <p className="mt-1 text-muted" data-testid="people-left-customers">
+                이 사람이 담당한 AI 비서 고객 <b className="text-ink">{notice.customers ?? 0}</b>명{(notice.customers ?? 0) > 0 ? ' — 담당 영업자를 다른 사람으로 바꿔 줘야 고칠 사람이 생깁니다(AI 비서 → 고객에서 조직장이 바꿈).' : '.'}
+              </p>
               <p className="mt-2 text-muted">담당은 자동으로 바뀌지 않습니다 — 업무 인계 관리에서 넘기세요. 「복귀」로 되돌릴 수 있습니다.</p>
               <div className="mt-2 flex gap-2">
                 <Button size="sm" variant="primary" onClick={() => toggleStatus(notice.id, 'left')} data-testid="people-confirm-left-ok">
@@ -215,12 +218,17 @@ export default function People() {
             </div>
           ) : (
             <>
-              <p className="font-semibold">담당을 먼저 넘기세요 — 이 사람이 아직 담당인 업무가 있습니다.</p>
+              <p className="font-semibold">{notice.lines.length ? '담당을 먼저 넘기세요 — 이 사람이 아직 담당인 업무가 있습니다.' : '넘길 담당이 남아 있습니다.'}</p>
               <ul className="mt-1 list-disc pl-5 text-muted">
                 {notice.lines.map((l) => (
                   <li key={l}>{l}</li>
                 ))}
               </ul>
+              {(notice.customers ?? 0) > 0 && (
+                <p className="mt-1 text-muted" data-testid="people-left-customers-after">
+                  AI 비서 고객 {notice.customers}명의 담당 영업자도 다른 사람으로 바꿔야 합니다.
+                </p>
+              )}
               <p className="mt-2 text-muted">담당은 자동으로 바뀌지 않습니다. 「업무 인계 관리」에서 인계하거나 업무 화면에서 담당자를 바꾸세요.</p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {handoverable > 0 && (

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createAssistantSeed } from '../src/assistant/seed';
 import { buildBriefing, upcomingMeetings } from '../src/assistant/briefing';
-import { applyFollowup, buildQuestions, pending, proposals } from '../src/assistant/followup';
+import { applyFollowup, buildQuestions, meetingDayWord, pending, proposals } from '../src/assistant/followup';
 import { executeSearch, describeCond, ruleParse, type Cond } from '../src/assistant/nlsearch';
 import { computeNotices } from '../src/assistant/notices';
 import { buildToday } from '../src/assistant/today';
@@ -35,6 +35,11 @@ const camel = (s: string) => s.replace(/_([a-z])/g, (_, c: string) => c.toUpperC
  *  D3 검색 「매운 음식 싫어하는 분」: 원본은 핵심어를 「음식」으로 잘못 잡아 날음식 고객까지 찾음 → 「매운」으로 찾음 (원본 버그 수정)
  *  D4 미팅 후 질문 interest: 「가족·생활」 선택지 제거 (2.3-6)
  *  D5 예시 분석 승인: 활동 상세에 「[후속조치]」 목록을 또 쓰지 않음 — 요청사항 한 곳만 (2.3-5)
+ *  --- 검토 반영(2026-10-30) ---
+ *  D6 미팅 후 질문 문구의 「오늘」: 원본은 미팅 날짜와 상관없이 늘 「오늘」 → 미팅이 오늘이 아니면 「10월 29일」 식으로 미팅 날짜를 쓴다 (검토 12)
+ *  D7 미팅 후 질문의 미팅 기록 메모 머리말 「[미팅 후 확인 날짜]」: 원본은 질문에 답한 날(오늘) → 미팅 날짜 (검토 12)
+ *  D8 예시 분석 승인: 원본은 예시 통화 기록을 더하며 고객의 최근 연락일을 오늘로 올렸다 → 시험용 예시라 실제 연락이 아니므로 올리지 않는다 (검토 14)
+ *  D9 예시 분석의 파일명·변경 이력 메모: 원본 sample_call_kimdohyun.txt(고객 이름이 들어감) → 「예시 대화」 (검토 14)
  */
 const DIFFS: Record<string, { cond?: Partial<Cond>; customers?: string[]; evidence?: Record<string, { label: string; text: string }[]> }> = {
   '해산물 못 드시는 분': { cond: { keywords: [{ text: '해산물', scope: 'food_dislike' }], conversationKeywords: [] }, customers: ['김도현'], evidence: { 김도현: [{ label: '기피 음식', text: '해산물' }] } },
@@ -46,6 +51,8 @@ const condOf = (py: any): Cond => ({
   target: py.target, keywords: py.keywords, conversationKeywords: py.conversation_keywords, orgKeywords: py.org_keywords, customerTypes: py.customer_types,
   noContactDays: py.no_contact_days, contactKind: py.contact_kind, birthdayFrom: py.birthday_from, birthdayTo: py.birthday_to, requestStatus: py.request_status,
   requestKeywords: py.request_keywords, dueWithinDays: py.due_within_days, overdue: py.overdue, agendaFrom: '', agendaTo: '',
+  // 원본에 없는 조건(검토 반영으로 더한 칸)은 원본 질문에서 늘 비어 있어야 한다
+  meetingFrom: '', meetingTo: '', nameKeywords: [], show: [],
 });
 
 describe('골든: 기준 시각과 시드', () => {
@@ -85,7 +92,12 @@ describe('골든: 미팅 후 질문(전 미팅)', () => {
       const m = a.interactions.find((i) => i.customerId === idOf(a, name) && i.date === date && i.title === title)!;
       const got = buildQuestions(a, m.id, NOW)!.questions.map((q) => ({ id: q.id, reason: q.reason, text: q.text, options: q.options.map((o) => ({ value: o.value, label: o.label, inputs: o.inputs.map((i) => i.key) })) }));
       // D4: 원본의 interest 질문에서 「가족·생활」만 뺀 것과 같아야 한다
-      const expected = strip(want).map((q) => (q.id === 'interest' ? { ...q, options: q.options.filter((o: any) => o.value !== '가족·생활') } : q));
+      // D6: 원본 문구는 늘 「오늘 …」로 시작 → 미팅이 오늘이 아니면 미팅 날짜(「10월 29일 …」)로 바뀐다
+      const dayWord = date === '2026-10-30' ? '오늘' : meetingDayWord(date, '2026-10-30');
+      const dated = (text: string) => (/^오늘 /.test(text) ? dayWord + text.slice(2) : text);
+      const expected = strip(want)
+        .map((q) => (q.id === 'interest' ? { ...q, options: q.options.filter((o: any) => o.value !== '가족·생활') } : q))
+        .map((q) => ({ ...q, text: dated(q.text) }));
       expect(got).toEqual(expected);
     });
   }
@@ -213,15 +225,21 @@ describe('골든: 승인 흐름', () => {
     const r = applyDraft(a, d, choices, {}, NOW);
     if ('error' in r) throw new Error(r.error);
     const want = g.sampleApply;
+    // D8: 원본은 예시 통화 기록으로 최근 연락일을 오늘로 올렸다 → 예시는 실제 연락이 아니므로 올리지 않는다
+    expect(Object.keys(want.changed)).toContain('last_contact_date');
+    const wantChanged = Object.fromEntries(Object.entries(want.changed).filter(([k]) => k !== 'last_contact_date'));
     const after = a.customers.find((c) => c.id === cid)!;
     const changed: Record<string, string[]> = {};
-    for (const k of Object.keys(want.changed)) changed[camel(k)] = [before[camel(k) as 'name'] ?? '', after[camel(k) as 'name'] ?? ''];
-    expect(changed).toEqual(Object.fromEntries(Object.entries(want.changed).map(([k, v]) => [camel(k), v])));
+    for (const k of Object.keys(wantChanged)) changed[camel(k)] = [before[camel(k) as 'name'] ?? '', after[camel(k) as 'name'] ?? ''];
+    expect(changed).toEqual(Object.fromEntries(Object.entries(wantChanged).map(([k, v]) => [camel(k), v])));
+    expect(after.lastContactDate).toBe(before.lastContactDate);
     // 바뀐 항목이 이것뿐인지(골든에 없는 항목이 바뀌지 않았는지)
     const fields = (Object.keys(after) as (keyof typeof after)[]).filter((k) => !['updatedAt'].includes(k) && before[k] !== after[k]);
-    expect(fields.sort()).toEqual(Object.keys(want.changed).map(camel).sort());
+    expect(fields.sort()).toEqual(Object.keys(wantChanged).map(camel).sort());
+    // D9: 변경 이력 메모의 파일명이 고객 이름이 들어간 sample_call_kimdohyun.txt → 「예시 대화」
+    expect(want.history.every((h: any) => h.note === '예시 분석 승인 (sample_call_kimdohyun.txt)')).toBe(true);
     expect(a.changes.filter((h) => h.source === 'sample').map((h) => ({ field: h.field, old: h.oldValue, new: h.newValue, source: h.source, note: h.note }))).toEqual(
-      want.history.map((h: any) => ({ ...h, field: camel(h.field) })),
+      want.history.map((h: any) => ({ ...h, field: camel(h.field), note: '예시 분석 승인 (예시 대화)' })),
     );
     const ints = a.interactions.filter((i) => i.customerId === cid).map((i) => ({ type: i.type, date: i.date, time: i.time, title: i.title, summary: i.summary, source: i.source }));
     expect(ints).toEqual(want.interactions.map((i: any) => ({ type: i.type, date: i.date, time: i.time, title: i.title, summary: i.summary, source: i.source })));
@@ -238,9 +256,13 @@ describe('골든: 승인 흐름', () => {
     const want = g.followupProposals;
     const p = proposals(a, m.id, want.answers, NOW)!;
     expect(p.info.questions.map((q) => q.id)).toEqual(want.questionIds);
+    // D7: 메모 머리말의 날짜가 원본은 답한 날(2026-10-30), TS는 미팅 날짜(2026-10-29)
+    const d7 = (t: string) => t.replace('[미팅 후 확인 2026-10-30]', '[미팅 후 확인 2026-10-29]');
+    expect(want.proposals.some((x: any) => String(x.new).includes('[미팅 후 확인 2026-10-30]'))).toBe(true);
     expect(p.proposals.map((x) => ({ kind: x.kind, field: x.field ? x.field : null, label: x.label, old: x.old, new: x.new, mode: x.mode ?? null, due_date: x.dueDate ?? null, assignee: x.assignee ?? null }))).toEqual(
-      want.proposals.map((x: any) => ({ ...x, field: x.field ? camel(x.field) : null, mode: x.mode ?? null, due_date: x.due_date ?? null, assignee: x.assignee ?? null })),
+      want.proposals.map((x: any) => ({ ...x, new: d7(x.new), field: x.field ? camel(x.field) : null, mode: x.mode ?? null, due_date: x.due_date ?? null, assignee: x.assignee ?? null })),
     );
+    expect(p.problems).toEqual([]);
     const before = { ...a.customers.find((c) => c.id === cid)! };
     const r = applyFollowup(a, m.id, want.answers, p.proposals.map((_, idx) => ({ idx, include: true })), NOW);
     if ('error' in r) throw new Error(r.error);
@@ -248,7 +270,7 @@ describe('골든: 승인 흐름', () => {
     const after = a.customers.find((c) => c.id === cid)!;
     expect(Object.fromEntries(Object.keys(wa.changed).map((k) => [camel(k), [before[camel(k) as 'name'], after[camel(k) as 'name']]]))).toEqual(Object.fromEntries(Object.entries(wa.changed).map(([k, v]) => [camel(k), v])));
     expect(a.changes.filter((h) => h.source === 'followup').map((h) => ({ field: h.field, old: h.oldValue, new: h.newValue, source: h.source, note: h.note }))).toEqual(wa.history.map((h: any) => ({ ...h, field: camel(h.field) })));
-    expect(a.interactions.filter((i) => i.customerId === cid).map((i) => ({ type: i.type, date: i.date, time: i.time, title: i.title, summary: i.summary, details: i.details, source: i.source }))).toEqual(wa.interactions);
+    expect(a.interactions.filter((i) => i.customerId === cid).map((i) => ({ type: i.type, date: i.date, time: i.time, title: i.title, summary: i.summary, details: i.details, source: i.source }))).toEqual(wa.interactions.map((i: any) => ({ ...i, details: d7(i.details) })));
     expect(a.requests.filter((q) => q.customerId === cid).map((q) => ({ content: q.content, received_date: q.receivedDate, due_date: q.dueDate, status: q.status, assignee: q.assignee, source: q.source, has_interaction: q.interactionId !== null }))).toEqual(wa.requests);
     const st = a.followups.find((f) => f.interactionId === m.id)!;
     expect({ status: st.status, answers: st.answers, asked: st.asked }).toEqual(wa.state);

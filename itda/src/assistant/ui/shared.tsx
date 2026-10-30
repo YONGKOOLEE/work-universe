@@ -1,8 +1,8 @@
 // AI 비서 화면 공통 부품 — 대화상자(초점·Esc·인쇄), 아바타, 표시 칩, 글자 강조.
 import React, { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ListChecks, Lock, X } from 'lucide-react';
-import { Tabs } from '../../components/ui';
+import { CheckCircle2, ListChecks, Lock, MessageCircleQuestion, X } from 'lucide-react';
+import { Button, Tabs } from '../../components/ui';
 import { cx } from '../../lib/util';
 import { avatarTone, ddayLabel, ddayTone, highlightParts, initialOf } from './logic';
 
@@ -175,7 +175,7 @@ export function ReadOnlyNote({ owner, testId = 'asst-readonly' }: { owner: strin
     <p className="flex items-start gap-2 rounded-lg border border-line bg-sunken/60 px-4 py-2.5 text-[13px] text-muted" data-testid={testId}>
       <Lock size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
       <span>
-        이 고객은 <b className="text-ink">{owner}</b>님이 담당합니다. 열람만 할 수 있고, 고치는 것은 담당 영업자와 담당자 소속 조직의 조직장입니다.
+        이 고객은 <b className="text-ink">{owner}</b>님이 담당합니다. 열람만 할 수 있고, 고치는 것은 담당 영업자와 담당자의 조직장입니다.
       </span>
     </p>
   );
@@ -214,6 +214,30 @@ export function PageTitle({ title, sub, right }: { title: string; sub?: React.Re
     </div>
   );
 }
+
+/** 활동 목록의 「미팅 후 질문」 단추. 이미 답한 미팅은 「미팅 후 질문 완료」 표시로 바뀐다(눌러서 답을 다시 열 수는 있다) */
+export function FollowupButton({ done, onClick }: { done: boolean; onClick: () => void }) {
+  return done ? (
+    <button
+      type="button"
+      onClick={onClick}
+      title="이미 답했습니다. 눌러서 답을 다시 보거나 고칠 수 있습니다."
+      className="inline-flex h-8 items-center gap-1 rounded-md bg-oksoft px-2.5 text-xs font-semibold text-ok hover:opacity-90"
+      data-testid="asst-fu-done"
+    >
+      <CheckCircle2 size={13} aria-hidden="true" />
+      미팅 후 질문 완료
+    </button>
+  ) : (
+    <Button size="sm" variant="subtle" onClick={onClick} data-testid="asst-fu-open">
+      <MessageCircleQuestion size={13} />
+      미팅 후 질문
+    </Button>
+  );
+}
+
+/** 목록 줄 안의 작은 선택 상자. inputCls의 py-2가 py-0을 이겨 글자가 잘리던 것을 !로 고정한다(높이·세로 여백·가로 여백 모두) */
+export const SMALL_SELECT = '!h-8 !w-auto !py-0 !pl-2.5 !pr-2 text-xs leading-none';
 
 /** 모든 긴 글이 칸 밖으로 나가지 않게 줄바꿈하는 글 상자 */
 export const wrapCls = 'min-w-0 break-words [overflow-wrap:anywhere]';

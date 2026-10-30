@@ -4,7 +4,7 @@ import { useStore, parseBackup } from '../lib/store';
 import { Button, Modal } from './ui';
 import { cx, localDay } from '../lib/util';
 import type { AppState } from '../lib/types';
-import { applyMerge, planMerge, previewCounts, conflictKey, defaultSamePerson, resolveWorks, skippedLine, exportBackupState, replaceKeepingOtherMemos, type ConflictChoice, type MergeChoices } from '../lib/mergeImport';
+import { applyMerge, planMerge, previewCounts, conflictKey, defaultSamePerson, resolveWorks, skippedLine, exportBackupState, replaceKeepingOtherMemos, replaceCustomerInfo, type ConflictChoice, type MergeChoices } from '../lib/mergeImport';
 
 /** 데이터 옮기기 — 다른 PC·브라우저·동료와는 저장소가 달라 데이터가 공유되지 않으므로 백업 파일로 이동(바꿔 불러오기·합쳐 불러오기) */
 export function DataTransfer({ open, onClose, initialTab }: { open: boolean; onClose: () => void; initialTab?: 'export' | 'import' }) {
@@ -64,7 +64,8 @@ export function DataTransfer({ open, onClose, initialTab }: { open: boolean; onC
     setConfirmReplace(false);
     if (!t.trim()) return;
     try {
-      setPending(parseBackup(t));
+      // 백업 파일은 AI 비서 칸이 없어도 가상 고객으로 채우지 않는다(바꿔 불러오면 지금 고객 유지, 합쳐 불러오면 합칠 고객 없음)
+      setPending(parseBackup(t, { seedAssistant: false }));
     } catch (e) {
       setErr((e as Error).message);
     }
@@ -98,7 +99,7 @@ export function DataTransfer({ open, onClose, initialTab }: { open: boolean; onC
       {tab === 'export' ? (
         <div className="space-y-3">
           <p className="text-[13px]">
-            업무 <b>{raw.works.length}</b>건 · 문서 <b>{raw.docs.length}</b>건 · 타임라인 이벤트 <b>{raw.events.length}</b>건 · 인계 <b>{raw.handovers.length}</b>건
+            업무 <b>{raw.works.length}</b>건 · 문서 <b>{raw.docs.length}</b>건 · 타임라인 이벤트 <b>{raw.events.length}</b>건 · 인계 <b>{raw.handovers.length}</b>건 · AI 비서 고객 <b data-testid="export-customers">{raw.assistant?.customers.length ?? 0}</b>명
           </p>
           <p className="text-2xs text-faint" data-testid="export-memo-note">다른 사람의 나만 보기 메모는 파일에 넣지 않습니다</p>
           <div className="flex flex-wrap gap-2">
@@ -164,6 +165,15 @@ export function DataTransfer({ open, onClose, initialTab }: { open: boolean; onC
               <p>
                 불러올 데이터: 업무 <b>{pending.works.length}</b>건 · 문서 <b>{pending.docs.length}</b>건 · 인계 <b>{pending.handovers.length}</b>건
               </p>
+              {(() => {
+                const ci = replaceCustomerInfo(raw, pending);
+                return (
+                  <p className="mt-1" data-testid="replace-customers">
+                    AI 비서 고객: 지금 <b>{ci.now}</b>명 → 파일 <b>{ci.file === null ? '칸 없음' : `${ci.file}명`}</b>
+                    {ci.file === null ? <span className="text-muted"> (파일에 고객 정보가 없어 지금 고객 {ci.now}명을 그대로 둡니다{ci.moved ? `. 담당자가 파일에 없는 ${ci.moved}명은 지금 사용자 담당으로 옮깁니다` : ''})</span> : ci.file < ci.now ? <span className="font-medium text-danger"> (고객 {ci.now - ci.file}명이 줄어듭니다)</span> : null}
+                  </p>
+                );
+              })()}
               <p className="mt-1 truncate text-2xs text-muted">{pending.works.map((w) => w.name).join(', ')}</p>
               <p className="mt-2 text-xs text-warn">지금 이 화면의 데이터는 불러온 데이터로 바뀜 (필요하면 먼저 '내보내기'로 백업)</p>
               {confirmReplace && (
@@ -325,7 +335,7 @@ export function DataTransfer({ open, onClose, initialTab }: { open: boolean; onC
                 </div>
               )}
               <p className="rounded bg-surface px-2 py-1.5 text-xs">
-                추가될 내용: 사람 <b>{counts.users}</b>명 · 업무 <b>{counts.works}</b>건 (합침 {counts.worksMerged}건) · 문서 <b>{counts.docs}</b>건 · 결정 <b>{counts.decisions}</b>건 · 조치 <b>{counts.actions}</b>건 · 인계 <b>{counts.handovers}</b>건{counts.orgs > 0 && <> · 조직 <b>{counts.orgs}</b>개 추가</>}
+                추가될 내용: 사람 <b>{counts.users}</b>명 · 업무 <b>{counts.works}</b>건 (합침 {counts.worksMerged}건) · 문서 <b>{counts.docs}</b>건 · 결정 <b>{counts.decisions}</b>건 · 조치 <b>{counts.actions}</b>건 · 인계 <b>{counts.handovers}</b>건{counts.orgs > 0 && <> · 조직 <b>{counts.orgs}</b>개 추가</>} · AI 비서 고객 <b data-testid="merge-customers">{counts.customers}</b>명
               </p>
               {skippedLine(plan.skipped) && (
                 <p className="text-2xs text-warn" data-testid="merge-skipped">
