@@ -282,12 +282,22 @@ export function applyActivityDates(a: AssistantData, customerId: string, type: s
   if (Object.keys(upd).length) updateCustomer(a, customerId, upd, { now, source: 'activity', note: `${type} 기록 추가` });
 }
 
+/** 고친·지운 활동의 (유형, 날짜) 목록에서 다시 계산할 대상을 가른다: 최근 연락일은 연락 유형(미팅·통화·이메일)만, 최근 미팅일은 미팅만 */
+export function affectedDates(rows: { type: string; date: string }[]): { contact: string[]; meeting: string[] } {
+  return {
+    contact: rows.filter((r) => CONTACT_TYPES.includes(r.type) && r.date).map((r) => r.date),
+    meeting: rows.filter((r) => r.type === '미팅' && r.date).map((r) => r.date),
+  };
+}
+
 /**
  * 활동기록을 고치거나 지운 뒤 최근 연락일/최근 미팅일을 다시 계산한다(지금까지의 기록 중 가장 늦은 날짜).
- * affected(고친·지운 활동의 옛 날짜와 새 날짜)를 주면, 지금 값이 그 날짜 중 하나일 때만 계산한 값으로 바꾸고
- * 아니면 지금 값과 계산한 값 중 늦은 쪽을 둔다 → 사용자가 직접 입력한 최근 연락일이 활동 수정·삭제로 사라지지 않는다.
+ * affected(고친·지운 활동의 옛·새 날짜를 유형별로: affectedDates)를 주면
+ *  · 해당 유형의 날짜가 없는 항목(메모·기타 기록을 고치거나 지운 경우의 최근 연락일 등)은 건드리지 않고,
+ *  · 있는 항목은 지금 값이 그 날짜 중 하나일 때만 계산한 값으로 바꾸고 아니면 지금 값과 계산한 값 중 늦은 쪽을 둔다
+ * → 사용자가 직접 입력한 최근 연락일이 활동 수정·삭제로 사라지지 않는다.
  */
-export function recomputeActivityDates(a: AssistantData, customerId: string, now: Date, affected?: string[]) {
+export function recomputeActivityDates(a: AssistantData, customerId: string, now: Date, affected?: { contact: string[]; meeting: string[] }) {
   const cur = a.customers.find((c) => c.id === customerId);
   if (!cur) return;
   const t = ymd(now);
@@ -296,10 +306,11 @@ export function recomputeActivityDates(a: AssistantData, customerId: string, now
   let lc = max(mine.filter((i) => CONTACT_TYPES.includes(i.type)));
   let lm = max(mine.filter((i) => i.type === '미팅'));
   if (affected) {
-    const keep = (v: string, computed: string) => (v && !affected.includes(v) && v > computed ? v : computed);
-    lc = keep(cur.lastContactDate || '', lc);
-    lm = keep(cur.lastMeetingDate || '', lm);
+    const keep = (v: string, computed: string, dates: string[]) => (!dates.length ? v : v && !dates.includes(v) && v > computed ? v : computed);
+    lc = keep(cur.lastContactDate || '', lc, affected.contact);
+    lm = keep(cur.lastMeetingDate || '', lm, affected.meeting);
   }
+  if (lc === (cur.lastContactDate || '') && lm === (cur.lastMeetingDate || '')) return;
   updateCustomer(a, customerId, { lastContactDate: lc, lastMeetingDate: lm }, { now, source: 'activity', note: '활동기록 변경에 따른 재계산' });
 }
 
@@ -392,7 +403,7 @@ export function updateInteraction(a: AssistantData, id: string, patch: Interacti
   const before = { date: row.date, type: row.type };
   Object.assign(row, f);
   // 날짜·유형이 바뀐 때만 다시 계산한다(제목·요약만 고쳤다면 직접 입력한 최근 연락일을 건드리지 않는다)
-  if (row.date !== before.date || row.type !== before.type) recomputeActivityDates(a, row.customerId, now, [before.date, row.date]);
+  if (row.date !== before.date || row.type !== before.type) recomputeActivityDates(a, row.customerId, now, affectedDates([before, { type: row.type, date: row.date }]));
   return { ok: true };
 }
 
@@ -404,7 +415,7 @@ export function deleteInteraction(a: AssistantData, id: string, now: Date): { ok
   a.followups = a.followups.filter((f) => f.interactionId !== id);
   // 지운 활동의 날짜가 지금 최근 연락일·미팅일일 때만 다시 계산한다
   const cu = a.customers.find((c) => c.id === row.customerId);
-  if (cu && (cu.lastContactDate === row.date || cu.lastMeetingDate === row.date)) recomputeActivityDates(a, row.customerId, now, [row.date]);
+  if (cu && (cu.lastContactDate === row.date || cu.lastMeetingDate === row.date)) recomputeActivityDates(a, row.customerId, now, affectedDates([row]));
   return { ok: true };
 }
 

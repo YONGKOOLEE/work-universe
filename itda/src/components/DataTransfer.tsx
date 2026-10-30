@@ -4,7 +4,7 @@ import { useStore, parseBackup } from '../lib/store';
 import { Button, Modal } from './ui';
 import { cx, localDay } from '../lib/util';
 import type { AppState } from '../lib/types';
-import { applyMerge, planMerge, previewCounts, conflictKey, defaultSamePerson, resolveWorks, skippedLine, exportBackupState, replaceKeepingOtherMemos, replaceCustomerInfo, type ConflictChoice, type MergeChoices } from '../lib/mergeImport';
+import { applyMerge, planMerge, previewCounts, conflictKey, defaultSamePerson, resolveWorks, skippedLine, skippedDemoCustomers, exportBackupState, replaceKeepingOtherMemos, replaceCustomerInfo, replaceMoveTarget, type ConflictChoice, type MergeChoices } from '../lib/mergeImport';
 
 /** 데이터 옮기기 — 다른 PC·브라우저·동료와는 저장소가 달라 데이터가 공유되지 않으므로 백업 파일로 이동(바꿔 불러오기·합쳐 불러오기) */
 export function DataTransfer({ open, onClose, initialTab }: { open: boolean; onClose: () => void; initialTab?: 'export' | 'import' }) {
@@ -170,7 +170,7 @@ export function DataTransfer({ open, onClose, initialTab }: { open: boolean; onC
                 return (
                   <p className="mt-1" data-testid="replace-customers">
                     AI 비서 고객: 지금 <b>{ci.now}</b>명 → 파일 <b>{ci.file === null ? '칸 없음' : `${ci.file}명`}</b>
-                    {ci.file === null ? <span className="text-muted"> (파일에 고객 정보가 없어 지금 고객 {ci.now}명을 그대로 둡니다{ci.moved ? `. 담당자가 파일에 없는 ${ci.moved}명은 지금 사용자 담당으로 옮깁니다` : ''})</span> : ci.file < ci.now ? <span className="font-medium text-danger"> (고객 {ci.now - ci.file}명이 줄어듭니다)</span> : null}
+                    {ci.file === null ? <span className="text-muted"> (파일에 고객 정보가 없어 지금 고객 {ci.now}명을 그대로 둡니다{ci.moved ? `. 담당자가 파일에 없거나 다른 사람(같은 ID, 다른 사번)인 ${ci.moved}명은 파일의 사용자${replaceMoveTarget(pending) ? `(${replaceMoveTarget(pending)})` : ''} 담당으로 옮기고 변경 이력에 남깁니다` : ''})</span> : ci.file < ci.now ? <span className="font-medium text-danger"> (고객 {ci.now - ci.file}명이 줄어듭니다)</span> : null}
                   </p>
                 );
               })()}
@@ -337,6 +337,11 @@ export function DataTransfer({ open, onClose, initialTab }: { open: boolean; onC
               <p className="rounded bg-surface px-2 py-1.5 text-xs">
                 추가될 내용: 사람 <b>{counts.users}</b>명 · 업무 <b>{counts.works}</b>건 (합침 {counts.worksMerged}건) · 문서 <b>{counts.docs}</b>건 · 결정 <b>{counts.decisions}</b>건 · 조치 <b>{counts.actions}</b>건 · 인계 <b>{counts.handovers}</b>건{counts.orgs > 0 && <> · 조직 <b>{counts.orgs}</b>개 추가</>} · AI 비서 고객 <b data-testid="merge-customers">{counts.customers}</b>명
               </p>
+              {skippedDemoCustomers(pending) > 0 && (
+                <p className="text-2xs text-warn" data-testid="merge-demo-skipped">
+                  가상 고객은 합치지 않습니다. (파일의 가상 고객 {skippedDemoCustomers(pending)}명)
+                </p>
+              )}
               {skippedLine(plan.skipped) && (
                 <p className="text-2xs text-warn" data-testid="merge-skipped">
                   {skippedLine(plan.skipped)}

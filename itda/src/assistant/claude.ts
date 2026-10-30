@@ -9,7 +9,7 @@ import { S, type LlmClient } from '../ai/llm';
 import { DATE_RE, isValidDate, ymd } from './dates';
 import { appendToList, listHas } from './lists';
 import { MAX_TEXT_CHARS, addInteraction, addRequest, dateError, fieldValueError, isErr, updateCustomer, type Err } from './model';
-import { INTERACTION_TYPES, type AssistantData, type Customer, type CustomerFieldKey } from './types';
+import { DATE_FIELDS, INTERACTION_TYPES, type AssistantData, type Customer, type CustomerFieldKey } from './types';
 
 // ───────────── 개인정보 가림 ─────────────
 
@@ -17,26 +17,37 @@ import { INTERACTION_TYPES, type AssistantData, type Customer, type CustomerFiel
 const NB = '(?<!\\d)';
 const NA = '(?!\\d)';
 // 구분자: 하이픈·점(앞뒤 공백 허용) 또는 공백 한두 칸. 「010 - 1234 - 5678」「010 1234 5678」 모두 잡는다
-const SEP = '(?:\\s*[-.]\\s*|\\s{1,2})';
-const MASK_RULES: [RegExp, string][] = [
+const SEP = '(?:[ \\t]*[-.][ \\t]*|[ \\t]{1,2})';
+/** 「1600-1730」「1800-2000 사이」처럼 시각 범위(HHMM-HHMM, 앞이 더 이르다)로 읽히면 대표번호가 아니다 */
+const notTimeRange = (m: string, after: string): boolean => {
+  const t = /^(\d{2})(\d{2})\s*-\s*(\d{2})(\d{2})$/.exec(m);
+  if (!t) return true;
+  const [h1, m1, h2, m2] = t.slice(1).map(Number);
+  const valid = h1 <= 23 && m1 <= 59 && h2 <= 23 && m2 <= 59;
+  const ascending = h1 * 60 + m1 < h2 * 60 + m2;
+  const hint = /^\s*(사이|까지|부터|시|분|~|동안|경)/.test(after);
+  return !(valid && (ascending || hint));
+};
+// 구분자의 공백은 줄바꿈을 넘지 않게 [ \t]만 쓴다(줄이 다른 두 숫자를 한 번호로 묶지 않도록)
+const MASK_RULES: [RegExp, string, ((m: string, after: string) => boolean)?][] = [
   // 주민등록번호: 하이픈형, 공백형(앞 6자리가 실제 생년월일 꼴일 때만 — 일반 숫자를 가리지 않게)
-  [new RegExp(`${NB}\\d{6}\\s?-\\s?[1-4]\\d{6}${NA}`, 'g'), '[주민등록번호]'],
-  [new RegExp(`${NB}\\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\\d|3[01])\\s[1-4]\\d{6}${NA}`, 'g'), '[주민등록번호]'],
+  [new RegExp(`${NB}\\d{6}[ \\t]?-[ \\t]?[1-4]\\d{6}${NA}`, 'g'), '[주민등록번호]'],
+  [new RegExp(`${NB}\\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\\d|3[01])[ \\t][1-4]\\d{6}${NA}`, 'g'), '[주민등록번호]'],
   [/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+/g, '[이메일]'],
   // 국제번호 +82 / 0082
-  [new RegExp(`${NB}(?:\\+|00)82[\\s-]*\\(?0?\\)?[\\s-]*1[016789]${SEP}?\\d{3,4}${SEP}?\\d{4}${NA}`, 'g'), '[휴대전화]'],
-  [new RegExp(`${NB}(?:\\+|00)82[\\s-]*\\(?0?\\)?[\\s-]*\\d{1,2}${SEP}\\d{3,4}${SEP}\\d{4}${NA}`, 'g'), '[전화번호]'],
+  [new RegExp(`${NB}(?:\\+|00)82[ \\t-]*\\(?0?\\)?[ \\t-]*1[016789]${SEP}?\\d{3,4}${SEP}?\\d{4}${NA}`, 'g'), '[휴대전화]'],
+  [new RegExp(`${NB}(?:\\+|00)82[ \\t-]*\\(?0?\\)?[ \\t-]*\\d{1,2}${SEP}\\d{3,4}${SEP}\\d{4}${NA}`, 'g'), '[전화번호]'],
   [new RegExp(`${NB}01[016789]${SEP}?\\d{3,4}${SEP}?\\d{4}${NA}`, 'g'), '[휴대전화]'],
   // (02) 123-4567 · 02) 123-4567 · 031-123-4567 · 02 123 4567
-  [new RegExp(`${NB}\\(0\\d{1,2}\\)\\s*\\d{3,4}${SEP}\\d{4}${NA}`, 'g'), '[전화번호]'],
-  [new RegExp(`${NB}0\\d{1,2}(?:\\s*[-.)]\\s*|\\s)\\d{3,4}${SEP}\\d{4}${NA}`, 'g'), '[전화번호]'],
-  // 대표번호 1588-1234 · 1566 - 1234 (하이픈이 있을 때만 — 금액·건수와 헷갈리지 않게)
-  [new RegExp(`${NB}1[5-8]\\d{2}\\s*-\\s*\\d{4}${NA}`, 'g'), '[전화번호]'],
+  [new RegExp(`${NB}\\(0\\d{1,2}\\)[ \\t]*\\d{3,4}${SEP}\\d{4}${NA}`, 'g'), '[전화번호]'],
+  [new RegExp(`${NB}0\\d{1,2}(?:[ \\t]*[-.)][ \\t]*|[ \\t])\\d{3,4}${SEP}\\d{4}${NA}`, 'g'), '[전화번호]'],
+  // 대표번호 1588-1234 · 1566 - 1234 (하이픈이 있을 때만 — 금액·건수와 헷갈리지 않게. 시각 범위 1600-1730은 제외)
+  [new RegExp(`${NB}1[5-8]\\d{2}[ \\t]*-[ \\t]*\\d{4}${NA}`, 'g'), '[전화번호]', notTimeRange],
   // 카드번호 1234 5678 9012 3456 · 1234-5678-9012-3456 (4-4-4-4), 4-6-5
-  [new RegExp(`${NB}\\d{4}([\\s-])\\d{4}\\1\\d{4}\\1\\d{4}${NA}`, 'g'), '[번호]'],
-  [new RegExp(`${NB}\\d{4}([\\s-])\\d{6}\\1\\d{5}${NA}`, 'g'), '[번호]'],
-  // 공백으로 끊은 계좌번호 110 123 456789 (3~4자리 + 2~4자리 + 5~8자리)
-  [new RegExp(`${NB}\\d{3,4}\\s\\d{2,4}\\s\\d{5,8}${NA}`, 'g'), '[번호]'],
+  [new RegExp(`${NB}\\d{4}([ \\t-])\\d{4}\\1\\d{4}\\1\\d{4}${NA}`, 'g'), '[번호]'],
+  [new RegExp(`${NB}\\d{4}([ \\t-])\\d{6}\\1\\d{5}${NA}`, 'g'), '[번호]'],
+  // 공백으로 끊은 계좌번호 110 123 456789 (3~4자리 + 2~4자리 + 6~8자리 — 끝 묶음이 5자리 이하인 「건수 1200 300 45000」은 번호로 보지 않는다)
+  [new RegExp(`${NB}\\d{3,4}[ \\t]\\d{2,4}[ \\t]\\d{6,8}${NA}`, 'g'), '[번호]'],
 ];
 // 계좌·카드번호 형태: 숫자(하이픈 포함) 10자리 이상. 날짜(2026-11-05)는 제외
 const ACCOUNT_RE = new RegExp(`${NB}\\d[\\d-]{8,24}\\d${NA}`, 'g');
@@ -45,8 +56,11 @@ const ACCOUNT_RE = new RegExp(`${NB}\\d[\\d-]{8,24}\\d${NA}`, 'g');
 export function maskText(text: string): [string, number] {
   let count = 0;
   let out = text;
-  for (const [rx, rep] of MASK_RULES) {
-    out = out.replace(rx, () => {
+  for (const [rx, rep, ok] of MASK_RULES) {
+    out = out.replace(rx, (...args: unknown[]) => {
+      const m = String(args[0]);
+      const offset = args[args.length - 2] as number;
+      if (ok && !ok(m, out.slice(offset + m.length, offset + m.length + 8))) return m;
       count += 1;
       return rep;
     });
@@ -190,82 +204,100 @@ export const QUOTE_MIN = 6;
 /** 이보다 짧은 근거는 원문에 있어도 「근거가 짧음」 경고를 붙이고 기본 해제한다(짧은 말은 우연히 일치하기 쉽다) */
 export const QUOTE_WARN_MIN = 8;
 
-const LABEL_RE = /^([^\s:：]{1,12})\s*[:：]\s*([\s\S]*)$/;
 const ELLIPSIS_RE = /\s*(?:\.{3,}|…|⋯)\s*/;
+// 말머리: 「김도현: 본문」「김도현 부장: 본문」「[김도현] 본문」. 숫자만 있는 앞말(시각 「10:00」)은 말머리가 아니다
+const BRACKET_LABEL_RE = /^\[([^\]\n]{1,16})\]\s*[:：]?\s*([\s\S]*)$/;
+const COLON_LABEL_RE = /^([^\s:：.,?!]{1,12}(?:\s[^\s:：.,?!]{1,12}){0,2})\s*[:：]\s*([\s\S]*)$/;
+function parseLabel(t: string): { label: string; body: string } | null {
+  const m = BRACKET_LABEL_RE.exec(t) ?? COLON_LABEL_RE.exec(t);
+  if (!m || /^[\d\s]+$/.test(m[1])) return null;
+  return { label: normForMatch(m[1]), body: m[2] };
+}
+/** 두 말머리가 같은 사람을 가리키는가(「김도현」과 「김도현 부장」) */
+const sameLabel = (a: string, b: string) => !!a && !!b && (a === b || (Math.min(a.length, b.length) >= 2 && (a.includes(b) || b.includes(a))));
+/** 문장 끝의 마침표·물음표 등은 대조에서 뺀다(원문과 인용의 끝 부호 차이) */
+const trimEnd = (x: string) => x.replace(/[\s.。!?…]+$/, '');
 
 interface SrcLine {
+  /** 이 줄의 말머리(정규화). 말머리 없는 줄은 바로 앞 말머리 줄의 말머리를 이어받고, 앞에 말머리가 없으면 '' */
   label: string;
-  /** 정규화한 줄 전체의 원문 전체(정규화) 안 시작 위치 */
-  at: number;
-  /** 정규화한 말머리 뒤 내용 */
-  flatBody: string;
-  /** 말머리 뒤 내용이 원문 전체(정규화) 안에서 시작하는 위치 */
-  bodyAt: number;
+  /** 정규화한 원문 전체(flat) 안에서 이 줄이 차지하는 [시작, 끝) */
+  start: number;
+  end: number;
 }
-/** 원문을 줄로 나눠 말머리(「이름:」)와 정규화 위치를 만든다. 정규화 원문(flat)도 함께 */
+/** 원문을 줄로 나눠 말머리와 정규화 위치를 만든다. 정규화 원문(flat)도 함께 */
 function indexSource(text: string): { flat: string; lines: SrcLine[] } {
   let flat = '';
   const lines: SrcLine[] = [];
+  let cur = '';
   for (const raw of text.split('\n')) {
-    const at = flat.length;
-    const t = raw.trim();
-    const m = LABEL_RE.exec(t);
-    if (m) {
-      const prefix = t.slice(0, t.length - m[2].length);
-      lines.push({ label: normForMatch(m[1]), at, flatBody: normForMatch(m[2]), bodyAt: at + normForMatch(prefix).length });
-    }
+    const start = flat.length;
+    const pl = parseLabel(raw.trim());
+    if (pl) cur = pl.label;
     flat += normForMatch(raw);
+    lines.push({ label: cur, start, end: flat.length });
   }
   return { flat, lines };
 }
 
 /**
  * 근거 문장이 원문에 실제로 있는가. reflect.ts의 정규화(공백·따옴표·가운뎃점·물결표 차이 무시)로 대조한다.
- *  · 「A ... B」처럼 말줄임으로 이은 근거는 조각마다 찾고, 조각이 원문에서 나온 순서대로여야 한다.
- *  · 「이름: 」 말머리가 붙은 근거는 먼저 그대로 찾고, 못 찾으면 말머리를 떼어 찾되 원문에 같은 말머리 줄(예: 「김도현: …」)이 있고
- *    그 줄 안에 내용이 있을 때만 통과한다 → 영업사원(「나:」)의 말을 고객 말로 인용하면 실패한다.
+ *  · 근거 전체를 먼저 그대로 찾는다(「음... 저는 …」처럼 원문에 말줄임표가 있어도 통과). 못 찾을 때만 말줄임 「A ... B」 조각으로 나눠 조각마다 찾고,
+ *    조각이 원문에서 나온 순서대로여야 한다.
+ *  · 끝 마침표 차이는 무시한다.
+ *  · 「이름: 」 말머리가 붙은 근거는 먼저 그대로 찾고, 못 찾으면 말머리를 떼어 찾되 그 말이 원문의 같은 사람 줄(「김도현:」「[김도현]」「김도현 부장:」)이거나
+ *    말머리 없는 줄일 때만 통과한다 → 영업사원(「나:」)의 말을 고객 말로 인용하면 실패한다.
  *  · 통과해도 근거 글자(공백 제외)가 QUOTE_WARN_MIN 미만이면 short=true.
  */
 export function verifyQuote(evidence: string, sourceText: string): { ok: boolean; span?: string; short?: boolean } {
-  const segs = s(evidence).split(ELLIPSIS_RE).map((x) => x.trim()).filter(Boolean);
-  if (!segs.length || !s(sourceText)) return { ok: false };
+  const ev = s(evidence);
+  if (!ev || !s(sourceText)) return { ok: false };
   const { flat, lines } = indexSource(sourceText);
-  let cursor = 0;
-  let first: string | undefined;
-  let total = 0;
-  for (const seg0 of segs) {
-    // 1) 말머리까지 그대로
-    const q0 = normForMatch(seg0);
-    let hit: { text: string; pos: number; len: number } | null = null;
-    if (q0.length >= QUOTE_MIN) {
-      const i = flat.indexOf(q0, cursor);
-      if (i >= 0) hit = { text: seg0, pos: i, len: q0.length };
+  const lineAt = (pos: number) => lines.find((l) => pos >= l.start && pos < l.end);
+
+  /** 조각 하나. cursor 이후에서 찾고 [원문 위치, 길이, 인용 글]을 돌려준다 */
+  const findSeg = (seg0: string, cursor: number): { pos: number; len: number; text: string } | null => {
+    const raw = seg0.trim();
+    // 1) 말머리까지 그대로(끝 부호 차이는 무시)
+    for (const t of [raw, trimEnd(raw)]) {
+      const q = normForMatch(t);
+      if (q.length < QUOTE_MIN) continue;
+      const i = flat.indexOf(q, cursor);
+      if (i >= 0) return { pos: i, len: q.length, text: t };
     }
-    // 2) 말머리를 떼고, 같은 말머리 줄 안에서만
-    if (!hit) {
-      const m = LABEL_RE.exec(seg0);
-      if (m) {
-        const body = m[2].trim();
-        const qb = normForMatch(body);
-        const lab = normForMatch(m[1]);
-        if (qb.length >= QUOTE_MIN) {
-          for (const ln of lines) {
-            if (ln.label !== lab) continue;
-            const j = ln.flatBody.indexOf(qb, Math.max(0, cursor - ln.bodyAt));
-            if (j >= 0) {
-              hit = { text: body, pos: ln.bodyAt + j, len: qb.length };
-              break;
-            }
-          }
-        }
-      }
+    // 2) 말머리를 떼고, 같은 사람 줄(또는 말머리 없는 줄) 안에서만
+    const pl = parseLabel(raw);
+    if (!pl) return null;
+    const body = trimEnd(pl.body);
+    const qb = normForMatch(body);
+    if (qb.length < QUOTE_MIN) return null;
+    let from = cursor;
+    for (;;) {
+      const i = flat.indexOf(qb, from);
+      if (i < 0) return null;
+      const ln = lineAt(i);
+      if (ln && (ln.label === '' || sameLabel(ln.label, pl.label))) return { pos: i, len: qb.length, text: body };
+      from = i + 1;
     }
-    if (!hit) return { ok: false };
-    cursor = hit.pos + hit.len;
-    total += hit.len;
-    if (first === undefined) first = spanOf(sourceText, hit.text) ?? undefined;
-  }
-  return { ok: true, span: first, short: total < QUOTE_WARN_MIN };
+  };
+  const run = (segs: string[]): { ok: boolean; span?: string; short?: boolean } => {
+    let cursor = 0;
+    let first: string | undefined;
+    let total = 0;
+    for (const seg of segs) {
+      const hit = findSeg(seg, cursor);
+      if (!hit) return { ok: false };
+      cursor = hit.pos + hit.len;
+      total += hit.len;
+      if (first === undefined) first = spanOf(sourceText, hit.text) ?? undefined;
+    }
+    return { ok: true, span: first, short: total < QUOTE_WARN_MIN };
+  };
+
+  const whole = run([ev]);
+  if (whole.ok) return whole;
+  const segs = ev.split(ELLIPSIS_RE).map((x) => x.trim()).filter(Boolean);
+  return segs.length > 1 ? run(segs) : whole;
 }
 
 /** 항목마다 근거 문장을 원문과 대조해 quoteVerified·quoteSpan을 채운다 */
@@ -371,7 +403,7 @@ export interface EnrichedDraft extends Draft {
 }
 
 /** 초안 항목에 기존 값·충돌 여부·경고·기본 선택값을 붙인다. 원문 확인이 안 된 항목은 기본 해제 */
-export function enrichDraft(a: AssistantData, draft: Draft): EnrichedDraft | Err {
+export function enrichDraft(a: AssistantData, draft: Draft, now: Date = new Date()): EnrichedDraft | Err {
   const c = a.customers.find((x) => x.id === draft.customerId);
   if (!c) return { error: '고객을 찾을 수 없습니다.' };
   const items = draft.items.map((it, i): EnrichedItem => {
@@ -382,6 +414,11 @@ export function enrichDraft(a: AssistantData, draft: Draft): EnrichedDraft | Err
     if (it.confidence === 'low') warn.push('신뢰도 낮음');
     if (!it.quoteVerified) warn.push('원문 확인 안 됨');
     else if (it.quoteShort) warn.push('근거가 짧음');
+    // 저장 때 걸릴 값(형식이 틀린 날짜·미래 생년월일·잘못된 이메일 등)은 미리 경고하고 기본 해제한다 — 체크한 채 저장하면 지금처럼 오류가 난다
+    if (it.kind === 'profile' && it.field && !it.isSpeculation && s(it.value)) {
+      const ve = (DATE_FIELDS.includes(it.field) ? dateError(s(it.value), it.fieldLabel ?? '날짜') : '') || fieldValueError(it.field, s(it.value), now);
+      if (ve) warn.push(`값 확인 필요: ${ve}`);
+    } else if (it.kind === 'request' && s(it.dueDate) && dateError(s(it.dueDate), '처리기한')) warn.push(`값 확인 필요: ${dateError(s(it.dueDate), '처리기한')}`);
     const e: EnrichedItem = { ...it, idx: i, warnings: warn, include: !warn.length };
     if (it.kind === 'profile' && it.field) {
       const existing = c[it.field] || '';

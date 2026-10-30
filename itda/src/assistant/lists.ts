@@ -3,7 +3,8 @@
 // (「한식 위주, 파스타」에 「한식」을 더하면 조각 「한식」은 없으므로 더한다 / 「골프, 등산」에 「골프」는 이미 있다).
 
 const SPLIT = /[,/·]/;
-const norm = (s: string) => s.trim().toLowerCase();
+// 비교할 때는 공백을 모두 없앤다(「매운 음식」=「매운음식」). 저장하는 값은 원래 표기 그대로 둔다
+const norm = (s: string) => s.replace(/\s+/g, '').toLowerCase();
 
 /** 「A, B / C」 → ['A','B','C'] */
 export const listParts = (s: string | undefined | null): string[] => String(s ?? '').split(SPLIT).map((x) => x.trim()).filter(Boolean);

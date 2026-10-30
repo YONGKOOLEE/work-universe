@@ -1,7 +1,8 @@
 // 합쳐 불러오기 — 동료가 내보낸 백업을 지금 데이터에 더한다(팀 지도용). 순수 함수만(브라우저 기능 없음).
 import type { Action, AppState, DeletedDoc, Org, Cite, Decision, Doc, Handover, HistoryEntry, Snapshot, Stmt, TEvent, User, Work } from './types';
 import type { AssistantData, Customer } from '../assistant/types';
-import { emptyAssistant, trimChanges } from '../assistant/model';
+import { stamp } from '../assistant/dates';
+import { addChange, emptyAssistant, trimChanges } from '../assistant/model';
 import { clone, nextId, uid } from './util';
 import { findTomb, stripDocRefs } from './docDelete';
 // @ts-expect-error 유니버스 순수 모듈(JS) — 비슷한 업무 점수(주제 3, 산출물 유형 2, 이름 낱말 1)
@@ -276,7 +277,7 @@ const newOrgs = (current: AppState, incoming: AppState): Org[] => {
 /** 같은 고객인가: 이름+소속(소속이 있을 때), 휴대전화(숫자 8자리 이상), 이메일 중 하나가 같다. 소속·휴대전화·이메일이 양쪽 다 비어 있으면 이름만 같아도 같은 고객(반복해서 합쳐도 중복이 생기지 않게) */
 export function sameCustomer(a: Customer, b: Customer): boolean {
   if (a.name && normText(a.name) === normText(b.name) && a.company.trim() && normText(a.company) === normText(b.company)) return true;
-  const bare = (c: Customer) => !c.company.trim() && !String(c.mobile || '').replace(/D/g, '') && !String(c.email || '').trim();
+  const bare = (c: Customer) => !c.company.trim() && !String(c.mobile || '').replace(/\D/g, '') && !String(c.email || '').trim();
   if (a.name && normText(a.name) === normText(b.name) && bare(a) && bare(b)) return true;
   const am = String(a.mobile || '').replace(/\D/g, '');
   if (am.length >= 8 && am === String(b.mobile || '').replace(/\D/g, '')) return true;
@@ -699,11 +700,13 @@ function mergeAssistant(cur: AppState, inc: AppState, mu: (id: string) => string
   const allocR = idsOf(a.requests);
   const allocA = idsOf(a.anniversaries);
   const allocH = idsOf(a.changes);
+  // 담당 영업자가 파일의 사람 목록에 없으면(옛 백업·깨진 파일) 같은 번호의 다른 사람에게 붙지 않도록 합치는 사람(지금 사용자)으로 한다
+  const fileUsers = new Set(inc.users.map((u) => u.id));
   for (const c of add) {
     // 활동 ID 바꿈 표는 고객마다 새로 만든다(앞 고객의 표가 쌓이면 미팅 후 질문 상태가 중복된다)
     const iMap = new Map<string, string>();
     const id = allocC(c.id);
-    a.customers.push({ ...c, id, ownerId: mu(c.ownerId) });
+    a.customers.push({ ...c, id, ownerId: fileUsers.has(c.ownerId) ? mu(c.ownerId) : cur.currentUserId });
     for (const i of src.interactions.filter((x) => x.customerId === c.id)) {
       const nid = allocI(i.id);
       iMap.set(i.id, nid);
@@ -740,25 +743,48 @@ export function replaceKeepingOtherMemos(current: AppState, file: AppState): App
   return withKeptAssistant(current, base);
 }
 
+/** 합쳐 불러올 때 합치지 않는 가상(데모) 고객 수 — 미리 보기에 「가상 고객은 합치지 않습니다」를 보이기 위한 수 */
+export const skippedDemoCustomers = (incoming: AppState): number => (incoming.assistant?.customers ?? []).filter((c) => c.isDemo).length;
+
+/**
+ * 지금 고객의 담당 영업자가 파일에서도 같은 사람인가. 파일의 사람 목록에 그 ID가 있고, 양쪽 사번이 모두 있는데 서로 다르면 같은 ID라도 다른 사람이다.
+ * (사번이 한쪽이라도 비어 있으면 ID가 같은 것으로 본다)
+ */
+export function ownerStaysInFile(current: AppState, file: AppState, ownerId: string): boolean {
+  const fu = file.users.find((u) => u.id === ownerId);
+  if (!fu) return false;
+  const cu = current.users.find((u) => u.id === ownerId);
+  const a = String(cu?.empNo ?? '').trim();
+  const b = String(fu.empNo ?? '').trim();
+  return !(a && b && a !== b);
+}
+
 /**
  * 바꿔 불러올 때 파일에 AI 비서 칸이 없으면(옛 백업) 지금 고객을 그대로 둔다 — 가상 고객으로 바꾸지 않는다.
- * 지금 고객의 담당 영업자가 파일의 사람 목록에 없으면 담당자 없는 고객이 되므로 파일의 사용자(지금 사용자)로 옮긴다.
+ * 지금 고객의 담당 영업자가 파일에 없거나 다른 사람(같은 ID, 다른 사번)이면 담당자 없는 고객이 되므로 파일의 사용자로 옮기고, 옮긴 내역을 변경 이력에 남긴다.
  */
-function withKeptAssistant(current: AppState, file: AppState): AppState {
+function withKeptAssistant(current: AppState, file: AppState, now: Date = new Date()): AppState {
   if (file.assistant !== undefined || !current.assistant) return file;
-  const ids = new Set(file.users.map((u) => u.id));
   const a = JSON.parse(JSON.stringify(current.assistant)) as AssistantData;
-  for (const c of a.customers) if (!ids.has(c.ownerId)) c.ownerId = file.currentUserId;
+  const to = file.users.find((u) => u.id === file.currentUserId);
+  const when = stamp(now);
+  for (const c of a.customers) {
+    if (ownerStaysInFile(current, file, c.ownerId)) continue;
+    const from = current.users.find((u) => u.id === c.ownerId)?.name ?? c.ownerId;
+    c.ownerId = file.currentUserId;
+    addChange(a, c.id, 'ownerId', from, to?.name ?? file.currentUserId, 'import', '바꿔 불러오기: 담당 영업자가 파일에 없어 파일의 사용자로 옮김', when);
+  }
   return { ...file, assistant: a };
 }
 
-/** 바꿔 불러오기 확인 창에 보일 고객 수: 지금 → 파일(파일에 칸이 없으면 file=null, 지금 고객 유지) */
+/** 바꿔 불러오기 확인 창에 보일 고객 수: 지금 → 파일(파일에 칸이 없으면 file=null, 지금 고객 유지). moved는 파일의 사용자(to)로 옮겨질 고객 수 */
 export function replaceCustomerInfo(current: AppState, file: AppState): { now: number; file: number | null; moved: number } {
   const now = current.assistant?.customers.length ?? 0;
   if (file.assistant !== undefined) return { now, file: file.assistant.customers.length, moved: 0 };
-  const ids = new Set(file.users.map((u) => u.id));
-  return { now, file: null, moved: (current.assistant?.customers ?? []).filter((c) => !ids.has(c.ownerId)).length };
+  return { now, file: null, moved: (current.assistant?.customers ?? []).filter((c) => !ownerStaysInFile(current, file, c.ownerId)).length };
 }
+/** 바꿔 불러올 때 담당자가 없는 고객이 옮겨 가는 곳: 파일의 사용자 이름 */
+export const replaceMoveTarget = (file: AppState): string => file.users.find((u) => u.id === file.currentUserId)?.name ?? '';
 
 /** 참조 무결성 점검 — 모든 참조가 실제로 존재하는지. 문제 목록(빈 배열이면 정상) */
 export function checkIntegrity(s: AppState): string[] {

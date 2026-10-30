@@ -7,7 +7,7 @@ import { INTERNAL_NOTICE } from '../../ai/claude';
 import { createSeq } from '../../ai/llm';
 import { Link, useRouter } from '../../lib/router';
 import { cx } from '../../lib/util';
-import { searchQuestion, type SearchOutcome } from '../nlsearch';
+import { NOT_UNDERSTOOD_NOTE, NO_CUSTOMERS_NOTE, searchQuestion, type SearchOutcome } from '../nlsearch';
 import { useAssistant } from './hooks';
 import { customerPath, evidencePath } from './logic';
 import { Avatar, DDay, Highlight, Pill, wrapCls } from './shared';
@@ -21,12 +21,19 @@ export const ASK_EXAMPLES = [
   '아직 처리하지 못한 요청사항을 모두 보여줘',
 ];
 
+/**
+ * 다른 화면에 갔다가 뒤로 오면 입력과 결과를 그대로 보여 주기 위해 모듈에 보관한다(이 탭을 닫으면 사라지고 저장하지 않는다).
+ * 사용자를 바꾸면 비운다 — 다른 사람의 고객 검색 결과가 남아 보이지 않게.
+ */
+const kept: { userId: string; q: string; out: SearchOutcome | null } = { userId: '', q: '', out: null };
+
 export default function AskView() {
   const { a, ai, userId } = useAssistant();
   const { nav, query, replace } = useRouter();
-  const [q, setQ] = useState(query.get('q') ?? '');
+  const keep = kept.userId === userId ? kept : null;
+  const [q, setQ] = useState(query.get('q') ?? keep?.q ?? '');
   const [busy, setBusy] = useState(false);
-  const [out, setOut] = useState<SearchOutcome | null>(null);
+  const [out, setOut] = useState<SearchOutcome | null>(keep?.out ?? null);
   const [err, setErr] = useState('');
   const ctl = useRef<AbortController | null>(null);
   const seq = useRef(createSeq());
@@ -37,14 +44,27 @@ export default function AskView() {
   };
   // 화면을 떠나면 진행 중인 호출을 끊는다. 엔진을 바꾸거나 사용자를 바꾸면 진행 중인 호출을 끊고 늦은 결과를 버린다
   useEffect(() => stopAll, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const firstRun = useRef(true);
+  const lastUser = useRef(userId);
   useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
     if (ctl.current) {
       stopAll();
       setBusy(false);
     }
     setOut(null);
     setErr('');
+    if (lastUser.current !== userId) setQ('');
+    lastUser.current = userId;
   }, [ai.engine, userId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    kept.userId = userId;
+    kept.q = q;
+    kept.out = out;
+  }, [userId, q, out]);
 
   const claude = ai.engine === 'claude' && !!ai.client;
 
@@ -218,8 +238,10 @@ export default function AskView() {
             )
           ) : out.customers.length === 0 ? (
             <Card>
-              {out.note ? (
+              {out.note === NO_CUSTOMERS_NOTE ? (
                 <Empty title={out.note} sub="「고객」 탭에서 고객을 등록하면 질문으로 찾을 수 있습니다. 설정에서 가상 고객 18명을 채울 수도 있습니다." />
+              ) : out.note ? (
+                <Empty title={out.note} sub={out.note === NOT_UNDERSTOOD_NOTE ? '고객 이름, 소속, 날짜, 좋아하는 것처럼 찾을 조건을 함께 적어 보세요.' : '이름은 맞게 찾았지만 그 낱말은 이 고객의 정보·기록에 없습니다. 표현을 바꿔 보세요.'} />
               ) : (
                 <Empty title="조건에 맞는 고객이 없습니다" sub="해석된 조건이 질문과 다르면 표현을 바꿔 다시 검색해 보세요. 핵심 낱말만 넣어도 됩니다." />
               )}

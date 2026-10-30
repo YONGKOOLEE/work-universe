@@ -5,7 +5,7 @@
 //   생년월일·가족·건강 등 사적 질문은 만들지 않는다(CR-25 2.3-6: 「가족·생활」 선택지를 뺐다) · 사용자가 체크한 반영안만 저장한다.
 import { addDays, addMinutes, mdLabel, stamp, ymd } from './dates';
 import { appendToList } from './lists';
-import { addRequest, applyActivityDates, dateError, fieldValueError, isErr, recomputeActivityDates, updateCustomer, type Err } from './model';
+import { addRequest, affectedDates, applyActivityDates, dateError, fieldValueError, isErr, recomputeActivityDates, updateCustomer, updateRequest, type Err } from './model';
 import type { AssistantConf, AssistantData, CustomerFieldKey, FollowupState, Interaction } from './types';
 import { FIELD_KEYS, FIELD_LABELS } from './types';
 
@@ -123,12 +123,13 @@ function fieldAgeDays(a: AssistantData, customerId: string, field: string, now: 
 }
 
 /** 최근 30일 안에 「언급 없음/기억 안 남」으로 답한 질문 id(다시 묻지 않음) */
-function recentNoInfo(a: AssistantData, customerId: string, now: Date): Set<string> {
+function recentNoInfo(a: AssistantData, customerId: string, now: Date, exceptInteractionId = ''): Set<string> {
   const since = addMinutes(stamp(now), -NO_REASK_DAYS * 1440);
   const mine = new Set(a.interactions.filter((i) => i.customerId === customerId).map((i) => i.id));
   const skip = new Set<string>();
   for (const f of a.followups) {
-    if (!mine.has(f.interactionId) || f.status !== 'done' || f.updatedAt < since) continue;
+    // 지금 열어 둔 미팅 자신의 옛 답은 뺀다 — 잘못 누른 「언급 없음」 때문에 같은 미팅을 다시 열었을 때 그 질문이 사라지면 고칠 수 없다
+    if (!mine.has(f.interactionId) || f.interactionId === exceptInteractionId || f.status !== 'done' || f.updatedAt < since) continue;
     for (const [qid, ans] of Object.entries(f.answers ?? {})) if (ans?.value === 'none' || ans?.value === 'unknown') skip.add(qid);
   }
   return skip;
@@ -149,7 +150,7 @@ export function buildQuestions(a: AssistantData, interactionId: string, now: Dat
   const c = a.customers.find((x) => x.id === m.customerId);
   if (!c) return null;
   const who = `${`${c.name} ${c.position || ''}`.trim()}님`;
-  const skip = recentNoInfo(a, c.id, now);
+  const skip = recentNoInfo(a, c.id, now, interactionId);
   const today = ymd(now);
   const dw = meetingDayWord(m.date, today);
   const qs: Question[] = [];
@@ -219,7 +220,7 @@ export function buildQuestions(a: AssistantData, interactionId: string, now: Dat
 // ───────────── 답변 → 반영안 ─────────────
 
 export type Answers = Record<string, Record<string, string>>;
-export type ProposalKind = 'field' | 'request' | 'meeting_held' | 'meeting_note' | 'meeting_move' | 'meeting_cancel';
+export type ProposalKind = 'field' | 'request' | 'request_due' | 'meeting_held' | 'meeting_note' | 'meeting_move' | 'meeting_cancel';
 /** 답은 했지만 이대로는 저장되지 않는 경우의 안내. blocking이면 확인 단계로 넘어갈 수 없다 */
 export interface FollowupProblem {
   qid: string;
@@ -285,8 +286,13 @@ export function proposals(a: AssistantData, interactionId: string, answers: Answ
     const content = (r.content || '').trim();
     if (!content) need('request');
     // 같은 미팅에서 이미 저장한 같은 요청은 다시 만들지 않는다(다시 답해도 중복되지 않게)
-    else if (!a.requests.some((x) => x.customerId === c.id && x.interactionId === interactionId && x.content === content)) {
-      out.push({ kind: 'request', label: `요청사항 등록 (${r.value})`, old: '', new: content, dueDate: r.due_date || '', assignee: (r.assignee || '').trim() });
+    else {
+      const same = a.requests.find((x) => x.customerId === c.id && x.interactionId === interactionId && x.content === content);
+      const due = (r.due_date || '').trim();
+      if (!same) out.push({ kind: 'request', label: `요청사항 등록 (${r.value})`, old: '', new: content, dueDate: r.due_date || '', assignee: (r.assignee || '').trim() });
+      // 같은 내용에 새 기한으로 다시 답하면 기한 변경 반영안을 만든다. 기한이 같거나 없으면 이미 등록됐다고 알린다
+      else if (due && due !== same.dueDate) out.push({ kind: 'request_due', label: '요청사항 기한 변경', old: same.dueDate || '(없음)', new: due, value: same.id });
+      else need('request', '이미 등록된 요청입니다. 새로 만들지 않습니다.');
     }
   }
   const fa = ans('food_ate');
@@ -358,14 +364,14 @@ export function meetingError(a: AssistantData, interactionId: string, now: Date)
   return '';
 }
 
-const PROPOSAL_KINDS: ProposalKind[] = ['field', 'request', 'meeting_held', 'meeting_note', 'meeting_move', 'meeting_cancel'];
+const PROPOSAL_KINDS: ProposalKind[] = ['field', 'request', 'request_due', 'meeting_held', 'meeting_note', 'meeting_move', 'meeting_cancel'];
 
 /**
  * 체크한 반영안만 저장한다. 고객 항목은 변경 이력(출처 「미팅 후 질문」)으로 남고, 미팅이 연기되면 질문 상태를 지워 새 날짜에 다시 묻는다.
  * given(확인 화면이 보여 준 반영안)을 주면 저장 때 다시 만들지 않고 그대로 쓴다 → 확인과 저장 사이에 고객 정보가 바뀌어도 선택 번호(idx)가 어긋나지 않는다.
  * 같은 요청·같은 메모는 이미 저장돼 있으면 다시 더하지 않는다(다시 답해도 중복되지 않음).
  */
-export function applyFollowup(a: AssistantData, interactionId: string, answers: Answers, choices: FollowupChoice[], now: Date, myName = '', given?: FollowupProposal[]): { applied: number; customerId: string; moved: boolean } | Err {
+export function applyFollowup(a: AssistantData, interactionId: string, answers: Answers, choices: FollowupChoice[], now: Date, myName = '', given?: FollowupProposal[]): { applied: number; customerId: string; moved: boolean; conflicts?: string[] } | Err {
   const me = meetingError(a, interactionId, now);
   if (me) return { error: me };
   const r = proposals(a, interactionId, answers, now, myName)!;
@@ -386,6 +392,7 @@ export function applyFollowup(a: AssistantData, interactionId: string, answers: 
   const note = `미팅 후 질문 (${m.date} ${m.title})`;
   let applied = 0;
   let moved = false;
+  const conflicts: string[] = [];
   // 저장 도중 오류가 나면 아무것도 바꾸지 않도록 먼저 모든 값을 검사한다
   for (const [idx, ch] of chosen) {
     const p = list[idx];
@@ -398,6 +405,10 @@ export function applyFollowup(a: AssistantData, interactionId: string, answers: 
       }
       const e = fieldValueError(p.field, val, now);
       if (e) return { error: e, field: p.field };
+    }
+    if (p.kind === 'request_due') {
+      const e = dateError(val, '처리기한', true);
+      if (e) return { error: e };
     }
     if (p.kind === 'request') {
       const e = dateError(ch.dueDate ?? p.dueDate ?? '', '처리기한');
@@ -414,12 +425,21 @@ export function applyFollowup(a: AssistantData, interactionId: string, answers: 
     const val = String(ch.new ?? p.new ?? '').trim();
     if (p.kind === 'field') {
       if (!val || !p.field) return;
+      // 반영안을 만든 뒤 이 항목이 다른 곳에서 바뀌었으면 덮어쓰지 않는다(다른 항목은 저장)
+      if ((a.customers.find((x) => x.id === cid)?.[p.field] || '') !== p.old) {
+        conflicts.push(`${p.label}: 확인 후 값이 바뀌었습니다. 저장하지 않았습니다.`);
+        return;
+      }
       const u = updateCustomer(a, cid, { [p.field]: val }, { now, source: 'followup', note });
       if (isErr(u)) return;
     } else if (p.kind === 'request') {
       if (!val) return;
       if (a.requests.some((x) => x.customerId === cid && x.interactionId === interactionId && x.content === val)) return;
       addRequest(a, cid, { content: val, receivedDate: m.date, dueDate: ch.dueDate ?? p.dueDate ?? '', assignee: (ch.assignee ?? p.assignee ?? '').trim(), interactionId }, { now, source: 'followup' });
+    } else if (p.kind === 'request_due') {
+      const rq = a.requests.find((x) => x.id === p.value && x.customerId === cid);
+      if (!rq || !val) return;
+      updateRequest(a, rq.id, { dueDate: val }, now);
     } else if (p.kind === 'meeting_held') {
       applyActivityDates(a, cid, '미팅', m.date, now);
     } else if (p.kind === 'meeting_note') {
@@ -429,17 +449,17 @@ export function applyFollowup(a: AssistantData, interactionId: string, answers: 
       const before = m.date;
       m.date = val;
       a.followups = a.followups.filter((f) => f.interactionId !== interactionId);
-      recomputeActivityDates(a, cid, now, [before, val]);
+      recomputeActivityDates(a, cid, now, affectedDates([{ type: '미팅', date: before }, { type: '미팅', date: val }]));
       moved = true;
     } else if (p.kind === 'meeting_cancel') {
       m.type = '메모';
       m.title = `[취소] ${m.title}`;
-      recomputeActivityDates(a, cid, now, [m.date]);
+      recomputeActivityDates(a, cid, now, affectedDates([{ type: '미팅', date: m.date }]));
     }
     applied += 1;
   });
   if (!moved) setState(a, interactionId, 'done', now, answers, r.info.questions.map((q) => q.id));
-  return { applied, customerId: cid, moved };
+  return { applied, customerId: cid, moved, ...(conflicts.length ? { conflicts } : {}) };
 }
 
 /** 이 미팅의 질문을 건너뛴다 */

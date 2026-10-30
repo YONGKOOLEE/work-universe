@@ -44,8 +44,26 @@ export interface Cond {
   meetingTo: string;
   /** 질문에 들어 있는 고객 이름(「오정석 생일 언제야」) — 이 이름의 고객만 */
   nameKeywords: string[];
-  /** 이름으로 찾을 때 근거로 함께 보여 줄 정보: birthday(생일) · contact(연락처) */
-  show: ('birthday' | 'contact')[];
+  /** 이름으로 찾을 때 근거로 함께 보여 줄 정보 */
+  show: ShowKey[];
+  /** 「모든 고객」「전체 고객」처럼 목록 전체를 원하는 질문(참일 때만 둔다). 조건이 하나도 없는데 이 값도 없으면 질문을 이해하지 못한 것이다 */
+  all?: true;
+}
+
+/** 이름으로 찾을 때 근거로 보여 줄 정보: 생일 · 연락처 · 이메일(기록 포함) · 기피 음식 · 선호 음식 · 관심사 · 취미 · 소속·직책 · 미팅 */
+export type ShowKey = 'birthday' | 'contact' | 'email' | 'food_dislike' | 'food_like' | 'interest' | 'hobbies' | 'org' | 'meeting';
+export const SHOW_KEYS: readonly ShowKey[] = ['birthday', 'contact', 'email', 'food_dislike', 'food_like', 'interest', 'hobbies', 'org', 'meeting'];
+const SHOW_FIELDS: Partial<Record<ShowKey, CustomerFieldKey[]>> = {
+  food_dislike: ['foodDislikes'],
+  food_like: ['foodLikes'],
+  interest: ['hobbies', 'recentInterests'],
+  hobbies: ['hobbies'],
+  org: ['company', 'department', 'position', 'duties'],
+};
+
+/** 검색 조건이 하나라도 있는가(없으면 질문을 이해하지 못한 것) */
+export function hasConditions(c: Cond): boolean {
+  return !!(c.target === 'requests' || c.keywords.length || c.conversationKeywords.length || c.orgKeywords.length || c.customerTypes.length || c.noContactDays || c.birthdayFrom || c.requestStatus || c.requestKeywords.length || c.dueWithinDays !== null || c.overdue || c.agendaFrom || c.meetingFrom || c.nameKeywords.length);
 }
 
 export const emptyCond = (): Cond => ({
@@ -116,48 +134,90 @@ function meetingPeriodOf(text: string, today: string): [string, string] {
 }
 
 /** 만나는 일정을 묻는 표현(「만나지 못한」「안 만난」 같은 미연락 표현은 아니다) */
-const MEET_PLAN_RE = /(만나는|만날|만나기로|만나게|미팅\s*(?:이\s*)?(?:예정|있|잡혀|일정|약속)|예정(?:된|인)?\s*미팅|약속)/;
+const MEET_PLAN_RE = /(만나는|만날|만나기로|만나게|미팅\s*(?:이\s*)?(?:예정|있|잡혀|일정|약속)|예정(?:된|인)?\s*미팅|약속|(?:오늘|내일|이번\s*주|다음\s*주|이번\s*달|다음\s*달)\s*(?:에|의)?\s*(?:있는\s*)?(?:미팅|일정))/;
 const NOT_MEET_PLAN_RE = /(만나지|못\s*만|안\s*만|만난\s*적|만나본)/;
 /** 날짜·질문 군더더기 — 「이번 주에 만나는 사람 누구야」에서 이 낱말들을 조건으로 AND하면 늘 0건이 된다 */
-const NOISE = new Set(['이번', '다음', '지난', '올해', '내년', '이달', '다음달', '이번달', '이번주', '다음주', '주에', '달에', '해에', '날에', '주', '달', '오늘', '내일', '언제', '며칠', '몇', '만나', '만나는', '만날', '만난', '만나서', '만나고', '미팅', '예정', '예정인', '약속', '일정', '내가', '우리', '나', '저', '제가', '어떻게', '어느', '누구', '누구야', '누구지', '누군지', '어디', '무엇', '뭐야', '뭔지', '알고', '싶어', '싶어요', '궁금해', '궁금해요', '확인', '확인해줘']);
+const NOISE = new Set(['주요', '이번', '다음', '지난', '올해', '내년', '이달', '다음달', '이번달', '이번주', '다음주', '주에', '달에', '해에', '날에', '주', '달', '오늘', '내일', '언제', '며칠', '몇', '만나', '만나는', '만날', '만난', '만나서', '만나고', '미팅', '예정', '예정인', '약속', '일정', '내가', '우리', '나', '저', '제가', '어떻게', '어느', '누구', '누구야', '누구지', '누군지', '어디', '무엇', '뭐야', '뭔지', '알고', '싶어', '싶어요', '궁금해', '궁금해요', '확인', '확인해줘', '좋아해', '좋아하나', '좋아하는지', '좋아하세요', '좋아하시나', '싫어해', '싫어하나', '싫어하는지', '즐겨', '즐기나', '있나요', '맞아', '맞나', '맞나요']);
 /** 낱말 끝의 질문 어미(야·지·까·요 …)를 뗀 뿌리가 군더더기인가 */
 function isNoise(w: string): boolean {
   if (NOISE.has(w) || STOP.has(w)) return true;
   const stem = w.replace(/(인가요|인가|이에요|예요|이야|나요|까요|일까|일까요|이죠|이지|야|지|까|죠|요)$/, '');
-  return stem !== w && stem.length > 0 && (NOISE.has(stem) || STOP.has(stem));
+  // 뿌리가 한 글자면 어미를 잘못 뗀 것일 수 있다(「주요」→「주」) — 두 글자 이상일 때만 인정
+  return stem !== w && stem.length >= 2 && (NOISE.has(stem) || STOP.has(stem));
 }
 /** 선호 연락 방식으로 볼 낱말 */
 const CONTACT_WORDS = ['메신저', '이메일', '메일', '전화', '문자', '카톡', '카카오톡', '공문', '대면', '휴대전화', '유선'];
 /** 이름 뒤에 올 수 있는 정보 낱말(「오정석 생일」「김도현 연락처」) */
-const INFO_WORDS = '생일|생신|연락처|전화번호|전화|휴대폰|핸드폰|휴대전화|이메일|메일|주소|직책|부서|소속|회사|담당|업무';
+/** 고객 목록 전체를 원하는 말 */
+export const ALL_RE = /(모든|전체|전부|모두)\s*(고객|담당자|거래처|사람|분|목록|리스트|명단)|(고객|담당자)\s*(전체|전부|모두|목록|리스트|명단)|^(전체|모두|전부)\s*(보기|보여\s*줘|보여줘)?$/;
+const INFO_WORDS = '취미|생일|생신|연락처|전화번호|전화|휴대폰|핸드폰|휴대전화|이메일|메일|주소|직책|부서|소속|회사|담당|업무';
 const INFO_RE = new RegExp(`(?:^|\\s)([가-힣]{2,4}?)(?:이|가|의|은|는|씨|님|한테|에게)?\\s*(?:${INFO_WORDS})`);
 /** 이름처럼 보이지만 이름이 아닌 낱말 */
 const NOT_A_NAME = /^(이번|다음|지난|올해|내년|이달|오늘|내일|고객|담당|사람|그분|이분|우리|내|가장|최근|언제|어느|누구|회사|기관|협력|참가|정부|이용|가맹)/;
 
+const PARTICLE_CHAIN = new RegExp(`^(?:${PARTICLES_BY_LEN.join('|')}){1,2}(?=$|[\\s?.,!)\\]'"])`);
+/**
+ * 질문에서 고객 이름의 위치 [시작, 끝). 이름 앞이 처음·공백·문장부호이고, 뒤가 끝·공백·문장부호이거나 조사·호칭(1~2개) 다음 끝·공백일 때만 인정한다.
+ * 「유진증권 담당자」의 「유진」, 「하나은행」의 「하나」는 이름이 아니다. 끝은 조사까지 포함한다(조사가 낱말로 남지 않게).
+ */
+export function findName(text: string, name: string): [number, number] | null {
+  let from = 0;
+  for (;;) {
+    const i = text.indexOf(name, from);
+    if (i < 0) return null;
+    const before = i === 0 ? ' ' : text[i - 1];
+    const after = text.slice(i + name.length);
+    if (/[\s(\['"“‘,.]/.test(before)) {
+      if (after === '' || /^[\s?.,!)\]'"”’]/.test(after)) return [i, i + name.length];
+      const pm = PARTICLE_CHAIN.exec(after);
+      if (pm) return [i, i + name.length + pm[0].length];
+    }
+    from = i + 1;
+  }
+}
+
 export function ruleParse(q: string, now: Date, names: readonly string[] = []): Cond {
   const today = ymd(now);
   const c = emptyCond();
-  const text = q.replace(/？/g, '?').replace(/\s+/g, ' ').trim();
+  const raw = q.replace(/？/g, '?').replace(/\s+/g, ' ').trim();
   const used: string[] = []; // 해석에 쓴 구절(일반 낱말 검색에서 제외)
 
-  // 고객 이름: 등록된 이름이 질문에 그대로 있으면 이름 조건. 이름 목록이 없을 때만 「이름 + 생일·연락처 …」 꼴로 짐작한다
+  // 고객 이름: 등록된 이름이 질문에 「이름 + (조사·호칭) + 공백·끝」꼴로 있으면 이름 조건. 인식한 이름은 질문에서 빼고 나머지로 다른 조건을 읽는다
+  // (이름이 낱말로 남으면 「김도현이 좋아하는 음식」의 「김도현」이 관심사 키워드가 된다). 이름 목록이 없을 때만 「이름 + 생일·연락처 …」 꼴로 짐작한다
   const known = [...new Set(names.map((n) => n.trim()).filter((n) => n.length >= 2))].sort((x, y) => y.length - x.length);
+  let text = raw;
   for (const n of known) {
-    if (text.includes(n) && !c.nameKeywords.some((k) => k.includes(n) || n.includes(k))) {
+    const hit = findName(text, n);
+    if (hit && !c.nameKeywords.some((k) => k.includes(n) || n.includes(k))) {
       c.nameKeywords.push(n);
-      used.push(n);
+      text = `${text.slice(0, hit[0])} ${text.slice(hit[1])}`;
     }
   }
   if (!known.length) {
-    const im0 = INFO_RE.exec(text);
+    const im0 = INFO_RE.exec(raw);
     if (im0 && !NOT_A_NAME.test(im0[1]) && !ORG_WORDS.some((w) => im0[1].includes(w)) && !TYPE_WORDS.some(([w]) => im0[1].includes(w))) {
       c.nameKeywords.push(im0[1]);
-      used.push(im0[1]);
+      const at = im0.index + im0[0].indexOf(im0[1]);
+      text = `${raw.slice(0, at)} ${raw.slice(at + im0[1].length)}`;
     }
   }
-  if (c.nameKeywords.length) {
-    if (/(연락처|전화번호|휴대폰|핸드폰|휴대전화|이메일 주소|메일 주소|번호)/.test(text)) c.show.push('contact');
-    if (/(생일|생신)/.test(text) && !/(이번|다음)\s*(달|주)|\d{1,2}\s*월|다가오는|곧/.test(text)) c.show.push('birthday');
+  text = text.replace(/\s+/g, ' ').trim();
+  const hasName = c.nameKeywords.length > 0;
+  const show = (k: ShowKey, phrase: RegExpExecArray | null) => {
+    if (!c.show.includes(k)) c.show.push(k);
+    if (phrase) used.push(phrase[0]);
+  };
+  if (hasName) {
+    let m: RegExpExecArray | null;
+    if ((m = /(연락처|전화번호|휴대폰|핸드폰|휴대전화|번호|이메일 주소|메일 주소)/.exec(text))) show('contact', m);
+    else if ((m = /(이메일|메일)/.exec(text))) show('email', m);
+    if ((m = /(생일|생신)/.exec(text)) && !/(이번|다음)\s*(달|주)|\d{1,2}\s*월|다가오는|곧/.test(text)) show('birthday', m);
+    if ((m = /(취미)/.exec(text))) show('hobbies', m);
+    if ((m = /(관심사|관심\s*분야)/.exec(text))) show('interest', m);
+    if ((m = /(부서|직책|직급|소속|회사|담당\s*업무|업무)/.exec(text))) show('org', m);
+    if ((m = /(기피\s*음식|기피\s*식품|알레르기)/.exec(text))) show('food_dislike', m);
+    if ((m = /((?:좋아하는|좋아한|즐기는|선호하는|선호)\s*(?:음식|메뉴|요리|식사))/.exec(text))) show('food_like', m);
+    // 미팅은 기간 말(「이번 주 미팅」)이 따로 읽는다 — 아래에서 예정 미팅 조건이 없을 때만 지난·다음 미팅을 보여 준다
     used.push('연락처', '전화번호');
   }
 
@@ -246,20 +306,25 @@ export function ruleParse(q: string, now: Date, names: readonly string[] = []): 
 
   // 관심사·음식
   const dm = DISLIKE_RE.exec(text);
+  let dkw = '';
   if (dm) {
     const ws = dm[1].trim().split(/\s+/);
-    let kw = '';
     for (let i = ws.length - 1; i >= 0; i--) {
       const w = cleanPhrase(ws[i]);
       if (w && !GENERIC_FOOD.has(w)) {
-        kw = w;
+        dkw = w;
         break;
       }
     }
-    if (kw) {
-      c.keywords.push({ text: kw, scope: 'food_dislike' });
+    if (dkw) {
+      c.keywords.push({ text: dkw, scope: 'food_dislike' });
       used.push(dm[0]);
     }
+  }
+  // 이름이 있고 「싫어하는 음식」「못 먹는 음식」처럼 음식 이름이 없는 질문 → 키워드 없이 그 고객의 기피 음식 칸을 보여 준다
+  if (hasName && !dkw) {
+    const v = new RegExp(`(?:${DISLIKE_VERB})(?:\\s*(?:음식|메뉴|요리|식사|것))?`).exec(text);
+    if (v) show('food_dislike', v);
   }
   const im = /([가-힣A-Za-z0-9·]+(?:\s[가-힣A-Za-z0-9·]+){0,3}?)\s*(?:에|에\s*대해|에\s*대한)?\s*관심/.exec(text);
   if (im) {
@@ -271,6 +336,11 @@ export function ruleParse(q: string, now: Date, names: readonly string[] = []): 
     }
   }
   const lm = /([가-힣A-Za-z0-9·]+)\s*(?:을|를|이|가)?\s*(좋아하는|좋아한|즐기는|좋아하시는|취미인|치는|하는\s*걸\s*좋아)/.exec(text);
+  // 이름이 있고 「좋아하는 음식」처럼 대상이 없는 질문 → 그 고객의 선호 음식 칸을 보여 준다(위 이름 블록이 못 잡은 「좋아하시는 음식」 등)
+  if (hasName && !lm) {
+    const v = /(?:좋아하시는|좋아하는|좋아한|즐기는)\s*(?:음식|메뉴|요리|식사)/.exec(text);
+    if (v) show('food_like', v);
+  }
   if (lm && !c.keywords.some((k) => k.scope === 'interest')) {
     const kw = cleanPhrase(lm[1]);
     if (kw) {
@@ -294,6 +364,10 @@ export function ruleParse(q: string, now: Date, names: readonly string[] = []): 
   if (MEET_PLAN_RE.test(text) && !NOT_MEET_PLAN_RE.test(text) && !c.noContactDays) {
     [c.meetingFrom, c.meetingTo] = meetingPeriodOf(text, today);
     used.push('만나는', '만날', '만나게', '미팅', '예정');
+  } else if (hasName && !c.noContactDays) {
+    // 「김도현 미팅」: 예정 미팅 기간이 없으면 그 고객의 최근·예정 미팅을 근거로 보여 준다
+    const mt = /(미팅|만남|일정)/.exec(text);
+    if (mt && !MEET_PLAN_RE.test(text)) show('meeting', mt);
   }
 
   // 챙겨야 할 사람(기한 임박 요청·경조사·예정 연락)
@@ -302,8 +376,10 @@ export function ruleParse(q: string, now: Date, names: readonly string[] = []): 
     used.push('챙겨야', '챙길', '이번', '달에', '내가');
   }
 
-  // 해석된 조건이 없으면: 낱말 검색(모든 고객정보 + 대화기록)
-  const has = c.keywords.length || c.orgKeywords.length || c.customerTypes.length || c.noContactDays || c.birthdayFrom || c.requestStatus || c.requestKeywords.length || c.agendaFrom || c.meetingFrom || c.nameKeywords.length;
+  const allm = ALL_RE.exec(text);
+  if (allm) used.push(allm[0]);
+  // 이름 말고 해석된 조건이 없으면: 낱말 검색(모든 고객정보 + 대화기록). 이름이 있으면 남은 낱말도 그 고객에게서 찾는다(「이서연 골프」)
+  const has = c.keywords.length || c.orgKeywords.length || c.customerTypes.length || c.noContactDays || c.birthdayFrom || c.requestStatus || c.requestKeywords.length || c.agendaFrom || c.meetingFrom;
   if (!has) {
     let rest = text;
     for (const u of used) rest = rest.split(u).join(' ');
@@ -316,6 +392,8 @@ export function ruleParse(q: string, now: Date, names: readonly string[] = []): 
       }
     }
   }
+  // 조건이 하나도 없을 때: 목록 전체를 원하는 말(「모든 고객」「전체 고객」)이거나 질문이 비었을 때만 전체. 그 밖에는 이해하지 못한 것(executeSearch가 빈 결과로 둔다)
+  if (!hasConditions(c) && (!raw || ALL_RE.test(raw))) c.all = true;
   return normalizeCond(c, now);
 }
 
@@ -409,7 +487,8 @@ export function normalizeCond(c: Partial<Cond>, now: Date): Cond {
   }
   if (out.meetingFrom > out.meetingTo) [out.meetingFrom, out.meetingTo] = [out.meetingTo, out.meetingFrom];
   out.nameKeywords = (Array.isArray(c.nameKeywords) ? c.nameKeywords : []).map((x) => clip(x, 20)).filter(Boolean).slice(0, 3);
-  out.show = (Array.isArray(c.show) ? c.show : []).filter((x, i, arr): x is 'birthday' | 'contact' => (x === 'birthday' || x === 'contact') && arr.indexOf(x) === i);
+  out.show = (Array.isArray(c.show) ? c.show : []).filter((x, i, arr): x is ShowKey => SHOW_KEYS.includes(x) && arr.indexOf(x) === i);
+  if (c.all === true) out.all = true;
   out.requestStatus = c.requestStatus === 'open' || c.requestStatus === 'any' ? c.requestStatus : '';
   if (c.dueWithinDays !== null && c.dueWithinDays !== undefined && (c.dueWithinDays as unknown) !== '') {
     const n = Math.trunc(Number(c.dueWithinDays));
@@ -420,6 +499,7 @@ export function normalizeCond(c: Partial<Cond>, now: Date): Cond {
   return out;
 }
 
+const SHOW_LABEL: Record<ShowKey, string> = { birthday: '생일', contact: '연락처', email: '이메일', food_dislike: '기피 음식', food_like: '선호 음식', interest: '관심사', hobbies: '취미', org: '소속·직책', meeting: '미팅' };
 const md = (iso: string) => iso.slice(5).replace('-', '/');
 /** 해석된 조건을 사람이 읽는 문장으로(화면 상단에 보여, 질문과 다르게 해석됐는지 확인하게 한다) */
 export function describeCond(c: Cond): string[] {
@@ -437,7 +517,8 @@ export function describeCond(c: Cond): string[] {
   if (c.requestStatus === 'open') out.push('미처리 요청' + (c.overdue ? ' (기한 경과)' : c.dueWithinDays ? ` (기한 ${c.dueWithinDays}일 이내)` : ''));
   else if (c.requestStatus === 'any' && c.target === 'customers') out.push('요청 이력 있음');
   if (c.requestKeywords.length) out.push('요청 내용에 ' + c.requestKeywords.map((x) => `'${x}'`).join(', '));
-  return out.length ? out : ['조건 없음 — 전체'];
+  if (c.show.length) out.push('이름으로 찾아 보여 줄 정보: ' + c.show.map((k) => SHOW_LABEL[k]).join(', '));
+  return out.length ? out : [c.all ? '조건 없음 — 전체' : '해석된 조건 없음'];
 }
 
 // ───────────── 검색 실행(이 브라우저의 데이터) ─────────────
@@ -493,6 +574,8 @@ const dday = (n: number) => (n === 0 ? '오늘' : `D-${n}`);
 
 export function executeSearch(a: AssistantData, c: Cond, now: Date): SearchResult {
   const today = ymd(now);
+  // 조건이 하나도 없는데 「전체」를 원한 것도 아니면 질문을 이해하지 못한 것 — 전체를 돌려주지 않는다
+  if (!hasConditions(c) && !c.all) return { target: 'customers', customers: [], requests: [], count: 0 };
   const customers = sortStable(a.customers, (x, y) => (x.name < y.name ? -1 : x.name > y.name ? 1 : 0));
   const inters = new Map<string, typeof a.interactions>();
   for (const i of sortStable(a.interactions, (x, y) => (x.date < y.date ? 1 : x.date > y.date ? -1 : 0))) {
@@ -537,6 +620,31 @@ export function executeSearch(a: AssistantData, c: Cond, now: Date): SearchResul
         ev.push({ label: '휴대전화', text: cu.mobile || '미입력' });
         ev.push({ label: '이메일', text: cu.email || '미입력' });
         if (cu.officePhone) ev.push({ label: '사무실 전화', text: cu.officePhone });
+      }
+      if (c.show.includes('email')) {
+        ev.push({ label: '이메일', text: cu.email || '미입력' });
+        const mail = (inters.get(cu.id) ?? []).find((i) => i.type === '이메일');
+        if (mail) ev.push({ label: `이메일 기록 ${mail.date}`, text: snip(`${mail.title} — ${mail.summary}`, ''), link: { to: 'customer-history', customerId: cu.id } });
+      }
+      for (const k of c.show) {
+        const fields = SHOW_FIELDS[k];
+        if (!fields) continue;
+        let any = false;
+        for (const f of fields) {
+          if (cu[f]) {
+            ev.push({ label: FIELD_LABELS[f] ?? f, text: cu[f] });
+            any = true;
+          }
+        }
+        if (!any) ev.push({ label: FIELD_LABELS[fields[0]] ?? fields[0], text: '미입력' });
+      }
+      if (c.show.includes('meeting')) {
+        const ms = (inters.get(cu.id) ?? []).filter((m) => m.type === '미팅');
+        const past = ms.find((m) => m.date < today);
+        const next = sortStable(ms.filter((m) => m.date >= today), (x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : 0))[0];
+        if (next) ev.push({ label: '예정 미팅', text: `${next.date} ${next.time || ''} ${next.title}`.replace(/ {2}/g, ' '), link: { to: 'customer-history', customerId: cu.id } });
+        if (past) ev.push({ label: `최근 미팅 ${past.date}`, text: snip(past.title, ''), link: { to: 'customer-history', customerId: cu.id } });
+        if (!next && !past) ev.push({ label: '미팅', text: cu.lastMeetingDate ? `최근 미팅 ${cu.lastMeetingDate}` : '기록 없음' });
       }
     }
     if (c.customerTypes.length && !c.customerTypes.includes(cu.customerType || '기타')) continue;
@@ -665,6 +773,24 @@ export interface SearchOutcome extends SearchResult {
 }
 
 export const NO_CUSTOMERS_NOTE = '등록된 고객이 없습니다';
+export const NOT_UNDERSTOOD_NOTE = '질문을 이해하지 못했습니다. 예: 「골프 좋아하는 은행 담당자」「이번 주 미팅 예정 고객」「김도현 연락처」「모든 고객」';
+const josaEulReul = (w: string) => {
+  const ch = w.charCodeAt(w.length - 1);
+  return ch >= 0xac00 && ch <= 0xd7a3 && (ch - 0xac00) % 28 !== 0 ? '을' : '를';
+};
+/** 결과가 비었을 때 까닭을 알리는 글 */
+export function emptyNote(a: AssistantData, c: Cond, count: number): string {
+  if (a.customers.length === 0) return NO_CUSTOMERS_NOTE;
+  if (!hasConditions(c) && !c.all) return NOT_UNDERSTOOD_NOTE;
+  if (count === 0 && c.nameKeywords.length && c.keywords.length) {
+    const who = c.nameKeywords.filter((n) => a.customers.some((x) => match(x.name, n)));
+    if (who.length) {
+      const kws = c.keywords.map((k) => `'${k.text}'`).join(', ');
+      return `${who.join('·')} 고객에게서 ${kws}${josaEulReul(c.keywords[c.keywords.length - 1].text)} 찾지 못했습니다`;
+    }
+  }
+  return '';
+}
 
 /** 질문 하나를 검색한다. client가 있으면 AI 해석을 먼저 시도하고, 실패하면 규칙 해석으로 대체한다 */
 export async function searchQuestion(a: AssistantData, q0: string, now: Date, opts: { client?: LlmClient | null; errorText?: (e: unknown) => string; signal?: AbortSignal } = {}): Promise<SearchOutcome | { error: string }> {
@@ -683,6 +809,7 @@ export async function searchQuestion(a: AssistantData, q0: string, now: Date, op
     }
   }
   if (!cond) cond = ruleParse(q, now, a.customers.map((x) => x.name));
+  else if (!hasConditions(cond) && ALL_RE.test(q)) cond.all = true;
   const res = executeSearch(a, cond, now);
-  return { q, mode, aiError, conditions: cond, explain: describeCond(cond), note: a.customers.length === 0 ? NO_CUSTOMERS_NOTE : '', ...res };
+  return { q, mode, aiError, conditions: cond, explain: describeCond(cond), note: emptyNote(a, cond, res.count), ...res };
 }

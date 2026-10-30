@@ -13,6 +13,7 @@ import { Pill, ReadOnlyNote, wrapCls } from './shared';
 const KIND_LABEL: Record<FollowupProposal['kind'], string> = {
   field: '고객 정보',
   request: '요청사항 등록',
+  request_due: '요청사항 기한 변경',
   meeting_held: '최근 미팅일 갱신',
   meeting_note: '미팅 기록 메모',
   meeting_move: '미팅 날짜 변경',
@@ -61,8 +62,8 @@ export default function FollowupView({ interactionId }: { interactionId: string 
     // 확인 화면에서 보여 준 반영안(props)을 그대로 넘긴다 — 저장할 때 다시 계산하면 그 사이에 고객 정보가 바뀌어 선택 번호가 어긋날 수 있다
     const r = exec(cid, (_s, d) => applyFollowup(d, interactionId, answers, choices, now, me?.name ?? '', props));
     if (isErr(r)) return setError(r.error);
-    const x = r as { applied: number; moved: boolean };
-    toast(x.moved ? '미팅 날짜를 바꿨습니다 — 새 날짜에 다시 묻습니다' : `${x.applied}건을 저장했습니다`);
+    const x = r as { applied: number; moved: boolean; conflicts?: string[] };
+    toast((x.moved ? '미팅 날짜를 바꿨습니다 — 새 날짜에 다시 묻습니다' : `${x.applied}건을 저장했습니다`) + (x.conflicts?.length ? ` (${x.conflicts.join(' ')})` : ''));
     back();
   };
   const skipAll = () => {

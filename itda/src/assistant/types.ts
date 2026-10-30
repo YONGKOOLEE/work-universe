@@ -86,7 +86,7 @@ export interface Customer extends CustomerFields {
   updatedAt: string;
 }
 
-export type ChangeSource = 'manual' | 'demo' | 'activity' | 'restore' | 'card' | 'ai' | 'sample' | 'followup';
+export type ChangeSource = 'manual' | 'demo' | 'activity' | 'restore' | 'card' | 'ai' | 'sample' | 'followup' | 'import';
 export const SOURCE_LABELS: Record<ChangeSource, string> = {
   manual: '직접 입력',
   demo: '데모 데이터',
@@ -96,6 +96,7 @@ export const SOURCE_LABELS: Record<ChangeSource, string> = {
   ai: 'AI 분석',
   sample: '예시 분석(AI 미사용)',
   followup: '미팅 후 질문',
+  import: '데이터 불러오기',
 };
 
 export interface Interaction {
