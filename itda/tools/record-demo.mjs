@@ -86,7 +86,16 @@ const prep = async () => {
   await ev(OVERLAY);
   await ev(HELP);
 };
-const cap = (big, small = '') => ev(`window.__ov.cap(${JSON.stringify(big)}, ${JSON.stringify(small)})`);
+let capNo = 0;
+const FRAMES = resolve(dirname(OUT), 'frames');
+await mkdir(FRAMES, { recursive: true });
+/** 자막을 바꾸고, 1.5초 뒤 그 장면을 검토용 그림으로 남긴다(영상에는 영향 없음) */
+const cap = async (big, small = '') => {
+  await ev(`window.__ov.cap(${JSON.stringify(big)}, ${JSON.stringify(small)})`);
+  if (!big) return;
+  const no = String(++capNo).padStart(2, '0');
+  setTimeout(() => cdp.send('Page.captureScreenshot', { format: 'jpeg', quality: 70 }).then(({ data }) => writeFile(resolve(FRAMES, `${no}.jpg`), Buffer.from(data, 'base64'))).catch(() => {}), 1500);
+};
 /** 요소를 화면 안으로 → 빨간 원 → 클릭 */
 async function click(sel, text, { exact = false, block = 'center', pause = 650 } = {}) {
   const pos = await ev(`(() => { const e = window.__d.find(${JSON.stringify(sel)}, ${JSON.stringify(text)}, ${exact}); if (!e) return null; e.scrollIntoView({ block: ${JSON.stringify(block)}, behavior: 'instant' }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
@@ -127,7 +136,7 @@ async function typeInto(selector, text, perChar = 45) {
   }
   await ev(`window.__d.setVal(document.querySelector(${JSON.stringify(selector)}), ${JSON.stringify(text)})`);
 }
-const scrollTo = (selector, block = 'start', dy = 0) => ev(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) return false; e.scrollIntoView({ block: ${JSON.stringify(block)}, behavior: 'smooth' }); setTimeout(() => window.scrollBy({ top: ${dy}, behavior: 'smooth' }), 400); return true; })()`);
+const scrollTo = (selector, block = 'start', dy = 0) => ev(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) return false; e.scrollIntoView({ block: ${JSON.stringify(block)}, behavior: 'smooth' }); setTimeout(() => document.getElementById('main-scroll')?.scrollBy({ top: ${dy}, behavior: 'smooth' }), 450); return true; })()`);
 const scrollMain = (y) => ev(`(() => { const m = document.getElementById('main-scroll') || document.scrollingElement; m.scrollTo({ top: ${y}, behavior: 'smooth' }); return true; })()`);
 async function waitPaused(expr, ms, note) {
   await cap(note[0], note[1]);
@@ -138,6 +147,9 @@ async function waitPaused(expr, ms, note) {
   await rev('window.__resume()');
   return ok;
 }
+
+// 가상 고객·가상 대화(AI 비서 장면). 전화번호·이메일 없음
+const CONVERSATION = '김도현: 지난번 제안서는 잘 받았습니다. 다음 달 3일까지 수정 견적을 보내 주시면 좋겠어요.\n가상 영업: 네, 3일까지 보내 드리겠습니다. 다음 미팅 때 식사도 같이 하시죠.\n김도현: 좋습니다. 저는 해산물을 잘 못 먹어서 한식이면 좋겠고요, 요즘은 주말마다 등산을 다닙니다.\n가상 영업: 알겠습니다. 한식으로 예약하겠습니다.';
 
 const log = [];
 try {
@@ -156,15 +168,15 @@ try {
   await sleep(500);
   await sleep(800);
   log.push(['첫 화면까지 frames', frames]);
-  log.push(['rec', await rev('window.__start()')]);
-
-  // 1 제목
+  // 1 제목 — 영상 첫 장면이 제목 카드가 되도록 녹화 전에 띄운다
   await ev(`window.__ov.card('업무잇다', ['평소의 업무 기록이 곧 인수인계', '모이면 조직의 업무 지도'], '시연 영상 · 등장 인물·부서·기관·문서는 모두 시연용 가상 자료입니다')`);
+  await sleep(900);
+  log.push(['rec', await rev('window.__start()')]);
   await sleep(4200);
   await ev(`window.__ov.card(null)`);
 
-  // 2 대시보드(이서연)
-  await user('이서연');
+  // 2 대시보드(박지훈 — 약관 개정 업무 담당)
+  await user('박지훈');
   await cap('업무 단위로 일하는 화면', '내 업무·남은 조치·AI가 발견한 누락 항목을 한눈에');
   await sleep(3500);
   await scrollMain(420);
@@ -182,9 +194,9 @@ try {
   await cdp.send('DOM.setFileInputFiles', { nodeId, files: [PDF] });
   log.push(['pdf', await waitFor(ev, `document.querySelector('#dr-text') && document.querySelector('#dr-text').value.includes('개정 조문 대비표')`, 20000)]);
   await sleep(2600);
-  await cap('AI가 결정·일정·조치(담당·기한)·주제를 뽑음', USE_KEY ? 'Claude + 꼼꼼히 읽기(두 번째 대조) — 원문 구절과 문단 번호를 함께 냄' : '키가 없으면 규칙 기반으로 같은 흐름');
+  await cap('AI가 결정·일정·조치(담당·기한)·주제를 뽑음', USE_KEY ? '꼼꼼히 읽기(두 번째 대조)까지 — 원문 구절과 문단 번호를 함께 냄' : '키가 없으면 규칙 기반으로 같은 흐름');
   await click('button', 'AI 분석');
-  log.push(['분석', await waitPaused(`[...document.querySelectorAll('h3')].some((h) => h.textContent.includes('업무 반영 미리보기'))`, 200000, ['Claude가 문서를 읽는 중…', '실제 약 20~40초 — 영상에서는 줄임'])]);
+  log.push(['분석', await waitPaused(`[...document.querySelectorAll('h3')].some((h) => h.textContent.includes('업무 반영 미리보기'))`, 200000, ['AI가 문서를 읽는 중…', '실제 약 20~40초 — 영상에서는 줄임'])]);
   await sleep(500);
 
   // 4 미리보기·승인
@@ -215,6 +227,7 @@ try {
   await sleep(3200);
 
   // 6 업무 지도 탭
+  await cap('');
   await go('#/works/W-003', 1200);
   await click('button', '업무 지도', { exact: true });
   await sleep(2200);
@@ -228,15 +241,19 @@ try {
   }
   await sleep(3000);
 
-  // 7 팀장: 팀·부서 지도
-  await user('박지훈');
+  // 7 부장: 팀·부서 지도
+  await user('서지안');
   await click('nav a', '업무 유니버스');
-  await sleep(2600);
-  await cap('업무가 모이면 팀·부서 지도로', '팀장(전체 보기) 화면 — 팀을 접고 펼쳐 봄');
+  await sleep(2200);
+  await click('button', '전자금융부 · 업무');
+  await sleep(2200);
+  await ev(`window.__itdaMap.graph.cy.container().scrollIntoView({ block: 'start', behavior: 'smooth' }); setTimeout(() => document.getElementById('main-scroll')?.scrollBy({ top: -24, behavior: 'smooth' }), 450); true`);
+  await sleep(900);
+  await cap('업무가 모이면 팀·부서 지도로', '부장 화면 — 팀을 접고 펼쳐 봄');
   await sleep(3000);
   await tapNode('출금이체팀', 'dbltap');
   await sleep(2600);
-  await cap('한 사람만 해 본 업무를 미리 찾음', '빨간 테두리 = 혼자만 아는 일 · 오른쪽 위험 점검 목록');
+  await cap('한 사람만 해 본 업무를 미리 찾음', '오른쪽 인사이트 — 혼자만 아는 일·빠지면 막히는 사람');
   await sleep(3000);
   await tapNode('출금이체 월 정산');
   await sleep(1500);
@@ -258,7 +275,8 @@ try {
   await click('button', '인계 시작', { exact: true });
   await sleep(1500);
   await click('button', '점검 실행');
-  await sleep(1800);
+  log.push(['점검', await waitPaused(`document.querySelectorAll('input[id^=chk-]').length > 0 && !document.querySelector('input[id^=chk-]').disabled && !document.body.innerText.includes('점검 중')`, 120000, ['AI가 인계 자료를 점검하는 중…', '영상에서는 줄임'])]);
+  await sleep(600);
   await scrollTo('[data-testid=handover-points]', 'start', -70);
   await cap('지도로 본 인계 포인트', '받는 범위·주의·진행 중·관계자 — 근거 칩을 누르면 근거 기록이 펼쳐짐');
   await sleep(1400);
@@ -289,15 +307,43 @@ try {
   await cap('AI 업무 검색 — 묻는 업무의 등록 자료로만 답함');
   await typeInto('main input', '비대면 출금동의 현재 추진 경과는?', 60);
   await click('button', '질문', { exact: true });
-  log.push(['검색', await waitPaused(`(document.querySelector('main') || document.body).innerText.includes('AI 종합 답변') && !(document.querySelector('main') || document.body).innerText.includes('근거를 찾는 중')`, 120000, ['Claude가 등록 자료에서 근거를 찾는 중…', '실제 약 15~20초 — 영상에서는 줄임'])]);
+  log.push(['검색', await waitPaused(`(document.querySelector('main') || document.body).innerText.includes('AI 종합 답변') && !(document.querySelector('main') || document.body).innerText.includes('근거를 찾는 중')`, 120000, ['AI가 등록 자료에서 근거를 찾는 중…', '실제 약 15~20초 — 영상에서는 줄임'])]);
   await cap('문장마다 원문 확인·AI 추론·추가 확인 필요', '인용은 앱이 원문과 대조 — 맞지 않으면 확정하지 않음');
   await sleep(2000);
   await scrollMain(260);
   await sleep(3200);
 
+  // 9-2 AI 비서 — 약 20초. 고객 담당 김도윤, 가상 고객 김도현(CU-001), 가상 대화
+  await user('김도윤');
+  await click('nav a', 'AI 비서');
+  await sleep(900);
+  await cap('고객 맥락도 끊기지 않게 — AI 비서', '오늘 챙길 연락·요청·기념일을 한 화면에');
+  await sleep(2800);
+  await go('#/assistant/analyze', 900);
+  await ev(`window.__d.setVal(document.querySelector('[data-testid=asst-an-customer]'), 'CU-001'); true`);
+  await sleep(200);
+  await ev(`window.__d.setVal(document.querySelector('[data-testid=asst-an-text]'), ${JSON.stringify(CONVERSATION)}); true`);
+  await cap('고객과 나눈 대화를 붙여 넣으면', '보내는 내용을 먼저 보여 주고, 동의해야 전송');
+  await sleep(1500);
+  await clickSel('[data-testid=asst-an-preview-btn]');
+  await sleep(1400);
+  await clickSel('[data-testid=asst-an-consent]', { pause: 400 });
+  await sleep(500);
+  await clickSel('[data-testid=asst-an-send]', { pause: 400 });
+  log.push(['대화 분석', await waitPaused(`!!document.querySelector('[data-testid=asst-an-review]')`, 120000, ['AI가 대화를 정리하는 중…', '영상에서는 줄임'])]);
+  await ev(`document.querySelector('[data-testid=asst-an-items]')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); true`);
+  await cap('요청·선호·기념일을 근거 문장과 함께 제안', '앱이 원문과 대조 — 담당자가 고른 것만 고객 기록에');
+  await sleep(3400);
+  await clickSel('[data-testid=asst-an-apply]');
+  await sleep(1800);
+  log.push(['대화 저장', await ev(`!!document.querySelector('[data-testid=asst-an-done]')`)]);
+  await go('#/assistant/customers/CU-001?tab=history', 1000);
+  await cap('담당이 바뀌어도 고객 이력이 그대로', '방금 대화가 히스토리에 — 미팅 전 브리핑으로도 이어짐');
+  await sleep(2600);
+
   // 10 마무리
   await cap('');
-  await ev(`window.__ov.card('업무잇다', ['파일 하나로 시작 → 합쳐 불러오기로 팀 지도 → 사내 연계로 조직까지', '업무 등록 · 문서 반영 · 업무 지도 · 인계 · AI 검색'], '평소의 업무 기록이 곧 인수인계')`);
+  await ev(`window.__ov.card('업무잇다', ['파일 하나로 시작 → 합쳐 불러오기로 팀 지도 → 사내 연계로 조직까지', '업무 등록 · 문서 반영 · 업무 지도 · 인계 · AI 검색 · AI 비서'], '평소의 업무 기록이 곧 인수인계')`);
   await sleep(4500);
   log.push(['frames', frames]);
   const size = await rev('window.__stop()');

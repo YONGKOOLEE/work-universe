@@ -57,9 +57,13 @@ try {
   await sleep(600);
   await shot('02-work-map');
 
-  // 3) 팀장: 팀·부서 지도 + 업무 카드(혼자만 아는 업무)
-  await asUser('박지훈');
+  // 3) 부장: 팀·부서 지도 + 업무 카드(혼자만 아는 업무). 팀장 첫 범위는 소속 팀이라 부 칩으로 두 팀을 함께 본다
+  await asUser('서지안');
   await go('#/universe', 3000);
+  await clickText('button', '전자금융부 · 업무');
+  await sleep(2500);
+  await ev(`window.__itdaMap.graph.cy.container().scrollIntoView({ block: 'start' }); document.getElementById('main-scroll')?.scrollBy(0, -24); true`);
+  await sleep(500);
   await shot('03-team-map');
   await ev(`(() => { const r = window.__itdaMap.graph.cy.nodes('[core_type = "root"]').filter((n) => n.data('label').startsWith('출금이체팀'))[0]; r && r.emit('dbltap'); return !!r; })()`);
   await sleep(2500);
@@ -67,21 +71,31 @@ try {
   await sleep(1200);
   await shot('04-team-map-open');
 
-  // 4) 대시보드(팀장) — 점검 목록에 혼자만 아는 업무
+  // 4) 대시보드(부장) — 점검 목록에 혼자만 아는 업무
   await go('#/dashboard', 1500);
   await shot('05-dashboard-lead');
 
-  // 5) 인계: 지도로 본 인계 포인트 + 스냅샷 비교
-  await go('#/handover/HO-002', 1800);
-  await ev(`(() => { const c = document.querySelector('[data-testid=handover-points]'); c.scrollIntoView({ block: 'start' }); c.querySelector('[data-testid=handover-point-chip]')?.click(); window.scrollBy(0, -70); return true; })()`);
-  await sleep(800);
-  await shot('06-handover-points');
+  // 5) 스냅샷 비교(인계 당시 ↔ 지금) — 출금이체팀 인계라 같은 부의 부장이 본다
   await go('#/snapshots/S-101', 2500);
-  await ev(`(() => { document.querySelector('[data-testid=snapshot-maps]').scrollIntoView({ block: 'start' }); window.scrollBy(0, -90); return true; })()`);
+  await ev(`(() => { document.querySelector('[data-testid=snapshot-maps]').scrollIntoView({ block: 'start' }); document.getElementById('main-scroll')?.scrollBy(0, -90); return true; })()`);
   await sleep(800);
   await shot('07-snapshot-maps');
 
+  // 5-2) 인계 포인트 — 김도윤이 새 인계를 시작해 점검을 돌린 화면
+  await asUser('김도윤');
+  await go('#/handover', 1200);
+  await ev(`(() => { const set = (el, v) => { Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(el, v); el.dispatchEvent(new Event('change', { bubbles: true })); }; set(document.getElementById('ho-work'), 'W-001'); const t = document.getElementById('ho-to'); set(t, [...t.options].find((x) => x.textContent.includes('이서연')).value); return true; })()`);
+  await sleep(400);
+  await ev(`[...document.querySelectorAll('button')].find((x) => x.offsetParent && x.textContent.trim() === '인계 시작').click()`);
+  await sleep(1200);
+  await clickText('button', '점검 실행');
+  await sleep(USE_KEY ? 25000 : 2000);
+  await ev(`(() => { const c = document.querySelector('[data-testid=handover-points]'); c.scrollIntoView({ block: 'start' }); c.querySelector('[data-testid=handover-point-chip]')?.click(); document.getElementById('main-scroll')?.scrollBy(0, -70); return true; })()`);
+  await sleep(800);
+  await shot('06-handover-points');
+
   // 6) 문서 등록(PDF) → 분석 → 반영 미리보기 — 김도윤이 아니라 팀장(약관 개정 업무 담당)
+  await asUser('박지훈');
   await go('#/docs', 1200);
   await clickText('button', '문서 등록');
   await sleep(800);
@@ -94,7 +108,7 @@ try {
   await clickText('button', 'AI 분석');
   log.push(['분석 끝', await waitFor(ev, `[...document.querySelectorAll('h3')].some((h) => h.textContent.includes('업무 반영 미리보기'))`, USE_KEY ? 180000 : 15000)]);
   await sleep(1000);
-  await ev(`(() => { const h = [...document.querySelectorAll('h3')].find((h) => h.textContent.includes('업무 반영 미리보기')); h.scrollIntoView({ block: 'start' }); return true; })()`);
+  await ev(`(() => { const h = [...document.querySelectorAll('h3')].find((h) => h.textContent.includes('업무 반영 미리보기')); h.scrollIntoView({ block: 'start' }); document.querySelector('[data-testid=proposal-owner]')?.scrollIntoView({ block: 'center' }); return true; })()`);
   await sleep(600);
   await shot('09-doc-preview');
   await clickText('button', '원문 확인 항목 모두 승인');
