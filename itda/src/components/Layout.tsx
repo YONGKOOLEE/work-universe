@@ -58,7 +58,7 @@ function EngineToggle({ onSettings }: { onSettings: () => void }) {
   const { toast } = useStore();
   const can = ai.status === 'available';
   const on: EnginePref = ai.preferred === 'internal' ? 'internal' : ai.engine;
-  const seg = (e: EnginePref) => cx('flex items-center gap-1 px-2 py-1 font-semibold', on === e ? (e === 'claude' ? 'bg-brand text-onbrand' : 'bg-navy text-surface') : 'text-muted');
+  const seg = (e: EnginePref) => cx('flex items-center gap-1 whitespace-nowrap px-2 py-1 font-semibold', on === e ? (e === 'claude' ? 'bg-brand text-onbrand' : 'bg-navy text-surface') : 'text-muted');
   return (
     <div className="flex items-center gap-1">
       <div className="flex items-center rounded-md border border-line text-xs" title="AI 엔진 선택: 규칙(키 없이, 밖으로 보내지 않음) · Claude(본인 키로 실시간 분석) · 사내(아직 연결 전 — 지금은 규칙)" role="group" aria-label="AI 엔진" data-testid="engine-toggle" data-value={on}>
@@ -191,7 +191,7 @@ function Brand() {
       </svg>
       <div className="leading-tight">
         <div className="text-[15px] font-bold tracking-tight text-sideink">업무잇다</div>
-        <div className="text-2xs text-sidemuted">AI 업무 지식관리 ·{' '}<span className="whitespace-nowrap">상시 인수인계</span></div>
+        <div className="text-2xs text-sidemuted">AI 업무 지식관리 ·{' '}<span className="whitespace-nowrap">업무 유니버스</span></div>
       </div>
     </div>
   );
@@ -295,7 +295,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-line bg-surface/95 px-4 backdrop-blur">
+        <header className="sticky top-0 z-30 flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b border-line bg-surface/95 px-4 py-2 backdrop-blur xl:h-14 xl:flex-nowrap xl:py-0">
           <button className="rounded p-1.5 text-muted hover:bg-sunken lg:hidden" onClick={() => setMobile(true)} aria-label="메뉴 열기">
             <Menu size={19} />
           </button>
@@ -321,7 +321,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               className="h-9 w-full rounded-md border border-line bg-sunken pl-9 pr-3 text-[13px] placeholder:text-faint focus:border-brand focus:bg-surface focus:outline-none"
             />
           </form>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2 xl:flex-nowrap">
             <label className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs text-muted" title="시연용 사용자 전환 (가상 인물)">
               <UserRound size={14} className="hidden sm:block" />
               <span className="hidden 2xl:inline">사용자</span>

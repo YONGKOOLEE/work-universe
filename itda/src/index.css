@@ -253,3 +253,25 @@ select optgroup {
   background-color: rgb(var(--surface));
   color: rgb(var(--ink));
 }
+
+/* 인쇄: 화면은 안쪽 칸만 스크롤해서 그대로 인쇄하면 1쪽에서 잘린다. 메뉴·머리글을 빼고 본문을 이어서 찍는다(사용자 요청 2026-11-01) */
+@media print {
+  html,
+  body,
+  #root {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  #root > .h-full {
+    display: block !important;
+    height: auto !important;
+  }
+  #root > .h-full > aside,
+  #root > .h-full header {
+    display: none !important;
+  }
+  #main-scroll {
+    overflow: visible !important;
+    height: auto !important;
+  }
+}

@@ -169,7 +169,7 @@ try {
   await sleep(800);
   log.push(['첫 화면까지 frames', frames]);
   // 1 제목 — 영상 첫 장면이 제목 카드가 되도록 녹화 전에 띄운다
-  await ev(`window.__ov.card('업무잇다', ['평소의 업무 기록이 곧 인수인계', '모이면 조직의 업무 지도'], '시연 영상 · 등장 인물·부서·기관·문서는 모두 시연용 가상 자료입니다')`);
+  await ev(`window.__ov.card('업무잇다', ['조직의 모든 일이, 하나의 유니버스로', '업무·사람·문서·조직이 이어지는 우리 조직의 업무 지도'], '시연 영상 · 등장 인물·부서·기관·문서는 모두 시연용 가상 자료입니다')`);
   await sleep(900);
   log.push(['rec', await rev('window.__start()')]);
   await sleep(4200);
@@ -343,7 +343,7 @@ try {
 
   // 10 마무리
   await cap('');
-  await ev(`window.__ov.card('업무잇다', ['파일 하나로 시작 → 합쳐 불러오기로 팀 지도 → 사내 연계로 조직까지', '업무 등록 · 문서 반영 · 업무 지도 · 인계 · AI 검색 · AI 비서'], '평소의 업무 기록이 곧 인수인계')`);
+  await ev(`window.__ov.card('업무잇다', ['파일 하나로 시작 → 합쳐 불러오기로 팀 지도 → 사내 연계로 조직까지', '업무 등록 · 문서 반영 · 업무 지도 · 인계 · AI 검색 · AI 비서'], '조직의 모든 일이, 하나의 유니버스로')`);
   await sleep(4500);
   log.push(['frames', frames]);
   const size = await rev('window.__stop()');
