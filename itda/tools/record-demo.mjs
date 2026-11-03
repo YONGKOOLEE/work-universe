@@ -1,5 +1,6 @@
 // 시연 영상 자동 녹화(docs/시연-대본-업무잇다.md). 설치 없이 헤드리스 Chrome만 쓴다:
 //   앱 탭을 Page.startScreencast로 받아 → 녹화 탭의 캔버스에 그리고 → MediaRecorder(video/mp4;codecs=avc1)로 저장.
+//   MediaRecorder의 조각 MP4는 일반 재생기에서 길이·이동이 안 되므로 mp4-defrag로 일반 MP4로 다시 묶어 쓴다.
 //   자막·클릭 표시(빨간 원)·제목 카드는 앱 화면 위에 그린다. Claude를 기다리는 동안은 녹화를 잠시 멈춘다(영상에서는 「약 20초 소요」 자막).
 // 사용: node tools/record-demo.mjs <출력.mp4> [포트] [--key]
 //   --key: 저장소 밖 키 파일을 이 임시 브라우저 저장소에만 넣고 실제 Claude로 분석·검색. 키는 화면·로그에 나오지 않는다.
@@ -9,6 +10,7 @@ import { writeFile, mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { connect, launch, sleep, waitFor } from './cdp.mjs';
+import { defragMp4 } from './mp4-defrag.mjs';
 
 const args = process.argv.slice(2);
 const OUT = resolve(args[0] || '../.tmp/video/업무잇다_시연영상.mp4');
@@ -349,8 +351,10 @@ try {
   const size = await rev('window.__stop()');
   const parts = [];
   for (let i = 0; i < size; i += 4 * 1024 * 1024) parts.push(Buffer.from(await rev(`window.__part(${i}, ${4 * 1024 * 1024})`), 'base64'));
-  await writeFile(OUT, Buffer.concat(parts));
-  log.push(['mp4', OUT, size]);
+  const raw = Buffer.concat(parts);
+  const fixed = defragMp4(raw);
+  await writeFile(OUT, fixed ? fixed.out : raw);
+  log.push(['mp4', OUT, size, fixed ? `일반 MP4 ${fixed.seconds.toFixed(1)}초·키프레임 ${fixed.sync}` : '변환 안 함']);
 } catch (e) {
   log.push(['error', String((e && e.stack) || e).slice(0, 600)]);
 } finally {
